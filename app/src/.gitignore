@@ -1,8 +1,8 @@
 # .gitignore
 
 # Ignore actual prompt files, but keep the templates.
-/prompts/*.txt
-!prompts/*.txt.example
+/prompts/*.md
+!prompts/*.md.example
 
 .env
 *.code-workspace

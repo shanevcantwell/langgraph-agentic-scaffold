@@ -5,6 +5,16 @@
 
 A foundational scaffold for building multi-agent systems using LangGraph, featuring a modular "specialist" architecture.
 
+## ⚠️ A Note on Security
+
+This scaffold is designed for architectural exploration and does not include production-grade safety guardrails. The tools you create and provide to the agents can execute real code and perform actions on your computer, such as:
+
+* Accessing the file system
+* Executing shell commands
+* Making external API calls with the keys you provide
+
+You are granting the configured LLM direct control over these tools. **Be fully aware of the capabilities you grant to your agents and consider all potential risks involved.** Always review the code for any tool before enabling it, and run this project in a secure, sandboxed environment whenever possible.
+
 ## Core Concepts
 
 This project is not a library but a **template** for structuring a complex agentic application. The core philosophy is to separate concerns into distinct components:

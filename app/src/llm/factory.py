@@ -27,9 +27,9 @@ class LLMClientFactory:
         provider = provider.lower()
         
         if provider == "gemini":
-            api_key = os.getenv("GEMINI_API_KEY")
+            api_key = os.getenv("GOOGLE_API_KEY")
             if not api_key:
-                raise ValueError("GEMINI_API_KEY environment variable not set.")
+                raise ValueError("GOOGLE_API_KEY environment variable not set.")
             model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
             return GeminiClient(api_key=api_key, model=model)
             

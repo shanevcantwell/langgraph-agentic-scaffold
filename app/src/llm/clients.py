@@ -4,7 +4,7 @@ import os
 import requests
 import json
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Using langchain_core.messages for consistency with the graph state
 from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
@@ -40,7 +40,7 @@ class GeminiClient(BaseLLMClient):
         self.model = genai.GenerativeModel(model)
         print(f"---INITIALIZED GEMINI CLIENT (Model: {model})---")
 
-    def invoke(self, messages: List[BaseMessage]) -> AIMessage:
+    def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None) -> AIMessage:
         # Note: Gemini has a specific format for message history.
         # This is a simplified conversion. A real implementation might need more robust mapping.
         gemini_messages = [
@@ -50,14 +50,60 @@ class GeminiClient(BaseLLMClient):
         # Gemini API often uses the system prompt separately
         system_prompt = next((msg.content for msg in messages if isinstance(msg, SystemMessage)), None)
         
-        # Placeholder for actual invocation logic
         print(f"---CALLING GEMINI API---")
-        # response = self.model.generate_content(gemini_messages, generation_config={"temperature": 0.7})
-        # return AIMessage(content=response.text)
-        
-        # Mock response for demonstration
-        mock_response_content = f"Mock response from Gemini for prompt: '{messages[-1].content}'"
-        return AIMessage(content=mock_response_content)
+
+        # Gemini API prefers the system prompt to be set on the model at initialization.
+        # As a workaround for handling it per-invocation, we prepend it to the first user message.
+        if system_prompt and gemini_messages and gemini_messages[0]['role'] == 'user':
+            original_content = gemini_messages[0]['parts'][0]
+            gemini_messages[0]['parts'] = [system_prompt, original_content]
+
+        try:
+            # Prepare tools for Gemini
+            gemini_tools = []
+            if tools:
+                for tool_obj in tools:
+                    # Langchain tools have a .tool_name and .description attribute
+                    # and a .args_schema for parameters
+                    tool_schema = {
+                        "function_declarations": [
+                            {
+                                "name": tool_obj.name,
+                                "description": tool_obj.description,
+                                "parameters": tool_obj.args_schema.schema()
+                            }
+                        ]
+                    }
+                    gemini_tools.append(tool_schema)
+
+            response = self.model.generate_content(
+                gemini_messages,
+                generation_config={"temperature": 0.7},
+                tools=gemini_tools if gemini_tools else None
+            )
+            
+            if response.parts:
+                # Handle tool calls
+                tool_calls = []
+                for part in response.parts:
+                    if part.function_call:
+                        tool_calls.append({
+                            "name": part.function_call.name,
+                            "args": {k: v for k, v in part.function_call.args.items()}
+                        })
+                if tool_calls:
+                    return AIMessage(content="", tool_calls=tool_calls)
+                else:
+                    return AIMessage(content=response.text)
+            elif response.prompt_feedback and response.prompt_feedback.block_reason:
+                return AIMessage(content=f"Error: Gemini blocked the prompt due to: {response.prompt_feedback.block_reason.name}")
+            elif response.candidates and response.candidates[0].finish_reason:
+                return AIMessage(content=f"Error: Gemini finished with reason: {response.candidates[0].finish_reason.name}")
+            else:
+                return AIMessage(content="Error: Gemini returned an empty or unexpected response.")
+        except Exception as e:
+            print(f"An error occurred while calling the Gemini API: {e}")
+            return AIMessage(content=f"Error: Could not get a response from Gemini. Details: {e}")
 
 class OllamaClient(BaseLLMClient):
     """LLM client for a local Ollama instance."""

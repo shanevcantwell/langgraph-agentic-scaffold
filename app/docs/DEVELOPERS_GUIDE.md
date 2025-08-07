@@ -44,29 +44,21 @@ Adherence to this structure is required for system integrity and automated parsi
 .
 ├── app/
 │   ├── docs/
-│   │   └── DEVELOPERS_GUIDE.md
+│   │   └── DEVELOPERS_GUIDE.md # This guide
 │   ├── prompts/
-│   │   ├── data_extractor_prompt.txt.example
-│   │   ├── hello_world_prompt.txt.example
-│   │   └── prompt_specialist_prompt.txt.example
+│   │   └── {specialist_name}_prompt.md
 │   └── src/
-│       ├── agents/
-│       │   ├── base.py
-│       │   └── hello_world.py
 │       ├── graph/
-│       │   ├── nodes.py
 │       │   └── state.py
 │       ├── llm/
 │       │   ├── clients.py
 │       │   └── factory.py
 │       ├── specialists/
 │       │   ├── base.py
-│       │   ├── data_extractor_specialist.py
-│       │   └── prompt_specialist.py
+│       │   └── {specialist_name}.py
 │       └── utils/
 │           └── prompt_loader.py
 ├── .gitignore
-├── enums.py
 ├── main.py
 ├── pyproject.toml
 ├── README.md

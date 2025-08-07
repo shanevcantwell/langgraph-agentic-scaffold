@@ -51,7 +51,7 @@ class BaseSpecialist(ABC):
         messages_to_send.extend(state["messages"])
 
         # 2. Call the LLM via the standardized client interface
-        ai_response = self.llm_client.invoke(messages_to_send)
+        ai_response = self.llm_client.invoke(messages_to_send, tools=self.tools)
 
         # 3. Return the response in the format expected by the graph state
         return {"messages": [ai_response]}
