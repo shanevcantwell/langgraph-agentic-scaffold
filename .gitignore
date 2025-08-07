@@ -1,0 +1,13 @@
+# .gitignore
+
+# Ignore actual prompt files, but keep the templates.
+app/prompts/*.txt
+!app/prompts/*.txt.example
+
+.env
+*.code-workspace
+
+__pycache__/*
+src/__pycache__/*
+src/agents/__pycache__/*
+src/graph/__pycache__/*
