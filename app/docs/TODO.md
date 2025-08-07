@@ -10,11 +10,9 @@ This document tracks the next steps and areas for improvement in the agentic sca
 
 - **[x] Improve `main.py` Input Handling**: The `main.py` script now accepts a user prompt from a command-line argument and provides default behavior if no argument is given.
 
-## Medium Priority
-
 - **[ ] Enhance Graph Error Handling**: The graph's control flow is currently "happy path."
-  - What happens if the `RouterSpecialist` returns a specialist name that isn't in the conditional map? The graph will crash. Add a default or error-handling branch.
-  - What if an API call fails due to a network error? Implement retry logic in the `BaseLLMClient` or individual clients.
+  - **[x]** What happens if the `RouterSpecialist` returns a specialist name that isn't in the conditional map? The graph will crash. Add a default or error-handling branch. (Implemented `route_to_specialist` function in `main.py` with fallback logic).
+  - **[x]** What if an API call fails due to a network error? Implement retry logic in the `BaseLLMClient` or individual clients. (Added `tenacity` retry logic to all clients in `llm/clients.py`)
 
+## Medium Priority
 - **[ ] Add Unit and Integration Tests**: Create a `tests/` directory and add tests for specialists and the LLM factory to ensure stability during future refactoring.
-

@@ -9,7 +9,7 @@ from langchain_core.messages import HumanMessage
 load_dotenv()
 
 from .graph.state import GraphState
-from .enums import Specialist
+from .enums import Specialist, Edge
 from .specialists.router_specialist import RouterSpecialist
 from .specialists.prompt_specialist import PromptSpecialist
 from .specialists.data_extractor_specialist import DataExtractorSpecialist
@@ -20,6 +20,31 @@ from .llm.factory import LLMClientFactory
 # Determines which LLM provider the specialists will use.
 # Can be 'gemini', 'ollama', 'lmstudio', etc.
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+
+def route_to_specialist(state: GraphState) -> str:
+    """
+    Reads the 'next_specialist' key from the state and determines the next node.
+    This function is the core of the graph's routing logic. It provides a
+    robust fallback to the PROMPT specialist if the router's decision is
+    invalid or missing.
+
+    Args:
+        state (GraphState): The current state of the graph.
+
+    Returns:
+        str: The name of the next node to execute.
+    """
+    next_specialist_name = state.get("next_specialist")
+    print(f"---ROUTING DECISION: {next_specialist_name}---")
+
+    # A set of all valid, routable specialists
+    valid_specialists = {s.value for s in Specialist if s != Specialist.ROUTER}
+
+    if next_specialist_name in valid_specialists:
+        return next_specialist_name
+    
+    print(f"---INVALID ROUTE: '{next_specialist_name}', defaulting to PROMPT specialist.---")
+    return Specialist.PROMPT.value
 
 def create_graph() -> StateGraph:
     """
@@ -37,27 +62,30 @@ def create_graph() -> StateGraph:
     workflow.add_node(Specialist.ROUTER.value, router.execute)
     workflow.add_node(Specialist.PROMPT.value, prompt_specialist.execute)
     workflow.add_node(Specialist.DATA_EXTRACTOR.value, data_extractor_specialist.execute)
-    workflow.add_node(Specialist.FILE.value, file_specialist.invoke) # Use .invoke for FileSpecialist
+    # All specialists should be called via their .execute() method for consistency.
+    workflow.add_node(Specialist.FILE.value, file_specialist.execute)
 
     # --- Define Edges ---
 
-    # The entry point is now the router.
-    workflow.set_conditional_entry_point(
-        # The router's 'execute' method returns a dictionary with a 'next' key.
-        # This key's value determines which node to go to next.
-        router.execute,
+    # The entry point is the router.
+    workflow.set_entry_point(Specialist.ROUTER.value)
+
+    # After the router runs, the 'route_to_specialist' function is called to
+    # decide which specialist node to run next.
+    workflow.add_conditional_edges(
+        Specialist.ROUTER.value,
+        route_to_specialist,
         {
-            # The router's output string is mapped to the destination node's name
             Specialist.PROMPT.value: Specialist.PROMPT.value,
             Specialist.DATA_EXTRACTOR.value: Specialist.DATA_EXTRACTOR.value,
-            Specialist.FILE.value: Specialist.FILE.value, # Add FileSpecialist to the routing
+            Specialist.FILE.value: Specialist.FILE.value,
         }
     )
 
-    # Any node that isn't a conditional branch should have a direct edge to the end
-    workflow.add_edge(Specialist.PROMPT.value, END)
-    workflow.add_edge(Specialist.DATA_EXTRACTOR.value, END)
-    workflow.add_edge(Specialist.FILE.value, END) # Add edge for FileSpecialist
+    # After a specialist runs, the graph ends.
+    workflow.add_edge(Specialist.PROMPT.value, Edge.END.value)
+    workflow.add_edge(Specialist.DATA_EXTRACTOR.value, Edge.END.value)
+    workflow.add_edge(Specialist.FILE.value, Edge.END.value) # Add edge for FileSpecialist
     
     return workflow.compile()
 

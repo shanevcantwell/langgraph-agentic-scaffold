@@ -4,7 +4,7 @@ from typing import Dict, Any
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from .base import BaseSpecialist
-from ..utils.prompt_loader import PromptLoader
+from ..utils.prompt_loader import load_prompt
 from ..graph.state import GraphState
 
 
@@ -26,9 +26,9 @@ class PromptSpecialist(BaseSpecialist):
         Args:
             llm_provider (str): The LLM provider to use ('gemini', 'ollama', etc.).
         """
-        system_prompt = PromptLoader.load("prompt_specialist")
+        system_prompt = load_prompt("prompt_specialist")
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider)
-        print(f"---INITIALIZED PROMPT SPECIALIST---")
+        print(f"---INITIALIZED {self.__class__.__name__}---")
 
     def execute(self, state: GraphState) -> Dict[str, Any]:
         """

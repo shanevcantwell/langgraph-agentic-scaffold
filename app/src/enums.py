@@ -11,3 +11,10 @@ class Specialist(Enum):
     PROMPT = "prompt_specialist"
     DATA_EXTRACTOR = "data_extractor_specialist"
     FILE = "file_specialist"
+
+class Edge(Enum):
+    """
+    An enumeration of all edge names in the graph.
+    """
+    CONTINUE = "continue"
+    END = "__end__"

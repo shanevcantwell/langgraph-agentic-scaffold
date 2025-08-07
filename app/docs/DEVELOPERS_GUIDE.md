@@ -21,7 +21,7 @@ The system is composed of the following layers and components.
 ### 2.2 Specialists: The Functional Units
 *   **Role:** Agent / Worker / Node.
 *   **Contract:** Must inherit from `src.specialists.base.BaseSpecialist`. Must implement the `execute(state: GraphState) -> Dict[str, Any]` method.
-*   **Constraint:** A Specialist must have a single, well-defined responsibility.
+*   **Constraint:** A Specialist must have a single, well-defined responsibility. The dictionary returned by `execute` is merged into the central `GraphState`, allowing the specialist to pass data to subsequent nodes.
 
 ### 2.3 The Router/Supervisor: The Central Dispatcher
 *   **Role:** Orchestrator / Decision Engine.
@@ -75,8 +75,8 @@ Execute the following sequence to provision a new Specialist.
 
 ### 4.1 Step 1: Define Prompt Contract
 1.  Create a new file in `src/prompts/`.
-2.  Filename must be `{specialist_name}_prompt.txt`.
-3.  A completely de-identified prompt for posting to github is named `{specialist_name}_prompt.txt.example`.
+2.  Filename must be `{specialist_name}_prompt.md`. This is the standard format used by the `prompt_loader`.
+3.  A de-identified prompt for public repositories (e.g., `{specialist_name}_prompt.md.example`) is for documentation only; the loader will not automatically use it.
 4.  Define the system prompt. If the specialist is functional, this prompt **must** include the required input variables and the mandatory output JSON schema. This prompt is an API contract.
 
 ### 4.2 Step 2: Implement Specialist Logic
@@ -124,7 +124,12 @@ class NewSpecialistName(BaseSpecialist):
         #    - For functional calls, wrap `json.loads(ai_response_str)` in a try/except block.
         #    - Validate the parsed data against the expected schema.
         #    - Implement fallback/retry logic on failure.
-        
-        # 5. Egress: Return a dictionary containing the new data to be merged into GraphState.
-        
-        return {} # Placeholder
+
+        # 5. Egress: Return a dictionary to update the graph's state.
+        #    The keys of this dictionary will be merged into the GraphState.
+        #    For example, to add a new AIMessage to the history:
+        #    return {"messages": [AIMessage(content="...")]}
+        #    To direct the next step (used by the Router):
+        #    return {"next_specialist": "some_specialist_name"}
+
+        return {} # Placeholder for state update

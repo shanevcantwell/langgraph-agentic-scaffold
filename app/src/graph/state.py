@@ -1,20 +1,25 @@
 # src/graph/state.py
 
-from typing import TypedDict, Annotated, List
+from typing import TypedDict, Annotated, List, Optional, Dict, Any
 from langchain_core.messages import BaseMessage
 import operator
 
 class GraphState(TypedDict):
     """
-    Represents the state of our graph as a conversation.
+    Represents the state of our graph.
 
     Attributes:
         messages: A list of messages that form the conversation.
-                  The `Annotated` type hint combined with `operator.add` is a
-                  special instruction to LangGraph. It tells the framework to
-                  always APPEND new messages to this list, rather than
-                  overwriting the list with the new value. This creates an
-                  append-only log, which is perfect for conversations.
+                  The `Annotated` type hint with `operator.add` ensures that
+                  new messages are always appended to the list.
+        next_specialist: The name of the specialist to route to next.
+        text_to_process: Text that a specialist may need to process.
+        extracted_data: The structured data extracted by the data extractor.
+        error: An error message, if any.
     """
     messages: Annotated[List[BaseMessage], operator.add]
+    next_specialist: Optional[str]
+    text_to_process: Optional[str]
+    extracted_data: Optional[Dict[str, Any]]
+    error: Optional[str]
 

@@ -27,3 +27,7 @@ class PromptLoader:
             raise FileNotFoundError(f"Prompt file not found at: {prompt_path}")
             
         return prompt_path.read_text().strip()
+
+# Create a function-like alias for the static method to align with the
+# DEVELOPERS_GUIDE.md template and specialist implementations.
+load_prompt = PromptLoader.load

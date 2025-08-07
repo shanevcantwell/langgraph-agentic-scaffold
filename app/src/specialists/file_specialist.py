@@ -7,13 +7,13 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMe
 from langchain_core.tools import tool, Tool
 
 from .base import BaseSpecialist
-from ..utils.prompt_loader import PromptLoader
+from ..utils.prompt_loader import load_prompt
 
 class FileSpecialist(BaseSpecialist):
     """Specialist for handling file system operations."""
 
     def __init__(self, llm_provider: str, root_dir: str = "."):
-        system_prompt = PromptLoader.load("file_specialist")
+        system_prompt = load_prompt("file_specialist")
         
         # Define tools as class attributes, instantiating them as Tool objects
         self._read_file_tool = Tool(name="read_file", func=self._read_file_impl, description="Reads the content of a file.")
@@ -24,7 +24,7 @@ class FileSpecialist(BaseSpecialist):
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider, tools=tools)
         
         self.root_dir = os.path.abspath(root_dir)
-        print(f"---INITIALIZED FILE SPECIALIST (Root Dir: {self.root_dir})---")
+        print(f"---INITIALIZED {self.__class__.__name__} (Root Dir: {self.root_dir})---")
 
     def _get_full_path(self, file_path: str) -> str:
         """Validates and returns the full, safe path for a file."""
@@ -80,7 +80,12 @@ class FileSpecialist(BaseSpecialist):
             user_prompt_message
         ]
 
-        ai_response = self.llm_client.invoke(messages_to_send, temperature=0)
+        # Invoke the LLM with the messages, tools, and a low temperature for deterministic tool use.
+        ai_response = self.llm_client.invoke(
+            messages=messages_to_send,
+            tools=self.tools,
+            temperature=0
+        )
         tool_calls = ai_response.tool_calls
 
         if not tool_calls:

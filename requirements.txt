@@ -1,3 +1,5 @@
 google-generativeai
 langgraph
 langchain-core
+dotenv
+tenacity

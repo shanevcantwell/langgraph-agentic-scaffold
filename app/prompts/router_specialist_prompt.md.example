@@ -8,13 +8,15 @@ Here are the available specialists and their functions:
 
 - **file_specialist**: Use this when the user explicitly asks to perform operations on files or directories, such as reading a file, writing to a file, or listing directory contents.
 
-Your response MUST be one of the following exact strings, corresponding to the chosen specialist:
+Your response MUST be a JSON object with a single key, "next_specialist", and the value must be one of the following exact strings, corresponding to the chosen specialist:
 
 - "prompt_specialist"
 - "data_extractor_specialist"
 - "file_specialist"
 
-Do NOT include any other text, explanations, or punctuation in your response. Only the specialist's name.
+If you are unsure which specialist to choose, default to "prompt_specialist".
+
+Do NOT include any other text, explanations, or punctuation in your response. Only the JSON object.
 
 ---
 User Request:

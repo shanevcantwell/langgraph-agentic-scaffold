@@ -1,0 +1,47 @@
+{
+  "title": "Proposal for enums.py Refactor",
+  "description": "This document outlines a plan to refactor the codebase to make enums.py the single source of truth for all dictionary structures and to fix a bug in the graph creation process.",
+  "steps": [
+    {
+      "title": "Fix Graph Entry Point",
+      "description": "Correct the TypeError in app/src/main.py by replacing the `start_key` argument in `add_conditional_edges` with a call to `set_entry_point`.",
+      "file_path": "app/src/main.py",
+      "actions": [
+        {
+          "action": "replace",
+          "old_code": "workflow.add_conditional_edges(\n    start_key=Specialist.ROUTER.value,",
+          "new_code": "workflow.set_entry_point(Specialist.ROUTER.value)\nworkflow.add_conditional_edges("
+        }
+      ]
+    },
+    {
+      "title": "Update enums.py",
+      "description": "Expand the Specialist enum in app/src/enums.py to include all specialist agents and other relevant string constants.",
+      "file_path": "app/src/enums.py",
+      "actions": [
+        {
+          "action": "replace",
+          "old_code": "class Specialist(Enum):\n    ROUTER = \"router_specialist\"\n    PROMPT = \"prompt_specialist\"\n    DATA_EXTRACTOR = \"data_extractor_specialist\"\n    FILE = \"file_specialist\"",
+          "new_code": "class Specialist(Enum):\n    ROUTER = \"router_specialist\"\n    PROMPT = \"prompt_specialist\"\n    DATA_EXTRACTOR = \"data_extractor_specialist\"\n    FILE = \"file_specialist\"\n\nclass Edge(Enum):\n    CONTINUE = \"continue\"\n    END = \"__end__\"\n"
+        }
+      ]
+    },
+    {
+      "title": "Refactor Hardcoded Strings",
+      "description": "Replace all hardcoded strings that represent specialist names or graph edges with the appropriate enum members from enums.py.",
+      "file_path": "app/src/main.py",
+      "actions": [
+        {
+          "action": "replace",
+          "old_code": "return Specialist.ROUTER.value",
+          "new_code": "return Edge.CONTINUE.value"
+        },
+        {
+          "action": "replace",
+          "old_code": "return \"__end__\"",
+          "new_code": "return Edge.END.value"
+        }
+      ]
+    }
+  ]
+}

@@ -21,3 +21,4 @@ __pycache__/
 app/prompts/*_prompt.md
 !app/prompts/*_prompt.md.example
 .venv_agents/
+.venv_agents_windows/

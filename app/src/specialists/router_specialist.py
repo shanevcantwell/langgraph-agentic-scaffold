@@ -21,7 +21,7 @@ class RouterSpecialist(BaseSpecialist):
         # The specialist name is hardcoded here to match its corresponding prompt file.
         system_prompt = load_prompt("router_specialist")
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider)
-        print("---INITIALIZED ROUTER SPECIALIST---")
+        print(f"---INITIALIZED {self.__class__.__name__}---")
 
     def execute(self, state: GraphState) -> Dict[str, Any]:
         """
@@ -31,31 +31,39 @@ class RouterSpecialist(BaseSpecialist):
         """
         print("---EXECUTING ROUTER---")
         user_prompt_message = state['messages'][-1]
-
         messages_to_send = [
             SystemMessage(content=self.system_prompt_content),
             user_prompt_message,
         ]
 
-        # The prompt for this specialist MUST specify a JSON output with a "next_specialist" key.
-        ai_response_str = self.llm_client.invoke(messages_to_send).content
+        # The prompt for this specialist should specify a JSON output.
+        ai_response_str = self.llm_client.invoke(messages_to_send).content.strip()
+        next_specialist = None
+        response_json = {}
 
         try:
-            # Per the DEVELOPERS_GUIDE, the response must be JSON.
-            response_json = json.loads(ai_response_str)
-            next_specialist = response_json.get("next_specialist")
+            # Attempt to parse as JSON first
+            parsed_response = json.loads(ai_response_str)
+            if isinstance(parsed_response, dict):
+                next_specialist = parsed_response.get("next_specialist")
+            elif isinstance(parsed_response, str):
+                # If JSON parsing results in a string, use it directly
+                next_specialist = parsed_response
+            else:
+                print(f"---ROUTER WARNING: LLM response parsed to unexpected type: {type(parsed_response)}. Response: \"{ai_response_str}\"---")
 
-            if not next_specialist:
-                raise ValueError("JSON response missing 'next_specialist' key.")
+        except json.JSONDecodeError:
+            # If not valid JSON, try to extract a raw string and treat it as the specialist name
+            print(f"---ROUTER WARNING: LLM response is not valid JSON. Attempting to parse as raw string. Response: \"{ai_response_str}\"---")
+            next_specialist = ai_response_str.strip('"` \n')
 
-            # Validate that the specialist is a known one.
-            valid_specialists = [s.value for s in Specialist]
-            if next_specialist not in valid_specialists:
-                raise ValueError(f"Router returned an unknown specialist: {next_specialist}")
-
+        # Validate the final decision.
+        valid_specialists = {s.value for s in Specialist}
+        if next_specialist and next_specialist in valid_specialists:
             print(f"---ROUTER DECISION: {next_specialist}---")
             return {"next_specialist": next_specialist}
-
-        except (json.JSONDecodeError, ValueError) as e:
-            print(f"---ROUTER ERROR: {e}. Routing to PROMPT specialist for clarification.---")
+        else:
+            # If no valid specialist was found, default to the prompt specialist.
+            error_msg = f"Router could not determine a valid specialist. LLM Response: '{ai_response_str}'. Parsed as: '{next_specialist}'"
+            print(f"---ROUTER ERROR: {error_msg}. Routing to PROMPT specialist for clarification.---")
             return {"next_specialist": Specialist.PROMPT.value}
