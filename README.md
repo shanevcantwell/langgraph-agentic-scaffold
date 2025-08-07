@@ -7,8 +7,6 @@ A foundational scaffold for building multi-agent systems using LangGraph, featur
 
 ## Core Concepts
 
-*(This is your most important section. Briefly explain the "why" of your architecture.)*
-
 This project is not a library but a **template** for structuring a complex agentic application. The core philosophy is to separate concerns into distinct components:
 
 * **Graph (`/app/src/graph`):** Defines the state machine. It orchestrates the flow of logic and state between different nodes.
