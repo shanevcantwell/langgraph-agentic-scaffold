@@ -1,0 +1,19 @@
+{
+  "project": "Add Unit and Integration Tests",
+  "completed": false,
+  "tasks": [
+    {
+      "task": "Create a `tests/` directory if it does not exist.",
+      "completed": false
+    },
+    {
+      "task": "Add unit tests for specialists.",
+      "completed": false
+    },
+    {
+      "task": "Add unit tests for the LLM factory.",
+      "completed": false
+    }
+  ],
+  "test": "Create a `tests/` directory and add tests for specialists and the LLM factory to ensure stability during future refactoring."
+}

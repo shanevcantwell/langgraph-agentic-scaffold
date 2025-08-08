@@ -1,0 +1,23 @@
+{
+  "project": "Consolidate Codebase",
+  "completed": false,
+  "tasks": [
+    {
+      "task": "Move the file src/agents/hello_world.py to src/specialists/hello_world.py.",
+      "completed": false
+    },
+    {
+      "task": "Delete the file src/agents/base.py.",
+      "completed": false
+    },
+    {
+      "task": "Search the codebase for any import statements that reference `from src.agents...` and change them to `from src.specialists...`.",
+      "completed": false
+    },
+    {
+      "task": "Delete the now-empty src/agents directory.",
+      "completed": false
+    }
+  ],
+  "test": "The `src/agents` directory no longer exists. All relevant code resides in `src/specialists`. The application runs successfully without any `ImportError` exceptions when executed via `python -m src.main`."
+}
