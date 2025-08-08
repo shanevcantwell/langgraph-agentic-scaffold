@@ -2,7 +2,7 @@
   "todo_number": "01",
   "todo_name": "Consolidate_Codebase",
   "objective": "Unify the codebase by moving all agent-related code into the `src/specialists` directory and deleting the redundant `src/agents` directory.",
-  "rationale": "The current file structure has two directories (`src/agents` and `src/specialists`) representing the same concept. This violates the "single source of truth" principle defined in `DEVELOPERS_GUIDE.md` and creates confusion. We will standardize on the term **Specialist**.",
+  "rationale": "The current file structure has two directories (`src/agents` and `src/specialists`) representing the same concept. This violates the 'single source of truth' principle defined in `DEVELOPERS_GUIDE.md` and creates confusion. We will standardize on the term **Specialist**.",
   "steps": [
     {
       "step_number": 1,
