@@ -20,5 +20,4 @@ __pycache__/
 # Ignore the specialist prompt files within the app directory.
 app/prompts/*_prompt.md
 !app/prompts/*_prompt.md.example
-.venv_agents/
-.venv_agents_windows/
+.venv*/

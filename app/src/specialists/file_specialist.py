@@ -3,7 +3,7 @@
 import os
 import json
 from typing import Dict, Any, List
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage, SystemMessage
 from langchain_core.tools import tool, Tool
 
 from .base import BaseSpecialist
@@ -14,7 +14,7 @@ class FileSpecialist(BaseSpecialist):
 
     def __init__(self, llm_provider: str, root_dir: str = "."):
         system_prompt = load_prompt("file_specialist")
-        
+
         # Define tools as class attributes, instantiating them as Tool objects
         self._read_file_tool = Tool(name="read_file", func=self._read_file_impl, description="Reads the content of a file.")
         self._write_file_tool = Tool(name="write_file", func=self._write_file_impl, description="Writes content to a file.")
@@ -22,7 +22,7 @@ class FileSpecialist(BaseSpecialist):
 
         tools = [self._read_file_tool, self._write_file_tool, self._list_directory_tool]
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider, tools=tools)
-        
+
         self.root_dir = os.path.abspath(root_dir)
         print(f"---INITIALIZED {self.__class__.__name__} (Root Dir: {self.root_dir})---")
 
@@ -30,12 +30,12 @@ class FileSpecialist(BaseSpecialist):
         """Validates and returns the full, safe path for a file."""
         if ".." in file_path:
             raise ValueError("File path cannot contain '..' to prevent directory traversal.")
-        
+
         full_path = os.path.abspath(os.path.join(self.root_dir, file_path))
-        
+
         if not full_path.startswith(self.root_dir):
             raise ValueError("File path is outside the allowed directory.")
-            
+
         return full_path
 
     def _read_file_impl(self, file_path: str) -> str:

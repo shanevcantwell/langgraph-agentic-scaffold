@@ -7,11 +7,19 @@ import json
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
-import google.api_core.exceptions
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Using langchain_core.messages for consistency with the graph state
 from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
+
+def _is_retryable_gemini_exception(exception) -> bool:
+    """Return True if the exception is a retryable Gemini API error."""
+    try:
+        import google.api_core.exceptions
+        return isinstance(exception, google.api_core.exceptions.ServiceUnavailable)
+    except ImportError:
+        # If google-api-core is not installed, it can't be this exception.
+        return False
 
 class BaseLLMClient(ABC):
     """
@@ -49,7 +57,7 @@ class GeminiClient(BaseLLMClient):
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
-        retry=retry_if_exception_type(google.api_core.exceptions.ServiceUnavailable),
+        retry=_is_retryable_gemini_exception,
         before_sleep=lambda retry_state: print(f"---GEMINI RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}---")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> AIMessage:
@@ -148,13 +156,17 @@ class OllamaClient(BaseLLMClient):
         before_sleep=lambda retry_state: print(f"---OLLAMA RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}---")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> AIMessage:
+        # Map LangChain message types to Ollama roles
+        role_map = {"human": "user", "ai": "assistant", "system": "system"}
+
         payload = {
             "model": self.model,
-            "messages": [{"role": msg.type, "content": msg.content} for msg in messages],
+            "messages": [{"role": role_map.get(msg.type, "user"), "content": msg.content} for msg in messages],
             "stream": False,
             "options": {
                 "temperature": temperature
-            }
+            },
+            "format": "json"
         }
         print(f"---CALLING OLLAMA API---")
         response = requests.post(self.api_url, json=payload)
@@ -169,7 +181,7 @@ class LMStudioClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str = "http://localhost:1234/v1"):
         self.model = model
         self.api_url = f"{base_url}/chat/completions"
-        print(f"---INITIALIZED LM STUDIO CLIENT (URL: {self.api_url})---")
+        print(f"---INITIALIZED LM STUDIO CLIENT (Model: {self.model}, URL: {self.api_url})---")
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
@@ -178,9 +190,12 @@ class LMStudioClient(BaseLLMClient):
         before_sleep=lambda retry_state: print(f"---LM STUDIO RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}---")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> AIMessage:
+        # Map LangChain message types to OpenAI-compatible roles
+        role_map = {"human": "user", "ai": "assistant", "system": "system"}
+
         payload = {
             "model": self.model,
-            "messages": [{"role": msg.type, "content": msg.content} for msg in messages],
+            "messages": [{"role": role_map.get(msg.type, "user"), "content": msg.content} for msg in messages],
             "temperature": temperature,
         }
         print(f"---CALLING LM STUDIO API---")

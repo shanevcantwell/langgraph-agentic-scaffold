@@ -4,11 +4,11 @@
   "tasks": [
     {
       "task": "Create a `tests/` directory if it does not exist.",
-      "completed": false
+      "completed": true
     },
     {
       "task": "Add unit tests for specialists.",
-      "completed": false
+      "completed": true
     },
     {
       "task": "Add unit tests for the LLM factory.",

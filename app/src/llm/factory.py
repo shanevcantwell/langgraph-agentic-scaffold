@@ -46,9 +46,12 @@ class LLMClientFactory:
             client = OllamaClient(model=model, base_url=base_url)
 
         elif provider == "lmstudio":
-            # LM Studio doesn't require a model name in the payload, but we can use it for logging
-            model = os.getenv("LMSTUDIO_MODEL", "local-model") 
-            base_url = os.getenv("LMSTUDIO_BASE_URL", "http://localhost:1234/v1")
+            # The model name is sent to the OpenAI-compatible API, but often ignored by LM Studio itself.
+            # It's useful for identifying which model is intended to be used.
+            model = os.getenv("LMSTUDIO_MODEL", "local-model")
+            base_url = os.getenv("LMSTUDIO_BASE_URL")
+            if not base_url:
+                raise ValueError("LMSTUDIO_BASE_URL environment variable not set.")
             client = LMStudioClient(model=model, base_url=base_url)
             
         else:

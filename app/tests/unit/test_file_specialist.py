@@ -1,7 +1,7 @@
 import pytest
-from pathlib import Path
+from unittest.mock import MagicMock, patch
 from src.specialists.file_specialist import FileSpecialist
-
+from langchain_core.messages import AIMessage, HumanMessage
 # Architectural Note: The 'tmp_path' fixture is provided by pytest.
 # It creates a unique temporary directory for each test function, ensuring that
 # tests are isolated and do not interfere with each other or leave artifacts
@@ -9,52 +9,54 @@ from src.specialists.file_specialist import FileSpecialist
 
 @pytest.fixture
 def file_specialist(tmp_path):
-    """Fixture to create a FileSpecialist instance rooted in a temporary directory."""
-    return FileSpecialist(root_dir=str(tmp_path))
+    """Initializes FileSpecialist in a temporary directory."""
+    return FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path))
 
-def test_write_file(file_specialist, tmp_path):
-    """Tests that the write_file tool correctly creates a file with the specified content."""
-    file_path = "test_document.txt"
-    content = "This is a test."
-    
-    result = file_specialist.write_file(file_path, content)
-    
-    full_path = tmp_path / file_path
-    assert full_path.exists()
-    assert full_path.read_text() == content
-    assert result == f"File '{file_path}' has been written successfully."
+def test_read_file_happy_path(file_specialist, tmp_path):
+    """Tests successful file reading."""
+    test_file = tmp_path / "test.txt"
+    test_file.write_text("Hello, world!")
 
-def test_read_file(file_specialist, tmp_path):
-    """Tests that the read_file tool correctly reads the content of an existing file."""
-    file_path = "test_document.txt"
-    content = "Hello from the test."
-    (tmp_path / file_path).write_text(content)
-    
-    read_content = file_specialist.read_file(file_path)
-    
-    assert read_content == content
+    result = file_specialist._read_file_impl(str(test_file))
+    assert result == "Hello, world!"
 
-def test_read_file_not_found(file_specialist):
-    """Tests that the read_file tool returns an informative error for a non-existent file."""
-    non_existent_file = "this_file_does_not_exist.txt"
-    
-    result = file_specialist.read_file(non_existent_file)
-    
-    assert "Error: File not found at" in result
-    assert non_existent_file in result
+def test_write_file_happy_path(file_specialist, tmp_path):
+    """Tests successful file writing."""
+    test_file = tmp_path / "test_write.txt"
 
-def test_list_files(file_specialist, tmp_path):
-    """Tests that the list_files tool correctly lists files and directories."""
-    # Create some structure
+    result = file_specialist._write_file_impl(str(test_file), "Hello again!")
+    assert test_file.read_text() == "Hello again!"
+    assert "Successfully wrote" in result
+
+def test_list_directory_happy_path(file_specialist, tmp_path):
+    """Tests successful directory listing."""
     (tmp_path / "file1.txt").touch()
-    (tmp_path / "subdir").mkdir()
-    (tmp_path / "subdir" / "subfile.txt").touch()
-    
-    # Test listing the root
-    root_listing = file_specialist.list_files(".")
-    assert "file1.txt" in root_listing
-    assert "subdir/" in root_listing
-    
-    # Test listing the subdirectory
-    subdir_listing = file_specialist.list_files("subdir")
-    assert "subfile.txt" in subdir_listing
+    (tmp_path / "file2.txt").touch()
+
+    result = file_specialist._list_directory_impl(str(tmp_path))
+    assert "file1.txt" in result
+    assert "file2.txt" in result
+
+def test_path_traversal_prevention(file_specialist):
+    """Tests that directory traversal is blocked."""
+    with pytest.raises(ValueError, match="directory traversal"):
+        file_specialist._get_full_path("../secret.txt")
+
+@patch('src.llm.clients.GeminiClient')
+def test_execute_routes_to_read(MockGeminiClient, file_specialist):
+    """Tests that the specialist correctly interprets an LLM call to read a file."""
+    # Mock the LLM client's response to simulate it choosing the 'read_file' tool
+    mock_llm_instance = MockGeminiClient.return_value
+    mock_llm_instance.invoke.return_value = AIMessage(
+        content="",
+        tool_calls=[{'name': 'read_file', 'args': {'file_path': 'test.txt'}, 'id': 'call_123'}])
+
+    # Mock the actual file operation to isolate the test to the specialist's logic
+    file_specialist._read_file_impl = MagicMock(return_value="File content")
+
+    state = {"messages": [HumanMessage(content="Read test.txt")]}
+    result = file_specialist.execute(state)
+
+    # Assert that the read_file tool was called and the result is in the output
+    file_specialist._read_file_impl.assert_called_once_with(file_path='test.txt')
+    assert "File content" in str(result["messages"])
