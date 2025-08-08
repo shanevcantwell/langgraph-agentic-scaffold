@@ -40,7 +40,9 @@ def route_to_specialist(state: GraphState) -> str:
     # A set of all valid, routable specialists
     valid_specialists = {s.value for s in Specialist if s != Specialist.ROUTER}
 
-    if next_specialist_name in valid_specialists:
+    if next_specialist_name == Edge.END.value:
+        return Edge.END.value
+    elif next_specialist_name in valid_specialists:
         return next_specialist_name
     
     print(f"---INVALID ROUTE: '{next_specialist_name}', defaulting to PROMPT specialist.---")
@@ -83,9 +85,9 @@ def create_graph() -> StateGraph:
     )
 
     # After a specialist runs, the graph ends.
-    workflow.add_edge(Specialist.PROMPT.value, Edge.END.value)
-    workflow.add_edge(Specialist.DATA_EXTRACTOR.value, Edge.END.value)
-    workflow.add_edge(Specialist.FILE.value, Edge.END.value) # Add edge for FileSpecialist
+    workflow.add_edge(Specialist.PROMPT.value, Specialist.ROUTER.value)
+    workflow.add_edge(Specialist.DATA_EXTRACTOR.value, Specialist.ROUTER.value)
+    workflow.add_edge(Specialist.FILE.value, Specialist.ROUTER.value) # Add edge for FileSpecialist
     
     return workflow.compile()
 

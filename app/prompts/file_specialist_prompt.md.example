@@ -5,20 +5,39 @@ Available actions:
 - `write_file`: Writes content to a specified file. Parameters: `file_path` (string, required), `content` (string, required).
 - `list_directory`: Lists the contents of a specified directory. Parameters: `dir_path` (string, required).
 
-Respond in a clear, concise manner, stating the action and its parameters. If the request is unclear or cannot be mapped to a file operation, state 'unclear_request'.
+Your response MUST be a JSON object with the tool call. Do NOT include any other text, explanations, or punctuation in your response. Only the JSON object.
 
 Examples:
 User: Read the file named 'my_document.txt'
-Response: action: read_file, file_path: my_document.txt
+Response: ```json
+{
+  "name": "read_file",
+  "args": {
+    "file_path": "my_document.txt"
+  }
+}
+```
 
 User: Write "Hello World" to 'output.txt'
-Response: action: write_file, file_path: output.txt, content: Hello World
+Response: ```json
+{
+  "name": "write_file",
+  "args": {
+    "file_path": "output.txt",
+    "content": "Hello World"
+  }
+}
+```
 
 User: List the contents of the 'data' directory
-Response: action: list_directory, dir_path: data
-
-User: What is the weather today?
-Response: unclear_request
+Response: ```json
+{
+  "name": "list_directory",
+  "args": {
+    "dir_path": "data"
+  }
+}
+```
 
 ---
 User Request:

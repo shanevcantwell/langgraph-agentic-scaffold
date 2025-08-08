@@ -13,8 +13,11 @@ Your response MUST be a JSON object with a single key, "next_specialist", and th
 - "prompt_specialist"
 - "data_extractor_specialist"
 - "file_specialist"
+- "END"
 
 If you are unsure which specialist to choose, default to "prompt_specialist".
+
+If the user's request is a sign-off like 'thank you', 'that's all', or 'goodbye', or if the previous step seems to have fully answered the request, route to 'END'.
 
 Do NOT include any other text, explanations, or punctuation in your response. Only the JSON object.
 
