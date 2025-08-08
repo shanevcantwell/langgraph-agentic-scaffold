@@ -43,12 +43,43 @@ This is a non-negotiable protocol for all internal system communication.
 Adherence to this structure is required for system integrity and automated parsing.
 
 ### 3.1 Directory Structure
-src/ ├── graph/ │ └── state.py # Schema definition for GraphState TypedDict. ├── llm/ │ ├── clients.py # LLM client implementations (BaseLLMClient, etc.). │ └── factory.py # Singleton LLMClientFactory for client instantiation. ├── prompts/ │ └── *.prompt # System prompts as discrete text files. ├── specialists/ │ ├── base.py # The BaseSpecialist abstract base class. │ └── *.py # Concrete specialist implementations. └── utils/ └── prompt_loader.py # Standardized utility for loading from src/prompts/.
-
-
-
-Copy block
-
+.
+|-- app/
+|   |-- docs/
+|   |   `-- DEVELOPERS_GUIDE.md
+|   |-- prompts/
+|   |   |-- data_extractor_specialist.prompt
+|   |   |-- file_specialist.prompt
+|   |   |-- prompt_specialist.prompt
+|   |   `-- router_specialist.prompt
+|   `-- src/
+|       |-- __init__.py
+|       |-- graph/
+|       |   |-- __init__.py
+|       |   |-- nodes.py
+|       |   `-- state.py
+|       |-- llm/
+|       |   |-- __init__.py
+|       |   |-- clients.py
+|       |   `-- factory.py
+|       |-- specialists/
+|       |   |-- __init__.py
+|       |   |-- base.py
+|       |   |-- data_extractor_specialist.py
+|       |   |-- file_specialist.py
+|       |   |-- prompt_specialist.py
+|       |   `-- router_specialist.py
+|       `-- utils/
+|           |-- __init__.py
+|           `-- prompt_loader.py
+|
+|-- .env.example
+|-- .gitignore
+|-- main.py
+|-- pyproject.toml
+|-- README.md
+|-- requirements.txt
+`-- run.sh
 
 ### 3.2 Naming Convention
 *   **Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains.

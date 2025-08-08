@@ -1,5 +1,7 @@
 # TODO: Consolidate `agents` and `specialists` Directories
 
+## Status: Completed by Gemini Code Assist 2025-08-07
+
 ## Objective
 Unify the codebase by moving all agent-related code into the `src/specialists` directory and deleting the redundant `src/agents` directory.
 
