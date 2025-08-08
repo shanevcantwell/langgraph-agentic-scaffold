@@ -41,9 +41,21 @@ class RouterSpecialist(BaseSpecialist):
         next_specialist = None
         response_json = {}
 
+        extracted_json_str = ""
+        # Attempt to find JSON within markdown code fences
+        if "```json" in ai_response_str:
+            start_index = ai_response_str.find("```json") + len("```json")
+            end_index = ai_response_str.find("```", start_index)
+            if start_index != -1 and end_index != -1:
+                extracted_json_str = ai_response_str[start_index:end_index].strip()
+        
+        # If no markdown JSON, try to parse the whole string
+        if not extracted_json_str:
+            extracted_json_str = ai_response_str
+
         try:
             # Attempt to parse as JSON first
-            parsed_response = json.loads(ai_response_str)
+            parsed_response = json.loads(extracted_json_str)
             if isinstance(parsed_response, dict):
                 next_specialist = parsed_response.get("next_specialist")
             elif isinstance(parsed_response, str):
