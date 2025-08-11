@@ -1,13 +1,8 @@
 # main.py
-import os
 
-from dotenv import load_dotenv
-from src.llm.factory import LLMClientFactory
 from src.specialists.chief_of_staff import ChiefOfStaffSpecialist
 from src.specialists.systems_architect import SystemsArchitect
 from src.specialists.web_builder import WebBuilder
-
-load_dotenv()
 
 def run_diagram_generation_workflow():
     """
@@ -23,9 +18,9 @@ def run_diagram_generation_workflow():
     )
 
     # 2. Instantiate the specialist agents
-    llm_provider_name = os.getenv("LLM_PROVIDER", "gemini")
-    systems_architect = SystemsArchitect(llm_provider=llm_provider_name)
-    web_builder = WebBuilder(llm_provider=llm_provider_name)
+    # For this example, their internal logic can be simple placeholders
+    systems_architect = SystemsArchitect()
+    web_builder = WebBuilder()
 
     # 3. Instantiate the Chief of Staff, providing it with the specialists it needs
     chief_of_staff = ChiefOfStaffSpecialist(
@@ -52,4 +47,3 @@ def run_diagram_generation_workflow():
 
 if __name__ == "__main__":
     run_diagram_generation_workflow()
-

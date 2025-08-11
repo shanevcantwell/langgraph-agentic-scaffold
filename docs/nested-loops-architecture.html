@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Self-Correction: A Nested Loop Architecture</title>
+    <meta name="description" content="A visualization of the nested loop architecture for agent self-correction, combining a high-level Plan-Do-Check-Act cycle with a low-level task execution graph.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-bg: #0A0A0A;
+            --color-text: #E0E0E0;
+            --color-text-dim: #999999;
+            --color-border: #2A2A2A;
+            --color-card: #141414;
+            --color-eval: #F39C12; /* Amber */
+            --color-success: #2ECC71; /* Green */
+            --color-loop: #C0392B; /* Red */
+            --color-specialist: #00F5D4; /* Teal */
+            --color-router: #9013FE; /* Purple */
+        }
+
+        body {
+            background-color: var(--color-bg);
+            color: var(--color-text);
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        .connector-path {
+            stroke-width: 1.5px;
+            fill: none;
+            stroke-dasharray: 1000;
+            stroke-dashoffset: 1000;
+            animation: draw-line 2s ease-out forwards;
+            animation-delay: var(--delay, 0s);
+        }
+
+        @keyframes draw-line { to { stroke-dashoffset: 0; } }
+
+        .fade-in-up {
+            opacity: 0;
+            transform: translateY(20px);
+            animation: fade-in-up-anim 0.8s cubic-bezier(0.215, 0.610, 0.355, 1.000) forwards;
+            animation-delay: var(--delay, 0s);
+        }
+
+        @keyframes fade-in-up-anim { to { opacity: 1; transform: translateY(0); } }
+        
+        .node-card {
+            background-color: var(--color-card);
+            border: 1px solid var(--color-border);
+            transition: all 0.3s ease;
+        }
+        
+        .subgraph-title {
+            color: var(--color-text-dim);
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: center;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--color-border);
+        }
+    </style>
+</head>
+<body class="overflow-x-hidden">
+
+    <div class="relative min-h-screen w-full">
+        <main class="relative z-10 p-4 sm:p-8 md:p-12">
+            <header class="fade-in-up">
+                <h1 class="text-3xl sm:text-4xl md:text-5xl font-bold text-center text-white">Agent Self-Correction Architecture</h1>
+                <p class="mt-4 max-w-3xl mx-auto text-center text-lg text-gray-400">A nested loop model where a high-level agent plans and refines its approach based on the outcome of a low-level execution graph.</p>
+            </header>
+
+            <div id="visualization-container" class="relative mt-16 md:mt-24 max-w-7xl mx-auto">
+                <svg id="connector-svg" class="absolute top-0 left-0 w-full h-full z-0" aria-hidden="true"></svg>
+
+                <div class="relative z-10 grid grid-cols-1 md:grid-cols-12 gap-y-12 md:gap-x-8 md:gap-y-20 items-center">
+                    
+                    <!-- Outer Loop -->
+                    <div class="md:col-span-12 fade-in-up" style="--delay: 0.2s;"><div class="subgraph-title">Outer Loop: Agent Self-Correction</div></div>
+                    
+                    <div class="md:col-start-5 md:col-span-4 fade-in-up" style="--delay: 0.3s;">
+                        <div id="node-A" class="node-card p-4 rounded-lg text-center">
+                            <h3 class="font-semibold text-white">1. Plan Workflow</h3>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-12 border-2 border-dashed border-gray-700 rounded-xl p-8 mt-8 fade-in-up" style="--delay: 0.4s;">
+                        <div id="node-B" class="text-center mb-8">
+                            <h3 class="font-semibold text-white text-lg">2. Execute Plan (Inner Loop)</h3>
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-12 gap-y-12 md:gap-x-8 items-center">
+                            <div class="md:col-start-5 md:col-span-4">
+                                <div id="node-R1" class="node-card p-4 rounded-lg text-center border-l-4" style="border-left-color: var(--color-router);">
+                                    <h3 class="font-semibold text-white">Router</h3>
+                                </div>
+                            </div>
+                            <div class="md:col-start-2 md:col-span-4">
+                                <div id="node-S1" class="node-card p-4 rounded-lg text-center border-l-4" style="border-left-color: var(--color-specialist);">
+                                    <h3 class="font-semibold text-white">Specialist A</h3>
+                                </div>
+                            </div>
+                            <div class="md:col-start-8 md:col-span-4">
+                                <div id="node-S2" class="node-card p-4 rounded-lg text-center border-l-4" style="border-left-color: var(--color-specialist);">
+                                    <h3 class="font-semibold text-white">Specialist B</h3>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="md:col-start-5 md:col-span-4 fade-in-up" style="--delay: 0.5s;">
+                        <div id="node-C" class="node-card p-4 rounded-lg text-center border-2" style="border-color: var(--color-eval);">
+                            <h3 class="font-semibold text-white">3. Evaluate Result</h3>
+                        </div>
+                    </div>
+
+                    <div class="md:col-start-9 md:col-span-3 fade-in-up" style="--delay: 0.6s;">
+                        <div id="node-D" class="node-card p-4 rounded-lg text-center border-2" style="border-color: var(--color-success);">
+                            <h3 class="font-semibold text-white">4. Finish</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const svg = document.getElementById('connector-svg');
+    const container = document.getElementById('visualization-container');
+
+    function createConnector(startNodeId, endNodeId, color, delay, options = {}) {
+        const startNode = document.getElementById(startNodeId);
+        const endNode = document.getElementById(endNodeId);
+        if (!startNode || !endNode) return;
+
+        const containerRect = container.getBoundingClientRect();
+        const startRect = startNode.getBoundingClientRect();
+        const endRect = endNode.getBoundingClientRect();
+
+        let startX = startRect.left + startRect.width / 2 - containerRect.left;
+        let startY = startRect.bottom - containerRect.top;
+        let endX = endRect.left + endRect.width / 2 - containerRect.left;
+        let endY = endRect.top - containerRect.top;
+
+        if (options.startSide === 'top') startY = startRect.top - containerRect.top;
+        if (options.startSide === 'left') startX = startRect.left - containerRect.left;
+        if (options.startSide === 'right') startX = startRect.right - containerRect.left;
+        if (options.endSide === 'left') endX = endRect.left - containerRect.left;
+        if (options.endSide === 'right') endX = endRect.right - containerRect.left;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        let d;
+        if (options.loop) {
+            const h = Math.abs(endY - startY);
+            const w = Math.abs(endX - startX);
+            d = `M ${startX} ${startY} C ${startX - w * 1.5} ${startY + h * 0.1}, ${endX - w * 1.5} ${endY - h * 0.1}, ${endX} ${endY}`;
+        } else {
+            const midY = startY + (endY - startY) * 0.5;
+            d = `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`;
+        }
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'connector-path');
+        path.setAttribute('stroke', color);
+        path.style.setProperty('--delay', `${delay}s`);
+        svg.appendChild(path);
+    }
+
+    function drawConnectors() {
+        svg.innerHTML = '';
+        // Outer loop
+        createConnector('node-A', 'node-B', 'var(--color-text-dim)', 0.5);
+        createConnector('node-B', 'node-C', 'var(--color-text-dim)', 0.6);
+        createConnector('node-C', 'node-D', 'var(--color-success)', 0.7, { startSide: 'right', endSide: 'left' });
+        createConnector('node-C', 'node-A', 'var(--color-loop)', 0.8, { startSide: 'left', endSide: 'left', loop: true });
+
+        // Inner loop
+        createConnector('node-R1', 'node-S1', 'var(--color-specialist)', 1.0, { startSide: 'left', endSide: 'right' });
+        createConnector('node-S1', 'node-R1', 'var(--color-text-dim)', 1.1, { startSide: 'right', endSide: 'left' });
+        createConnector('node-R1', 'node-S2', 'var(--color-specialist)', 1.2, { startSide: 'right', endSide: 'left' });
+        createConnector('node-S2', 'node-R1', 'var(--color-text-dim)', 1.3, { startSide: 'left', endSide: 'right' });
+    }
+
+    const observer = new IntersectionObserver((e) => e.forEach(entry => entry.isIntersecting && setTimeout(drawConnectors, 100)), { threshold: 0.1 });
+    observer.observe(container);
+    window.addEventListener('resize', () => setTimeout(drawConnectors, 250));
+});
+</script>
+</body>
+</html>
