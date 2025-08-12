@@ -1,42 +1,27 @@
 # src/specialists/base.py
 
 from abc import ABC, abstractmethod
-from typing import List, Optional, Any, Dict
+from typing import Dict, Any, List, Optional
 
+from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from ..graph.state import GraphState
 from ..llm.factory import LLMClientFactory
-from ..llm.clients import BaseLLMClient
-from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
 
 class BaseSpecialist(ABC):
     """
-    An abstract base class that defines the standard interface for all specialist
-    agents. It now includes an integrated LLM client instantiated via a factory.
+    Abstract base class for all specialists in the multi-agent system.
     """
 
-    def __init__(
-        self,
-        system_prompt: str,
-        llm_provider: str,
-        tools: Optional[List[Any]] = None
-    ):
-        """
-        Initializes the specialist.
-
-        Args:
-            system_prompt (str): The system prompt that defines the specialist's persona.
-            llm_provider (str): The name of the LLM provider to use (e.g., 'gemini', 'ollama').
-            tools (Optional[List[Any]]): An optional list of tools for the specialist.
-        """
+    def __init__(self, system_prompt: str, llm_provider: str, tools: Optional[List] = None):
         self.system_prompt_content = system_prompt
+        self.llm_client = LLMClientFactory.create_client(llm_provider)
         self.tools = tools if tools is not None else []
-        self.llm_client: BaseLLMClient = LLMClientFactory.create_client(llm_provider)
+        print(f"---INITIALIZED BASE ({self.__class__.__name__})---")
 
     def invoke(self, state: GraphState) -> Dict[str, Any]:
         """
-        The main entry point for the specialist's logic. This implementation
-        handles the core LLM call cycle. Concrete classes can override this
-        or parts of it if more complex logic (like tool use) is needed.
+        Prepares messages and invokes the LLM client. This is a standard
+        implementation that can be used by most specialists.
 
         Args:
             state (GraphState): The current state of the graph.
@@ -56,6 +41,31 @@ class BaseSpecialist(ABC):
         # 3. Return the response in the format expected by the graph state
         return {"messages": [ai_response]}
 
+    def _parse_llm_response(self, response_dict: Dict[str, Any]) -> str:
+        """
+        Parses the dictionary returned by self.invoke() to extract the LLM's
+        string content. This is a robust helper method for subclasses.
+
+        Args:
+            response_dict (Dict[str, Any]): The dictionary returned by the invoke method.
+
+        Returns:
+            str: The content of the AI message, or an empty string if not found.
+        """
+        if not isinstance(response_dict, dict) or "messages" not in response_dict:
+            return ""
+        
+        messages = response_dict["messages"]
+        if not isinstance(messages, list) or not messages:
+            return ""
+
+        # The most recent message from the LLM is the one we want.
+        last_message = messages[0]
+        if hasattr(last_message, 'content'):
+            return last_message.content
+        
+        return ""
+
     @abstractmethod
     def execute(self, state: GraphState) -> Dict[str, Any]:
         """
@@ -63,3 +73,4 @@ class BaseSpecialist(ABC):
         For most simple specialists, this can just call self.invoke().
         """
         pass
+

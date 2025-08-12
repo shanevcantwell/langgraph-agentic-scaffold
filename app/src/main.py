@@ -1,5 +1,5 @@
-# main.py
 import os
+import logging
 
 from dotenv import load_dotenv
 from src.llm.factory import LLMClientFactory
@@ -8,6 +8,7 @@ from src.specialists.systems_architect import SystemsArchitect
 from src.specialists.web_builder import WebBuilder
 
 load_dotenv()
+logger = logging.getLogger(__name__)
 
 def run_diagram_generation_workflow():
     """
@@ -36,18 +37,18 @@ def run_diagram_generation_workflow():
     # 4. Invoke the workflow
     final_state = chief_of_staff.invoke(goal)
 
-    # 5. Print the results
-    print("\n--- FINAL WORKFLOW OUTPUT ---")
+    # 5. Log the results
+    logger.info("--- FINAL WORKFLOW OUTPUT ---")
     if final_state.get("error"):
-        print(f"An error occurred: {final_state['error']}")
+        logger.error(f"An error occurred: {final_state['error']}")
     else:
-        print("Mermaid Code Generated:")
-        print("-----------------------")
-        print(final_state.get("mermaid_code"))
-        print("\nFinal HTML Artifact:")
-        print("--------------------")
-        print(final_state.get("final_html"))
-        print("\nWorkflow executed successfully.")
+        logger.info("JSON Artifact Generated:")
+        logger.info("-----------------------")
+        logger.info(final_state.get("json_artifact"))
+        logger.info("\nFinal HTML Artifact:")
+        logger.info("--------------------")
+        logger.info(final_state.get("html_artifact"))
+        logger.info("\nWorkflow executed successfully.")
 
 
 if __name__ == "__main__":

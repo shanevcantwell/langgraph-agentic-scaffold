@@ -1,8 +1,14 @@
-# main.py
+import logging
+import argparse
 
 from src.specialists.chief_of_staff import ChiefOfStaffSpecialist
 from src.specialists.systems_architect import SystemsArchitect
 from src.specialists.web_builder import WebBuilder
+
+# Configure logging
+def setup_logging(debug_mode: bool):
+    level = logging.DEBUG if debug_mode else logging.INFO
+    logging.basicConfig(level=level, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 def run_diagram_generation_workflow():
     """
@@ -32,18 +38,25 @@ def run_diagram_generation_workflow():
     final_state = chief_of_staff.invoke(goal)
 
     # 5. Print the results
-    print("\n--- FINAL WORKFLOW OUTPUT ---")
+    logging.info("\n--- FINAL WORKFLOW OUTPUT ---")
     if final_state.get("error"):
-        print(f"An error occurred: {final_state['error']}")
+        logging.error(f"An error occurred: {final_state['error']}")
     else:
-        print("Mermaid Code Generated:")
-        print("-----------------------")
-        print(final_state.get("mermaid_code"))
-        print("\nFinal HTML Artifact:")
-        print("--------------------")
-        print(final_state.get("final_html"))
-        print("\nWorkflow executed successfully.")
+        logging.info("JSON Artifact Generated:")
+        logging.info("-----------------------")
+        logging.info(final_state.get("json_artifact"))
+        logging.info("\nFinal HTML Artifact:")
+        logging.info("--------------------")
+        logging.info(final_state.get("html_artifact"))
+        logging.info("\nWorkflow executed successfully.")
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Run the diagram generation workflow.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
+    args = parser.parse_args()
+
+    setup_logging(args.debug)
+    logging.info("Starting diagram generation workflow.")
     run_diagram_generation_workflow()
+    logging.info("Diagram generation workflow completed.")

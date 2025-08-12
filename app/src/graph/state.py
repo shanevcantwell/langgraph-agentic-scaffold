@@ -22,4 +22,6 @@ class GraphState(TypedDict):
     text_to_process: Optional[str]
     extracted_data: Optional[Dict[str, Any]]
     error: Optional[str]
+    json_artifact: Optional[str]
+    html_artifact: Optional[str]
 

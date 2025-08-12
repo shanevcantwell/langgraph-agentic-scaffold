@@ -1,5 +1,4 @@
-# src/llm/clients.py
-
+import logging
 import os
 import requests
 import requests.exceptions
@@ -11,6 +10,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 # Using langchain_core.messages for consistency with the graph state
 from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, HumanMessage
+
+logger = logging.getLogger(__name__)
 
 def _is_retryable_gemini_exception(exception) -> bool:
     """Return True if the exception is a retryable Gemini API error."""
@@ -52,13 +53,13 @@ class GeminiClient(BaseLLMClient):
         
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel(model)
-        print(f"---INITIALIZED GEMINI CLIENT (Model: {model})---")
+        logger.info(f"INITIALIZED GEMINI CLIENT (Model: {model})")
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
         retry=_is_retryable_gemini_exception,
-        before_sleep=lambda retry_state: print(f"---GEMINI RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}---")
+        before_sleep=lambda retry_state: logger.warning(f"GEMINI RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> AIMessage:
         gemini_messages = [
@@ -67,24 +68,36 @@ class GeminiClient(BaseLLMClient):
         ]
         system_prompt = next((msg.content for msg in messages if isinstance(msg, SystemMessage)), None)
         
-        print(f"---CALLING GEMINI API---")
+        logger.debug("CALLING GEMINI API")
+
+        gemini_messages = []
+        system_instructions = []
+
+        # Separate system messages and other messages
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                system_instructions.append(msg.content)
+            else:
+                gemini_messages.append({"role": "user" if isinstance(msg, HumanMessage) else "model", "parts": [msg.content]})
 
         # Always include a system instruction for JSON output
         json_system_instruction = "Your response MUST be a valid JSON object. Do NOT include any other text or explanations."
-        
-        # Prepend the JSON instruction to the messages
+        system_instructions.insert(0, json_system_instruction) # Prepend the JSON instruction
+
+        # Combine all system instructions into a single string
+        combined_system_instruction = "\n".join(system_instructions)
+
+        # Prepend the combined system instruction to the first user message
         if gemini_messages and gemini_messages[0]['role'] == 'user':
-            # If there's an existing system prompt, combine it with the JSON instruction
-            if system_prompt:
-                gemini_messages[0]['parts'] = [json_system_instruction + "\n" + system_prompt, gemini_messages[0]['parts'][0]]
-            else:
-                gemini_messages[0]['parts'] = [json_system_instruction, gemini_messages[0]['parts'][0]]
+            gemini_messages[0]['parts'].insert(0, combined_system_instruction)
         elif not gemini_messages:
             # If no messages, just add the system instruction as a user message (Gemini limitation)
-            gemini_messages.append({"role": "user", "parts": [json_system_instruction]})
+            gemini_messages.append({"role": "user", "parts": [combined_system_instruction]})
         else:
             # If the first message is not a user message, add a new user message with the instruction
-            gemini_messages.insert(0, {"role": "user", "parts": [json_system_instruction]})
+            gemini_messages.insert(0, {"role": "user", "parts": [combined_system_instruction]})
+        
+        logger.debug("CALLING GEMINI API")
 
         try:
             gemini_tools = []
@@ -102,44 +115,59 @@ class GeminiClient(BaseLLMClient):
                     gemini_tools.append(tool_schema)
 
             response = self.model.generate_content(
-                gemini_messages,
-                generation_config={"temperature": temperature},
+                contents=gemini_messages,
+                generation_config={
+                    "temperature": temperature
+                },
                 tools=gemini_tools if gemini_tools else None,
-                request_options={"timeout": 60}
+                request_options={
+                    "timeout": 60
+                }
             )
             
             # --- Robust Response Handling ---
+            # Check for prompt feedback blocking first
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                return AIMessage(content=f"Error: Gemini blocked the prompt due to: {response.prompt_feedback.block_reason.name}")
+                block_reason = response.prompt_feedback.block_reason.name
+                return AIMessage(content=f"Error: Gemini blocked the prompt due to: {block_reason}")
 
+            # Check for tool calls
+            tool_calls = []
             if response.parts:
-                # Handle tool calls
-                tool_calls = []
                 for part in response.parts:
-                    if part.function_call:
+                    if hasattr(part, 'function_call') and part.function_call:
                         tool_calls.append({
                             "name": part.function_call.name,
                             "args": {k: v for k, v in part.function_call.args.items()}
                         })
-                if tool_calls:
-                    return AIMessage(content="", tool_calls=tool_calls)
-                # Handle normal text response
+            if tool_calls:
+                return AIMessage(content="", tool_calls=tool_calls)
+
+            # Attempt to get text content
+            text_content = ""
+            if hasattr(response, 'text'):
                 try:
-                    return AIMessage(content=response.text)
+                    text_content = response.text
                 except ValueError:
-                    # This case handles when response.text is not available
+                    # This handles cases where .text might raise ValueError if no text is present
                     pass
 
-            if response.candidates and response.candidates[0].finish_reason:
-                finish_reason = response.candidates[0].finish_reason.name
-                if finish_reason != "STOP":
-                    return AIMessage(content=f"Error: Gemini finished with reason: {finish_reason}")
+            if text_content:
+                return AIMessage(content=text_content)
+            else:
+                # If no text content, check finish reason for more details
+                finish_reason = None
+                if response.candidates and response.candidates[0].finish_reason:
+                    finish_reason = response.candidates[0].finish_reason.name
 
-            # Fallback for empty or unexpected responses
-            return AIMessage(content="")
+                if finish_reason and finish_reason != "STOP":
+                    return AIMessage(content=f"Error: Gemini finished with reason: {finish_reason} and no text content.")
+                else:
+                    # Fallback for empty or unexpected responses, or STOP with no text
+                    return AIMessage(content="Error: Gemini returned an empty or unexpected response.")
 
         except Exception as e:
-            print(f"An error occurred while calling the Gemini API: {e}")
+            logger.error(f"An error occurred while calling the Gemini API: {e}")
             return AIMessage(content=f"Error: Could not get a response from Gemini. Details: {e}")
 
 class OllamaClient(BaseLLMClient):
@@ -147,13 +175,13 @@ class OllamaClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str = "http://localhost:11434"):
         self.model = model
         self.api_url = f"{base_url}/api/chat"
-        print(f"---INITIALIZED OLLAMA CLIENT (Model: {self.model}, URL: {self.api_url})---")
+        logger.info(f"INITIALIZED OLLAMA CLIENT (Model: {self.model}, URL: {self.api_url})")
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
         retry=retry_if_exception_type(requests.exceptions.RequestException),
-        before_sleep=lambda retry_state: print(f"---OLLAMA RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}---")
+        before_sleep=lambda retry_state: logger.warning(f"OLLAMA RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> AIMessage:
         # Map LangChain message types to Ollama roles
@@ -161,14 +189,17 @@ class OllamaClient(BaseLLMClient):
 
         payload = {
             "model": self.model,
-            "messages": [{"role": role_map.get(msg.type, "user"), "content": msg.content} for msg in messages],
+            "messages": [{
+                "role": role_map.get(msg.type, "user"),
+                "content": msg.content
+            } for msg in messages],
             "stream": False,
             "options": {
                 "temperature": temperature
             },
             "format": "json"
         }
-        print(f"---CALLING OLLAMA API---")
+        logger.debug("CALLING OLLAMA API")
         response = requests.post(self.api_url, json=payload)
         response.raise_for_status()
         response_data = response.json()
@@ -181,13 +212,13 @@ class LMStudioClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str = "http://localhost:1234/v1"):
         self.model = model
         self.api_url = f"{base_url}/chat/completions"
-        print(f"---INITIALIZED LM STUDIO CLIENT (Model: {self.model}, URL: {self.api_url})---")
+        logger.info(f"INITIALIZED LM STUDIO CLIENT (Model: {self.model}, URL: {self.api_url})")
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
         retry=retry_if_exception_type(requests.exceptions.RequestException),
-        before_sleep=lambda retry_state: print(f"---LM STUDIO RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}---")
+        before_sleep=lambda retry_state: logger.warning(f"LM STUDIO RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> AIMessage:
         # Map LangChain message types to OpenAI-compatible roles
@@ -195,10 +226,13 @@ class LMStudioClient(BaseLLMClient):
 
         payload = {
             "model": self.model,
-            "messages": [{"role": role_map.get(msg.type, "user"), "content": msg.content} for msg in messages],
+            "messages": [{
+                "role": role_map.get(msg.type, "user"),
+                "content": msg.content
+            } for msg in messages],
             "temperature": temperature,
         }
-        print(f"---CALLING LM STUDIO API---")
+        logger.debug("CALLING LM STUDIO API")
         response = requests.post(self.api_url, json=payload)
         response.raise_for_status()
         response_data = response.json()
