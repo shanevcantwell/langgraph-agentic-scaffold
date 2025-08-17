@@ -41,35 +41,25 @@ The system is composed of the following layers and components.
 ## 3.0 FILE & NAMING SCHEMA (MANDATORY)
 
 ### 3.1 Directory Structure
+
+The project follows a structured layout to ensure a clear separation of concerns.
+
 .
 |-- app/
 |   |-- docs/
 |   |   `-- DEVELOPERS_GUIDE.md
 |   |-- prompts/
-|   |   |-- data_extractor_specialist_prompt.md
-|   |   |-- file_specialist_prompt.md
-|   |   |-- prompt_specialist_prompt.md
-|   |   |-- router_specialist_prompt.md
-|   |   |-- systems_architect_prompt.md
-|   |   `-- web_builder_prompt.md
+|   |   `-- ... (specialist prompts) ...
 |   `-- src/
-|       |-- graph/
-|       |-- llm/
-|       |-- specialists/
-|       |   |-- __init__.py
-|       |   |-- base.py
-|       |   |-- chief_of_staff.py
-|       |   |-- data_extractor_specialist.py
-|       |   |-- file_specialist.py
-|       |   |-- prompt_specialist.py
-|       |   |-- router_specialist.py
-|       |   |-- systems_architect.py
-|       |   `-- web_builder.py
-|       `-- utils/
-|           `-- prompt_loader.py
+|       |-- graph/         # LangGraph state, nodes, and graph compilation
+|       |-- llm/           # LLM client implementations and factory
+|       |-- specialists/   # Core agentic business logic
+|       |-- utils/         # Shared utilities (e.g., prompt_loader)
+|       |-- workflow/      # High-level workflow orchestration and service APIs
+|       |   `-- runner.py
+|       `-- main.py        # Main application entry point
 |
 |-- .env
-|-- main.py
 `-- run.sh
 
 ### 3.2 Naming Convention
