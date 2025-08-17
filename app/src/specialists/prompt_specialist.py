@@ -1,5 +1,6 @@
 # src/specialists/prompt_specialist.py
 
+import logging
 from typing import Dict, Any
 from langchain_core.messages import SystemMessage, HumanMessage
 
@@ -7,6 +8,7 @@ from .base import BaseSpecialist
 from ..utils.prompt_loader import load_prompt
 from ..graph.state import GraphState
 
+logger = logging.getLogger(__name__)
 
 class PromptSpecialist(BaseSpecialist):
     """
@@ -28,7 +30,7 @@ class PromptSpecialist(BaseSpecialist):
         """
         system_prompt = load_prompt("prompt_specialist")
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider)
-        print(f"---INITIALIZED {self.__class__.__name__}---")
+        logger.info(f"---INITIALIZED {self.__class__.__name__}---")
 
     def execute(self, state: GraphState) -> Dict[str, Any]:
         """
@@ -44,7 +46,7 @@ class PromptSpecialist(BaseSpecialist):
             Dict[str, Any]: A dictionary with the 'messages' key containing the
                             AI's response.
         """
-        print("---EXECUTING PROMPT SPECIALIST---")
+        logger.info("---EXECUTING PROMPT SPECIALIST---")
         
         # For this simple specialist, we assume the last message is the user's prompt.
         # A more robust implementation might look for a specific key in the state.

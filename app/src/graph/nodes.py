@@ -16,7 +16,7 @@ def router(state: GraphState) -> str:
     Returns:
         A string key that corresponds to the next node to call.
     """
-    print("---ROUTING---")
+    logging.info("---ROUTING---")
     # In a real router, you would have logic to inspect the state
     # and decide which specialist to call next.
     return Specialist.HELLO_WORLD.value # <-- Use the enum value

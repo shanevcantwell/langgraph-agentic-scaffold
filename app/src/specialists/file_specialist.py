@@ -1,5 +1,6 @@
 # app/src/specialists/file_specialist.py
 
+import logging
 import os
 import json
 from typing import Dict, Any, List
@@ -8,6 +9,8 @@ from langchain_core.tools import tool, Tool
 
 from .base import BaseSpecialist
 from ..utils.prompt_loader import load_prompt
+
+logger = logging.getLogger(__name__)
 
 class FileSpecialist(BaseSpecialist):
     """Specialist for handling file system operations."""
@@ -24,7 +27,7 @@ class FileSpecialist(BaseSpecialist):
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider, tools=tools)
 
         self.root_dir = os.path.abspath(root_dir)
-        print(f"---INITIALIZED {self.__class__.__name__} (Root Dir: {self.root_dir})---")
+        logger.info(f"---INITIALIZED {self.__class__.__name__} (Root Dir: {self.root_dir})---")
 
     def _get_full_path(self, file_path: str) -> str:
         """Validates and returns the full, safe path for a file."""
@@ -72,7 +75,7 @@ class FileSpecialist(BaseSpecialist):
         """
         Uses the LLM to determine which file operation to perform and executes it.
         """
-        print("---FILE SPECIALIST EXECUTING---")
+        logger.info("---FILE SPECIALIST EXECUTING---")
         user_prompt_message = state['messages'][-1]
 
         messages_to_send = [

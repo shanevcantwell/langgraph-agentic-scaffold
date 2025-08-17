@@ -1,5 +1,6 @@
 import os
 import logging
+import argparse
 
 from dotenv import load_dotenv
 from src.llm.factory import LLMClientFactory
@@ -8,6 +9,13 @@ from src.specialists.systems_architect import SystemsArchitect
 from src.specialists.web_builder import WebBuilder
 
 load_dotenv()
+
+def setup_logging(debug_mode: bool):
+    """Configures the logging for the application."""
+    level = logging.DEBUG if debug_mode else logging.INFO
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging.basicConfig(level=level, format=log_format)
+
 logger = logging.getLogger(__name__)
 
 def run_diagram_generation_workflow():
@@ -35,22 +43,33 @@ def run_diagram_generation_workflow():
     )
 
     # 4. Invoke the workflow
-    final_state = chief_of_staff.invoke(goal)
+    result = chief_of_staff.invoke(goal)
 
     # 5. Log the results
     logger.info("--- FINAL WORKFLOW OUTPUT ---")
-    if final_state.get("error"):
-        logger.error(f"An error occurred: {final_state['error']}")
+    if result.get("status") == "error":
+        logger.error(f"An error occurred: {result.get('message')}")
+        logger.error(f"Details: {result.get('details')}")
     else:
+        final_state = result.get("final_state", {})
         logger.info("JSON Artifact Generated:")
         logger.info("-----------------------")
-        logger.info(final_state.get("json_artifact"))
+        logger.info(final_state.get("json_artifact", "Not found in final state."))
         logger.info("\nFinal HTML Artifact:")
         logger.info("--------------------")
-        logger.info(final_state.get("html_artifact"))
+        logger.info(final_state.get("html_artifact", "Not found in final state."))
         logger.info("\nWorkflow executed successfully.")
 
 
 if __name__ == "__main__":
-    run_diagram_generation_workflow()
+    parser = argparse.ArgumentParser(description="Run the diagram generation workflow.")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
+    args = parser.parse_args()
 
+    setup_logging(args.debug)
+    # Re-initialize logger after basicConfig is called to ensure it picks up the config
+    logger = logging.getLogger(__name__)
+
+    logger.info("Starting diagram generation workflow.")
+    run_diagram_generation_workflow()
+    logger.info("Diagram generation workflow completed.")

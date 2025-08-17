@@ -28,32 +28,41 @@ class WebBuilder(BaseSpecialist):
         """
         logger.info("WEB BUILDER: Generating HTML Artifact")
 
-        json_artifact = state.get("json_artifact", "{}") # Get the JSON artifact from the state
+        # 1. Get the JSON artifact from the state.
+        json_artifact = state.get("json_artifact")
+        if not json_artifact:
+            error_message = "WEB BUILDER: 'json_artifact' not found in state. Cannot generate HTML."
+            logger.error(error_message)
+            return {"error": "Missing Dependency", "error_details": error_message}
 
-        # Prepare messages for the LLM, including the JSON artifact
-        # The prompt for WebBuilder will instruct the LLM to convert this JSON into HTML
-        messages_for_llm = state["messages"] + [HumanMessage(content=f"Visualize the following JSON object as an HTML document: {json_artifact}")]
+        # 2. Create a specific prompt for the Web Builder to convert the JSON to HTML.
+        user_prompt = f"""Based on the following JSON artifact, create a complete HTML document that renders the diagram using Mermaid.js.
+The HTML must include the necessary Mermaid.js library script tag and the Mermaid diagram definition within a `<pre class="mermaid">` tag.
 
-        # 1. Invoke the LLM client directly with the prepared messages.
-        ai_response = self.llm_client.invoke(messages_for_llm)
+JSON Artifact:
+```json
+{json_artifact}
+```"""
 
-        # Wrap the AI response in the format expected by the graph state and _parse_llm_response.
-        llm_response_dict = {"messages": [ai_response]}
+        # 3. Invoke the LLM with the specific, focused prompt.
+        llm_input = {"messages": [HumanMessage(content=user_prompt)]}
+        llm_response_dict = self.invoke(llm_input)
 
-        # 2. Use the robust parser from the base class to safely extract the string content.
+        # 4. Check for errors from the LLM client.
+        if "error" in llm_response_dict:
+            logger.error(f"Web Builder failed to get a valid response from the LLM. Error: {llm_response_dict['error']}")
+            return llm_response_dict
+
+        # 5. Use the robust parser from the base class to safely extract the string content.
         html_artifact = self._parse_llm_response(llm_response_dict)
 
         if not html_artifact:
-            # This is a safeguard in case the LLM response was empty or malformed.
             logger.warning("WEB BUILDER: FAILED to parse LLM response.")
-            html_artifact = "<html><body><h1>Error: Failed to generate HTML.</h1></body></html>" # Fallback HTML
-
+            return {"error": "LLM Parsing Failed", "error_details": "Web Builder failed to parse a valid HTML artifact from the LLM response."}
 
         logger.info(f"WEB BUILDER: Generated HTML Artifact\n{html_artifact[:250]}...")
 
-        # 3. Prepare the final dictionary to update the graph's state.
-        # We take the original response dictionary (which contains the new message for the history)
-        # and add the 'html_artifact' key to it.
+        # 6. Prepare the final dictionary to update the graph's state.
         final_state_update = llm_response_dict.copy()
         final_state_update["html_artifact"] = html_artifact
 

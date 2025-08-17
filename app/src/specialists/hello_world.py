@@ -1,10 +1,13 @@
 # src/agents/hello_world.py
 
+import logging
 from langchain_core.messages import AIMessage, HumanMessage
 from typing import Dict, Any
 
 from .base import SpecialistNode
 from ..graph.state import GraphState
+
+logger = logging.getLogger(__name__)
 
 class HelloWorldSpecialist(SpecialistNode):
     """
@@ -16,7 +19,7 @@ class HelloWorldSpecialist(SpecialistNode):
         """
         Executes the specialist's logic.
         """
-        print("---CALLING HELLO WORLD SPECIALIST (CLASS)---")
+        logger.info("---CALLING HELLO WORLD SPECIALIST (CLASS)---")
         
         last_message = state["messages"][-1]
         user_request = last_message.content

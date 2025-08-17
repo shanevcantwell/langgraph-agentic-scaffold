@@ -1,43 +1,9 @@
 import pytest
-from unittest.mock import patch, MagicMock
-from langchain_core.messages import AIMessage, HumanMessage
-from src.specialists.prompt_specialist import PromptSpecialist
-from src.graph.state import GraphState
-
-@pytest.fixture
-def specialist_and_state():
-    """Provides a PromptSpecialist instance and a default state."""
-    specialist = PromptSpecialist(llm_provider="gemini")
-    state = GraphState(messages=[HumanMessage(content="What should I do next?")])
-    return specialist, state
-
-import pytest
-from unittest.mock import patch, MagicMock
-from langchain_core.messages import AIMessage, HumanMessage
-from src.specialists.prompt_specialist import PromptSpecialist
-from src.graph.state import GraphState
 import json
-
-@pytest.fixture
-def specialist_and_state():
-    """Provides a PromptSpecialist instance and a default state."""
-    specialist = PromptSpecialist(llm_provider="gemini")
-    state = GraphState(messages=[HumanMessage(content="What should I do next?")])
-    return specialist, state
-
-import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import AIMessage, HumanMessage
 from src.specialists.prompt_specialist import PromptSpecialist
 from src.graph.state import GraphState
-import json
-
-import pytest
-from unittest.mock import patch, MagicMock
-from langchain_core.messages import AIMessage, HumanMessage
-from src.specialists.prompt_specialist import PromptSpecialist
-from src.graph.state import GraphState
-import json
 
 @pytest.fixture
 def default_state():
@@ -60,4 +26,3 @@ def test_prompt_specialist_happy_path(mock_create_client, default_state):
     # Assert that the content of the AIMessage is exactly what was returned by the mock
     assert result["messages"][-1].content == expected_content
     assert isinstance(result["messages"][-1], AIMessage)
-

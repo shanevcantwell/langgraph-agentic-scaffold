@@ -38,17 +38,20 @@ def run_diagram_generation_workflow():
     final_state = chief_of_staff.invoke(goal)
 
     # 5. Print the results
-    logging.info("\n--- FINAL WORKFLOW OUTPUT ---")
+    logging.info("
+--- FINAL WORKFLOW OUTPUT ---")
     if final_state.get("error"):
         logging.error(f"An error occurred: {final_state['error']}")
     else:
         logging.info("JSON Artifact Generated:")
         logging.info("-----------------------")
         logging.info(final_state.get("json_artifact"))
-        logging.info("\nFinal HTML Artifact:")
+        logging.info("
+Final HTML Artifact:")
         logging.info("--------------------")
         logging.info(final_state.get("html_artifact"))
-        logging.info("\nWorkflow executed successfully.")
+        logging.info("
+Workflow executed successfully.")
 
 
 if __name__ == "__main__":

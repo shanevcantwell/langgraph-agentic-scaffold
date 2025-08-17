@@ -145,12 +145,12 @@ class GeminiClient(BaseLLMClient):
 
             # Attempt to get text content
             text_content = ""
-            if hasattr(response, 'text'):
-                try:
-                    text_content = response.text
-                except ValueError:
-                    # This handles cases where .text might raise ValueError if no text is present
-                    pass
+            try:
+                text_content = response.text
+            except ValueError:
+                # This handles cases where .text might raise ValueError if no text is present
+                # (e.g., if the model returns a tool call or is blocked).
+                pass
 
             if text_content:
                 return AIMessage(content=text_content)
@@ -168,7 +168,7 @@ class GeminiClient(BaseLLMClient):
 
         except Exception as e:
             logger.error(f"An error occurred while calling the Gemini API: {e}")
-            return AIMessage(content=f"Error: Could not get a response from Gemini. Details: {e}")
+            raise e
 
 class OllamaClient(BaseLLMClient):
     """LLM client for a local Ollama instance."""
