@@ -125,3 +125,107 @@ System configuration is managed via a `.env` file in the `/app` directory. The a
 *   `OLLAMA_MODEL`: **Required for Ollama.** The name of the model to use with your local Ollama instance.
 *   `OLLAMA_BASE_URL`: *Optional.* The base URL for the Ollama API (defaults to `http://localhost:11434`).
 *   `LMSTUDIO_BASE_URL`: **Required for LM Studio.** The base URL for your local LM Studio server (e.g., `http://localhost:1234/v1`).
+
+## 5. Data Contracts
+
+To ensure reliable, state-driven communication between specialists, the project uses standardized JSON schemas for artifacts passed in the `GraphState`. This section serves as the canonical reference for these schemas. Adherence to these contracts is mandatory for system stability.
+
+### 5.1 Sequence Diagram JSON Schema
+
+This schema is the standard format for representing sequence diagrams within the system. It is produced by the `SystemsArchitect` and consumed by specialists like the `WebBuilder`.
+
+**Root Object:**
+
+| Key            | Type              | Description                                                  |
+| :------------- | :---------------- | :----------------------------------------------------------- |
+| `diagram_type` | `string`          | The type of diagram. Must be `"sequence"`.                   |
+| `title`        | `string`          | A concise and descriptive title for the diagram.             |
+| `participants` | `array of objects` | A list of all participants in the diagram. See below.        |
+| `flow`         | `array of objects` | The ordered sequence of interactions. See below.             |
+
+**Participant Object:**
+
+| Key    | Type     | Description                                                              |
+| :----- | :------- | :----------------------------------------------------------------------- |
+| `id`   | `string` | A short, lowercase, `snake_case` identifier (e.g., "user", "api_server"). |
+| `name` | `string` | The full, display name of the participant (e.g., "User", "API Server").  |
+| `type` | `string` | The type of participant. Must be either `"actor"` or `"participant"`.    |
+
+**Flow Object:**
+
+| Key        | Type      | Description                                                                  |
+| :--------- | :-------- | :--------------------------------------------------------------------------- |
+| `from`     | `string`  | The `id` of the originating participant.                                     |
+| `to`       | `string`  | The `id` of the destination participant.                                     |
+| `action`   | `string`  | A brief description of the action being performed.                           |
+| `is_reply` | `boolean` | `false` for a request/action (solid line). `true` for a reply (dashed line). |
+
+---
+
+#### **Canonical Example**
+
+```json
+{
+  "diagram_type": "sequence",
+  "title": "User Login Flow",
+  "participants": [
+    {
+      "id": "user",
+      "name": "User",
+      "type": "actor"
+    },
+    {
+      "id": "webapp",
+      "name": "Web Application",
+      "type": "participant"
+    },
+    {
+      "id": "api",
+      "name": "API Server",
+      "type": "participant"
+    },
+    {
+      "id": "db",
+      "name": "Database",
+      "type": "participant"
+    }
+  ],
+  "flow": [
+    {
+      "from": "user",
+      "to": "webapp",
+      "action": "Submit credentials",
+      "is_reply": false
+    },
+    {
+      "from": "webapp",
+      "to": "api",
+      "action": "Validate credentials",
+      "is_reply": false
+    },
+    {
+      "from": "api",
+      "to": "db",
+      "action": "Query for user",
+      "is_reply": false
+    },
+    {
+      "from": "db",
+      "to": "api",
+      "action": "Return user record",
+      "is_reply": true
+    },
+    {
+      "from": "api",
+      "to": "webapp",
+      "action": "Return JWT token",
+      "is_reply": true
+    },
+    {
+      "from": "webapp",
+      "to": "user",
+      "action": "Login successful",
+      "is_reply": true
+    }
+  ]
+}
