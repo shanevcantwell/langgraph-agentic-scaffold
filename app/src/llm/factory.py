@@ -19,14 +19,12 @@ class AdapterFactory:
         if adapter_class_name == 'GeminiAdapter':
             return GeminiAdapter(
                 model_config=model_config,
-                provider_config=provider_config,
                 api_key=os.getenv("GOOGLE_API_KEY"),
                 system_prompt=system_prompt
             )
         elif adapter_class_name == 'LMStudioAdapter':
             return LMStudioAdapter(
                 model_config=model_config,
-                provider_config=provider_config,
                 base_url=os.getenv("LMSTUDIO_BASE_URL"),
                 system_prompt=system_prompt
             )

@@ -11,6 +11,8 @@ class Specialist(Enum):
     PROMPT = "prompt_specialist"
     DATA_EXTRACTOR = "data_extractor_specialist"
     FILE = "file_specialist"
+    SYSTEMS_ARCHITECT = "systems_architect"
+    WEB_BUILDER = "web_builder"
 
 class Edge(Enum):
     """

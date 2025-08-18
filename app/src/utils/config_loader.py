@@ -9,7 +9,7 @@ class ConfigLoader:
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(ConfigLoader, cls).__new__(cls)
-            config_path = os.path.join(os.path.dirname(__file__), '../../config.yaml')
+            config_path = os.path.join(os.path.dirname(__file__), '../../../config.yaml')
             with open(config_path, 'r') as f:
                 cls._config = yaml.safe_load(f)
         return cls._instance

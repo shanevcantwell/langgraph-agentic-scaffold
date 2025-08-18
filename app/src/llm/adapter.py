@@ -7,6 +7,7 @@ class StandardizedLLMRequest(BaseModel):
     """A provider-agnostic request object that captures the specialist's runtime intent."""
     messages: List[BaseMessage]
     output_schema: Optional[Dict[str, Any]] = Field(default=None)
+    tools: Optional[List[Any]] = Field(default=None)
 
 class BaseAdapter(ABC):
     """The abstract base class for all provider-specific adapters."""

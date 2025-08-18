@@ -2,11 +2,11 @@
 
 import logging
 from typing import Dict, Any
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 from .base import BaseSpecialist
+from ..llm.adapter import StandardizedLLMRequest
 from ..utils.prompt_loader import load_prompt
-from ..graph.state import GraphState
 
 logger = logging.getLogger(__name__)
 
@@ -18,21 +18,14 @@ class PromptSpecialist(BaseSpecialist):
     This is a fundamental building block for direct Q&A and instruction-following.
     """
 
-    def __init__(self, llm_provider: str):
+    def __init__(self):
         """
         Initializes the PromptSpecialist.
-
-        It uses a generic system prompt that can be overridden if needed,
-        but its primary purpose is to be a direct conduit to the LLM.
-
-        Args:
-            llm_provider (str): The LLM provider to use ('gemini', 'ollama', etc.).
         """
-        system_prompt = load_prompt("prompt_specialist")
-        super().__init__(system_prompt=system_prompt, llm_provider=llm_provider)
+        super().__init__(specialist_name="prompt_specialist")
         logger.info(f"---INITIALIZED {self.__class__.__name__}---")
 
-    def execute(self, state: GraphState) -> Dict[str, Any]:
+    def execute(self, state: dict) -> Dict[str, Any]:
         """
         The execution entry point called by the LangGraph node.
 
@@ -40,7 +33,7 @@ class PromptSpecialist(BaseSpecialist):
         and returns the AI's response to be appended to the message history.
 
         Args:
-            state (GraphState): The current state of the graph.
+            state (dict): The current state of the graph.
 
         Returns:
             Dict[str, Any]: A dictionary with the 'messages' key containing the
@@ -48,20 +41,18 @@ class PromptSpecialist(BaseSpecialist):
         """
         logger.info("---EXECUTING PROMPT SPECIALIST---")
         
-        # For this simple specialist, we assume the last message is the user's prompt.
-        # A more robust implementation might look for a specific key in the state.
         user_prompt_message = state['messages'][-1]
         
         if not isinstance(user_prompt_message, HumanMessage):
             raise ValueError("PromptSpecialist requires the last message in the state to be a HumanMessage.")
 
-        # We don't use the base class's `invoke` because we want a fresh conversation
-        # with only the system prompt and the current user prompt.
-        messages_to_send = [
-            SystemMessage(content=self.system_prompt_content),
-            user_prompt_message
-        ]
+        system_prompt = load_prompt("prompt_specialist_prompt.md")
 
-        ai_response = self.llm_client.invoke(messages_to_send)
+        request = StandardizedLLMRequest(
+            messages=[user_prompt_message],
+            system_prompt_content=system_prompt,
+        )
 
-        return {"messages": [ai_response]}
+        response_data = self.llm_adapter.invoke(request)
+
+        return {"messages": [AIMessage(content=response_data)]}

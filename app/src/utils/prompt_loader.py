@@ -21,7 +21,7 @@ class PromptLoader:
             FileNotFoundError: If the prompt file does not exist.
         """
         # Use _specialist_prompt.md as the standard format for prompt files
-        prompt_path = Path(__file__).parent.parent.parent / "prompts" / f"{prompt_name}_prompt.md"
+        prompt_path = Path(__file__).parent.parent.parent / "prompts" / prompt_name
         
         if not prompt_path.exists():
             raise FileNotFoundError(f"Prompt file not found at: {prompt_path}")

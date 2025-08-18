@@ -20,9 +20,7 @@ class WorkflowRunner:
         Initializes the WorkflowRunner by instantiating the ChiefOfStaff
         and compiling the LangGraph application.
         """
-        llm_provider = os.getenv("LLM_PROVIDER", "gemini")
-        
-        chief_of_staff = ChiefOfStaff(llm_provider=llm_provider)
+        chief_of_staff = ChiefOfStaff()
         
         self.app = chief_of_staff.compile_graph()
         

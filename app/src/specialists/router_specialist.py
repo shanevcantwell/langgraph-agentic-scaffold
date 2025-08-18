@@ -1,14 +1,12 @@
 import logging
-import json
 from typing import Dict, Any
 
-from langchain_core.messages import SystemMessage, HumanMessage
-
 from .base import BaseSpecialist
-from ..graph.state import GraphState
-from ..utils.prompt_loader import load_prompt
 from ..enums import Specialist
-from ..llm.clients import LLMInvocationError
+from ..llm.adapter import StandardizedLLMRequest
+from ..utils.prompt_loader import load_prompt
+from langchain_core.messages import HumanMessage
+from google.generativeai.types import FunctionDeclaration, Tool
 
 logger = logging.getLogger(__name__)
 
@@ -18,57 +16,55 @@ class RouterSpecialist(BaseSpecialist):
     by leveraging the LLM's tool-calling capabilities as a structured output mechanism.
     """
 
-    def __init__(self, llm_provider: str):
-        system_prompt = load_prompt("router_specialist")
-        
-        # Define the "Decoy Tool" schema. This is our hard contract.
-        # The enum provides a strict list of valid choices.
-        routing_tool = {
-            "name": "route_to_specialist",
-            "description": "Routes the request to the appropriate specialist.",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "next_specialist": {
-                        "type": "string",
-                        "description": "The name of the specialist to route to.",
-                        "enum": [s.value for s in Specialist]
-                    }
-                },
-                "required": ["next_specialist"]
-            }
-        }
-        
-        # Pass the tool definition to the base class
-        super().__init__(system_prompt=system_prompt, llm_provider=llm_provider, tools=[routing_tool])
-        logger.info(f"Initialized {self.__class__.__name__} with routing tool.")
+    def __init__(self):
+        super().__init__(specialist_name="router_specialist")
+        logger.info(f"Initialized {self.__class__.__name__}.")
 
-    def execute(self, state: GraphState) -> Dict[str, Any]:
+    def execute(self, state: dict) -> Dict[str, Any]:
         """
         Invokes the LLM with the decoy tool to get a structured routing decision.
         """
         logger.info("Executing Router...")
-        user_prompt_message = state['messages'][-1]
-        messages_to_send = [
-            SystemMessage(content=self.system_prompt_content),
-            user_prompt_message,
-        ]
+        user_prompt = state['messages'][-1].content
+        system_prompt = load_prompt("router_specialist_prompt.md")
 
-        try:
-            # Invoke the client, passing the tools defined in __init__
-            # The client will now handle the tool call response.
-            response_data = self.llm_client.invoke(messages_to_send, tools=self.tools)
-            
-            # The client now returns the arguments of the tool call directly.
-            next_specialist = response_data.get("next_specialist")
+        # Define the "Decoy Tool" schema. This is our hard contract.
+        # The enum provides a strict list of valid choices.
+        routing_tool = Tool(
+            function_declarations=[
+                FunctionDeclaration(
+                    name="route_to_specialist",
+                    description="Routes the request to the appropriate specialist.",
+                    parameters={
+                        "type": "OBJECT",
+                        "properties": {
+                            "next_specialist": {
+                                "type": "STRING",
+                                "description": "The name of the specialist to route to.",
+                                "enum": [s.value for s in Specialist]
+                            }
+                        },
+                        "required": ["next_specialist"]
+                    }
+                )
+            ]
+        )
 
-            if next_specialist and next_specialist in {s.value for s in Specialist}:
-                logger.info(f"Router decision: Routing to {next_specialist}")
-                return {"next_specialist": next_specialist}
-            else:
-                raise LLMInvocationError(f"Router returned an invalid specialist: {next_specialist}")
+        request = StandardizedLLMRequest(
+            messages=[
+                HumanMessage(content=user_prompt),
+            ],
+            system_prompt_content=system_prompt,
+            tools=[routing_tool]
+        )
 
-        except LLMInvocationError as e:
-            error_msg = f"Router failed to determine a valid specialist: {e}"
-            logger.error(f"{error_msg}. Routing to PROMPT specialist for clarification.")
+        response_data = self.llm_adapter.invoke(request)
+        
+        next_specialist = response_data.get("next_specialist")
+
+        if next_specialist and next_specialist in {s.value for s in Specialist}:
+            logger.info(f"Router decision: Routing to {next_specialist}")
+            return {"next_specialist": next_specialist}
+        else:
+            logger.error(f"Router returned an invalid specialist: {next_specialist}. Routing to PROMPT specialist for clarification.\n")
             return {"next_specialist": Specialist.PROMPT.value}
