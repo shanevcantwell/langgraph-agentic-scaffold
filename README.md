@@ -45,25 +45,41 @@ This project is not a library but a **template** for structuring a complex agent
     cd langgraph-agentic-scaffold
     ```
 
-2.  **Create a virtual environment and install dependencies:**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate
+2.  **Create and activate a virtual environment:**
+    *   For **Linux/macOS**:
+        ```sh
+        python3 -m venv .venv_agents
+        source ./.venv_agents/bin/activate
+        ```
+    *   For **Windows**:
+        ```sh
+        python -m venv .venv_agents_windows
+        .\.venv_agents_windows\Scripts\activate
+        ```
+
+3.  **Install dependencies:**
+    ```sh
     pip install -r requirements.txt
     ```
 
-3.  **Configure your environment:**
+4.  **Configure your environment:**
     ```bash
     # Copy the example .env file
     cp .env.example .env
     ```
     Now, edit the `.env` file to add your API keys and other settings.
 
-4.  **Run the application:**
-    ```bash
-    # Example command to run the main graph
-    python -m app.main
-    ```
+5.  **Run the application:**
+    Use the provided scripts to start the API server.
+    *   On **Linux/macOS**:
+        ```sh
+        ./run.sh
+        ```
+    *   On **Windows**:
+        ```bat
+        .\windows_run.bat
+        ```
+    Once running, you can access the interactive API documentation at `http://127.0.0.1:8000/docs`.
 
 ## Project Status & Disclaimer
 

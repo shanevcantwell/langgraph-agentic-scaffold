@@ -56,6 +56,8 @@ Follow these steps to set up and run the project.
 
 Use the provided scripts in the project root to run the application.
 
+These scripts will start the FastAPI web server using Uvicorn. You can access the API at `http://127.0.0.1:8000` and view the interactive documentation (Swagger UI) at `http://127.0.0.1:8000/docs`.
+
 *   On **Linux/macOS**:
     ```sh
     ./run.sh
@@ -143,7 +145,7 @@ The system is composed of the following layers and components.
     ```python
     from .base import BaseSpecialist
     from ..llm.adapter import StandardizedLLMRequest
-    from langchain_core.messages import HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage
 
     class NewSpecialist(BaseSpecialist):
         def __init__(self):
@@ -164,5 +166,9 @@ The system is composed of the following layers and components.
             response_data = self.llm_adapter.invoke(request)
 
             # 3. Process the structured response.
-            # ... your logic here ...
-            return {"some_new_key": response
+            # Your logic here to process response_data.
+            # For example, add the AI's response back to the message history.
+            ai_message = AIMessage(content=str(response_data))
+
+            return {"messages": state["messages"] + [ai_message]}
+    ```

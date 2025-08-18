@@ -1,8 +1,17 @@
 #!/bin/bash
-# This script is for Linux/macOS users.
+# This script activates the virtual environment, installs dependencies,
+# and runs the FastAPI application server for Linux/macOS users.
 
-# Activate the Python virtual environment
+# Activate the virtual environment
 source ./.venv_agents/bin/activate
 
-# Run the main application module, passing along any command-line arguments
-python -m app.src.main "$@"
+echo "Installing/updating dependencies from requirements.txt..."
+pip install -r requirements.txt
+
+echo "Starting SpecialistHub API server with Uvicorn..."
+echo "Access the API at http://127.0.0.1:8000"
+echo "View the interactive documentation at http://127.0.0.1:8000/docs"
+
+# Run the FastAPI server using uvicorn
+# --reload will automatically restart the server when code changes are detected
+uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --reload

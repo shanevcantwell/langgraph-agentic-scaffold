@@ -1,8 +1,11 @@
-# app/api.py
+# app/src/api.py
+import logging
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any
+from typing import Dict, Any
+from .workflow.runner import WorkflowRunner
 
+logger = logging.getLogger(__name__)
 # --- 1. Define your Data Contracts (The "XSD" part) ---
 # Pydantic models define the shape and types of your API data.
 
@@ -31,9 +34,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# TODO: Import and instantiate your LangGraph app from main.py
-# from src.main import app as langgraph_app
-
+# Instantiate the runner once when the application starts.
+# This is efficient as it will preload the configuration and graph.
+workflow_runner = WorkflowRunner()
 
 # --- 3. Define your API Endpoints (The "RPC" part) ---
 # These are the functions that will be called by clients.
@@ -49,22 +52,10 @@ def invoke_graph(request: InvokeRequest):
     Receives a user prompt, invokes the agentic graph synchronously,
     and returns the final result.
     """
-    print(f"Received request to invoke graph with prompt: {request.input_prompt}")
+    logger.info(f"Received request to invoke graph with prompt: '{request.input_prompt}'")
 
-    # This is where you will call your actual LangGraph application
-    # For now, we'll use a mock response.
-    #
-    # inputs = {"messages": [("user", request.input_prompt)]}
-    # final_state = langgraph_app.invoke(inputs)
-    #
-    # return {"final_output": final_state}
+    # Invoke the workflow runner with the user's prompt as the goal.
+    final_state = workflow_runner.run(goal=request.input_prompt)
 
-    # Mock response for demonstration:
-    mock_final_output = {
-        "messages": [
-            {"type": "human", "content": request.input_prompt},
-            {"type": "ai", "content": f"This is a mock response for: '{request.input_prompt}'"}
-        ]
-    }
-    return {"final_output": mock_final_output}
-
+    # The runner's final state is the output.
+    return InvokeResponse(final_output=final_state)
