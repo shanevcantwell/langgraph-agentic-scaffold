@@ -1,75 +1,75 @@
-import os
 import logging
-import argparse
-
+import os
 from dotenv import load_dotenv
-from src.llm.factory import LLMClientFactory
-from src.specialists.chief_of_staff import ChiefOfStaffSpecialist
-from src.specialists.systems_architect import SystemsArchitect
-from src.specialists.web_builder import WebBuilder
 
-load_dotenv()
+from .workflow.runner import WorkflowRunner
 
-def setup_logging(debug_mode: bool):
-    """Configures the logging for the application."""
-    level = logging.DEBUG if debug_mode else logging.INFO
-    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=level, format=log_format)
-
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def run_diagram_generation_workflow():
+def main():
     """
-    Initializes the specialists and runs the diagram generation workflow.
+    The main entry point for the application.
+    Initializes the environment, sets a goal, and uses the WorkflowRunner to execute it.
     """
+    load_dotenv()
+    
+    # MODIFIED: The validation check now uses the correct, documented environment variable.
+    if os.getenv("LLM_PROVIDER") == "gemini" and not os.getenv("GOOGLE_API_KEY"):
+        logger.error("GOOGLE_API_KEY must be set in your .env file for the 'gemini' provider.")
+        return
+        
+    if not os.getenv("LLM_PROVIDER"):
+        logger.warning("LLM_PROVIDER not set, defaulting to 'gemini'.")
+        os.environ["LLM_PROVIDER"] = "gemini"
+    if not os.getenv("GEMINI_MODEL"):
+        logger.warning("GEMINI_MODEL not set, defaulting to 'gemini-1.5-flash'.")
+        os.environ["GEMINI_MODEL"] = "gemini-1.5-flash"
+
+    logger.info("Starting agentic workflow.")
+
     # 1. Define the high-level goal
     goal = (
-        "Create a sequence diagram that shows the interaction between a User, "
-        "a Chief of Staff, a Systems Architect, and a Web Builder. The User asks "
-        "the Chief of Staff to create a diagram. The Chief of Staff first calls the "
-        "Systems Architect to get the diagram's code, then calls the Web Builder "
-        "to embed that code into an HTML page, and finally returns the result to the User."
+        "Create a sequence diagram that shows the interaction between a User, a Chief of Staff, "
+        "a Systems Architect, and a Web Builder. The User asks the Chief of Staff to create a diagram. "
+        "The Chief of Staff first calls the Systems Architect to get the diagram's code, then calls "
+        "the Web Builder to embed that code into an HTML page, and finally returns the result to the User."
     )
 
-    # 2. Instantiate the specialist agents
-    llm_provider_name = os.getenv("LLM_PROVIDER", "gemini")
-    systems_architect = SystemsArchitect(llm_provider=llm_provider_name)
-    web_builder = WebBuilder(llm_provider=llm_provider_name)
+    # 2. Instantiate and use the WorkflowRunner. All complexity is now hidden.
+    runner = WorkflowRunner()
+    final_state = runner.run(goal=goal)
 
-    # 3. Instantiate the Chief of Staff, providing it with the specialists it needs
-    chief_of_staff = ChiefOfStaffSpecialist(
-        systems_architect=systems_architect,
-        web_builder=web_builder
-    )
-
-    # 4. Invoke the workflow
-    result = chief_of_staff.invoke(goal)
-
-    # 5. Log the results
+    # 3. Process and display the final results
     logger.info("--- FINAL WORKFLOW OUTPUT ---")
-    if result.get("status") == "error":
-        logger.error(f"An error occurred: {result.get('message')}")
-        logger.error(f"Details: {result.get('details')}")
+    if final_state.get("error"):
+        logger.error(f"An error occurred: {final_state['error']}")
     else:
-        final_state = result.get("final_state", {})
-        logger.info("JSON Artifact Generated:")
-        logger.info("-----------------------")
-        logger.info(final_state.get("json_artifact", "Not found in final state."))
-        logger.info("\nFinal HTML Artifact:")
-        logger.info("--------------------")
-        logger.info(final_state.get("html_artifact", "Not found in final state."))
+        json_artifact = final_state.get("json_artifact")
+        html_artifact = final_state.get("html_artifact")
+
+        if json_artifact:
+            logger.info("JSON Artifact Generated:")
+            logger.info("-----------------------")
+            logger.info(json_artifact)
+        
+        if html_artifact:
+            logger.info("\nFinal HTML Artifact:")
+            logger.info("--------------------")
+            
+            output_path = "output.html"
+            try:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(html_artifact)
+                logger.info(f"HTML output saved to {os.path.abspath(output_path)}")
+            except Exception as e:
+                logger.error(f"Failed to save HTML artifact: {e}")
+                logger.info(html_artifact) # Log to console as a fallback
+
         logger.info("\nWorkflow executed successfully.")
 
+    logger.info("Workflow completed.")
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the diagram generation workflow.")
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging.")
-    args = parser.parse_args()
-
-    setup_logging(args.debug)
-    # Re-initialize logger after basicConfig is called to ensure it picks up the config
-    logger = logging.getLogger(__name__)
-
-    logger.info("Starting diagram generation workflow.")
-    run_diagram_generation_workflow()
-    logger.info("Diagram generation workflow completed.")
+    main()

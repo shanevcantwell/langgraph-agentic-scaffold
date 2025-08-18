@@ -1,39 +1,51 @@
-# src/specialists/router_specialist.py
-
-
-
-
 import logging
 import json
 from typing import Dict, Any
+
 from langchain_core.messages import SystemMessage, HumanMessage
 
 from .base import BaseSpecialist
 from ..graph.state import GraphState
 from ..utils.prompt_loader import load_prompt
 from ..enums import Specialist
+from ..llm.clients import LLMInvocationError
 
 logger = logging.getLogger(__name__)
 
 class RouterSpecialist(BaseSpecialist):
     """
-    A specialist that routes the user's request to the appropriate specialist.
-    It analyzes the user's prompt and decides which specialist is best suited
-    to handle it.
+    A specialist that routes the user's request to the appropriate specialist
+    by leveraging the LLM's tool-calling capabilities as a structured output mechanism.
     """
 
     def __init__(self, llm_provider: str):
-        # Adheres to the DEVELOPERS_GUIDE.md contract for creating a new specialist.
-        # The specialist name is hardcoded here to match its corresponding prompt file.
         system_prompt = load_prompt("router_specialist")
-        super().__init__(system_prompt=system_prompt, llm_provider=llm_provider)
-        logger.info(f"Initialized {self.__class__.__name__}")
+        
+        # Define the "Decoy Tool" schema. This is our hard contract.
+        # The enum provides a strict list of valid choices.
+        routing_tool = {
+            "name": "route_to_specialist",
+            "description": "Routes the request to the appropriate specialist.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "next_specialist": {
+                        "type": "string",
+                        "description": "The name of the specialist to route to.",
+                        "enum": [s.value for s in Specialist]
+                    }
+                },
+                "required": ["next_specialist"]
+            }
+        }
+        
+        # Pass the tool definition to the base class
+        super().__init__(system_prompt=system_prompt, llm_provider=llm_provider, tools=[routing_tool])
+        logger.info(f"Initialized {self.__class__.__name__} with routing tool.")
 
     def execute(self, state: GraphState) -> Dict[str, Any]:
         """
-        Analyzes the user prompt and routes to the appropriate specialist.
-        Input: state['messages'] must contain the user prompt.
-        Output: A dictionary with 'next_specialist' key for routing.
+        Invokes the LLM with the decoy tool to get a structured routing decision.
         """
         logger.info("Executing Router...")
         user_prompt_message = state['messages'][-1]
@@ -42,46 +54,21 @@ class RouterSpecialist(BaseSpecialist):
             user_prompt_message,
         ]
 
-        # The prompt for this specialist should specify a JSON output.
-        ai_response_str = self.llm_client.invoke(messages_to_send).content.strip()
-        next_specialist = None
-        response_json = {}
-
-        extracted_json_str = ""
-        # Attempt to find JSON within markdown code fences
-        if "```json" in ai_response_str:
-            start_index = ai_response_str.find("```json") + len("```json")
-            end_index = ai_response_str.find("```", start_index)
-            if start_index != -1 and end_index != -1:
-                extracted_json_str = ai_response_str[start_index:end_index].strip()
-        
-        # If no markdown JSON, try to parse the whole string
-        if not extracted_json_str:
-            extracted_json_str = ai_response_str
-
         try:
-            # Attempt to parse as JSON first
-            parsed_response = json.loads(extracted_json_str)
-            if isinstance(parsed_response, dict):
-                next_specialist = parsed_response.get("next_specialist")
-            elif isinstance(parsed_response, str):
-                # If JSON parsing results in a string, use it directly
-                next_specialist = parsed_response
+            # Invoke the client, passing the tools defined in __init__
+            # The client will now handle the tool call response.
+            response_data = self.llm_client.invoke(messages_to_send, tools=self.tools)
+            
+            # The client now returns the arguments of the tool call directly.
+            next_specialist = response_data.get("next_specialist")
+
+            if next_specialist and next_specialist in {s.value for s in Specialist}:
+                logger.info(f"Router decision: Routing to {next_specialist}")
+                return {"next_specialist": next_specialist}
             else:
-                logger.warning(f"LLM response parsed to unexpected type: {type(parsed_response)}. Response: \"{ai_response_str}\"")
+                raise LLMInvocationError(f"Router returned an invalid specialist: {next_specialist}")
 
-        except json.JSONDecodeError:
-            # If not valid JSON, try to extract a raw string and treat it as the specialist name
-            logger.warning(f"LLM response is not valid JSON. Attempting to parse as raw string. Response: \"{ai_response_str}\"")
-            next_specialist = ai_response_str.strip('"` \n')
-
-        # Validate the final decision.
-        valid_specialists = {s.value for s in Specialist}
-        if next_specialist and next_specialist in valid_specialists:
-            logger.info(f"Router decision: Routing to {next_specialist}")
-            return {"next_specialist": next_specialist}
-        else:
-            # If no valid specialist was found, default to the prompt specialist.
-            error_msg = f"Router could not determine a valid specialist. LLM Response: '{ai_response_str}'. Parsed as: '{next_specialist}'"
+        except LLMInvocationError as e:
+            error_msg = f"Router failed to determine a valid specialist: {e}"
             logger.error(f"{error_msg}. Routing to PROMPT specialist for clarification.")
             return {"next_specialist": Specialist.PROMPT.value}

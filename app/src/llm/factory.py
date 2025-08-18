@@ -1,61 +1,47 @@
-# src/llm/factory.py
-
-from .clients import BaseLLMClient, GeminiClient, OllamaClient, LMStudioClient
 import os
+from typing import Optional
+from .clients import BaseLLMClient, GeminiClient, OllamaClient, LMStudioClient
 
 class LLMClientFactory:
-    _instances: dict = {}
     """
-    A factory class to create instances of LLM clients based on a provider name.
+    Factory to create and configure LLM clients based on the provider.
     """
     @staticmethod
-    def create_client(provider: str) -> BaseLLMClient:
+    def create_client(provider: str, system_prompt: Optional[str] = None) -> BaseLLMClient:
         """
-        Creates and returns an LLM client for the specified provider.
-        Configuration is pulled from environment variables.
+        Creates a client for the specified LLM provider.
 
         Args:
-            provider (str): The name of the LLM provider.
-                            Supported: 'gemini', 'ollama', 'lmstudio'.
+            provider: The name of the LLM provider (e.g., "gemini").
+            system_prompt: The system prompt to configure the model with.
 
         Returns:
-            BaseLLMClient: An instance of the appropriate client.
-
-        Raises:
-            ValueError: If the provider is not supported or required environment
-                        variables are not set.
+            An instance of a BaseLLMClient subclass.
         """
         provider = provider.lower()
         
-        if provider in LLMClientFactory._instances:
-            return LLMClientFactory._instances[provider]
-
-        client: BaseLLMClient
         if provider == "gemini":
             api_key = os.getenv("GOOGLE_API_KEY")
+            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY environment variable not set.")
-            model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-            client = GeminiClient(api_key=api_key, model=model)
-            
+            return GeminiClient(api_key=api_key, model=model_name, system_prompt=system_prompt)
+        
         elif provider == "ollama":
-            model = os.getenv("OLLAMA_MODEL")
-            if not model:
-                raise ValueError("OLLAMA_MODEL environment variable not set.")
+            model_name = os.getenv("OLLAMA_MODEL")
             base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            client = OllamaClient(model=model, base_url=base_url)
+            if not model_name:
+                raise ValueError("OLLAMA_MODEL environment variable not set.")
+            return OllamaClient(model=model_name, base_url=base_url)
 
         elif provider == "lmstudio":
-            # The model name is sent to the OpenAI-compatible API, but often ignored by LM Studio itself.
-            # It's useful for identifying which model is intended to be used.
-            model = os.getenv("LMSTUDIO_MODEL", "local-model")
+            # LM Studio doesn't have a native system prompt API, so we ignore it here.
+            # The prompt will be prepended in its client implementation.
+            model_name = os.getenv("LMSTUDIO_MODEL")
             base_url = os.getenv("LMSTUDIO_BASE_URL")
-            if not base_url:
-                raise ValueError("LMSTUDIO_BASE_URL environment variable not set.")
-            client = LMStudioClient(model=model, base_url=base_url)
+            if not model_name or not base_url:
+                raise ValueError("LMSTUDIO_MODEL and LMSTUDIO_BASE_URL must be set.")
+            return LMStudioClient(model=model_name, base_url=base_url)
             
         else:
-            raise ValueError(f"Unsupported LLM provider: '{provider}'. Supported providers are 'gemini', 'ollama', 'lmstudio'.")
-
-        LLMClientFactory._instances[provider] = client
-        return client
+            raise ValueError(f"Unknown LLM provider: {provider}")

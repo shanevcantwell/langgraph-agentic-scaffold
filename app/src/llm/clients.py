@@ -12,15 +12,12 @@ from langchain_core.messages import BaseMessage, AIMessage, SystemMessage, Human
 
 logger = logging.getLogger(__name__)
 
-# Define a standard timeout for all LLM calls to prevent indefinite hangs.
-REQUEST_TIMEOUT = 120  # seconds
+REQUEST_TIMEOUT = 120
 
-# Custom exception for clear error handling in specialists
 class LLMInvocationError(Exception):
     pass
 
 def _is_retryable_gemini_exception(exception) -> bool:
-    """Return True if the exception is a retryable Gemini API error."""
     try:
         import google.api_core.exceptions
         return isinstance(exception, google.api_core.exceptions.ServiceUnavailable)
@@ -28,77 +25,78 @@ def _is_retryable_gemini_exception(exception) -> bool:
         return False
 
 class BaseLLMClient(ABC):
-    """
-    Abstract base class for all LLM clients. The invoke method is the single,
-    protected entry point for all specialists.
-    """
     def __init__(self, model: str):
         self.model = model
 
     @abstractmethod
-    def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = None) -> Dict[str, Any]:
-        """
-        Sends messages to the LLM and returns a parsed JSON object.
-        This method is responsible for timeouts, retries, and response validation.
-        """
+    def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> Dict[str, Any]:
         pass
 
 class GeminiClient(BaseLLMClient):
-    """LLM client for Google's Gemini API."""
-    def __init__(self, api_key: str, model: str = "gemini-1.5-flash"):
+    def __init__(self, api_key: str, model: str, system_prompt: Optional[str] = None):
         super().__init__(model)
         try:
             import google.generativeai as genai
         except ImportError:
-            raise ImportError("The 'google-generativeai' package is required for Gemini. Please install it with 'pip install google-generativeai'.")
+            raise ImportError("The 'google-generativeai' package is required for Gemini.")
         
         genai.configure(api_key=api_key)
-        self.genai_model = genai.GenerativeModel(model)
+        self.genai_model = genai.GenerativeModel(model, system_instruction=system_prompt)
         logger.info(f"INITIALIZED GEMINI CLIENT (Model: {model})")
 
     @retry(
         wait=wait_exponential(multiplier=1, min=2, max=30),
         stop=stop_after_attempt(3),
         retry=_is_retryable_gemini_exception,
-        before_sleep=lambda retry_state: logger.warning(f"GEMINI RETRYING ({retry_state.attempt_number}/{retry_state.retry_object.stop.max_attempt_number}): {retry_state.outcome.exception()}")
+        before_sleep=lambda retry_state: logger.warning(f"GEMINI RETRYING: {retry_state.outcome.exception()}")
     )
     def invoke(self, messages: List[BaseMessage], tools: Optional[List[Any]] = None, temperature: Optional[float] = 0.7) -> Dict[str, Any]:
         gemini_messages = [
             {"role": "user" if isinstance(msg, HumanMessage) else "model", "parts": [msg.content]}
-            for msg in messages if not isinstance(msg, SystemMessage)
+            for msg in messages
         ]
-        system_prompt = next((msg.content for msg in messages if isinstance(msg, SystemMessage)), None)
-        
-        if system_prompt:
-            gemini_messages.insert(0, {"role": "user", "parts": [system_prompt]})
 
         logger.debug("CALLING GEMINI API")
-        response_content = ""
         try:
-            response = self.genai_model.generate_content(
-                contents=gemini_messages,
-                generation_config={"temperature": temperature, "response_mime_type": "application/json"},
-                request_options={"timeout": REQUEST_TIMEOUT}
-            )
+            if tools:
+                logger.debug("GeminiClient: Invoking in tool-calling mode.")
+                response = self.genai_model.generate_content(
+                    contents=gemini_messages,
+                    generation_config={"temperature": temperature},
+                    tools=tools,
+                    request_options={"timeout": REQUEST_TIMEOUT}
+                )
+                # MODIFIED: Handle the tool call response
+                if response.parts and hasattr(response.parts[0], 'function_call'):
+                    function_call = response.parts[0].function_call
+                    # Convert the google.protobuf.struct_pb2.Struct to a dict
+                    args = dict(function_call.args)
+                    logger.info(f"Gemini returned tool call '{function_call.name}' with args: {args}")
+                    return args
+                else:
+                    raise LLMInvocationError("Tool call was expected, but none was returned by Gemini.")
+            else:
+                logger.debug("GeminiClient: Invoking in JSON-output mode.")
+                response = self.genai_model.generate_content(
+                    contents=gemini_messages,
+                    generation_config={"temperature": temperature, "response_mime_type": "application/json"},
+                    request_options={"timeout": REQUEST_TIMEOUT}
+                )
             
             if response.prompt_feedback and response.prompt_feedback.block_reason:
-                raise LLMInvocationError(f"Gemini blocked the prompt due to: {response.prompt_feedback.block_reason.name}")
+                raise LLMInvocationError(f"Gemini blocked prompt: {response.prompt_feedback.block_reason.name}")
 
-            if response.parts and hasattr(response.parts[0], 'function_call'):
-                 raise LLMInvocationError("Gemini returned a tool call, but a JSON response was expected.")
+            if not response.parts:
+                finish_reason = response.candidates[0].finish_reason if response.candidates else "UNKNOWN"
+                raise LLMInvocationError(f"Gemini returned an empty response. Finish Reason: {finish_reason}")
 
             response_content = response.text
             return json.loads(response_content)
 
         except json.JSONDecodeError as e:
-            error_message = f"LLM Client Error: Failed to parse Gemini response as JSON. Details: {e}"
-            logger.error(error_message)
-            logger.debug(f"Invalid content received from Gemini: {response_content}")
-            raise LLMInvocationError(error_message) from e
+            raise LLMInvocationError(f"Failed to parse Gemini response as JSON: {e}") from e
         except Exception as e:
-            error_message = f"An unexpected error occurred while calling the Gemini API: {e}"
-            logger.error(error_message)
-            raise LLMInvocationError(error_message) from e
+            raise LLMInvocationError(f"An unexpected error occurred with Gemini API: {e}") from e
 
 class OllamaClient(BaseLLMClient):
     """LLM client for a local Ollama instance."""
@@ -165,7 +163,6 @@ class LMStudioClient(BaseLLMClient):
             "model": self.model,
             "messages": [{"role": role_map.get(msg.type, "user"), "content": msg.content} for msg in messages],
             "temperature": temperature,
-            "response_format": {"type": "json_object"}
         }
         
         logger.debug("CALLING LM STUDIO API")
@@ -175,7 +172,6 @@ class LMStudioClient(BaseLLMClient):
             response.raise_for_status()
             response_data = response.json()
             response_content = response_data['choices'][0]['message']['content']
-            # Clean markdown fences just in case the model doesn't respect the format perfectly
             cleaned_content = re.sub(r"```(json)?\n(.*)\n```", r"\2", response_content, flags=re.DOTALL).strip()
             return json.loads(cleaned_content)
 
