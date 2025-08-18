@@ -1,47 +1,51 @@
-# langgraph-agentic-scaffold
+# SpecialistHub: An Agentic System Scaffold
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A foundational scaffold for building multi-agent systems using LangGraph, featuring a modular "specialist" architecture.
+A foundational scaffold for building robust, modular, and scalable multi-agent systems using LangGraph. This project provides a production-ready architecture that moves beyond simple scripts to a fully-fledged, API-driven application.
 
-## ⚠️ A Note on Security
+## Mission & Philosophy
 
-This scaffold is designed for architectural exploration and does not include production-grade safety guardrails. The tools you create and provide to the agents can execute real code and perform actions on your computer, such as:
+The mission is to provide a clear, maintainable, and testable template for constructing multi-agent systems. The core philosophy is a separation of concerns, where the system is composed of two primary agent types:
 
-* Accessing the file system
-* Executing shell commands
-* Making external API calls with the keys you provide
+*   **Specialists:** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code).
+*   **Orchestrators:** High-level components that manage the workflow by compiling a `LangGraph` instance and routing tasks between the necessary Specialists.
 
-You are granting the configured LLM direct control over these tools. **Be fully aware of the capabilities you grant to your agents and consider all potential risks involved.** Always review the code for any tool before enabling it, and run this project in a secure, sandboxed environment whenever possible.
+## Architectural Highlights
 
-## Core Concepts
+This scaffold is not just a collection of scripts; it's a well-defined architecture designed for reliability and scalability.
 
-This project is not a library but a **template** for structuring a complex agentic application. The core philosophy is to separate concerns into distinct components:
+*   **API-First Design:** The system is exposed via a **FastAPI** web server, providing a clean, modern interface for interaction and integration. Includes auto-generated interactive documentation (via Swagger UI).
+*   **Configuration-Driven:** The entire agentic system—its specialists, models, and prompts—is defined in a central `config.yaml`. This "Configuration as Code" approach allows you to reconfigure the system's structure without changing the Python code.
+*   **Decoupled Adapter Pattern:** Specialists are decoupled from the underlying LLM clients. They request a pre-configured "adapter" by name, allowing you to swap LLM providers (Gemini, OpenAI, Ollama, etc.) in the config file without touching the specialist's business logic.
+*   **Schema-Enforced Reliability:** Utilizes Pydantic models to define "hard contracts" for LLM outputs. For supported providers, this guarantees that the LLM will return a valid JSON object matching your schema, dramatically reducing runtime errors and validation boilerplate.
+*   **Modern Python Tooling:** Uses `pyproject.toml` for project definition and `pip-tools` to generate pinned `requirements.txt` files, ensuring reproducible and reliable builds for both production and development.
+*   **Model-Specific Prompts:** The configuration allows you to assign different prompt files to the same specialist based on the model it's using. This enables fine-tuning instructions for specific model families (e.g., a more verbose prompt for a smaller model, a different format for an OpenAI vs. a Gemini model) without code changes.
 
-* **Graph (`/app/src/graph`):** Defines the state machine. It orchestrates the flow of logic and state between different nodes.
-* **Specialists (`/app/src/llm/specialists`):** These are modular, role-based agents. Each specialist has a specific prompt and is responsible for a single, well-defined task (e.g., a "researcher" specialist, a "coder" specialist). The LLM acts as the **Reasoning Engine** for each specialist.
-* **Tools (`/app/src/agents/tools`):** Concrete functions that the specialists can call to interact with the outside world (e.g., file I/O, API calls).
+## ⚠️ A Critical Note on Security
 
-## Features
+This scaffold is designed for architectural exploration and grants significant power to the LLM. The tools you create can execute real code, access your file system, and make external API calls with your keys.
 
-* **Modular Architecture:** Easily add or remove "specialist" agents.
-* **Multi-LLM Support:** Client abstractions for Gemini, Ollama, and LM Studio.
-* **Stateful Execution:** Leverages LangGraph to manage conversational state across multiple turns.
-* **Configuration-driven:** Uses `.env` for secrets and API keys.
+**You are granting the configured LLM direct control over these powerful tools.**
+
+An uncensored or highly capable model can interpret your requests in unexpected ways, leading to irreversible actions like file deletion, data exposure, or unintended resource usage. Treat this system with the same caution you would a loaded weapon. You take full and sole responsibility for what you build and run with it.
+
+**Always run this project in a secure, sandboxed environment (like a Docker container or a dedicated VM).**
 
 ## Getting Started
 
 ### Prerequisites
 
-* Python 3.11+
-* Access to an LLM (e.g., via Google AI Studio, Ollama, or LM Studio running locally).
+*   Python 3.10+
+*   Access to an LLM (e.g., via Google AI Studio, OpenAI, or a local server like Ollama).
 
 ### Installation & Setup
 
 1.  **Clone the repository:**
-    ```bash
-    git clone [https://github.com/your-username/langgraph-agentic-scaffold.git](https://github.com/your-username/langgraph-agentic-scaffold.git)
+    ```sh
+    git clone https://github.com/shanevcantwell/langgraph-agentic-scaffold.git
     cd langgraph-agentic-scaffold
     ```
 
@@ -58,16 +62,23 @@ This project is not a library but a **template** for structuring a complex agent
         ```
 
 3.  **Install dependencies:**
+    This command installs the exact versions of all packages needed to run the application.
     ```sh
     pip install -r requirements.txt
     ```
 
 4.  **Configure your environment:**
-    ```bash
-    # Copy the example .env file
+    Copy the example configuration files.
+    ```sh
+    # Copy the example .env file for secrets
     cp .env.example .env
+
+    # Copy the example app config file
+    cd app
+    cp config.yaml.example config.yaml
+    cd ..
     ```
-    Now, edit the `.env` file to add your API keys and other settings.
+    Now, edit `.env` with your API keys and `app/config.yaml` to define your agent setup.
 
 5.  **Run the application:**
     Use the provided scripts to start the API server.
@@ -79,11 +90,16 @@ This project is not a library but a **template** for structuring a complex agent
         ```bat
         .\windows_run.bat
         ```
-    Once running, you can access the interactive API documentation at `http://127.0.0.1:8000/docs`.
+    Once running, you can access the interactive API documentation at **`http://127.0.0.1:8000/docs`**.
 
-## Project Status & Disclaimer
+## For Developers
 
-This is a personal project posted as a public backup and architectural reference. It is not actively maintained, and I am not looking to provide support. Feel free to fork it, learn from it, and adapt it for your own purposes.
+This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **Developer's Guide**.
+
+To set up a full development environment with testing and linting tools, run:
+```sh
+pip install -r requirements-dev.txt
+```
 
 ## License
 
