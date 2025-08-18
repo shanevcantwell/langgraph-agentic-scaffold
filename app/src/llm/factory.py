@@ -1,47 +1,42 @@
 import os
-from typing import Optional
-from .clients import BaseLLMClient, GeminiClient, OllamaClient, LMStudioClient
+from ..utils.config_loader import ConfigLoader
+from .adapter import BaseAdapter
+from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
 
-class LLMClientFactory:
-    """
-    Factory to create and configure LLM clients based on the provider.
-    """
-    @staticmethod
-    def create_client(provider: str, system_prompt: Optional[str] = None) -> BaseLLMClient:
-        """
-        Creates a client for the specified LLM provider.
-
-        Args:
-            provider: The name of the LLM provider (e.g., "gemini").
-            system_prompt: The system prompt to configure the model with.
-
-        Returns:
-            An instance of a BaseLLMClient subclass.
-        """
-        provider = provider.lower()
+class AdapterFactory:
+    def create_adapter(self, specialist_name: str, system_prompt: str) -> BaseAdapter:
+        config = ConfigLoader()
         
-        if provider == "gemini":
-            api_key = os.getenv("GOOGLE_API_KEY")
-            model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash")
-            if not api_key:
-                raise ValueError("GOOGLE_API_KEY environment variable not set.")
-            return GeminiClient(api_key=api_key, model=model_name, system_prompt=system_prompt)
+        spec_config = config.get_specialist_config(specialist_name)
+        model_name = spec_config['model']
+        provider_name = spec_config['provider']
         
-        elif provider == "ollama":
-            model_name = os.getenv("OLLAMA_MODEL")
-            base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-            if not model_name:
-                raise ValueError("OLLAMA_MODEL environment variable not set.")
-            return OllamaClient(model=model_name, base_url=base_url)
+        model_config = config.get_model_config(model_name)
+        provider_config = config.get_provider_config(provider_name)
 
-        elif provider == "lmstudio":
-            # LM Studio doesn't have a native system prompt API, so we ignore it here.
-            # The prompt will be prepended in its client implementation.
-            model_name = os.getenv("LMSTUDIO_MODEL")
-            base_url = os.getenv("LMSTUDIO_BASE_URL")
-            if not model_name or not base_url:
-                raise ValueError("LMSTUDIO_MODEL and LMSTUDIO_BASE_URL must be set.")
-            return LMStudioClient(model=model_name, base_url=base_url)
-            
-        else:
-            raise ValueError(f"Unknown LLM provider: {provider}")
+        adapter_class_name = provider_config['adapter_class']
+        
+        if adapter_class_name == 'GeminiAdapter':
+            return GeminiAdapter(
+                model_config=model_config,
+                provider_config=provider_config,
+                api_key=os.getenv("GOOGLE_API_KEY"),
+                system_prompt=system_prompt
+            )
+        elif adapter_class_name == 'LMStudioAdapter':
+            return LMStudioAdapter(
+                model_config=model_config,
+                provider_config=provider_config,
+                base_url=os.getenv("LMSTUDIO_BASE_URL"),
+                system_prompt=system_prompt
+            )
+        elif adapter_class_name == 'OllamaAdapter':
+            return OllamaAdapter(
+                model_config=model_config,
+                provider_config=provider_config,
+                base_url=os.getenv("OLLAMA_BASE_URL"),
+                system_prompt=system_prompt
+            )
+        # Add future adapters here (e.g., ClaudeAdapter)
+        
+        raise ValueError(f"Unknown adapter class '{adapter_class_name}'")

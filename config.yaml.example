@@ -1,0 +1,67 @@
+# app/config.yaml
+
+# ===================================================================
+#  1. Canonical Model Definitions
+# ===================================================================
+# This section defines the intrinsic properties of each model we use.
+# These settings are independent of where the model is hosted.
+models:
+  gemini-1.5-flash:
+    # This is the unique identifier the provider's API expects.
+    api_identifier: "gemini-1.5-flash"
+    # These are the optimal generation parameters for this model.
+    parameters:
+      temperature: 0.5
+      top_p: 0.95
+      top_k: 40
+
+  gemma-3-27b:
+    api_identifier: "mlabonne/gemma-3-27b-it-abliterated-gguf/gemma-3-27b-it-abliterated.q8_0.gguf"
+    parameters:
+      temperature: 0.1
+      top_p: 0.95
+      top_k: 40
+      repeat_penalty: 1.1
+
+# ===================================================================
+#  2. Provider (Hosting) Definitions
+# ===================================================================
+# This section defines the hosting platforms. It knows nothing about
+# which specific models are running, only how to connect to them.
+providers:
+  google_gemini:
+    adapter_class: GeminiAdapter
+    # Credentials will be loaded from .env
+
+  lm_studio_local:
+    adapter_class: LMStudioAdapter
+    # Connection details loaded from .env
+    supports_schema: true # A capability flag for this provider
+
+# ===================================================================
+#  3. Specialist Configuration (The "Wiring")
+# ===================================================================
+# This is the most critical section. It maps a specialist's role to a
+# specific model, provider, and prompt, allowing for ultimate flexibility.
+specialists:
+  router_specialist:
+    # We can easily switch the router's brain by changing these lines.
+    model: gemini-1.5-flash
+    provider: google_gemini
+    prompt_file: "router_specialist_prompt.md"
+
+  systems_architect:
+    model: gemma-3-27b
+    provider: lm_studio_local
+    # We can have model-specific prompts for the same specialist role!
+    prompt_file: "systems_architect_prompt_gguf.md"
+
+  web_builder:
+    model: gemma-3-27b
+    provider: lm_studio_local
+    prompt_file: "web_builder_prompt.md"
+
+  prompt_specialist:
+    model: gemini-1.5-flash
+    provider: google_gemini
+    prompt_file: "prompt_specialist_prompt.md"

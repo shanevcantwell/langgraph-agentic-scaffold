@@ -4,7 +4,7 @@ from typing import Dict, Any, List, Optional
 
 from langchain_core.messages import SystemMessage, BaseMessage, AIMessage
 from ..graph.state import GraphState
-from ..llm.factory import LLMClientFactory
+from ..llm.factory import AdapterFactory
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ class BaseSpecialist(ABC):
     def __init__(self, system_prompt: str, llm_provider: str, tools: Optional[List] = None):
         self.system_prompt_content = system_prompt
         # MODIFIED: Pass the system_prompt to the factory for correct client initialization
-        self.llm_client = LLMClientFactory.create_client(
+        self.llm_client = AdapterFactory.create_client(
             provider=llm_provider,
             system_prompt=system_prompt
         )
