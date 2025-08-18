@@ -1,13 +1,11 @@
 import logging
-from typing import Dict, Any
+from typing import Dict
 
 from langgraph.graph import StateGraph, END
 
 from ..graph.state import GraphState
-from ..specialists.systems_architect import SystemsArchitect
-from ..specialists.web_builder import WebBuilder
-from ..specialists.router_specialist import RouterSpecialist
-from ..specialists.prompt_specialist import PromptSpecialist
+from ..specialists import get_specialist_class
+from ..utils.config_loader import ConfigLoader
 
 logger = logging.getLogger(__name__)
 
@@ -20,37 +18,48 @@ class ChiefOfStaff:
 
     def __init__(self):
         """
-        Initializes the ChiefOfStaff and all the specialists it manages.
+        Initializes the ChiefOfStaff, loading specialists defined in the configuration.
         """
-        self.router = RouterSpecialist()
-        self.systems_architect = SystemsArchitect()
-        self.web_builder = WebBuilder()
-        self.prompt_specialist = PromptSpecialist()
+        self.config = ConfigLoader.load()
+        self.specialists = self._load_specialists()
+
+    def _load_specialists(self) -> Dict[str, any]:
+        """Dynamically load and instantiate specialists from config."""
+        specialist_instances = {}
+        specialist_configs = self.config.get("specialists", {})
+        for name in specialist_configs:
+            try:
+                SpecialistClass = get_specialist_class(name)
+                specialist_instances[name] = SpecialistClass()
+                logger.info(f"Successfully instantiated specialist: {name}")
+            except (ImportError, AttributeError) as e:
+                logger.error(f"Could not load specialist '{name}': {e}")
+        return specialist_instances
 
     def compile_graph(self):
         """
         Compiles and returns the LangGraph application.
-        This defines the nodes and the conditional edges of the workflow.
+        This method dynamically builds the graph based on the loaded specialists.
         """
         workflow = StateGraph(GraphState)
 
-        # Add nodes for each specialist
-        workflow.add_node("router", self.router.execute)
-        workflow.add_node("systems_architect", self.systems_architect.execute)
-        workflow.add_node("web_builder", self.web_builder.execute)
-        workflow.add_node("prompt_specialist", self.prompt_specialist.execute)
+        # Dynamically add all loaded specialists as nodes
+        for name, instance in self.specialists.items():
+            workflow.add_node(name, instance.execute)
 
-        workflow.set_entry_point("router")
+        # The entry point must be the router specialist
+        router_name = "router_specialist"
+        if router_name not in self.specialists:
+            raise ValueError(f"Configuration must include a '{router_name}'.")
+        workflow.set_entry_point(router_name)
 
         def decide_next_specialist(state: GraphState) -> str:
-            """
-            Inspects the state to decide which specialist to route to next.
-            """
+            """Inspects the state to decide which specialist to route to next."""
             logger.info("---ROUTING DECISION---")
             if state.get("error"):
                 logger.error(f"Error detected: {state['error']}. Ending workflow.")
                 return END
-            
+
             next_specialist = state.get("next_specialist")
             if not next_specialist:
                 logger.warning("No next specialist decided. Defaulting to end.")
@@ -59,20 +68,21 @@ class ChiefOfStaff:
             logger.info(f"Routing to: {next_specialist}")
             return next_specialist
 
+        # Create a dynamic mapping for conditional edges from the router
+        # to all other specialists.
+        specialist_nodes = [name for name in self.specialists if name != router_name]
+        routing_map = {name: name for name in specialist_nodes}
+        routing_map[END] = END
+
         workflow.add_conditional_edges(
-            "router",
+            router_name,
             decide_next_specialist,
-            {
-                "systems_architect": "systems_architect",
-                "prompt_specialist": "prompt_specialist",
-                END: END
-            }
+            routing_map
         )
 
-        workflow.add_edge("systems_architect", "web_builder")
-        
-        workflow.add_edge("web_builder", END)
-        workflow.add_edge("prompt_specialist", END)
+        # After any specialist runs, it returns control to the router.
+        for specialist_name in specialist_nodes:
+            workflow.add_edge(specialist_name, router_name)
 
         app = workflow.compile()
         logger.info("---ChiefOfStaff: Graph compiled successfully.---")

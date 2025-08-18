@@ -9,7 +9,7 @@ class PromptLoader:
     @staticmethod
     def load(prompt_name: str) -> str:
         """
-        Loads a prompt from the 'src/prompts' directory.
+        Loads a prompt from the 'app/prompts' directory.
 
         Args:
             prompt_name (str): The base name of the prompt file (e.g., 'data_extractor_specialist').

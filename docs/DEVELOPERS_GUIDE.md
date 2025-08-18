@@ -1,9 +1,81 @@
-# [SYSTEM BOOTSTRAP] DEVELOPERS_GUIDE.md
-# Project: SpecialistHub
+# SpecialistHub: System Architecture & Developer's Guide
 # Version: 2.0
 # Status: ACTIVE
 
-## 1.0 CORE DIRECTIVE: MISSION & PHILOSOPHY
+This document provides all the necessary information to understand, run, test, and extend the SpecialistHub agentic system. It is designed to be parsed by both human developers and autonomous AI agents.
+
+## 1.0 Getting Started
+
+Follow these steps to set up and run the project.
+
+### 1.1 Prerequisites
+*   Python 3.10+
+*   Git
+
+### 1.2 Installation
+
+1.  **Clone the repository:**
+    ```sh
+    git clone <repository-url>
+    cd langgraph-agentic-scaffold
+    ```
+
+2.  **Create and activate a virtual environment:**
+    *   For **Linux/macOS** (using the `.venv_agents` directory):
+        ```sh
+        python3 -m venv .venv_agents
+        source ./.venv_agents/bin/activate
+        ```
+    *   For **Windows** (using the `.venv_agents_windows` directory):
+        ```sh
+        python -m venv .venv_agents_windows
+        .\.venv_agents_windows\Scripts\activate
+        ```
+
+3.  **Install dependencies:**
+    ```sh
+    pip install -r requirements.txt
+    ```
+
+### 1.3 Configuration
+
+1.  **Environment Secrets:** In the project root, copy `.env.example` to a new file named `.env`. This file stores secrets and is safely ignored by Git.
+    ```sh
+    cp .env.example .env
+    ```
+    Then, edit `.env` with your API keys.
+
+2.  **Application Configuration:** In the `app/` directory, copy `config.yaml.example` to a new file named `config.yaml`. This file defines the agentic system's structure and can be modified without tracking changes in Git if desired.
+    ```sh
+    cd app
+    cp config.yaml.example config.yaml
+    cd ..
+    ```
+
+### 1.4 Running the Application
+
+Use the provided scripts in the project root to run the application.
+
+*   On **Linux/macOS**:
+    ```sh
+    ./run.sh
+    ```
+*   On **Windows**:
+    ```bat
+    .\windows_run.bat
+    ```
+
+### 1.5 Running Tests
+
+To ensure the system is functioning correctly, run the full suite of unit tests using `pytest`.
+
+```sh
+pytest
+```
+
+---
+
+## 2.0 Mission & Philosophy
 
 **Mission:** To construct a multi-agent system composed of modular, single-responsibility "Specialists." The system must be scalable, maintainable, and testable, driven by a flexible, decoupled configuration.
 
@@ -11,58 +83,61 @@
 1.  **Specialists:** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code). They inherit from `BaseSpecialist`.
 2.  **Orchestrators:** High-level components that manage a workflow by compiling a `LangGraph` instance and wiring together the necessary Specialists.
 
-## 2.0 ARCHITECTURAL BLUEPRINT
+## 3.0 System Architecture
 
 The system is composed of the following layers and components.
 
-### 2.1 LangGraph: The Runtime Environment
+### 3.1 LangGraph: The Runtime Environment
 *   **Role:** Framework / Execution Engine.
 *   **Function:** Manages the computational graph, holds the central `GraphState`, and routes execution between nodes.
 
-### 2.2 Configuration (`config.yaml`): The System Blueprint
+### 3.2 Configuration (`config.yaml`): The System Blueprint
 *   **Role:** The single source of truth for the system's structure.
 *   **Function:** Defines all models, providers, and specialists, and declaratively "wires" them together. The application code is a generic engine that interprets this configuration at runtime.
 
-### 2.3 The Adapter Factory Pattern
+### 3.3 The Adapter Factory Pattern
 *   **Role:** Centralized component instantiation.
 *   **Implementation:** The `AdapterFactory` reads the `config.yaml` to create and configure the correct LLM adapter for a given specialist.
 *   **Principle:** Specialists request an adapter by name; they do not know the details of its creation. This decouples business logic from infrastructure.
 
-### 2.4 Specialists: The Functional Units
+### 3.4 Specialists: The Functional Units
 *   **Role:** Agent / Worker / Node.
 *   **Contract:** Must inherit from `src.specialists.base.BaseSpecialist`. Must implement the `execute(state: GraphState) -> Dict[str, Any]` method.
 *   **Function:** A Specialist performs a single atomic task, usually by creating a `StandardizedLLMRequest` and passing it to its configured LLM adapter.
 
-## 3.0 FILE & NAMING SCHEMA (MANDATORY)
+## 4.0 Project Structure & Naming
 
-### 3.1 Directory Structure
+### 4.1 Directory Structure
+```
 .
-|-- app/
-|   |-- config.yaml      # The central configuration file
-|   |-- docs/
-|   |   `-- DEVELOPERS_GUIDE.md
-|   |-- prompts/
-|   |   `-- ... (specialist prompts) ...
-|   `-- src/
-|       |-- graph/
-|       |-- llm/           # Adapter abstractions, implementations, and factory
-|       |-- specialists/   # Core agentic business logic
-|       |-- utils/         # Shared utilities (config/prompt loaders)
-|       |-- workflow/      # High-level workflow orchestration (ChiefOfStaff)
-|       `-- main.py
-|
-|-- .env
-`-- run.sh
+|-- .env                 # Local environment secrets (DO NOT COMMIT)
+|-- .env.example         # Example environment file
+|-- requirements.txt
+|-- pytest.ini           # Test runner configuration
+|-- run.sh               # Execution script for Linux/macOS
+|-- windows_run.bat      # Execution script for Windows
+|-- docs/                # All project documentation
+|   |-- DEVELOPERS_GUIDE.md
+|   |-- MANIFEST.json
+|   `-- ... (proposals, etc.)
+`-- app/
+    |-- api.py           # FastAPI application
+    |-- config.yaml      # Local configuration (can be gitignored)
+    |-- config.yaml.example # Example configuration file
+    |-- prompts/
+    |-- src/
+    `-- tests/
+```
 
-### 3.2 Naming Convention
+### 4.2 Naming Convention
 *   **Specialist Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains (e.g., `FileSpecialist` in `file_specialist.py`).
 *   **Prompt Rule:** A prompt file in `app/prompts/` must be named according to the `prompt_file` key in `config.yaml`. This allows for model-specific prompt variations (e.g., `systems_architect_prompt_gguf.md`).
 
-## 4.0 DEVELOPMENT PROTOCOLS
+## 5.0 Development Protocols
 
-### 4.1 Protocol A: Creating a Standard Specialist
+### 5.1 Protocol A: Creating a Standard Specialist
 
-1.  **Define Prompt Contract:** Create a new file in `app/prompts/`.
+1.  **Define Prompt Contract:** Create a new prompt file in `app/prompts/`.
 2.  **Define Configuration:** Open `app/config.yaml` and add a new entry under the `specialists` key. Define its `model`, `provider`, and `prompt_file`.
 3.  **Implement Specialist Logic:** Create a new file in `src/specialists/`. Use the following template:
     ```python
@@ -90,19 +165,4 @@ The system is composed of the following layers and components.
 
             # 3. Process the structured response.
             # ... your logic here ...
-            return {"some_new_key": response_data}
-    ```
-4.  **Integrate into Graph:** Add your new specialist to the `ChiefOfStaff` graph in `src/workflow/chief_of_staff.py`.
-
-## 5.0 CONFIGURATION
-
-### 5.1 Primary Configuration (`config.yaml`)
-The system is primarily configured via `app/config.yaml`. This file defines the relationships between models, providers, and specialists. See the file for detailed examples.
-
-### 5.2 Secrets & Connection Strings (`.env`)
-The `.env` file is used for secrets and environment-specific connection details.
-*   `GOOGLE_API_KEY`: **Required for Gemini.** Your API key for the Google AI platform.
-*   `LMSTUDIO_BASE_URL`: **Required for LM Studio.** The base URL for your local LM Studio server (e.g., `http://localhost:1234/v1`).
-
-## 6.0 Data Contracts
-*(This section remains the same as the previously generated version)
+            return {"some_new_key": response
