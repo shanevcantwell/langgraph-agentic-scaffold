@@ -11,12 +11,21 @@ models:
     api_identifier: "gemini-1.5-flash"
     # These are the optimal generation parameters for this model.
     parameters:
-      temperature: 0.5
+      temperature: 0.3
+      top_p: 0.95
+      top_k: 40
+
+  gemini-2.5-pro:
+    # This is the unique identifier the provider's API expects.
+    api_identifier: "gemini-2.5-pro"
+    # These are the optimal generation parameters for this model.
+    parameters:
+      temperature: 0.3
       top_p: 0.95
       top_k: 40
 
   gemma-3-27b:
-    api_identifier: "mlabonne/gemma-3-27b-it-abliterated-gguf/gemma-3-27b-it-abliterated.q8_0.gguf"
+    api_identifier: "gemma-3-27b-it"
     parameters:
       temperature: 0.1
       top_p: 0.95
@@ -53,12 +62,12 @@ specialists:
   systems_architect:
     model: gemma-3-27b
     provider: lm_studio_local
-    # We can have model-specific prompts for the same specialist role!
-    prompt_file: "systems_architect_prompt_gguf.md"
+    # We can have model-specific prompts for the same specialist role
+    prompt_file: "systems_architect_prompt.md"
 
   web_builder:
-    model: gemma-3-27b
-    provider: lm_studio_local
+    model: gemini-2.5-pro
+    provider: google_gemini
     prompt_file: "web_builder_prompt.md"
 
   prompt_specialist:
