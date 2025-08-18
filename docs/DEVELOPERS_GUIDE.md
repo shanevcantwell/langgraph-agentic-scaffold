@@ -33,9 +33,11 @@ Follow these steps to set up and run the project.
         ```
 
 3.  **Install dependencies:**
+    To set up a development environment, install all production and development dependencies, including tools for testing, formatting, and dependency management.
     ```sh
-    pip install -r requirements.txt
+    pip install -r requirements-dev.txt
     ```
+    This command ensures you have all the tools needed to contribute to the project.
 
 ### 1.3 Configuration
 
@@ -172,3 +174,15 @@ The system is composed of the following layers and components.
 
             return {"messages": state["messages"] + [ai_message]}
     ```
+
+### 5.2 Protocol B: Managing Dependencies
+
+This project uses `pyproject.toml` as the single source of truth for dependencies and `pip-tools` to generate pinned `requirements.txt` files for reproducible installations.
+
+**To add or update a dependency:**
+
+1.  Edit the `[project.dependencies]` or `[project.optional-dependencies.dev]` sections in `pyproject.toml`.
+2.  Run the sync script to regenerate the lock files:
+    *   On Linux/macOS: `./scripts/sync-reqs.sh`
+    *   On Windows: `.\scripts\sync-reqs.bat`
+3.  Commit the changes to `pyproject.toml` **and** the generated `requirements.txt` / `requirements-dev.txt` files to version control.

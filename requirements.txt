@@ -1,8 +1,0 @@
-google-generativeai
-langgraph
-langchain-core
-dotenv
-tenacity
-google.api_core
-pytest-mock
-fastapi[all]

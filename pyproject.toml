@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "specialist-hub-agentic-system"
+version = "1.0.0"
+description = "A foundational scaffold for building multi-agent systems using LangGraph, featuring a modular 'specialist' architecture."
+readme = "README.md"
+authors = [{ name = "Shane V Cantwell", email = "shane@example.com" }] # Replace with a real email if desired
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+# These are the core dependencies required to run the application
+# This section is the single source of truth for dependencies.
+dependencies = [
+    "fastapi[all]",
+    "uvicorn[standard]",
+    "pydantic",
+    "langchain",
+    "langchain-core",
+    "langgraph",
+    "python-dotenv",
+    "PyYAML",
+    "google-generativeai",
+    "tenacity",
+    # Add specific LLM provider packages here as needed
+    # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/shanevcantwell/langgraph-agentic-scaffold"
+"Bug Tracker" = "https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues"
+
+# These are dependencies only needed for development (e.g., running tests)
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-mock",
+    "black", # A popular code formatter
+    "ruff",  # A fast linter
+    "pip-tools", # For compiling requirements.txt from pyproject.toml
+]
+
+[tool.setuptools.packages.find]
+# Automatically find all packages under the 'app' directory
+where = ["app"]

@@ -5,9 +5,6 @@ rem and runs the FastAPI application server for Windows users.
 rem Activate the virtual environment
 call .\.venv_agents_windows\Scripts\activate.bat
 
-echo "Installing/updating dependencies from requirements.txt..."
-pip install -r requirements.txt
-
 echo "Starting SpecialistHub API server with Uvicorn..."
 echo "Access the API at http://127.0.0.1:8000"
 echo "View the interactive documentation at http://127.0.0.1:8000/docs"
