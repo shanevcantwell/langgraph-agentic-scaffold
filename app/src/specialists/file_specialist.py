@@ -27,7 +27,7 @@ class FileSpecialist(BaseSpecialist):
         super().__init__(system_prompt=system_prompt, llm_provider=llm_provider, tools=tools)
 
         self.root_dir = os.path.abspath(root_dir)
-        logger.info(f"---INITIALIZED {self.__class__.__name__} (Root Dir: {self.root_dir})---")
+        logger.info(f"Initialized {self.__class__.__name__} with root directory: {self.root_dir}")
 
     def _get_full_path(self, file_path: str) -> str:
         """Validates and returns the full, safe path for a file."""

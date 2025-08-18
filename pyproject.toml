@@ -23,9 +23,10 @@ dependencies = [
     "fastapi[all]",
     "uvicorn[standard]",
     "pydantic",
-    "langchain",
-    "langchain-core",
-    "langgraph",
+    "langchain-core>=0.1.52",
+    "langchain>=0.1.20",
+    "langgraph>=0.0.48",
+    "langchain-openai>=0.1.6",
     "python-dotenv",
     "PyYAML",
     "google-generativeai",
@@ -46,6 +47,8 @@ dev = [
     "black", # A popular code formatter
     "ruff",  # A fast linter
     "pip-tools", # For compiling requirements.txt from pyproject.toml
+    "typer[all]", # For the command-line interface
+    "requests",   # For making HTTP requests from the CLI to the API
 ]
 
 [tool.setuptools.packages.find]

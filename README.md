@@ -1,4 +1,4 @@
-# SpecialistHub: An Agentic System Scaffold
+# langgraph-agentic-scaffold: An Unlabeled Agentic System Scaffold
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
@@ -99,6 +99,16 @@ This repository is designed to be a starting point for your own complex projects
 To set up a full development environment with testing and linting tools, run:
 ```sh
 pip install -r requirements-dev.txt
+```
+
+Once the server is running, you can interact with it from a separate terminal using the CLI script:
+*   On **Linux/macOS**:
+    ```sh
+    ./scripts/cli.sh "Your prompt for the agent goes here."
+    ```
+*   On **Windows**:
+    ```bat
+    .\scripts\cli.bat "Your prompt for the agent goes here."
 ```
 
 ## License

@@ -1,0 +1,9 @@
+# SpecialistHub Configuration Example
+# Version: 1.0
+#
+# This file defines the structure of the agentic system. It is the single
+# source of truth for wiring together providers, models, and specialists.
+# Copy this file to `config.yaml` and customize it for your setup.
+
+# ==============================================================================
+#

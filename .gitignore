@@ -30,3 +30,7 @@ app/windows_run.bat
 config.yaml
 output.html
 app/output.html
+backups/
+build/
+logs/
+specialist_hub_agentic_system.egg-info/

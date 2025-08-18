@@ -20,17 +20,18 @@ Follow these steps to set up and run the project.
     cd langgraph-agentic-scaffold
     ```
 
-2.  **Create and activate a virtual environment:**
-    *   For **Linux/macOS** (using the `.venv_agents` directory):
-        ```sh
-        python3 -m venv .venv_agents
-        source ./.venv_agents/bin/activate
-        ```
-    *   For **Windows** (using the `.venv_agents_windows` directory):
-        ```sh
-        python -m venv .venv_agents_windows
-        .\.venv_agents_windows\Scripts\activate
-        ```
+2.  **Create and activate a virtual environment.**
+
+    For **Linux/macOS** (using the `.venv_agents` directory):
+    ```sh
+    python3 -m venv .venv_agents
+    source ./.venv_agents/bin/activate
+    ```
+    For **Windows** (using the `.venv_agents_windows` directory):
+    ```bat
+    python -m venv .venv_agents_windows
+    .\.venv_agents_windows\Scripts\activate
+    ```
 
 3.  **Install dependencies:**
     To set up a development environment, install all production and development dependencies, including tools for testing, formatting, and dependency management.
@@ -60,14 +61,14 @@ Use the provided scripts in the project root to run the application.
 
 These scripts will start the FastAPI web server using Uvicorn. You can access the API at `http://127.0.0.1:8000` and view the interactive documentation (Swagger UI) at `http://127.0.0.1:8000/docs`.
 
-*   On **Linux/macOS**:
-    ```sh
-    ./run.sh
-    ```
-*   On **Windows**:
-    ```bat
-    .\windows_run.bat
-    ```
+On **Linux/macOS**:
+```sh
+./run.sh
+```
+On **Windows**:
+```bat
+.\windows_run.bat
+```
 
 ### 1.5 Running Tests
 
@@ -75,6 +76,25 @@ To ensure the system is functioning correctly, run the full suite of unit tests 
 
 ```sh
 pytest
+```
+
+### 1.6 Running via CLI
+
+Once the FastAPI server is running, you can interact with it from the command line using the provided `cli.py` script. This is the recommended way to perform quick tests and script interactions without using a full API client.
+
+1.  **Ensure the server is running in one terminal:**
+    *   On **Linux/macOS**: `./run.sh`
+    *   On **Windows**: `.\windows_run.bat`
+
+2.  **In a separate terminal, run the CLI:**
+    ```sh
+    python cli.py "Your prompt for the agent goes here."
+    ```
+    For example:
+    ```sh
+    python cli.py "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
+    ```
+    The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
 ```
 
 ---

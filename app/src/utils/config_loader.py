@@ -22,3 +22,6 @@ class ConfigLoader:
 
     def get_provider_config(self, provider_name: str) -> Dict[str, Any]:
         return self._config['providers'][provider_name]
+
+    def get_config(self) -> Dict[str, Any]:
+        return self._config

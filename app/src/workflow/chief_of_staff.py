@@ -20,7 +20,7 @@ class ChiefOfStaff:
         """
         Initializes the ChiefOfStaff, loading specialists defined in the configuration.
         """
-        self.config = ConfigLoader.load()
+        self.config = ConfigLoader().get_config()
         self.specialists = self._load_specialists()
 
     def _load_specialists(self) -> Dict[str, any]:
