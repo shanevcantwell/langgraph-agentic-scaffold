@@ -10,7 +10,7 @@ class Specialist(Enum):
     ROUTER = "router_specialist"
     PROMPT = "prompt_specialist"
     DATA_EXTRACTOR = "data_extractor_specialist"
-    DATA_PROCESSOR = "data_processor_specialist" # New specialist
+    # DATA_PROCESSOR was removed as it's not defined in config.yaml
     FILE = "file_specialist"
     SYSTEMS_ARCHITECT = "systems_architect"
     WEB_BUILDER = "web_builder"

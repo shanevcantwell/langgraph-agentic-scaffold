@@ -1,4 +1,2 @@
-from ..specialists.data_extractor_specialist import DataExtractorSpecialist
-from ..specialists.prompt_specialist import PromptSpecialist
-from ..specialists.router_specialist import RouterSpecialist
-from ..specialists.file_specialist import FileSpecialist
+# This file marks the 'workflow' directory as a Python package.
+# It can be left empty or used for package-level initializations.

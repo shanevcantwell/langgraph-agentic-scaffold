@@ -1,6 +1,7 @@
 import logging
 import os
 from typing import Dict, Any
+import json
 
 from langchain_core.messages import HumanMessage
 
@@ -38,8 +39,16 @@ class WorkflowRunner:
         """
         logger.info(f"--- Starting workflow for goal: '{goal}' ---")
         
-        initial_state = {
-            "messages": [HumanMessage(content=goal)]
+        # The initial state should conform to the GraphState TypedDict.
+        # The router specialist is the entry point and will decide the first step based on the goal.
+        initial_state: GraphState = {
+            "messages": [HumanMessage(content=goal)],
+            "next_specialist": None,
+            "text_to_process": None,
+            "extracted_data": None,
+            "error": None,
+            "json_artifact": None,
+            "html_artifact": None,
         }
 
         try:

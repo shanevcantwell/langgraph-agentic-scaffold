@@ -31,6 +31,7 @@ dependencies = [
     "PyYAML",
     "google-generativeai",
     "tenacity",
+    "inflection",
     # Add specific LLM provider packages here as needed
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]

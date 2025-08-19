@@ -4,7 +4,6 @@ from typing import Dict, Any
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from ..utils.prompt_loader import load_prompt
 from langchain_core.messages import HumanMessage
 
 logger = logging.getLogger(__name__)
@@ -19,13 +18,9 @@ class SystemsArchitect(BaseSpecialist):
         initial_goal = state.get("messages", [])[-1].content
         if not initial_goal:
             return {"error": "SystemsArchitect Error: Initial goal not found in state."}
-
-        system_prompt = load_prompt("systems_architect_prompt.md")
         
         request = StandardizedLLMRequest(
             messages=[HumanMessage(content=initial_goal)],
-            system_prompt_content=system_prompt,
-            # The schema for the sequence diagram
             output_schema={
                 "diagram_type": "sequence",
                 "title": "User Login Flow",
