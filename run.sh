@@ -24,7 +24,7 @@ start_server() {
     echo "View the interactive documentation at http://127.0.0.1:8000/docs"
 
     # Run the FastAPI server using uvicorn in the background and capture its PID
-    PYTHONUNBUFFERED=1 uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --log-level debug 2>&1 &
+    PYTHONUNBUFFERED=1 uvicorn app.src.api:app --host 0.0.0.0 --port 8000 2>&1 &
     echo $! > "$SERVER_PID_FILE"
     echo "Server started with PID $(cat "$SERVER_PID_FILE")."
 }

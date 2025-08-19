@@ -1,5 +1,5 @@
 # SpecialistHub: System Architecture & Developer's Guide
-# Version: 2.0
+# Version: 2.3
 # Status: ACTIVE
 
 This document provides all the necessary information to understand, run, test, and extend the SpecialistHub agentic system. It is designed to be parsed by both human developers and autonomous AI agents.
@@ -46,13 +46,15 @@ Follow these steps to set up and run the project.
     ```sh
     cp .env.example .env
     ```
-    Then, edit `.env` with your API keys.
+    Then, edit `.env` with your API keys. You can also set the console log level for the API server by adding the following line:
+    ```
+    LOG_LEVEL=DEBUG
+    ```
+    Valid levels are `DEBUG`, `INFO`, `WARNING`, and `ERROR`. If not set, the server defaults to `INFO`.
 
-2.  **Application Configuration:** In the `app/` directory, copy `config.yaml.example` to a new file named `config.yaml`. This file defines the agentic system's structure and can be modified without tracking changes in Git if desired.
+2.  **Application Configuration:** In the project root, copy `config.yaml.example` to a new file named `config.yaml`. This file defines the agentic system's structure and can be modified without tracking changes in Git if desired.
     ```sh
-    cd app
     cp config.yaml.example config.yaml
-    cd ..
     ```
 
 ### 1.4 Running the Application
@@ -63,7 +65,7 @@ These scripts will start the FastAPI web server using Uvicorn. You can access th
 
 On **Linux/macOS**:
 ```sh
-./run.sh
+./run.sh start
 ```
 On **Windows**:
 ```bat
@@ -83,16 +85,16 @@ pytest
 Once the FastAPI server is running, you can interact with it from the command line using the provided `cli.py` script. This is the recommended way to perform quick tests and script interactions without using a full API client.
 
 1.  **Ensure the server is running in one terminal:**
-    *   On **Linux/macOS**: `./run.sh`
+    *   On **Linux/macOS**: `./run.sh start`
     *   On **Windows**: `.\windows_run.bat`
 
 2.  **In a separate terminal, run the CLI:**
     ```sh
-    python cli.py "Your prompt for the agent goes here."
+    python app/src/cli.py "Your prompt for the agent goes here."
     ```
     For example:
     ```sh
-    python cli.py "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
+    python app/src/cli.py "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
     ```
     The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
 
@@ -136,8 +138,10 @@ The system now supports specialists that do not require an associated Large Lang
 .
 |-- .env                 # Local environment secrets (DO NOT COMMIT)
 |-- .env.example         # Example environment file
-|-- requirements.txt
-|-- pytest.ini           # Test runner configuration
+|-- config.yaml          # Local configuration (can be gitignored)
+|-- config.yaml.example  # Example configuration file
+|-- data_processor_specialist.py # Stub for procedural processing
+|-- requirements-dev.txt # Development dependencies
 |-- run.sh               # Execution script for Linux/macOS
 |-- windows_run.bat      # Execution script for Windows
 |-- docs/                # All project documentation
@@ -145,11 +149,16 @@ The system now supports specialists that do not require an associated Large Lang
 |   |-- MANIFEST.json
 |   `-- ... (proposals, etc.)
 `-- app/
-    |-- api.py           # FastAPI application
-    |-- config.yaml      # Local configuration (can be gitignored)
-    |-- config.yaml.example # Example configuration file
-    |-- prompts/
+    |-- prompts/         # Prompt templates for specialists
     |-- src/
+    |   |-- api.py           # FastAPI application entry point
+    |   |-- cli.py           # Command-line interface script
+    |   |-- enums.py         # System-wide enumerations
+    |   |-- graph/           # LangGraph state and nodes
+    |   |-- llm/             # LLM abstraction layer
+    |   |-- specialists/     # Specialist agent implementations
+    |   |-- utils/           # Shared utility functions
+    |   `-- workflow/        # LangGraph orchestration logic
     `-- tests/
 ```
 
@@ -157,12 +166,26 @@ The system now supports specialists that do not require an associated Large Lang
 *   **Specialist Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains (e.g., `FileSpecialist` in `file_specialist.py`).
 *   **Prompt Rule:** A prompt file in `app/prompts/` must be named according to the `prompt_file` key in `config.yaml`. This allows for model-specific prompt variations (e.g., `systems_architect_prompt_gguf.md`).
 
-## 5.0 Development Protocols
+## 5.0 Application Internals: Separation of Concerns
 
-### 5.1 Protocol A: Creating a Standard Specialist
+The `app/src` directory is organized to enforce a clear separation of concerns, making the system more modular and maintainable.
+
+*   `specialists/`: This is the core directory for the agentic workforce. Each file defines a `BaseSpecialist` subclass that encapsulates a specific skill or task. For example, `file_specialist.py` handles file operations, while `web_builder.py` might generate HTML.
+
+*   `workflow/`: This directory contains the high-level orchestration logic. It defines how the different specialists work together to achieve a larger goal. The `ChiefOfStaff` class, for instance, compiles the `LangGraph`, defining the flow of control and state between specialists.
+
+*   `llm/`: This directory abstracts away the complexities of interacting with different Large Language Models. The `adapter` and `factory` modules provide a standardized interface for specialists to make requests to LLMs without needing to know the specific implementation details of each provider (e.g., OpenAI, Google GenAI).
+
+*   `graph/`: This directory defines the structure of the shared state that is passed between all nodes in the LangGraph. The `state.py` file defines the `GraphState` TypedDict, ensuring that all specialists have a consistent view of the application's state.
+
+*   `utils/`: This directory contains shared utility functions and classes that are used across the application. For example, the `config_loader.py` is responsible for loading the `config.yaml` file, and `prompt_loader.py` loads the prompt templates for the specialists.
+
+## 6.0 Development Protocols
+
+### 6.1 Protocol A: Creating a Standard Specialist
 
 1.  **Define Prompt Contract:** Create a new prompt file in `app/prompts/`.
-2.  **Define Configuration:** Open `app/config.yaml` and add a new entry under the `specialists` key. Define its `model`, `provider`, and `prompt_file`.
+2.  **Define Configuration:** Open `config.yaml` and add a new entry under the `specialists` key. Define its `model`, `provider`, and `prompt_file`.
 3.  **Implement Specialist Logic:** Create a new file in `src/specialists/`. Use the following template:
     ```python
     from .base import BaseSpecialist
@@ -195,7 +218,7 @@ The system now supports specialists that do not require an associated Large Lang
             return {"messages": state["messages"] + [ai_message]}
     ```
 
-### 5.2 Protocol B: Managing Dependencies
+### 6.2 Protocol B: Managing Dependencies
 
 This project uses `pyproject.toml` as the single source of truth for dependencies and `pip-tools` to generate pinned `requirements.txt` files for reproducible installations.
 
@@ -206,3 +229,7 @@ This project uses `pyproject.toml` as the single source of truth for dependencie
     *   On Linux/macOS: `./scripts/sync-reqs.sh`
     *   On Windows: `.\scripts\sync-reqs.bat`
 3.  Commit the changes to `pyproject.toml` **and** the generated `requirements.txt` / `requirements-dev.txt` files to version control.
+
+### 6.3 Packaging
+
+This project is structured as an installable Python package. The `pyproject.toml` file defines the package metadata, and the `app` directory contains the source code. This allows for clean dependency management and distribution.

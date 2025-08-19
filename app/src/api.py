@@ -2,6 +2,7 @@
 import logging
 from logging.handlers import RotatingFileHandler
 import pathlib
+import os
 from dotenv import load_dotenv # <<< 1. IMPORT THE LIBRARY
 
 # --- This is the ONLY place this configuration should happen ---
@@ -18,27 +19,34 @@ log_file_path = project_root / "logs" / "specialisthub_debug.log"
 # 4. Ensure the log directory exists
 log_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-# 5. Configure the root logger
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.DEBUG)
+# 5. Get log level from environment variable, default to INFO
+log_level_str = os.getenv('LOG_LEVEL', 'INFO').upper()
+# Ensure it's a valid level, otherwise default to INFO
+log_level = getattr(logging, log_level_str, logging.INFO)
 
-if root_logger.handlers:
-    for handler in root_logger.handlers:
-        root_logger.removeHandler(handler)
 
+# 6. Configure handlers
 formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
 file_handler = RotatingFileHandler(log_file_path, maxBytes=1024*1024*5, backupCount=5)
-file_handler.setLevel(logging.DEBUG)
+file_handler.setLevel(logging.DEBUG) # File logs are always detailed
 file_handler.setFormatter(formatter)
-root_logger.addHandler(file_handler)
 
 console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
+console_handler.setLevel(log_level) # Console log level is configurable
 console_handler.setFormatter(formatter)
-root_logger.addHandler(console_handler)
+
+# 7. Configure the root logger
+# The root logger's level should be the most verbose of its handlers (DEBUG)
+# to allow messages to pass through to the handlers for their own filtering.
+logging.basicConfig(
+    level=logging.DEBUG,
+    handlers=[file_handler, console_handler],
+    force=True
+)
 
 logger = logging.getLogger(__name__)
+logger.info(f"Logging configured. Console log level set to {log_level_str}.")
 
 # --- The rest of your api.py file ---
 from fastapi import FastAPI
