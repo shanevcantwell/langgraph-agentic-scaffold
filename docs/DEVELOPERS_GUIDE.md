@@ -95,9 +95,6 @@ Once the FastAPI server is running, you can interact with it from the command li
     python cli.py "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
     ```
     The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
-```
-
----
 
 ## 2.0 Mission & Philosophy
 
@@ -128,6 +125,9 @@ The system is composed of the following layers and components.
 *   **Role:** Agent / Worker / Node.
 *   **Contract:** Must inherit from `src.specialists.base.BaseSpecialist`. Must implement the `execute(state: GraphState) -> Dict[str, Any]` method.
 *   **Function:** A Specialist performs a single atomic task, usually by creating a `StandardizedLLMRequest` and passing it to its configured LLM adapter.
+
+**LLM-Optional Specialists:**
+The system now supports specialists that do not require an associated Large Language Model (LLM). These are typically procedural specialists that perform deterministic tasks without needing AI inference. To define an LLM-optional specialist, simply omit the `model` and `provider` fields in its configuration within `config.yaml`. The `AdapterFactory` will automatically handle this by providing a `None` LLM adapter to such specialists. This allows for greater flexibility and efficiency by avoiding unnecessary LLM calls for purely procedural tasks.
 
 ## 4.0 Project Structure & Naming
 
