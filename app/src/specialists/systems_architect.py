@@ -22,7 +22,7 @@ class SystemsArchitect(BaseSpecialist):
 
         request = StandardizedLLMRequest(
             messages=messages,
-            output_schema=SystemPlan.model_json_schema()
+            output_model_class=SystemPlan
         )
 
         response_data = self.llm_adapter.invoke(request)

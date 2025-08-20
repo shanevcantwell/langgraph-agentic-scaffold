@@ -39,3 +39,6 @@ logs/
 *.egg-info/
 smoke-test.sh
 .gitignore
+
+# --- Agent Notes ---
+/docs/agentic_notes.md

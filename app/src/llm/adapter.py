@@ -1,16 +1,22 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Type, Any, Optional
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
+
+class LLMInvocationError(Exception):
+    """Custom exception for errors during LLM adapter invocation."""
+    pass
 
 class StandardizedLLMRequest(BaseModel):
     """A provider-agnostic request object that captures the specialist's runtime intent."""
     messages: List[BaseMessage]
-    output_schema: Optional[Dict[str, Any]] = Field(default=None)
+    output_model_class: Optional[Type[BaseModel]] = Field(default=None)
     tools: Optional[List[Any]] = Field(default=None)
 
 class BaseAdapter(ABC):
-    """The abstract base class for all provider-specific adapters."""
+    """
+    The abstract base class for all provider-specific adapters.
+    """
     def __init__(self, model_config: Dict[str, Any]):
         self.config = model_config
 
@@ -18,5 +24,10 @@ class BaseAdapter(ABC):
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         pass
 
-class LLMInvocationError(Exception):
-    pass
+    def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
+        """
+        Hook for adapters to post-process JSON responses before Pydantic validation.
+        Default implementation returns the response as is.
+        Subclasses can override this for specific schema transformations.
+        """
+        return json_response

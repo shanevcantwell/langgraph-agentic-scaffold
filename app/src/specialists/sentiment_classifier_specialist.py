@@ -21,7 +21,7 @@ class SentimentClassifierSpecialist(BaseSpecialist):
 
         request = StandardizedLLMRequest(
             messages=messages,
-            output_schema=Sentiment
+            output_model_class=Sentiment
         )
 
         response_data = self.llm_adapter.invoke(request)

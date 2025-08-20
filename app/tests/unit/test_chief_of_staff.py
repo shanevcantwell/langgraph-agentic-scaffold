@@ -1,65 +1,99 @@
 # app/tests/unit/test_chief_of_staff.py
 
 from langgraph.graph import StateGraph
-import unittest
 from unittest.mock import MagicMock, patch
 from app.src.workflow.chief_of_staff import ChiefOfStaff
 from app.src.specialists.base import BaseSpecialist
 
-class TestChiefOfStaff(unittest.TestCase):
-
-    @patch("app.src.workflow.chief_of_staff.ConfigLoader")
-    @patch("app.src.workflow.chief_of_staff.get_specialist_class")
-    def test_load_specialists(self, mock_get_specialist_class, mock_config_loader):
-        """Tests that specialists are loaded and the router is configured."""
-        # --- Arrange ---
-        mock_config = {
-            "specialists": {
-                "router_specialist": {"prompt_file": "fake.md"},
-                "specialist1": {"description": "Test specialist 1"}
-            }
+@patch("app.src.workflow.chief_of_staff.AdapterFactory")
+@patch("app.src.workflow.chief_of_staff.get_specialist_class")
+@patch("app.src.workflow.chief_of_staff.ConfigLoader")
+def test_load_specialists_and_configure_router(mock_config_loader, mock_get_specialist_class, mock_adapter_factory):
+    """
+    Tests that specialists are loaded and that the router specialist is
+    re-configured with a dynamic prompt (the "morning standup").
+    """
+    # --- Arrange ---
+    mock_config = {
+        "specialists": {
+            "router_specialist": {"model": "gemini-test", "provider": "gemini", "prompt_file": "fake_router.md"},
+            "specialist1": {"description": "Test specialist 1", "model": "gemini-test", "provider": "gemini", "prompt_file": "fake1.md"},
+            "specialist2": {"description": "Test specialist 2", "model": "gemini-test", "provider": "gemini", "prompt_file": "fake2.md"}
         }
-        mock_config_loader.return_value.get_config.return_value = mock_config
+    }
+    mock_config_loader.return_value.get_config.return_value = mock_config
 
-        # Mock the specialist classes and their instances
-        mock_router_class = MagicMock()
-        mock_specialist1_class = MagicMock()
-        mock_get_specialist_class.side_effect = [mock_router_class, mock_specialist1_class]
+    # Mock the specialist classes and their instances
+    mock_router_class = MagicMock()
+    mock_specialist1_class = MagicMock()
+    mock_specialist2_class = MagicMock()
+    mock_get_specialist_class.side_effect = [mock_router_class, mock_specialist1_class, mock_specialist2_class]
 
-        mock_router_instance = MagicMock(spec=BaseSpecialist)
-        mock_specialist1_instance = MagicMock(spec=BaseSpecialist)
-        mock_router_class.return_value = mock_router_instance
-        mock_specialist1_class.return_value = mock_specialist1_instance
+    mock_router_instance = MagicMock(spec=BaseSpecialist)
+    mock_specialist1_instance = MagicMock(spec=BaseSpecialist)
+    mock_specialist2_instance = MagicMock(spec=BaseSpecialist)
+    
+    mock_router_class.return_value = mock_router_instance
+    mock_specialist1_class.return_value = mock_specialist1_instance
+    mock_specialist2_class.return_value = mock_specialist2_instance
 
-        # --- Act ---
-        chief_of_staff = ChiefOfStaff()
+    # --- Act ---
+    chief_of_staff = ChiefOfStaff()
 
-        # --- Assert ---
-        # Check that specialists were loaded
-        self.assertEqual(len(chief_of_staff.specialists), 2)
-        self.assertIn("specialist1", chief_of_staff.specialists)
-        self.assertIn("router_specialist", chief_of_staff.specialists)
-        
-        # Check that the router's adapter was re-configured (the core of the "morning standup")
-        # We assert that the llm_adapter attribute of the router instance was set.
-        # In a real test, we might mock AdapterFactory to check it was called with the right prompt.
-        self.assertIsNotNone(mock_router_instance.llm_adapter)
+    # --- Assert ---
+    # Check that all specialists were loaded
+    assert len(chief_of_staff.specialists) == 3
+    assert "router_specialist" in chief_of_staff.specialists
+    assert "specialist1" in chief_of_staff.specialists
+    assert "specialist2" in chief_of_staff.specialists
 
-    @patch("app.src.workflow.chief_of_staff.ConfigLoader")
-    @patch("app.src.workflow.chief_of_staff.get_specialist_class")
-    @patch("app.src.workflow.chief_of_staff.AdapterFactory")
-    def test_get_graph(self, mock_adapter_factory, mock_get_specialist_class, mock_config_loader):
-        """Tests that a valid graph is built and returned."""
-        # --- Act ---
-        # We can use a minimal config for this test, as we're mocking the instantiation
-        mock_config_loader.return_value.get_config.return_value = {"specialists": {"router_specialist": {}}}
-        chief_of_staff = ChiefOfStaff()
-        graph = chief_of_staff.get_graph()
+    # Check that the AdapterFactory was called to create a NEW adapter for the router
+    # This is the key assertion for the "morning standup" logic.
+    mock_adapter_factory.create_adapter.assert_called_once()
+    
+    # Check the arguments of the call to create_adapter
+    call_args, call_kwargs = mock_adapter_factory.create_adapter.call_args
+    
+    assert call_args[0] == "router_specialist"
+    
+    dynamic_prompt = call_kwargs['system_prompt']
+    assert isinstance(dynamic_prompt, str)
+    assert "Test specialist 1" in dynamic_prompt
+    assert "Test specialist 2" in dynamic_prompt
+    assert "specialist1" in dynamic_prompt
+    assert "specialist2" in dynamic_prompt
 
-        # --- Assert ---
-        self.assertIsNotNone(graph)
-        self.assertIsInstance(graph, StateGraph)
-        self.assertIn("router", graph.nodes)
+    # Check that the router's adapter was replaced with the new one
+    assert chief_of_staff.specialists["router_specialist"].llm_adapter == mock_adapter_factory.create_adapter.return_value
 
-if __name__ == '__main__':
-    unittest.main()
+@patch("app.src.workflow.chief_of_staff.ConfigLoader")
+@patch("app.src.workflow.chief_of_staff.get_specialist_class")
+def test_get_graph(mock_get_specialist_class, mock_config_loader):
+    """Tests that a valid graph is built and returned with all nodes."""
+    # --- Arrange ---
+    mock_config = {
+        "specialists": {
+            "router_specialist": {"prompt_file": "fake.md"},
+            "some_other_specialist": {"description": "desc"}
+        }
+    }
+    mock_config_loader.return_value.get_config.return_value = mock_config
+    
+    mock_router_class = MagicMock()
+    mock_other_class = MagicMock()
+    mock_get_specialist_class.side_effect = [mock_router_class, mock_other_class]
+    
+    mock_router_instance = MagicMock(spec=BaseSpecialist)
+    mock_other_instance = MagicMock(spec=BaseSpecialist)
+    mock_router_class.return_value = mock_router_instance
+    mock_other_class.return_value = mock_other_instance
+
+    # --- Act ---
+    chief_of_staff = ChiefOfStaff()
+    graph = chief_of_staff.get_graph()
+
+    # --- Assert ---
+    assert graph is not None
+    assert isinstance(graph, StateGraph)
+    assert "router" in graph.nodes
+    assert "some_other_specialist" in graph.nodes

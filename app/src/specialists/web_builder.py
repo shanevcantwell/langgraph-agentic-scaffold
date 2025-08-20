@@ -25,7 +25,7 @@ class WebBuilder(BaseSpecialist):
 
         request = StandardizedLLMRequest(
             messages=messages,
-            output_schema=WebContent.model_json_schema()
+            output_model_class=WebContent
         )
 
         response_data = self.llm_adapter.invoke(request)

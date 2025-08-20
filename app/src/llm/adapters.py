@@ -1,11 +1,13 @@
 import logging
 import json
 import requests
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Type
 import google.generativeai as genai
+from pydantic import BaseModel
 from langchain_core.messages import BaseMessage
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError
+from ..specialists.schemas import SystemPlan, WebContent # Added imports
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 120
@@ -26,7 +28,7 @@ class GeminiAdapter(BaseAdapter):
 
         # Determine request type and configure API call parameters
         tools_to_pass = None
-        if request.output_schema:
+        if request.output_model_class:
             logger.info("GeminiAdapter: Invoking in JSON mode.")
             generation_config["response_mime_type"] = "application/json"
         elif request.tools:
@@ -56,14 +58,15 @@ class GeminiAdapter(BaseAdapter):
         # Robustness check for safety filtering
         if not response.candidates:
             logger.warning("GeminiAdapter received a response with no candidates. This may be due to content filtering.")
-            if request.output_schema: return {"json_response": {}}
+            if request.output_model_class: return {"json_response": {}}
             if request.tools: return {"tool_calls": []}
             return {"text_response": "The model did not provide a response, possibly due to safety filters."}
 
         # If we requested JSON, we expect JSON.
-        if request.output_schema:
+        if request.output_model_class:
             logger.info("GeminiAdapter returned JSON response.")
-            return {"json_response": json.loads(response.text)}
+            json_response = json.loads(response.text)
+            return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
 
         # If we passed tools, check for a tool call.
         if request.tools:
@@ -84,9 +87,42 @@ class GeminiAdapter(BaseAdapter):
         # Otherwise, it's a standard text response.
         logger.info("GeminiAdapter returned text response.")
         return {"text_response": response.text}
+
+    def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
+        """
+        Gemini-specific post-processing for JSON responses.
+        """
+        if output_model_class == SystemPlan:
+            # Map 'summary' to 'plan_summary' if present
+            if "summary" in json_response and "plan_summary" not in json_response:
+                json_response["plan_summary"] = json_response.pop("summary")
+            # Map 'components' or 'required_components_list' to 'required_components'
+            if "components" in json_response and "required_components" not in json_response:
+                json_response["required_components"] = json_response.pop("components")
+            elif "required_components_list" in json_response and "required_components" not in json_response:
+                json_response["required_components"] = json_response.pop("required_components_list")
+        elif output_model_class == WebContent:
+            # If the LLM returns a nested structure instead of a flat html_document string
+            if "html" in json_response and "html_document" not in json_response:
+                # Attempt to reconstruct the HTML string from the nested structure
+                # This is a simplified example and might need more robust parsing
+                html_content = ""
+                if "head" in json_response["html"]:
+                    head = json_response["html"]["head"]
+                    title = head.get("title", "")
+                    html_content += f"<head>\n    <title>{title}</title>\n</head>\n"
+                if "body" in json_response["html"]:
+                    body = json_response["html"]["body"]
+                    text = body.get("text", "")
+                    html_content += f"<body>\n    <h1>{text}</h1>\n</body>\n"
+                json_response["html_document"] = f"<!DOCTYPE html>\n<html>\n{html_content}</html>"
+                json_response.pop("html") # Remove the old nested structure
+
+        return json_response
                                                                         
 class LMStudioAdapter(BaseAdapter):
-    # This adapter's invoke method would need to be updated to support tool calling
+    # This adapter supports OpenAI-compatible APIs, such as LM Studio.
+    # Its invoke method would need to be updated to support tool calling
     # For now, it remains as it was, supporting text and JSON schema output.
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
         super().__init__(model_config)
@@ -105,18 +141,30 @@ class LMStudioAdapter(BaseAdapter):
             **self.config.get('parameters', {})
         }
 
-        if self.config.get('supports_schema') and request.output_schema:
-            payload["response_format"] = {"type": "json_object", "schema": request.output_schema}
+        if self.config.get('supports_schema') and request.output_model_class:
+            payload["response_format"] = {
+                "type": "json_object",
+                "schema": request.output_model_class.model_json_schema()
+            }
 
         try:
             response = requests.post(self.api_url, json=payload, timeout=REQUEST_TIMEOUT)
             response.raise_for_status()
             response_data = response.json()
             content = response_data['choices'][0]['message']['content']
-            
-            if self.config.get('supports_schema') and request.output_schema:
-                return {"json_response": json.loads(content)}
+
+            if self.config.get('supports_schema') and request.output_model_class:
+                json_response = json.loads(content)
+                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
             else:
                 return {"text_response": content}
-        except Exception as e:
-            raise LLMInvocationError(f"LM Studio API error: {e}") from e
+        except requests.RequestException as e:
+            logger.error(f"LMStudio API error during invoke: {e}", exc_info=True)
+            raise LLMInvocationError(f"LMStudio API error: {e}") from e
+
+    def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
+        """
+        LM Studio-specific post-processing for JSON responses.
+        Currently, no specific transformations are needed, so it returns as is.
+        """
+        return json_response
