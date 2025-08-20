@@ -201,40 +201,13 @@ The `app/src` directory is organized to enforce a clear separation of concerns, 
 
 ## 6.0 Development Protocols
 
-### 6.1 Creating a New Specialist
+### 6.1 Extending the System with Specialists
 
-Creating a new specialist is a straightforward process thanks to the dynamic loading mechanism of the `ChiefOfStaff`.
+The primary way to extend the system's capabilities is by adding new specialists. This can be done by creating a new standard specialist from scratch or by wrapping an existing, external agent.
 
-1.  **Implement the Specialist Logic:** Create a new Python file in `src/specialists/`. The filename must be the `snake_case` version of the `PascalCase` class name it contains (e.g., `MySpecialist` in `my_specialist.py`). This class must inherit from `BaseSpecialist`.
+For a detailed, step-by-step tutorial on both of these processes, please refer to the **Creating a New Specialist** guide.
 
-2.  **Implement the `_execute_logic` method:** This is where the core business logic of your specialist resides. The `BaseSpecialist` handles the surrounding boilerplate.
-
-3.  **Define a Prompt (Optional):** If your specialist uses a language model, create a corresponding prompt file in `app/prompts/`.
-
-3.  **Configure the Specialist:** Add a new entry to your `config.yaml` file under the `specialists` key. The key name must match your specialist's module name (e.g., `my_specialist`).
-
-That's it! The `ChiefOfStaff` will automatically discover, load, and integrate your new specialist into the graph at runtime. There is no need to manually edit the workflow.
-
-### 6.2 Creating a Wrapped Specialist
-
-In addition to creating specialists from scratch, you can also wrap existing, externally-sourced agents. This is useful for integrating third-party agents or agents from other repositories into your workflow.
-
-1.  **Create a Wrapper Specialist:** Create a new Python file in `src/specialists/`. This class must inherit from `WrappedSpecialist`.
-
-2.  **Implement the Translation Logic:** The wrapper specialist needs to implement two methods:
-    *   `_translate_state_to_input(self, state: dict) -> any`: This method takes the application's `GraphState` and translates it into the input format expected by the external agent.
-    *   `_translate_output_to_state(self, state: dict, output: any) -> dict`: This method takes the output from the external agent and translates it back into the `GraphState` format.
-
-3.  **Configure the Wrapped Specialist:** Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: wrapped` and a `source` key pointing to the entry point of the external agent.
-
-    ```yaml
-    specialists:
-      my_wrapped_specialist:
-        type: wrapped
-        source: "./path/to/external/agent/main.py" # Relative path from project root
-    ```
-
-### 6.3 Managing Dependencies
+### 6.2 Managing Dependencies
 
 This project uses `pyproject.toml` as the single source of truth for dependencies and `pip-tools` to generate pinned `requirements.txt` files for reproducible installations.
 
@@ -246,6 +219,6 @@ This project uses `pyproject.toml` as the single source of truth for dependencie
     *   On Windows: `.\scripts\sync-reqs.bat`
 3.  Commit the changes to `pyproject.toml` **and** the generated `requirements.txt` / `requirements-dev.txt` files to version control.
 
-### 6.4 Packaging
+### 6.3 Packaging
 
 This project is structured as an installable Python package. The `pyproject.toml` file defines the package metadata, and the `app` directory contains the source code. This allows for clean dependency management and distribution.
