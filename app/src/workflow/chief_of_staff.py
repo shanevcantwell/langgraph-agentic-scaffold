@@ -27,10 +27,14 @@ class ChiefOfStaff:
         """Dynamically load and instantiate specialists from config."""
         specialist_instances = {}
         specialist_configs = self.config.get("specialists", {})
-        for name in specialist_configs:
+        for name, config in specialist_configs.items():
             try:
-                SpecialistClass = get_specialist_class(name)
-                specialist_instances[name] = SpecialistClass()
+                SpecialistClass = get_specialist_class(name, config)
+                if config.get("type") == "wrapped":
+                    instance = SpecialistClass(specialist_name=name, **config)
+                else:
+                    instance = SpecialistClass()
+                specialist_instances[name] = instance
                 logger.info(f"Successfully instantiated specialist: {name}")
             except (ImportError, AttributeError) as e:
                 logger.error(f"Could not load specialist '{name}': {e}")

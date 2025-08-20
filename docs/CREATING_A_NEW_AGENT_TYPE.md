@@ -8,7 +8,9 @@ A Specialist is a modular, reusable component responsible for a single, well-def
 
 By creating new Specialists, you can extend the capabilities of the system to perform new tasks.
 
-## The Files You Will Touch
+## Creating a Standard Specialist
+
+### The Files You Will Touch
 
 Creating a new specialist involves creating and modifying a few files:
 
@@ -16,7 +18,7 @@ Creating a new specialist involves creating and modifying a few files:
 2.  `app/prompts/your_specialist_prompt.md`: A new prompt file that tells your specialist what to do.
 3.  `config.yaml`: The main configuration file where you will register your new specialist.
 
-## Step 1: Create the Specialist Python File
+### Step 1: Create the Specialist Python File
 
 First, you need to create a new Python file for your specialist in the `app/src/specialists/` directory. The filename should be the `snake_case` version of your specialist's class name. For example, if your specialist is named `CodeWriterSpecialist`, the filename should be `code_writer_specialist.py`.
 
@@ -76,7 +78,7 @@ class CodeWriterSpecialist(BaseSpecialist):
         return {"messages": state["messages"] + [ai_message]}
 ```
 
-## Step 2: Create the Prompt File
+### Step 2: Create the Prompt File
 
 Next, create a new prompt file in the `app/prompts/` directory. This file contains the instructions that will be sent to the Language Model. The filename should be descriptive and match the `prompt_file` key you will set in `config.yaml`.
 
@@ -90,7 +92,7 @@ You are a world-class Python programmer. Your task is to write clean, efficient,
 Only output the code itself. Do not add any explanations or pleasantries.
 ```
 
-## Step 3: Configure the Specialist in `config.yaml`
+### Step 3: Configure the Specialist in `config.yaml`
 
 Now, you need to register your new specialist in the `config.yaml` file in the root directory. This tells the system about your specialist and how to configure it.
 
@@ -113,7 +115,7 @@ specialists:
 *   `provider`: The name of the LLM provider. This must be a provider defined in the `providers` section of `config.yaml`.
 *   `prompt_file`: The name of the prompt file you created in the `app/prompts/` directory.
 
-## Step 4: Testing Your New Specialist
+### Step 4: Testing Your New Specialist
 
 After creating your specialist, it's important to test it. You can write a simple unit test in the `app/tests/unit/` directory.
 
@@ -146,7 +148,7 @@ class TestCodeWriterSpecialist(unittest.TestCase):
 
         # Check that the AI message was added to the state
         self.assertEqual(len(result_state["messages"]), 2)
-        self.assertEqual(result_atate["messages"][-1].content, "print('Hello, World!')")
+        self.assertEqual(result_state["messages"][-1].content, "print('Hello, World!')")
 
 if __name__ == '__main__':
     unittest.main()
@@ -154,6 +156,45 @@ if __name__ == '__main__':
 ```
 
 To run the tests, simply run `pytest` from the root directory.
+
+## Creating a Wrapped Specialist
+
+In addition to creating specialists from scratch, you can also wrap existing, externally-sourced agents. This is useful for integrating third-party agents or agents from other repositories into your workflow.
+
+### Step 1: Create the Wrapper Specialist File
+
+Create a new Python file in `app/src/specialists/`. This class must inherit from `WrappedSpecialist`.
+
+```python
+# app/src/specialists/open_swe_specialist.py
+
+from .wrapped_specialist import WrappedSpecialist
+from langchain_core.messages import AIMessage
+
+class OpenSweSpecialist(WrappedSpecialist):
+    """A wrapper specialist for the open-swe agent."""
+
+    def _translate_state_to_input(self, state: dict) -> any:
+        """Translates the GraphState to the open-swe agent's input format."""
+        return state["messages"][-1].content
+
+    def _translate_output_to_state(self, state: dict, output: any) -> dict:
+        """Translates the open-swe agent's output back to the GraphState format."""
+        ai_message = AIMessage(content=str(output))
+        return {"messages": state["messages"] + [ai_message]}
+```
+
+### Step 2: Configure the Wrapped Specialist in `config.yaml`
+
+Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: wrapped` and a `source` key pointing to the entry point of the external agent.
+
+```yaml
+specialists:
+  open_swe_specialist:
+    type: wrapped
+    source: "./open-swe/agent/run.py"
+    description: "A specialist that wraps the open-swe agent for software engineering tasks."
+```
 
 ## Conclusion
 
