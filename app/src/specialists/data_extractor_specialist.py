@@ -29,7 +29,7 @@ class DataExtractorSpecialist(BaseSpecialist):
 
         request = StandardizedLLMRequest(
             messages=[HumanMessage(content=unstructured_text)],
-            output_schema=ExtractedData
+            output_schema=ExtractedData.model_json_schema()
         )
 
         response_data = self.llm_adapter.invoke(request)

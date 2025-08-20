@@ -48,6 +48,15 @@ class RouterSpecialist(BaseSpecialist):
         logger.info("Initialized RouterSpecialist (awaiting contextual configuration from ChiefOfStaff).")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Check if a previous specialist has already set the next_specialist
+        if state.get("next_specialist"):
+            # Clear the next_specialist from the state to avoid infinite loops
+            # if the target specialist doesn't clear it.
+            next_specialist_from_state = state["next_specialist"]
+            state["next_specialist"] = None # Clear it for the next routing decision
+            logger.info(f"Router decision: Prioritizing next_specialist from state: {next_specialist_from_state}")
+            return {"next_specialist": next_specialist_from_state}
+
         messages: List[BaseMessage] = state["messages"]
 
         # Create a standardized request to the Language Model.

@@ -22,7 +22,7 @@ class SystemsArchitect(BaseSpecialist):
 
         request = StandardizedLLMRequest(
             messages=messages,
-            output_schema=SystemPlan
+            output_schema=SystemPlan.model_json_schema()
         )
 
         response_data = self.llm_adapter.invoke(request)
@@ -36,6 +36,7 @@ class SystemsArchitect(BaseSpecialist):
         new_message = AIMessage(content=f"I have created a system plan: {plan.plan_summary}")
         updated_state = {
             "messages": state["messages"] + [new_message],
-            "system_plan": plan.dict()
+            "system_plan": plan.dict(),
+            "next_specialist": "web_builder" # Set next specialist
         }
         return updated_state

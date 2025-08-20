@@ -24,4 +24,5 @@ class GraphState(TypedDict):
     error: Optional[str]
     json_artifact: Optional[str]
     html_artifact: Optional[str]
+    system_plan: Optional[Dict[str, Any]] # Added system_plan
 
