@@ -1,4 +1,4 @@
-# How to Create a New Specialist Agent
+# How to Create a New Specialist
 
 This guide provides a detailed, step-by-step walkthrough for creating a new "Specialist" agent within the SpecialistHub framework. It is intended for entry-level Python developers who are new to the system.
 
@@ -52,14 +52,14 @@ class CodeWriterSpecialist(BaseSpecialist):
         It takes the current application state as input and returns a dictionary
         with the updated state.
         """
-        # Get the user's most recent message from the state.
-        user_input = state["messages"][-1].content
+        # Get the full message history from the state.
+        messages = state["messages"]
 
         # 1. Create a standardized request to the Language Model.
-        #    This object bundles up the messages and any other parameters
-        #    you want to send to the LLM.
+        #    This object bundles up the messages for the LLM.
+        #    Passing the full history gives the LLM context.
         request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=user_input)]
+            messages=messages
         )
 
         # 2. Invoke the LLM adapter.
@@ -119,39 +119,40 @@ specialists:
 
 After creating your specialist, it's important to test it. You can write a simple unit test in the `app/tests/unit/` directory.
 
-Here is an example test for our `CodeWriterSpecialist`:
+The project uses `pytest` as its testing framework. Here is an example test for our `CodeWriterSpecialist` that follows the `pytest` style (which is simpler and more direct than using `unittest.TestCase`).
 
 ```python
 # app/tests/unit/test_code_writer_specialist.py
 
-import unittest
 from unittest.mock import MagicMock
+from langchain_core.messages import HumanMessage
 from app.src.specialists.code_writer_specialist import CodeWriterSpecialist
 
-class TestCodeWriterSpecialist(unittest.TestCase):
+def test_code_writer_specialist_execute():
+    """
+    Tests that the CodeWriterSpecialist correctly executes, calls the LLM adapter,
+    and updates the state with the response.
+    """
+    # Arrange
+    # Create an instance of the specialist
+    specialist = CodeWriterSpecialist()
 
-    def test_execute(self):
-        # Create an instance of the specialist
-        specialist = CodeWriterSpecialist()
+    # Mock the LLM adapter to avoid making a real API call
+    specialist.llm_adapter = MagicMock()
+    specialist.llm_adapter.invoke.return_value = {"text_response": "print('Hello, World!')"}
 
-        # Mock the LLM adapter to avoid making a real API call
-        specialist.llm_adapter = MagicMock()
-        specialist.llm_adapter.invoke.return_value = {"text_response": "print('Hello, World!')"}
+    # Create a sample state
+    initial_state = {
+        "messages": [HumanMessage(content="Write a hello world program in Python")]
+    }
 
-        # Create a sample state
-        initial_state = {
-            "messages": [{"role": "user", "content": "Write a hello world program in Python"}]
-        }
+    # Act
+    result_state = specialist.execute(initial_state)
 
-        # Execute the specialist
-        result_state = specialist.execute(initial_state)
-
-        # Check that the AI message was added to the state
-        self.assertEqual(len(result_state["messages"]), 2)
-        self.assertEqual(result_state["messages"][-1].content, "print('Hello, World!')")
-
-if __name__ == '__main__':
-    unittest.main()
+    # Assert
+    # Check that the AI message was added to the state
+    assert len(result_state["messages"]) == 2
+    assert result_state["messages"][-1].content == "print('Hello, World!')"
 
 ```
 
@@ -192,7 +193,7 @@ Add a new entry to your `config.yaml` file under the `specialists` key. This ent
 specialists:
   open_swe_specialist:
     type: wrapped
-    source: "./open-swe/agent/run.py"
+    source: "./path/to/external/agent/run.py" # Relative path from project root
     description: "A specialist that wraps the open-swe agent for software engineering tasks."
 ```
 

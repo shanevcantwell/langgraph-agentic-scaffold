@@ -89,12 +89,14 @@ Once the FastAPI server is running, you can interact with it from the command li
     *   On **Windows**: `.\windows_run.bat`
 
 2.  **In a separate terminal, run the CLI:**
-    ```sh
-    python app/src/cli.py "Your prompt for the agent goes here."
-    ```
+    Use the provided convenience script for your operating system.
+    *   On **Linux/macOS**:
+        ```sh
+        ./scripts/cli.sh "Your prompt for the agent goes here."
+        ```
     For example:
     ```sh
-    python app/src/cli.py "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
+    ./scripts/cli.sh "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
     ```
     The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
 
@@ -210,7 +212,7 @@ In addition to creating specialists from scratch, you can also wrap existing, ex
     specialists:
       my_wrapped_specialist:
         type: wrapped
-        source: "/path/to/external/agent/main.py"
+        source: "./path/to/external/agent/main.py" # Relative path from project root
     ```
 
 ### 6.3 Managing Dependencies

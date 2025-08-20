@@ -1,23 +1,13 @@
 # src/enums.py
 
 from enum import Enum
-
-class Specialist(Enum):
-    """
-    An enumeration of all specialist agents in the graph.
-    The value of each member is the string identifier used by LangGraph.
-    """
-    ROUTER = "router_specialist"
-    PROMPT = "prompt_specialist"
-    DATA_EXTRACTOR = "data_extractor_specialist"
-    # DATA_PROCESSOR was removed as it's not defined in config.yaml
-    FILE = "file_specialist"
-    SYSTEMS_ARCHITECT = "systems_architect"
-    WEB_BUILDER = "web_builder"
+from langgraph.graph import END as LANGGRAPH_END
 
 class Edge(Enum):
     """
-    An enumeration of all edge names in the graph.
+    An enumeration for standard graph edge names.
+    NOTE: The Specialist enum was removed as it was a static list that conflicted
+    with the system's dynamic, configuration-driven specialist loading.
+    The router_specialist now generates the list of specialists dynamically.
     """
-    CONTINUE = "continue"
-    END = "__end__"
+    END = LANGGRAPH_END

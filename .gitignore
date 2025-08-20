@@ -37,3 +37,5 @@ build/
 logs/
 *.bak
 *.egg-info/
+smoke-test.sh
+.gitignore

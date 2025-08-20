@@ -17,11 +17,8 @@ class ConfigLoader:
     def get_specialist_config(self, specialist_name: str) -> Dict[str, Any]:
         return self._config['specialists'][specialist_name]
 
-    def get_model_config(self, model_name: str) -> Dict[str, Any]:
-        return self._config['models'][model_name]
-
     def get_provider_config(self, provider_name: str) -> Dict[str, Any]:
-        return self._config['providers'][provider_name]
+        return self._config['llm_providers'][provider_name]
 
     def get_config(self) -> Dict[str, Any]:
         return self._config

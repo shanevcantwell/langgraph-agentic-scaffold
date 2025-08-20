@@ -4,6 +4,7 @@ from typing import Dict, Any
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
+from ..utils.prompt_loader import load_prompt
 from langchain_core.messages import HumanMessage
 
 logger = logging.getLogger(__name__)
@@ -18,28 +19,22 @@ class SystemsArchitect(BaseSpecialist):
         initial_goal = state.get("messages", [])[-1].content
         if not initial_goal:
             return {"error": "SystemsArchitect Error: Initial goal not found in state."}
+
+        # Load the prompt from the .md file
+        system_prompt = load_prompt("systems_architect_prompt.md")
         
+        # Dynamically create the output schema based on the prompt or a default
+        output_schema = {
+            "diagram_type": "sequence",
+            "title": "Dynamic Flow",
+            "participants": [],
+            "flow": []
+        }
+
         request = StandardizedLLMRequest(
             messages=[HumanMessage(content=initial_goal)],
-            output_schema={
-                "diagram_type": "sequence",
-                "title": "User Login Flow",
-                "participants": [
-                    {
-                        "id": "user",
-                        "name": "User",
-                        "type": "actor"
-                    }
-                ],
-                "flow": [
-                    {
-                        "from": "user",
-                        "to": "webapp",
-                        "action": "Submit credentials",
-                        "is_reply": False
-                    }
-                ]
-            }
+            system_prompt_content=system_prompt,
+            output_schema=output_schema
         )
 
         try:

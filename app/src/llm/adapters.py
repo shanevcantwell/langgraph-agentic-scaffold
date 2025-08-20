@@ -22,49 +22,68 @@ class GeminiAdapter(BaseAdapter):
 
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         messages = [{"role": "user" if m.type == 'human' else "model", "parts": [m.content]} for m in request.messages]
-        generation_config = self.config.get('parameters', {})
+        generation_config = self.config.get('parameters', {}).copy()
+
+        # Determine request type and configure API call parameters
+        tools_to_pass = None
+        if request.output_schema:
+            logger.info("GeminiAdapter: Invoking in JSON mode.")
+            generation_config["response_mime_type"] = "application/json"
+        elif request.tools:
+            logger.info("GeminiAdapter: Invoking in Tool-calling mode.")
+            tools_to_pass = request.tools
+        else:
+            logger.info("GeminiAdapter: Invoking in Text mode.")
 
         try:
-            if request.output_schema:
-                logger.info("GeminiAdapter: Invoking in JSON mode and explicitly disabling tools.")
-                generation_config["response_mime_type"] = "application/json"
-                # In JSON mode, we MUST explicitly pass tools=None to override any
-                # "sticky" tools from previous calls in the workflow.
-                response = self.model.generate_content(
-                    messages,
-                    generation_config=generation_config,
-                    tools=None
-                )
-            else:
-                logger.info("GeminiAdapter: Invoking in Tool-calling or Text mode.")
-                response = self.model.generate_content(
-                    messages,
-                    generation_config=generation_config,
-                    tools=request.tools if request.tools else None,
-                )
-
-            if response.candidates and response.candidates[0].content.parts:
-                part = response.candidates[0].content.parts[0]
-                if hasattr(part, 'function_call'):
-                    function_call = part.function_call
-                    args = {key: value for key, value in function_call.args.items()} if function_call.args else {}
-                    tool_call_response = {
-                        "tool_calls": [{
-                            "name": function_call.name, "args": args, "id": "call_" + function_call.name
-                        }]
-                    }
-                    logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
-                    return tool_call_response
-
-            if request.output_schema:
-                logger.info("GeminiAdapter returned JSON response.")
-                return {"json_response": json.loads(response.text)}
-            else:
-                logger.info("GeminiAdapter returned text response.")
-                return {"text_response": response.text}
+            response = self.model.generate_content(
+                messages,
+                generation_config=generation_config,
+                tools=tools_to_pass,
+            )
+            return self._parse_and_format_response(request, response)
 
         except Exception as e:
+            logger.error(f"Gemini API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"Gemini API error: {e}") from e
+
+    def _parse_and_format_response(self, request: StandardizedLLMRequest, response: Any) -> Dict[str, Any]:
+        """
+        Parses the raw response from the Gemini API and formats it into the
+        standardized dictionary expected by the specialists. This includes
+        handling safety filtering, JSON, tool calls, and text responses.
+        """
+        # Robustness check for safety filtering
+        if not response.candidates:
+            logger.warning("GeminiAdapter received a response with no candidates. This may be due to content filtering.")
+            if request.output_schema: return {"json_response": {}}
+            if request.tools: return {"tool_calls": []}
+            return {"text_response": "The model did not provide a response, possibly due to safety filters."}
+
+        # If we requested JSON, we expect JSON.
+        if request.output_schema:
+            logger.info("GeminiAdapter returned JSON response.")
+            return {"json_response": json.loads(response.text)}
+
+        # If we passed tools, check for a tool call.
+        if request.tools:
+            if response.candidates and response.candidates[0].content.parts and hasattr(response.candidates[0].content.parts[0], 'function_call'):
+                part = response.candidates[0].content.parts[0]
+                function_call = part.function_call
+                args = {key: value for key, value in function_call.args.items()} if function_call.args else {}
+                tool_call_id = f"call_{function_call.name}"
+                tool_call_response = {
+                    "tool_calls": [{"name": function_call.name, "args": args, "id": tool_call_id}]
+                }
+                logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
+                return tool_call_response
+            else:
+                logger.info("GeminiAdapter was given tools but returned a text response.")
+                return {"text_response": response.text}
+
+        # Otherwise, it's a standard text response.
+        logger.info("GeminiAdapter returned text response.")
+        return {"text_response": response.text}
                                                                         
 class LMStudioAdapter(BaseAdapter):
     # This adapter's invoke method would need to be updated to support tool calling

@@ -49,17 +49,17 @@ class DataExtractorSpecialist(BaseSpecialist):
         # Use the adapter, not a direct client
         ai_response_str = self.llm_adapter.invoke(request)
         
-        extracted_json_str = ""
-        # Attempt to find JSON within markdown code fences
-        if "```json" in ai_response_str:
-            start_index = ai_response_str.find("```json") + len("```json")
-            end_index = ai_response_str.find("```", start_index)
-            if start_index != -1 and end_index != -1:
-                extracted_json_str = ai_response_str[start_index:end_index].strip()
-        
-        # If no markdown JSON, try to parse the whole string
-        if not extracted_json_str:
-            extracted_json_str = ai_response_str
+        extracted_json_str = ai_response_str.strip()
+        # Models often wrap JSON in markdown code fences. Let's strip them.
+        if extracted_json_str.startswith("```json"):
+            extracted_json_str = extracted_json_str[len("```json"):]
+        if extracted_json_str.startswith("```"):
+            extracted_json_str = extracted_json_str[len("```"):]
+        if extracted_json_str.endswith("```"):
+            extracted_json_str = extracted_json_str[:-len("```")]
+
+        # After stripping fences, we should have a clean JSON string.
+        extracted_json_str = extracted_json_str.strip()
 
         try:
             # 1. First, parse the raw JSON string from the LLM
