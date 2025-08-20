@@ -2,7 +2,9 @@
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from langchain_core.messages import AIMessage, HumanMessage
+from .schemas import Sentiment
+from langchain_core.messages import AIMessage, BaseMessage
+from typing import Dict, Any, List
 
 class SentimentClassifierSpecialist(BaseSpecialist):
     """A specialist that classifies the sentiment of a user's message."""
@@ -11,18 +13,24 @@ class SentimentClassifierSpecialist(BaseSpecialist):
         """Initializes the specialist."""
         super().__init__(specialist_name="sentiment_classifier_specialist")
 
-    def execute(self, state: dict) -> dict:
+    def _execute_logic(self, state: dict) -> dict:
         """Classifies the sentiment of the user's message."""
-        user_input = state["messages"][-1].content
+        messages: List[BaseMessage] = state.get("messages", [])
+        if not messages:
+            raise ValueError("Cannot classify sentiment of empty message history.")
 
         request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=user_input)],
-            output_schema={"sentiment": "(positive|negative|neutral)"}
+            messages=messages,
+            output_schema=Sentiment
         )
 
         response_data = self.llm_adapter.invoke(request)
+        json_response = response_data.get("json_response")
+        if not json_response:
+            raise ValueError("SentimentClassifier failed to get a valid JSON response from the LLM.")
 
-        sentiment = response_data['json_response']['sentiment']
-        ai_message = AIMessage(content=f"The sentiment of the message is: {sentiment}")
+        classification = Sentiment(**json_response)
+        ai_message = AIMessage(content=f"The sentiment of the message is: {classification.sentiment}")
 
-        return {"messages": state["messages"] + [ai_message]}
+        # Return the updated messages and the structured sentiment as a new artifact
+        return {"messages": state["messages"] + [ai_message], "sentiment": classification.sentiment}

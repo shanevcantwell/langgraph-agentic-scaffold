@@ -47,12 +47,10 @@ class RouterSpecialist(BaseSpecialist):
         logger.info("Executing Router...")
         messages: List[BaseMessage] = state["messages"]
 
-        # Key Improvement: Check for a finish condition *before* calling the LLM.
-        # If the last message is a standard AI response (not a tool call),
-        # it means a specialist has just provided an answer. We can now decide to finish.
-        if isinstance(messages[-1], AIMessage) and not messages[-1].tool_calls:
-            logger.info("Router decision: Last message was a direct AI response. Finishing workflow.")
-            return {"next_specialist": END}
+        # The premature finish condition has been removed. The LLM is now solely
+        # responsible for deciding when to finish by calling the `__FINISH__`
+        # tool. This allows for multi-step chains of specialists (e.g.,
+        # SystemsArchitect -> WebBuilder).
 
         # Create a standardized request to the Language Model.
         # We provide the `Route` model as a tool for the LLM to call.

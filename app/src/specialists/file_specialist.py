@@ -60,12 +60,11 @@ class FileSpecialist(BaseSpecialist):
         except Exception as e:
             return f"Error listing directory: {e}"
 
-    def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info("---FILE SPECIALIST EXECUTING---")
-        user_prompt_message = state['messages'][-1]
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        messages = state['messages']
         
         request = StandardizedLLMRequest(
-            messages=[user_prompt_message],
+            messages=messages,
             tools=self.tools,
         )
 

@@ -15,18 +15,33 @@ class BaseSpecialist(ABC):
 
     def __init__(self, specialist_name: str):
         self.specialist_name = specialist_name
-        specialist_config = ConfigLoader().get_specialist_config(specialist_name)
-        prompt_file = specialist_config.get("prompt_file")
+        self.specialist_config = ConfigLoader().get_specialist_config(specialist_name)
+        prompt_file = self.specialist_config.get("prompt_file")
         system_prompt = load_prompt(prompt_file) if prompt_file else ""
         self.llm_adapter = AdapterFactory().create_adapter(
             specialist_name=specialist_name,
             system_prompt=system_prompt
         )
-        logger.info(f"---INITIALIZED BASE ({self.__class__.__name__})---")
+        logger.info(f"---INITIALIZED {self.__class__.__name__}---")
 
-    @abstractmethod
     def execute(self, state: dict) -> Dict[str, Any]:
         """
-        The execution method called by the LangGraph node.
+        Template method that wraps the specialist's logic with common
+        functionality like logging and error handling.
+        """
+        logger.info(f"---EXECUTING {self.specialist_name.upper()}---")
+        logger.debug(f"[{self.specialist_name}] Received state: {state}")
+        try:
+            updated_state = self._execute_logic(state)
+            logger.debug(f"[{self.specialist_name}] Delivering updated state: {updated_state}")
+            return updated_state
+        except Exception as e:
+            logger.error(f"An unhandled exception occurred in {self.specialist_name}: {e}", exc_info=True)
+            return {"error": f"{self.specialist_name} encountered a critical error: {e}"}
+
+    @abstractmethod
+    def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        """
+        The core logic of the specialist to be implemented by subclasses.
         """
         pass

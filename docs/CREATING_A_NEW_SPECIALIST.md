@@ -46,11 +46,12 @@ class CodeWriterSpecialist(BaseSpecialist):
         # This name is used to look up the specialist's configuration in config.yaml.
         super().__init__(specialist_name="code_writer_specialist")
 
-    def execute(self, state: dict) -> dict:
-        """This is the main method where your specialist's logic goes.
+    def _execute_logic(self, state: dict) -> dict:
+        """This is the main method where your specialist's core logic goes.
 
-        It takes the current application state as input and returns a dictionary
-        with the updated state.
+        The `execute` method in the `BaseSpecialist` class handles all the
+        common boilerplate like logging and error handling. You only need to
+        implement the logic specific to this specialist.
         """
         # Get the full message history from the state.
         messages = state["messages"]
@@ -70,7 +71,8 @@ class CodeWriterSpecialist(BaseSpecialist):
         # 3. Process the response from the LLM.
         #    In this case, we are just taking the text response and adding it
         #    to the message history as an AI message.
-        ai_message = AIMessage(content=str(response_data['text_response']))
+        ai_response_content = response_data.get("text_response", "I am unable to provide a response at this time.")
+        ai_message = AIMessage(content=ai_response_content)
 
         # 4. Return the updated state.
         #    It is very important to return a dictionary with the updated

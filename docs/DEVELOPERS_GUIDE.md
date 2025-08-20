@@ -127,11 +127,28 @@ The system is composed of the following layers and components.
 
 ### 3.4 Specialists: The Functional Units
 *   **Role:** Agent / Worker / Node.
-*   **Contract:** Must inherit from `src.specialists.base.BaseSpecialist`. Must implement the `execute(state: GraphState) -> Dict[str, Any]` method.
+*   **Contract:**
+    *   Must inherit from `src.specialists.base.BaseSpecialist`.
+    *   Must implement the `_execute_logic(self, state: dict) -> Dict[str, Any]` method.
+    *   The public `execute` method is defined in the base class and provides a template with logging and error handling. You should not override it unless you have a specific reason.
 *   **Function:** A Specialist performs a single atomic task, usually by creating a `StandardizedLLMRequest` and passing it to its configured LLM adapter.
 
 **LLM-Optional Specialists:**
 The system now supports specialists that do not require an associated Large Language Model (LLM). These are typically procedural specialists that perform deterministic tasks without needing AI inference. To define an LLM-optional specialist, simply omit the `model` and `provider` fields in its configuration within `config.yaml`. The `AdapterFactory` will automatically handle this by providing a `None` LLM adapter to such specialists. This allows for greater flexibility and efficiency by avoiding unnecessary LLM calls for purely procedural tasks.
+
+## 4.0 Project Structure & Naming
+
+### 3.5 Schema Enforcement Strategy
+
+As outlined in the `PROPOSAL_ Schema-Enforced LLM Output Contracts.md` ADR, the system uses a "hard contract" approach to ensure LLMs produce reliable, structured JSON output. This is implemented via a progressive enhancement strategy in the LLM adapters.
+
+*   **MIME Type Enforcement (e.g., Gemini):** For providers like Google Gemini, the adapter leverages the `response_mime_type` API parameter. When a specialist requests a Pydantic schema, the `GeminiAdapter` sets this parameter to `application/json`. This forces the model to generate a syntactically correct JSON string, while the system prompt guides the content and structure of that JSON.
+
+*   **Full Schema Enforcement (e.g., LM Studio, OpenAI-compatible):** For providers that support it, the adapter can go a step further. The `LMStudioAdapter`, for example, can take a Pydantic model, convert it into a formal JSON Schema, and pass that schema directly to the API. This enforces not only the JSON format but also the specific fields, types, and structure of the output, offering the highest level of reliability.
+
+This dual approach allows the system to use the strongest enforcement mechanism available for any given provider, with a graceful fallback to prompt-guided generation if a provider supports neither.
+
+---
 
 ## 4.0 Project Structure & Naming
 
@@ -190,7 +207,9 @@ Creating a new specialist is a straightforward process thanks to the dynamic loa
 
 1.  **Implement the Specialist Logic:** Create a new Python file in `src/specialists/`. The filename must be the `snake_case` version of the `PascalCase` class name it contains (e.g., `MySpecialist` in `my_specialist.py`). This class must inherit from `BaseSpecialist`.
 
-2.  **Define a Prompt (Optional):** If your specialist uses a language model, create a corresponding prompt file in `app/prompts/`.
+2.  **Implement the `_execute_logic` method:** This is where the core business logic of your specialist resides. The `BaseSpecialist` handles the surrounding boilerplate.
+
+3.  **Define a Prompt (Optional):** If your specialist uses a language model, create a corresponding prompt file in `app/prompts/`.
 
 3.  **Configure the Specialist:** Add a new entry to your `config.yaml` file under the `specialists` key. The key name must match your specialist's module name (e.g., `my_specialist`).
 

@@ -1,47 +1,41 @@
 import logging
-import json
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from ..utils.prompt_loader import load_prompt
-from langchain_core.messages import HumanMessage
+from .schemas import SystemPlan
+from langchain_core.messages import AIMessage, BaseMessage
 
 logger = logging.getLogger(__name__)
 
 class SystemsArchitect(BaseSpecialist):
+    """
+    A specialist that analyzes a user request and creates a high-level
+    technical plan for implementation, adding it to the state.
+    """
     def __init__(self):
         super().__init__(specialist_name="systems_architect")
-        logger.info(f"---INITIALIZED {self.__class__.__name__}---")
+        logger.info("---INITIALIZED SystemsArchitect---")
 
-    def execute(self, state: dict) -> Dict[str, Any]:
-        logger.info("---SYSTEMS ARCHITECT: Generating JSON Artifact---")
-        initial_goal = state.get("messages", [])[-1].content
-        if not initial_goal:
-            return {"error": "SystemsArchitect Error: Initial goal not found in state."}
-
-        # Load the prompt from the .md file
-        system_prompt = load_prompt("systems_architect_prompt.md")
-        
-        # Dynamically create the output schema based on the prompt or a default
-        output_schema = {
-            "diagram_type": "sequence",
-            "title": "Dynamic Flow",
-            "participants": [],
-            "flow": []
-        }
+    def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        messages: List[BaseMessage] = state["messages"]
 
         request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=initial_goal)],
-            system_prompt_content=system_prompt,
-            output_schema=output_schema
+            messages=messages,
+            output_schema=SystemPlan
         )
 
-        try:
-            response_data = self.llm_adapter.invoke(request)
-            logger.info("Successfully generated JSON artifact.")
-            return {"json_artifact": json.dumps(response_data, indent=2), "error": None}
-        except Exception as e:
-            error_message = f"An unexpected error occurred in SystemsArchitect: {e}"
-            logger.error(error_message)
-            return {"error": error_message}
+        response_data = self.llm_adapter.invoke(request)
+        json_response = response_data.get("json_response")
+        if not json_response:
+            raise ValueError("SystemsArchitect failed to get a valid plan from the LLM.")
+
+        plan = SystemPlan(**json_response)
+
+        # Add a summary message for the router and a structured artifact for other specialists/API response
+        new_message = AIMessage(content=f"I have created a system plan: {plan.plan_summary}")
+        updated_state = {
+            "messages": state["messages"] + [new_message],
+            "system_plan": plan.dict()
+        }
+        return updated_state

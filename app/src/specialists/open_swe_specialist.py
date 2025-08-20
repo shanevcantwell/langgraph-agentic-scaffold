@@ -8,7 +8,10 @@ class OpenSweSpecialist(WrappedSpecialist):
 
     def _translate_state_to_input(self, state: dict) -> any:
         """Translates the GraphState to the open-swe agent's input format."""
-        return state["messages"][-1].content
+        messages = state.get("messages", [])
+        if not messages:
+            raise ValueError("OpenSweSpecialist cannot execute with an empty message history.")
+        return messages[-1].content
 
     def _translate_output_to_state(self, state: dict, output: any) -> dict:
         """Translates the open-swe agent's output back to the GraphState format."""

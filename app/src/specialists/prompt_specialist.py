@@ -18,20 +18,14 @@ class PromptSpecialist(BaseSpecialist):
         super().__init__(specialist_name="prompt_specialist")
         logger.info("---INITIALIZED PromptSpecialist---")
 
-    def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
         Generates a text response based on the message history.
         """
-        logger.info("---EXECUTING PROMPT SPECIALIST---")
-
-        # The original error was caused by a strict check for HumanMessage.
-        # A more robust approach is to use the whole history, making the
-        # specialist useful at any point in the conversation.
         messages: List[BaseMessage] = state["messages"]
 
         if not messages:
-            # Handle the unlikely case of no messages.
-            return {"messages": state["messages"] + [AIMessage(content="I have no input to respond to.")]}
+            return {"messages": state.get("messages", []) + [AIMessage(content="I have no input to respond to.")]}
 
         # Create a standardized request to the Language Model.
         # Crucially, we do NOT pass any tools here. This specialist's job

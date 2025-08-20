@@ -6,8 +6,12 @@ from .base import BaseSpecialist
 class WrappedSpecialist(BaseSpecialist):
     """A specialist that wraps an externally-sourced agent."""
 
-    def __init__(self, specialist_name: str, source: str, **kwargs):
-        super().__init__(specialist_name=specialist_name, **kwargs)
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name=specialist_name)
+        source = self.specialist_config.get("source")
+        if not source:
+            raise ValueError(f"Wrapped specialist '{specialist_name}' is missing the 'source' key in its config.yaml entry.")
+        # The external agent is loaded once during initialization.
         self.external_agent = self._load_external_agent(source)
 
     def _load_external_agent(self, source: str):
@@ -18,7 +22,7 @@ class WrappedSpecialist(BaseSpecialist):
         # Assuming the external agent has a class named 'Agent'
         return module.Agent()
 
-    def execute(self, state: dict) -> dict:
+    def _execute_logic(self, state: dict) -> dict:
         """Executes the wrapped external agent."""
         # 1. Translate the GraphState to the external agent's input format.
         external_agent_input = self._translate_state_to_input(state)
