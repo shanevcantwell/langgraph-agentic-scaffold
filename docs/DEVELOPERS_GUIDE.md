@@ -1,5 +1,5 @@
 # SpecialistHub: System Architecture & Developer's Guide
-# Version: 2.3
+# Version: 2.4
 # Status: ACTIVE
 
 This document provides all the necessary information to understand, run, test, and extend the SpecialistHub agentic system. It is designed to be parsed by both human developers and autonomous AI agents.
@@ -182,43 +182,19 @@ The `app/src` directory is organized to enforce a clear separation of concerns, 
 
 ## 6.0 Development Protocols
 
-### 6.1 Protocol A: Creating a Standard Specialist
+### 6.1 Creating a New Specialist
 
-1.  **Define Prompt Contract:** Create a new prompt file in `app/prompts/`.
-2.  **Define Configuration:** Open `config.yaml` and add a new entry under the `specialists` key. Define its `model`, `provider`, and `prompt_file`.
-3.  **Implement Specialist Logic:** Create a new file in `src/specialists/`. Use the following template:
-    ```python
-    from .base import BaseSpecialist
-    from ..llm.adapter import StandardizedLLMRequest
-    from langchain_core.messages import AIMessage, HumanMessage
+Creating a new specialist is a straightforward process thanks to the dynamic loading mechanism of the `ChiefOfStaff`.
 
-    class NewSpecialist(BaseSpecialist):
-        def __init__(self):
-            # The specialist is identified by its class name in snake_case.
-            super().__init__(specialist_name="new_specialist")
+1.  **Implement the Specialist Logic:** Create a new Python file in `src/specialists/`. The filename must be the `snake_case` version of the `PascalCase` class name it contains (e.g., `MySpecialist` in `my_specialist.py`). This class must inherit from `BaseSpecialist`.
 
-        def execute(self, state: dict) -> dict:
-            user_input = state["messages"][-1].content
+2.  **Define a Prompt (Optional):** If your specialist uses a language model, create a corresponding prompt file in `app/prompts/`.
 
-            # 1. Create a standardized request stating your intent.
-            request = StandardizedLLMRequest(
-                messages=[HumanMessage(content=user_input)]
-                # Optionally add an output_schema for enforced JSON
-                # output_schema={...}
-            )
+3.  **Configure the Specialist:** Add a new entry to your `config.yaml` file under the `specialists` key. The key name must match your specialist's module name (e.g., `my_specialist`).
 
-            # 2. Invoke the adapter configured for this specialist.
-            response_data = self.llm_adapter.invoke(request)
+That's it! The `ChiefOfStaff` will automatically discover, load, and integrate your new specialist into the graph at runtime. There is no need to manually edit the workflow.
 
-            # 3. Process the structured response.
-            # Your logic here to process response_data.
-            # For example, add the AI's response back to the message history.
-            ai_message = AIMessage(content=str(response_data))
-
-            return {"messages": state["messages"] + [ai_message]}
-    ```
-
-### 6.2 Protocol B: Managing Dependencies
+### 6.2 Managing Dependencies
 
 This project uses `pyproject.toml` as the single source of truth for dependencies and `pip-tools` to generate pinned `requirements.txt` files for reproducible installations.
 

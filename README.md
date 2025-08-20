@@ -18,7 +18,7 @@ The mission is to provide a clear, maintainable, and testable template for const
 This scaffold is not just a collection of scripts; it's a well-defined architecture designed for reliability and scalability.
 
 *   **API-First Design:** The system is exposed via a **FastAPI** web server, providing a clean, modern interface for interaction and integration. Includes auto-generated interactive documentation (via Swagger UI).
-*   **Configuration-Driven:** The entire agentic system—its specialists, models, and prompts—is defined in a central `config.yaml`. This "Configuration as Code" approach allows you to reconfigure the system's structure without changing the Python code.
+*   **Configuration-Driven:** The entire agentic system's specialists, models, and prompts is defined in a central `config.yaml`. The system's structure is not dependent on changing any Python code.
 *   **Decoupled Adapter Pattern:** Specialists are decoupled from the underlying LLM clients. They request a pre-configured "adapter" by name, allowing you to swap LLM providers (Gemini, OpenAI, Ollama, etc.) in the config file without touching the specialist's business logic.
 *   **Schema-Enforced Reliability:** Utilizes Pydantic models to define "hard contracts" for LLM outputs. For supported providers, this guarantees that the LLM will return a valid JSON object matching your schema, dramatically reducing runtime errors and validation boilerplate.
 *   **Modern Python Tooling:** Uses `pyproject.toml` for project definition and `pip-tools` to generate pinned `requirements.txt` files, ensuring reproducible and reliable builds for both production and development.
@@ -30,7 +30,7 @@ This scaffold is designed for architectural exploration and grants significant p
 
 **You are granting the configured LLM direct control over these powerful tools.**
 
-An uncensored or highly capable model can interpret your requests in unexpected ways, leading to irreversible actions like file deletion, data exposure, or unintended resource usage. Treat this system with the same caution you would a loaded weapon. You take full and sole responsibility for what you build and run with it.
+Any LLM at any time can interpret your requests in unexpected ways. Be mindful of what you are turning control over to an emergent property of statistical math. Anything the code you turn over control can do, the LLM will be able to perform. This includes such irreversible actions as file deletion, data exposure, or unintended resource usage. An agentic system allows complicated narratives to form as specialists interact, creating indefinite numbers of calls to inference that can amplify a mistaken understanding. Treat this system with the same caution you would a loaded weapon. You take full and sole responsibility for what you build and run with it.
 
 **Always run this project in a secure, sandboxed environment (like a Docker container or a dedicated VM).**
 
@@ -64,7 +64,7 @@ An uncensored or highly capable model can interpret your requests in unexpected 
 3.  **Install dependencies:**
     This command installs the exact versions of all packages needed to run the application.
     ```sh
-    pip install -r requirements.txt
+    pip install -r requirements-dev.txt
     ```
 
 4.  **Configure your environment:**
@@ -74,17 +74,15 @@ An uncensored or highly capable model can interpret your requests in unexpected 
     cp .env.example .env
 
     # Copy the example app config file
-    cd app
     cp config.yaml.example config.yaml
-    cd ..
     ```
-    Now, edit `.env` with your API keys and `app/config.yaml` to define your agent setup.
+    Now, edit `.env` with your API keys and `config.yaml` to define your agent setup.
 
 5.  **Run the application:**
     Use the provided scripts to start the API server.
     *   On **Linux/macOS**:
         ```sh
-        ./run.sh
+        ./run.sh start
         ```
     *   On **Windows**:
         ```bat
@@ -94,7 +92,7 @@ An uncensored or highly capable model can interpret your requests in unexpected 
 
 ## For Developers
 
-This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **Developer's Guide**.
+This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)** and the **[Creating a New Agent Type Guide](./docs/CREATING_A_NEW_AGENT_TYPE.md)**.
 
 To set up a full development environment with testing and linting tools, run:
 ```sh
@@ -102,13 +100,8 @@ pip install -r requirements-dev.txt
 ```
 
 Once the server is running, you can interact with it from a separate terminal using the CLI script:
-*   On **Linux/macOS**:
-    ```sh
-    ./scripts/cli.sh "Your prompt for the agent goes here."
-    ```
-*   On **Windows**:
-    ```bat
-    .\scripts\cli.bat "Your prompt for the agent goes here."
+```sh
+python app/src/cli.py "Your prompt for the agent goes here."
 ```
 
 ## License
