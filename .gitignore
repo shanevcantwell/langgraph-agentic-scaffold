@@ -3,6 +3,7 @@
 # --- Environment ---
 # Ignore local environment variables. Never commit secrets.
 .env
+.run
 
 # --- Python ---
 # Ignore cache files, compiled files, and virtual environments.
@@ -34,4 +35,5 @@ app/output.html
 backups/
 build/
 logs/
-specialist_hub_agentic_system.egg-info/
+*.bak
+*.egg-info/
