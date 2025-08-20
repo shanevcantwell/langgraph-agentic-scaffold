@@ -2,6 +2,9 @@
 # This script provides a convenient way to run the CLI for Linux/macOS.
 # It ensures the command is run from the project root and passes all arguments to the CLI script.
 
+# Exit immediately if a command exits with a non-zero status.
+set -e
+
 # Get the directory of the script
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # Go to the parent directory (project root)
