@@ -10,6 +10,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
 
 # --- IDE / Editor ---
 # Ignore editor-specific configuration files.
