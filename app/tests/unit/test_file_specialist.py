@@ -65,3 +65,37 @@ def test_execute_routes_to_read(tmp_path_fixture):
         # Assert that the read_file tool was called and the result is in the output
         file_specialist._read_file_impl.assert_called_once_with(file_path='test.txt')
         assert "File content" in str(result["messages"])
+
+def test_execute_routes_to_write(tmp_path_fixture):
+    """Tests that the specialist correctly interprets an LLM call to write a file."""
+    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
+
+    with patch.object(file_specialist.llm_client, 'invoke') as mock_invoke:
+        mock_invoke.return_value = AIMessage(
+            content="",
+            tool_calls=[{'name': 'write_file', 'args': {'file_path': 'test.txt', 'content': 'new content'}, 'id': 'call_456'}])
+
+        file_specialist._write_file_impl = MagicMock(return_value="Successfully wrote to test.txt")
+
+        state = {"messages": [HumanMessage(content="Write to test.txt")]}
+        result = file_specialist.execute(state)
+
+        file_specialist._write_file_impl.assert_called_once_with(file_path='test.txt', content='new content')
+        assert "Successfully wrote" in str(result["messages"])
+
+def test_execute_routes_to_list(tmp_path_fixture):
+    """Tests that the specialist correctly interprets an LLM call to list a directory."""
+    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
+
+    with patch.object(file_specialist.llm_client, 'invoke') as mock_invoke:
+        mock_invoke.return_value = AIMessage(
+            content="",
+            tool_calls=[{'name': 'list_directory', 'args': {'path': '.'}, 'id': 'call_789'}])
+
+        file_specialist._list_directory_impl = MagicMock(return_value="file1.txt\nfile2.txt")
+
+        state = {"messages": [HumanMessage(content="List files")]}
+        result = file_specialist.execute(state)
+
+        file_specialist._list_directory_impl.assert_called_once_with(path='.')
+        assert "file1.txt" in str(result["messages"])
