@@ -23,7 +23,7 @@ class WorkflowRunner:
         """
         chief_of_staff = ChiefOfStaff()
         
-        self.app = chief_of_staff.compile_graph()
+        self.app = chief_of_staff.get_graph()
         
         logger.info("WorkflowRunner initialized with compiled graph.")
 

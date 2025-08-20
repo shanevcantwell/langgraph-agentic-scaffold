@@ -67,13 +67,13 @@ specialists:
 
   systems_architect:
     prompt_file: "systems_architect_prompt.md"
-    description: "Designs system components and generates structured data, like sequence diagrams in JSON format."
+    description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
     api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
     provider: "lmstudio"
 
   web_builder:
     prompt_file: "web_builder_prompt.md"
-    description: "Takes structured data (JSON) and generates an HTML visualization."
+    description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
     api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
     provider: "lmstudio"
 

@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class AvailableSpecialists(str, Enum):
     """Dynamically create an Enum of available specialists plus a finish state."""
     # Load specialist names from config to make the tool dynamic
+    # This is a local import to avoid potential circular dependencies at the module level.
     config = ConfigLoader().get_config()
     specialist_names = {name: name for name in config.get("specialists", {})}
     
@@ -40,17 +41,14 @@ class RouterSpecialist(BaseSpecialist):
     """
 
     def __init__(self):
+        # The complex __init__ logic has been moved to the ChiefOfStaff.
+        # The router is now a "plain" specialist that gets its context-aware
+        # adapter injected by the orchestrator during the "morning standup".
         super().__init__(specialist_name="router_specialist")
-        logger.info("Initialized RouterSpecialist.")
+        logger.info("Initialized RouterSpecialist (awaiting contextual configuration from ChiefOfStaff).")
 
-    def execute(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        logger.info("Executing Router...")
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         messages: List[BaseMessage] = state["messages"]
-
-        # The premature finish condition has been removed. The LLM is now solely
-        # responsible for deciding when to finish by calling the `__FINISH__`
-        # tool. This allows for multi-step chains of specialists (e.g.,
-        # SystemsArchitect -> WebBuilder).
 
         # Create a standardized request to the Language Model.
         # We provide the `Route` model as a tool for the LLM to call.
