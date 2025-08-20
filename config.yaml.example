@@ -1,5 +1,5 @@
 # SpecialistHub Configuration Example
-# Version: 2.0
+# Version: 2.1
 #
 # This file defines the structure of the agentic system. It is the single
 # source of truth for wiring together providers, models, and specialists.
@@ -35,50 +35,61 @@ llm_providers:
 # name passed to super().__init__() in its constructor.
 # ==============================================================================
 specialists:
+  # --- Orchestration & Planning ---
   router_specialist:
-    prompt_file: "router_specialist_prompt.md"
-    description: "The master router. It analyzes the user's request and routes it to the appropriate specialist. It is the entry point of the graph."
+    prompt_file: "router_prompt.md"
+    description: "The master router and planner. It analyzes the user's request and routes it to the appropriate specialist. It is the entry point of the graph."
     # This model should be capable of reliable tool/function calling.
-    api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-    provider: "lmstudio"
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
 
-  data_extractor_specialist:
-    prompt_file: "data_extractor_specialist_prompt.md"
-    description: "Extracts structured JSON data from unstructured text based on a schema."
-    # This model should be good at following JSON formatting instructions.
-    api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-    provider: "lmstudio"
+  systems_architect:
+    prompt_file: "systems_architect_prompt.md"
+    description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
+
+  # --- Core Capabilities ---
+  web_builder:
+    prompt_file: "web_builder_prompt.md"
+    description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
 
   file_specialist:
     prompt_file: "file_specialist_prompt.md"
     description: "A specialist that uses tools to interact with the filesystem (read, write, list)."
     # This model must be capable of tool/function calling.
-    api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-    provider: "lmstudio"
-    # The root directory this specialist is allowed to operate in.
-    # For security, this should be a dedicated, non-sensitive directory.
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
     root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
 
-  prompt_specialist:
-    prompt_file: "prompt_specialist_prompt.md"
-    description: "A general-purpose specialist for direct Q&A and instruction following. Acts as a fallback."
-    api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-    provider: "lmstudio"
+  # --- Data & Analysis ---
+  data_extractor_specialist:
+    prompt_file: "data_extractor_prompt.md"
+    description: "Extracts structured JSON data from unstructured text based on a schema."
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
 
-  systems_architect:
-    prompt_file: "systems_architect_prompt.md"
-    description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
-    api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-    provider: "lmstudio"
-
-  web_builder:
-    prompt_file: "web_builder_prompt.md"
-    description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
-    api_identifier: "lmstudio-community/Meta-Llama-3-8B-Instruct-GGUF"
-    provider: "lmstudio"
+  sentiment_classifier_specialist:
+    prompt_file: "sentiment_classifier_prompt.md"
+    description: "Classifies the sentiment of a given text as positive, negative, or neutral."
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
 
   data_processor_specialist:
     # This is a procedural specialist and does not require an LLM.
-    # By omitting 'model' and 'provider', the AdapterFactory will assign a None adapter.
-    # This demonstrates how to create non-AI nodes in the graph for deterministic tasks.
     description: "A specialist that performs deterministic data processing tasks, like formatting or cleaning, without calling an LLM."
+
+  # --- General & Fallback ---
+  prompt_specialist:
+    prompt_file: "prompt_prompt.md"
+    description: "A general-purpose specialist for direct Q&A and instruction following. Acts as a fallback."
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
+
+  # --- Wrapped & External Specialists ---
+  open_swe_specialist:
+    type: wrapped
+    source: "./external_agents/open_swe/run.py" # Relative path from project root
+    description: "A specialist that wraps the open-swe agent for software engineering tasks."
