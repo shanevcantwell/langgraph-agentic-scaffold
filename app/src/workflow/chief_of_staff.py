@@ -74,17 +74,21 @@ class ChiefOfStaff:
     def _build_graph(self) -> StateGraph:
         workflow = StateGraph(GraphState)
         workflow.add_node("router", self.specialists["router_specialist"].execute)
+        workflow.add_node("archiver", self.specialists["archiver_specialist"].execute)
 
         for name, instance in self.specialists.items():
-            if name != "router_specialist":
+            if name not in ["router_specialist", "archiver_specialist"]:
                 workflow.add_node(name, instance.execute)
         
         workflow.set_entry_point("router")
-        workflow.add_conditional_edges("router", self.decide_next_specialist, {name: name for name in self.specialists if name != "router_specialist"} | {END: END})
+        
+        conditional_map = {name: name for name in self.specialists if name not in ["router_specialist", "archiver_specialist"]}
+        conditional_map["__FINISH__"] = END
+        workflow.add_conditional_edges("router", self.decide_next_specialist, conditional_map)
 
         for name in self.specialists:
-            if name != "router_specialist":
-                workflow.add_edge(name, "router")
+            if name not in ["router_specialist", "archiver_specialist"]:
+                workflow.add_edge(name, "archiver")
 
         return workflow.compile()
 

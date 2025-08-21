@@ -93,3 +93,6 @@ specialists:
     type: wrapped
     source: "./external_agents/open_swe/run.py" # Relative path from project root
     description: "A specialist that wraps the open-swe agent for software engineering tasks."
+
+  archiver_specialist:
+    description: "Summarizes the conversation and prepares the final report. This is the final step."

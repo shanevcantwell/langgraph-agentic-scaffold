@@ -40,11 +40,11 @@ class RouterSpecialist(BaseSpecialist):
     or ends the conversation if the goal has been met.
     """
 
-    def __init__(self):
+    def __init__(self, specialist_name: str = "router_specialist"):
         # The complex __init__ logic has been moved to the ChiefOfStaff.
         # The router is now a "plain" specialist that gets its context-aware
         # adapter injected by the orchestrator during the "morning standup".
-        super().__init__(specialist_name="router_specialist")
+        super().__init__(specialist_name)
         logger.info("Initialized RouterSpecialist (awaiting contextual configuration from ChiefOfStaff).")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
