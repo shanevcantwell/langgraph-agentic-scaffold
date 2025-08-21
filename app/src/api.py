@@ -1,5 +1,28 @@
 # app/src/api.py
 import logging
+import os
+from logging.handlers import RotatingFileHandler
+
+# --- Logging Configuration ---
+log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
+log_dir = "logs"
+log_file = os.path.join(log_dir, "agentic_server.log")
+
+# Create log directory if it doesn't exist
+if not os.path.exists(log_dir):
+    os.makedirs(log_dir)
+
+# Configure root logger
+logging.basicConfig(
+    level=log_level,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        RotatingFileHandler(log_file, maxBytes=10485760, backupCount=5), # 10MB per file, 5 backups
+        logging.StreamHandler() # Also log to console
+    ],
+    force=True # This will remove any existing handlers, preventing duplicate logs.
+)
+
 logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI

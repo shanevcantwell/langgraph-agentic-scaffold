@@ -15,8 +15,8 @@ class DataExtractorSpecialist(BaseSpecialist):
     It receives text and outputs a predictable JSON object using schema enforcement.
     """
 
-    def __init__(self):
-        super().__init__(specialist_name="data_extractor_specialist")
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name=specialist_name)
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         """

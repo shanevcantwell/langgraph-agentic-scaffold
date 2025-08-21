@@ -2,6 +2,10 @@
 # This script activates the virtual environment, installs dependencies,
 # and manages the FastAPI application server for Linux/macOS users.
 
+# Ensure the script is run from the project root
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+cd "$SCRIPT_DIR/.."
+
 # Activate the virtual environment
 source ./.venv_agents/bin/activate
 

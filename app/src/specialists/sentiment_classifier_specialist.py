@@ -9,9 +9,9 @@ from typing import Dict, Any, List
 class SentimentClassifierSpecialist(BaseSpecialist):
     """A specialist that classifies the sentiment of a user's message."""
 
-    def __init__(self):
+    def __init__(self, specialist_name: str):
         """Initializes the specialist."""
-        super().__init__(specialist_name="sentiment_classifier_specialist")
+        super().__init__(specialist_name)
 
     def _execute_logic(self, state: dict) -> dict:
         """Classifies the sentiment of the user's message."""

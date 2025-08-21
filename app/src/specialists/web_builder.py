@@ -13,8 +13,8 @@ class WebBuilder(BaseSpecialist):
     A specialist that generates a self-contained HTML document based on a
     system_plan artifact in the state.
     """
-    def __init__(self):
-        super().__init__(specialist_name="web_builder")
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name=specialist_name)
         logger.info("---INITIALIZED WebBuilder---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

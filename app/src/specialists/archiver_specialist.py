@@ -12,8 +12,8 @@ class ArchiverSpecialist(BaseSpecialist):
     The Archiver Specialist is responsible for summarizing the conversation
     and preparing the final report. It's the last step in the workflow.
     """
-    def __init__(self):
-        super().__init__("archiver_specialist")
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name)
 
     def _execute_logic(self, state: GraphState) -> Dict[str, Any]:
         logger.info("---Executing Archiver Specialist---")
@@ -34,4 +34,3 @@ class ArchiverSpecialist(BaseSpecialist):
             "archive_report": report,
             "next_specialist": "__FINISH__" # Signal to end the graph
         }
-

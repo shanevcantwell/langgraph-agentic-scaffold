@@ -13,8 +13,8 @@ class SystemsArchitect(BaseSpecialist):
     A specialist that analyzes a user request and creates a high-level
     technical plan for implementation, adding it to the state.
     """
-    def __init__(self):
-        super().__init__(specialist_name="systems_architect")
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name=specialist_name)
         logger.info("---INITIALIZED SystemsArchitect---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

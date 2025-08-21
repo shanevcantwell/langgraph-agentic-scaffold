@@ -8,7 +8,7 @@ from typing_extensions import Annotated
 API_BASE_URL = "http://127.0.0.1:8000"
 
 app = typer.Typer(
-    help="A command-line interface to interact with the SpecialistHub agentic system."
+    help="A command-line interface to interact with the agentic system."
 )
 
 
@@ -19,7 +19,7 @@ def invoke(
     )]
 ):
     """
-    Sends a prompt to the SpecialistHub API /v1/graph/invoke endpoint and prints the final response.
+    Sends a prompt to the langgraph-agentic-scaffold API /v1/graph/invoke endpoint and prints the final response.
     """
     invoke_url = f"{API_BASE_URL}/v1/graph/invoke"
     print(f"▶️  Invoking agent via {invoke_url} with prompt: '{prompt}'")
@@ -43,7 +43,7 @@ def invoke(
 
     except requests.exceptions.RequestException as e:
         print(f"\n❌ Error: Could not connect to the API server at {invoke_url}.", file=sys.stderr)
-        print("Please ensure the server is running with './run.sh' or '.\\windows_run.bat'.", file=sys.stderr)
+        print("Please ensure the server is running with './scripts/server.sh' or '.\\scripts\\server.bat'.", file=sys.stderr)
         print(f"Details: {e}", file=sys.stderr)
         sys.exit(1)
 

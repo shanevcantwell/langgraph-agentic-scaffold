@@ -40,7 +40,7 @@ class RouterSpecialist(BaseSpecialist):
     or ends the conversation if the goal has been met.
     """
 
-    def __init__(self, specialist_name: str = "router_specialist"):
+    def __init__(self, specialist_name: str):
         # The complex __init__ logic has been moved to the ChiefOfStaff.
         # The router is now a "plain" specialist that gets its context-aware
         # adapter injected by the orchestrator during the "morning standup".

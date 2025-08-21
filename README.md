@@ -89,11 +89,11 @@ Any LLM at any time can interpret your requests in unexpected ways. Be mindful o
     Use the provided scripts to start the API server.
     *   On **Linux/macOS**:
         ```sh
-        ./run.sh start
+        ./scripts/server.sh start
         ```
     *   On **Windows**:
         ```bat
-        .\windows_run.bat
+        .\scripts/server.bat start
         ```
     Once running, you can access the interactive API documentation at **`http://127.0.0.1:8000/docs`**.
 
@@ -108,7 +108,11 @@ pip install -r requirements-dev.txt
 
 Once the server is running, you can interact with it from a separate terminal using the CLI script:
 ```sh
-python app/src/cli.py "Your prompt for the agent goes here."
+./scripts/cli.sh "Your prompt for the agent goes here."
+```
+Or on Windows:
+```bat
+.\scripts\cli.bat "Your prompt for the agent goes here."
 ```
 
 ## License

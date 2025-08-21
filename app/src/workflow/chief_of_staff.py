@@ -6,6 +6,7 @@ from ..utils.config_loader import ConfigLoader
 from ..utils.prompt_loader import load_prompt
 from ..specialists import get_specialist_class, BaseSpecialist
 from ..graph.state import GraphState
+from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
 
 logger = logging.getLogger(__name__)
@@ -35,7 +36,14 @@ class ChiefOfStaff:
         for name, config in specialists_config.items():
             try:
                 SpecialistClass = get_specialist_class(name, config)
-                instance = SpecialistClass()
+                if not issubclass(SpecialistClass, BaseSpecialist):
+                    logger.warning(f"Skipping '{name}': Class '{SpecialistClass.__name__}' does not inherit from BaseSpecialist.")
+                    continue
+
+                # Pass the specialist's name from the config to its constructor.
+                # This aligns with the BaseSpecialist contract, which requires
+                # the specialist_name for self-configuration.
+                instance = SpecialistClass(name)
                 loaded_specialists[name] = instance
                 logger.info(f"Successfully instantiated specialist: {name}")
             except Exception as e:
@@ -43,7 +51,7 @@ class ChiefOfStaff:
                 raise
 
         # Second pass: The "Morning Standup" - configure the router
-        if "router_specialist" in loaded_specialists:
+        if CoreSpecialist.ROUTER in loaded_specialists:
             self._configure_router(loaded_specialists, specialists_config)
         
         return loaded_specialists
@@ -51,49 +59,65 @@ class ChiefOfStaff:
     def _configure_router(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         """Injects a context-aware LLM adapter into the router specialist."""
         logger.info("Conducting 'morning standup' to configure the router...")
-        router_instance = specialists["router_specialist"]
-        router_config = configs.get("router_specialist", {})
+        router_instance = specialists[CoreSpecialist.ROUTER]
+        router_config = configs.get(CoreSpecialist.ROUTER, {})
 
         # Build the dynamic part of the prompt from peer descriptions
-        available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in configs.items() if name != "router_specialist"]
+        available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in configs.items() if name != CoreSpecialist.ROUTER]
         tools_list_str = "\n".join(available_tools_desc)
 
         # Load the router's base prompt from its configured file
         base_prompt_file = router_config.get("prompt_file")
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
-        
+
         dynamic_system_prompt = f"{base_prompt}\n\nAVAILABLE SPECIALISTS:\n{tools_list_str}"
 
         # Create a new, context-aware adapter and inject it into the router instance
         router_instance.llm_adapter = AdapterFactory().create_adapter(
-            specialist_name="router_specialist",
+            specialist_name=CoreSpecialist.ROUTER,
             system_prompt=dynamic_system_prompt
         )
         logger.info("RouterSpecialist adapter re-initialized with dynamic, context-aware prompt.")
 
     def _build_graph(self) -> StateGraph:
         workflow = StateGraph(GraphState)
-        workflow.add_node("router", self.specialists["router_specialist"].execute)
-        workflow.add_node("archiver", self.specialists["archiver_specialist"].execute)
 
+        # Add all specialists as nodes
         for name, instance in self.specialists.items():
-            if name not in ["router_specialist", "archiver_specialist"]:
-                workflow.add_node(name, instance.execute)
-        
-        workflow.set_entry_point("router")
-        
-        conditional_map = {name: name for name in self.specialists if name not in ["router_specialist", "archiver_specialist"]}
-        conditional_map["__FINISH__"] = END
-        workflow.add_conditional_edges("router", self.decide_next_specialist, conditional_map)
+            workflow.add_node(name, instance.execute)
 
+        # The router is the entry point to the graph
+        workflow.set_entry_point(CoreSpecialist.ROUTER)
+
+        # Define the conditional mapping for the router
+        # All specialists (except the router) are potential next steps.
+        conditional_map = {name: name for name in self.specialists if name != CoreSpecialist.ROUTER}
+        # The '__FINISH__' route maps to the archiver, which is the designated final step.
+        conditional_map["__FINISH__"] = CoreSpecialist.ARCHIVER
+
+        workflow.add_conditional_edges(
+            CoreSpecialist.ROUTER,
+            self.decide_next_specialist,
+            conditional_map
+        )
+
+        # After any specialist runs, it goes back to the router for the next decision
         for name in self.specialists:
-            if name not in ["router_specialist", "archiver_specialist"]:
-                workflow.add_edge(name, "archiver")
+            # The router and archiver have their own explicit routing logic.
+            if name not in [CoreSpecialist.ROUTER, CoreSpecialist.ARCHIVER]:
+                workflow.add_edge(name, CoreSpecialist.ROUTER)
+
+        # The archiver is the final step before ending the graph execution.
+        workflow.add_edge(CoreSpecialist.ARCHIVER, END)
 
         return workflow.compile()
 
     def decide_next_specialist(self, state: GraphState) -> str:
-        logger.info("---ROUTING DECISION---")
+        """
+        Determines the next node to execute based on the 'next_specialist'
+        field in the state, which is populated by the router specialist.
+        """
+        logger.info("--- ChiefOfStaff: Deciding next specialist ---")
         if error := state.get("error"):
             logger.error(f"Error detected: {error}. Ending workflow.")
             return END

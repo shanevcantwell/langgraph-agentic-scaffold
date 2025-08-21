@@ -36,15 +36,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 class CodeWriterSpecialist(BaseSpecialist):
     """A specialist that writes Python code based on a user's request."""
 
-    def __init__(self):
+t now    def __init__(self, specialist_name: str):
         """Initializes the specialist.
 
         The most important part of this method is calling the parent class's
         __init__ method with the specialist's name.
         """
-        # The specialist_name should be the snake_case version of the class name.
-        # This name is used to look up the specialist's configuration in config.yaml.
-        super().__init__(specialist_name="code_writer_specialist")
+        # The specialist_name is passed in by the ChiefOfStaff and must match the key in config.yaml.
+        super().__init__(specialist_name)
 
     def _execute_logic(self, state: dict) -> dict:
         """This is the main method where your specialist's core logic goes.
@@ -127,42 +126,29 @@ The project uses `pytest` as its testing framework. Here is an example test for 
 # app/tests/unit/test_code_writer_specialist.py
 
 from unittest.mock import MagicMock
-from langchain_core.messages import HumanMessage
 from app.src.specialists.code_writer_specialist import CodeWriterSpecialist
 
 def test_code_writer_specialist_execute():
-    """
-    Tests that the CodeWriterSpecialist correctly executes, calls the LLM adapter,
-    and updates the state with the response.
-    """
+def test_code_writer_specialist_execute():
     # Arrange
+    # Create an instance of the specialist
+    specialist = CodeWriterSpecialist()
+
+    # Mock the LLM adapter to avoid making a real API call
     # Create an instance of the specialist
     specialist = CodeWriterSpecialist()
 
     # Mock the LLM adapter to avoid making a real API call
     specialist.llm_adapter = MagicMock()
     specialist.llm_adapter.invoke.return_value = {"text_response": "print('Hello, World!')"}
-
-    # Create a sample state
-    initial_state = {
-        "messages": [HumanMessage(content="Write a hello world program in Python")]
-    }
-
-    # Act
-    result_state = specialist.execute(initial_state)
-
-    # Assert
     # Check that the AI message was added to the state
-    assert len(result_state["messages"]) == 2
-    assert result_state["messages"][-1].content == "print('Hello, World!')"
-
 ```
 
 To run the tests, simply run `pytest` from the root directory.
 
 ## Creating a Wrapped Specialist
 
-### Managing Third-Party Code
+    result_state = specialist.execute(initial_state)
 
 Wrapped specialists rely on external, third-party code. To keep the project clean and avoid checking in external repositories, this scaffold uses a conventional directory: `external/`.
 

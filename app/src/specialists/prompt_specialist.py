@@ -13,9 +13,9 @@ class PromptSpecialist(BaseSpecialist):
     or the current state of the conversation. It does not use tools.
     """
 
-    def __init__(self):
+    def __init__(self, specialist_name: str):
         """Initializes the PromptSpecialist."""
-        super().__init__(specialist_name="prompt_specialist")
+        super().__init__(specialist_name=specialist_name)
         logger.info("---INITIALIZED PromptSpecialist---")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:

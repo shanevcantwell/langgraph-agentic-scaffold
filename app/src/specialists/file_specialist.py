@@ -12,11 +12,12 @@ from ..utils.config_loader import ConfigLoader
 logger = logging.getLogger(__name__)
 
 class FileSpecialist(BaseSpecialist):
-    def __init__(self):
-        super().__init__(specialist_name="file_specialist")
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name)
 
-        specialist_config = ConfigLoader().get_specialist_config("file_specialist")
-        self.root_dir = os.path.abspath(specialist_config.get("root_dir", "."))
+        # The specialist_config is already loaded by the BaseSpecialist constructor.
+        # We can access it via self.specialist_config.
+        self.root_dir = os.path.abspath(self.specialist_config.get("root_dir", "."))
         logger.info(f"Initialized {self.__class__.__name__} with root directory: {self.root_dir}")
 
         self.tools = [

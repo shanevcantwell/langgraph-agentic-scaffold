@@ -11,3 +11,12 @@ class Edge(Enum):
     The router_specialist now generates the list of specialists dynamically.
     """
     END = LANGGRAPH_END
+
+class CoreSpecialist(str, Enum):
+    """
+    An enumeration for core specialists with special, hardcoded roles in the graph.
+    This is not a list of all specialists, but rather canonical names for roles
+    that the orchestration logic depends on.
+    """
+    ROUTER = "router_specialist"
+    ARCHIVER = "archiver_specialist"
