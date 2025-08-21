@@ -162,6 +162,22 @@ To run the tests, simply run `pytest` from the root directory.
 
 ## Creating a Wrapped Specialist
 
+### Managing Third-Party Code
+
+Wrapped specialists rely on external, third-party code. To keep the project clean and avoid checking in external repositories, this scaffold uses a conventional directory: `external/`.
+
+The `external/` directory at the project root is the designated location for cloning any third-party agent repositories. Its contents are ignored by Git (via `.gitignore`), so you can safely manage external code without cluttering your project's history.
+
+**To add an external agent:**
+
+1.  Clone the external agent's repository into the `external/` directory. For example, to add the `open-swe` agent:
+    ```sh
+    git clone https://github.com/sweepai/open-swe.git external/open-swe
+    ```
+2.  In your `config.yaml`, set the `source` path for your wrapped specialist to point to the agent's entrypoint script within the `external/` directory.
+
+---
+
 In addition to creating specialists from scratch, you can also wrap existing, externally-sourced agents. This is useful for integrating third-party agents or agents from other repositories into your workflow.
 
 ### Step 1: Create the Wrapper Specialist File
@@ -191,11 +207,12 @@ class OpenSweSpecialist(WrappedSpecialist):
 
 Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: wrapped` and a `source` key pointing to the entry point of the external agent.
 
+Following the convention above, the configuration for `open_swe_specialist` would look like this:
 ```yaml
 specialists:
   open_swe_specialist:
     type: wrapped
-    source: "./path/to/external/agent/run.py" # Relative path from project root
+    source: "./external/open-swe/agent/run.py" # Path relative to project root
     description: "A specialist that wraps the open-swe agent for software engineering tasks."
 ```
 

@@ -38,5 +38,10 @@ logs/
 *.bak
 app/src/ui/*
 
+# --- External Code ---
+# Ignore contents of the external directory, but keep the directory itself.
+external/*
+!external/.gitkeep
+
 # --- Agent Notes ---
 docs/agent_scratchpad.md

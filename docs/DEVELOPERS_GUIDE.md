@@ -4,15 +4,25 @@
 
 This document provides all the necessary information to understand, run, test, and extend the agentic system. It is designed to be parsed by both human developers and autonomous AI agents.
 
-## 1.0 Getting Started
+## 1.0 Mission & Philosophy
+
+**Mission:** To provide the best possible open-source starting point for building any LangGraph-based agentic system. The scaffold focuses on modularity, extensibility, and architectural best practices.
+
+**Open Core Model:** This project is the "core" in an open core model. It provides generic, foundational capabilities under a permissive MIT license. Specialized, proprietary features (e.g., specific product integrations, complex UIs, opinionated agent personas) are intended to be built in separate, private projects that use this scaffold as a dependency or starting point.
+
+**Core Philosophy:** The system is composed of two primary types of agents:
+1.  **Specialists:** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code). They inherit from `BaseSpecialist`.
+2.  **Orchestrators:** High-level components that manage a workflow by compiling a `LangGraph` instance and wiring together the necessary Specialists.
+
+## 2.0 Getting Started
 
 Follow these steps to set up and run the project.
 
-### 1.1 Prerequisites
+### 2.1 Prerequisites
 *   Python 3.10+
 *   Git
 
-### 1.2 Installation
+### 2.2 Installation
 
 1.  **Clone the repository:**
     ```sh
@@ -40,7 +50,7 @@ Follow these steps to set up and run the project.
     ```
     This command ensures you have all the tools needed to contribute to the project.
 
-### 1.3 Configuration
+### 2.3 Configuration
 
 1.  **Environment Secrets:** In the project root, copy `.env.example` to a new file named `.env`. This file stores secrets and is safely ignored by Git.
     ```sh
@@ -57,7 +67,7 @@ Follow these steps to set up and run the project.
     cp config.yaml.example config.yaml
     ```
 
-### 1.4 Running the Application
+### 2.4 Running the Application
 
 Use the provided scripts in the project root to run the application.
 
@@ -69,10 +79,10 @@ On **Linux/macOS**:
 ```
 On **Windows**:
 ```bat
-.\scripts\server.bat
+.\scripts\server.bat start
 ```
 
-### 1.5 Running Tests
+### 2.5 Running Tests
 
 To ensure the system is functioning correctly, run the full suite of unit tests using `pytest`.
 
@@ -80,13 +90,30 @@ To ensure the system is functioning correctly, run the full suite of unit tests 
 pytest
 ```
 
-### 1.6 Running via CLI
+### 2.6 Verifying End-to-End Functionality
+
+To quickly confirm that the entire system is wired correctly (server starts, API responds, and a basic agent workflow completes), you can run the verification script. This is a great sanity check to run after making significant changes.
+
+On **Linux/macOS**:
+```sh
+./scripts/verify.sh
+```
+
+On **Windows** (requires PowerShell):
+```powershell
+.\scripts\verify.ps1
+```
+
+These scripts will automatically start the server, run a test prompt via the CLI, report success or failure, and then shut down the server.
+
+
+### 2.7 Running via CLI
 
 Once the FastAPI server is running, you can interact with it from the command line using the provided `cli.py` script. This is the recommended way to perform quick tests and script interactions without using a full API client.
 
 1.  **Ensure the server is running in one terminal:**
-    *   On **Linux/macOS**: `./run.sh start`
-    *   On **Windows**: `.\windows_run.bat`
+    *   On **Linux/macOS**: `./scripts/server.sh start`
+    *   On **Windows**: `.\scripts\server.bat start`
 
 2.  **In a separate terminal, run the CLI:**
     Use the provided convenience script for your operating system.
@@ -94,21 +121,15 @@ Once the FastAPI server is running, you can interact with it from the command li
         ```sh
         ./scripts/cli.sh "Your prompt for the agent goes here."
         ```
+    *   On **Windows**:
+        ```bat
+        .\scripts\cli.bat "Your prompt for the agent goes here."
+        ```
     For example:
     ```sh
     ./scripts/cli.sh "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
     ```
     The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
-
-## 2.0 Mission & Philosophy
-
-**Mission:** To provide the best possible open-source starting point for building any LangGraph-based agentic system. The scaffold focuses on modularity, extensibility, and architectural best practices.
-
-**Open Core Model:** This project is the "core" in an open core model. It provides generic, foundational capabilities under a permissive MIT license. Specialized, proprietary features (e.g., specific product integrations, complex UIs, opinionated agent personas) are intended to be built in separate, private projects that use this scaffold as a dependency or starting point.
-
-**Core Philosophy:** The system is composed of two primary types of agents:
-1.  **Specialists:** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code). They inherit from `BaseSpecialist`.
-2.  **Orchestrators:** High-level components that manage a workflow by compiling a `LangGraph` instance and wiring together the necessary Specialists.
 
 ## 3.0 System Architecture
 
@@ -138,8 +159,6 @@ The system is composed of the following layers and components.
 **LLM-Optional Specialists:**
 The system now supports specialists that do not require an associated Large Language Model (LLM). These are typically procedural specialists that perform deterministic tasks without needing AI inference. To define an LLM-optional specialist, simply omit the `model` and `provider` fields in its configuration within `config.yaml`. The `AdapterFactory` will automatically handle this by providing a `None` LLM adapter to such specialists. This allows for greater flexibility and efficiency by avoiding unnecessary LLM calls for purely procedural tasks.
 
-## 4.0 Project Structure & Naming
-
 ### 3.5 Schema Enforcement Strategy
 
 As outlined in the `PROPOSAL_ Schema-Enforced LLM Output Contracts.md` ADR, the system uses a "hard contract" approach to ensure LLMs produce reliable, structured JSON output. This is implemented via a progressive enhancement strategy in the LLM adapters.
@@ -150,44 +169,7 @@ As outlined in the `PROPOSAL_ Schema-Enforced LLM Output Contracts.md` ADR, the 
 
 This dual approach allows the system to use the strongest enforcement mechanism available for any given provider, with a graceful fallback to prompt-guided generation if a provider supports neither.
 
----
-
-## 4.0 Project Structure & Naming
-
-### 4.1 Directory Structure
-```
-.
-|-- .env                 # Local environment secrets (DO NOT COMMIT)
-|-- .env.example         # Example environment file
-|-- config.yaml          # Local configuration (can be gitignored)
-|-- config.yaml.example  # Example configuration file
-|-- data_processor_specialist.py # Stub for procedural processing
-|-- requirements-dev.txt # Development dependencies
-|-- run.sh               # Execution script for Linux/macOS
-|-- windows_run.bat      # Execution script for Windows
-|-- docs/                # All project documentation
-|   |-- DEVELOPERS_GUIDE.md
-|   |-- MANIFEST.json
-|   `-- ... (proposals, etc.)
-`-- app/
-    |-- prompts/         # Prompt templates for specialists
-    |-- src/
-    |   |-- api.py           # FastAPI application entry point
-    |   |-- cli.py           # Command-line interface script
-    |   |-- enums.py         # System-wide enumerations
-    |   |-- graph/           # LangGraph state and nodes
-    |   |-- llm/             # LLM abstraction layer
-    |   |-- specialists/     # Specialist agent implementations
-    |   |-- utils/           # Shared utility functions
-    |   `-- workflow/        # LangGraph orchestration logic
-    `-- tests/
-```
-
-### 4.2 Naming Convention
-*   **Specialist Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains (e.g., `FileSpecialist` in `file_specialist.py`).
-*   **Prompt Rule:** A prompt file in `app/prompts/` must be named according to the `prompt_file` key in `config.yaml`. This allows for model-specific prompt variations (e.g., `systems_architect_prompt_gguf.md`).
-
-## 5.0 Application Internals: Separation of Concerns
+### 3.6 Application Internals: Separation of Concerns
 
 The `app/src` directory is organized to enforce a clear separation of concerns, making the system more modular and maintainable.
 
@@ -201,15 +183,15 @@ The `app/src` directory is organized to enforce a clear separation of concerns, 
 
 *   `utils/`: This directory contains shared utility functions and classes that are used across the application. For example, the `config_loader.py` is responsible for loading the `config.yaml` file, and `prompt_loader.py` loads the prompt templates for the specialists.
 
-## 6.0 Development Protocols
+## 4.0 How to Extend the System
 
-### 6.1 Extending the System with Specialists
+### 4.1 Adding New Specialists
 
 The primary way to extend the system's capabilities is by adding new specialists. This can be done by creating a new standard specialist from scratch or by wrapping an existing, external agent.
 
 For a detailed, step-by-step tutorial on both of these processes, please refer to the **Creating a New Specialist** guide.
 
-### 6.2 Managing Dependencies
+### 4.2 Managing Dependencies
 
 This project uses `pyproject.toml` as the single source of truth for dependencies and `pip-tools` to generate pinned `requirements.txt` files for reproducible installations.
 
@@ -221,6 +203,44 @@ This project uses `pyproject.toml` as the single source of truth for dependencie
     *   On Windows: `.\scripts\sync-reqs.bat`
 3.  Commit the changes to `pyproject.toml` **and** the generated `requirements.txt` / `requirements-dev.txt` files to version control.
 
-### 6.3 Packaging
+### 4.3 Packaging
 
 This project is structured as an installable Python package. The `pyproject.toml` file defines the package metadata, and the `app` directory contains the source code. This allows for clean dependency management and distribution.
+
+## 5.0 Project Structure Reference
+
+### 5.1 Directory Structure
+```
+langgraph-agentic-scaffold/
+|-- .env.example         # Example environment file for secrets
+|-- .gitignore           # Files and directories ignored by Git
+|-- LICENSE              # Project license
+|-- README.md            # Main project README
+|-- config.yaml.example  # Example application configuration
+|-- pyproject.toml       # Project definition and dependencies
+|-- requirements-dev.txt # Pinned development dependencies
+|-- requirements.txt     # Pinned production dependencies
+|-- app/
+|   |-- prompts/         # Prompt templates for specialists
+|   |-- src/             # Main application source code
+|   |   |-- api.py           # FastAPI application entry point
+|   |   |-- cli.py           # Command-line interface script
+|   |   |-- specialists/     # Specialist agent implementations
+|   |   |-- workflow/        # LangGraph orchestration logic
+|   |   `-- ... (llm, graph, utils, etc.)
+|   `-- tests/             # Unit and integration tests
+|-- docs/                # All project documentation
+|   |-- DEVELOPERS_GUIDE.md
+|   |-- CREATING_A_NEW_SPECIALIST.md
+|   `-- adr/               # Architecture Decision Records
+|-- external/            # For third-party code (e.g., wrapped agents)
+|   `-- .gitkeep         # Keeps the directory in Git history
+`-- scripts/             # Helper scripts for development
+    |-- server.sh          # Server management (start, stop) for Linux/macOS
+    |-- server.bat         # Server management for Windows
+    `-- ... (verify, cli, sync-reqs scripts)
+```
+
+### 5.2 Naming Convention
+*   **Specialist Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains (e.g., `FileSpecialist` in `file_specialist.py`).
+*   **Prompt Rule:** A prompt file in `app/prompts/` must be named according to the `prompt_file` key in `config.yaml`. This allows for model-specific prompt variations (e.g., `systems_architect_prompt_gguf.md`).

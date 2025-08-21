@@ -99,7 +99,7 @@ Any LLM at any time can interpret your requests in unexpected ways. Be mindful o
 
 ## For Developers
 
-This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)** and the **[Creating a New Agent Type Guide](./docs/CREATING_A_NEW_AGENT_TYPE.md)**.
+This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)** and the **[Creating a New Specialist Guide](./docs/CREATING_A_NEW_SPECIALIST.md)**.
 
 To set up a full development environment with testing and linting tools, run:
 ```sh
