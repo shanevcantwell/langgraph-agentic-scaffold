@@ -10,6 +10,16 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 # Go to the parent directory (project root)
 cd "$SCRIPT_DIR/.."
 
+# --- Check for jq dependency ---
+if ! command -v jq &> /dev/null
+then
+    echo "Error: jq is not installed. Please install jq to run this verification script."
+    echo "On Debian/Ubuntu: sudo apt-get install jq"
+    echo "On macOS (using Homebrew): brew install jq"
+    echo "For other systems, please refer to https://stedolan.github.io/jq/download/"
+    exit 1
+fi
+
 PORT=8000
 HEALTH_CHECK_URL="http://127.0.0.1:${PORT}/"
 TEST_PROMPT="Hello, world! Please respond with a simple confirmation."
@@ -34,17 +44,31 @@ echo "--- Starting server for verification test ---"
 echo "--- Waiting for server to become healthy (max 30 seconds) ---"
 for i in {1..30}; do
     # Use curl to check the health endpoint.
-    if curl -s --fail "$HEALTH_CHECK_URL" > /dev/null; then
+    if curl -s --fail "$HEALTH_CHECK_URL" > /dev/null;
+    then
         echo "Server is up and running."
-        # Run the CLI script and check its exit code
+        # Run the CLI script with --json-only flag and capture its output
         echo "--- Running CLI verification test ---"
-        if ./scripts/cli.sh "$TEST_PROMPT"; then
+      JSON_RESPONSE=$(./scripts/cli.sh --json-only "$TEST_PROMPT")
+
+        # Check if JSON_RESPONSE is empty or not valid JSON
+        if [ -z "$JSON_RESPONSE" ]; then
             echo "---"
-            echo "✅ Verification test PASSED."
+            echo "❌ Verification test FAILED: No JSON response received from CLI."
+            exit 1
+        fi
+
+        # Validate the JSON response using jq
+        # Check for non-null next_specialist and meaningful AI message
+        if echo "$JSON_RESPONSE" | jq -e '.next_specialist != null and (.messages | length > 1 and .messages[-1].type == "ai" and .messages[-1].content | length > 0)'; then
+            echo "---"
+            echo "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully."
             exit 0
         else
             echo "---"
-            echo "❌ Verification test FAILED: CLI command failed."
+            echo "❌ Verification test FAILED: Agent response was not meaningful or routing failed."
+            echo "JSON Response:"
+            echo "$JSON_RESPONSE" | jq .
             exit 1
         fi
     fi

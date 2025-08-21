@@ -24,33 +24,30 @@ Follow these steps to set up and run the project.
 
 ### 2.2 Installation
 
-1.  **Clone the repository:**
-    ```sh
-    git clone <repository-url>
-    cd langgraph-agentic-scaffold
-    ```
+To set up your development environment, run the appropriate installation script for your operating system from the project root:
 
-2.  **Create and activate a virtual environment.**
-
-    For **Linux/macOS** (using the `.venv_agents` directory):
+*   On **Linux/macOS**:
     ```sh
-    python3 -m venv .venv_agents
-    source ./.venv_agents/bin/activate
+    ./scripts/install.sh
     ```
-    For **Windows** (using the `.venv_agents_windows` directory):
+*   On **Windows**:
     ```bat
-    python -m venv .venv_agents_windows
-    .\.venv_agents_windows\Scripts\activate
+    .\scripts\install.bat
     ```
 
-3.  **Install dependencies:**
-    To set up a development environment, install all production and development dependencies, including tools for testing, formatting, and dependency management.
-    ```sh
-    pip install -r requirements-dev.txt
-    ```
-    This command ensures you have all the tools needed to contribute to the project.
+These scripts will:
+*   Clone the repository (if not already cloned).
+*   Create and activate a Python virtual environment.
+*   Install all necessary Python dependencies.
+*   Copy example configuration files (`.env.example` to `.env`, `config.yaml.example` to `config.yaml`).
+*   Check for the `jq` command-line JSON processor (required for verification scripts) and provide installation instructions if missing.
+*   For Windows, provide a note about PowerShell execution policy if running PowerShell scripts.
+
+After running the installation script, remember to edit `.env` with your API keys and `config.yaml` to define your agent setup.
 
 ### 2.3 Configuration
+
+(This section is now largely handled by the install scripts, but keeping it for reference if manual config is needed)
 
 1.  **Environment Secrets:** In the project root, copy `.env.example` to a new file named `.env`. This file stores secrets and is safely ignored by Git.
     ```sh
@@ -127,7 +124,7 @@ Once the FastAPI server is running, you can interact with it from the command li
         ```
     For example:
     ```sh
-    ./scripts/cli.sh "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
+    .\scripts\cli.bat "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
     ```
     The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
 
@@ -205,7 +202,7 @@ This project uses `pyproject.toml` as the single source of truth for dependencie
 
 ### 4.3 Packaging
 
-This project is structured as an installable Python package. The `pyproject.toml` file defines the package metadata, and the `app` directory contains the source code. This allows for clean dependency management and distribution.
+This project is structured as an installable Python package. The `pyproject.toml` file defines the package metadata, and the `app` directory contains the source code. It allows for clean dependency management and distribution.
 
 ## 5.0 Project Structure Reference
 

@@ -50,40 +50,27 @@ Any LLM at any time can interpret your requests in unexpected ways. Be mindful o
 
 ### Installation & Setup
 
-1.  **Clone the repository:**
+To get started quickly, run the appropriate installation script for your operating system from the project root:
+
+*   On **Linux/macOS**:
     ```sh
-    git clone https://github.com/shanevcantwell/langgraph-agentic-scaffold.git
-    cd langgraph-agentic-scaffold
+    ./scripts/install.sh
+    ```
+*   On **Windows**:
+    ```bat
+    .\scripts\install.bat
     ```
 
-2.  **Create and activate a virtual environment:**
-    *   For **Linux/macOS**:
-        ```sh
-        python3 -m venv .venv_agents
-        source ./.venv_agents/bin/activate
-        ```
-    *   For **Windows**:
-        ```sh
-        python -m venv .venv_agents_windows
-        .\.venv_agents_windows\Scripts\activate
-        ```
+These scripts will:
+*   Clone the repository (if not already cloned).
+*   Create and activate a Python virtual environment.
+*   Install all necessary Python dependencies.
+*   Copy example configuration files (`.env.example` to `.env`, `config.yaml.example` to `config.yaml`).
+*   Check for the `jq` command-line JSON processor (required for verification scripts) and provide installation instructions if missing.
+*   For Windows, provide a note about PowerShell execution policy if running PowerShell scripts.
 
-3.  **Install dependencies:**
-    This command installs the exact versions of all packages needed to run the application.
-    ```sh
-    pip install -r requirements-dev.txt
-    ```
+After running the installation script, remember to edit `.env` with your API keys and `config.yaml` to define your agent setup.
 
-4.  **Configure your environment:**
-    Copy the example configuration files.
-    ```sh
-    # Copy the example .env file for secrets
-    cp .env.example .env
-
-    # Copy the example app config file
-    cp config.yaml.example config.yaml
-    ```
-    Now, edit `.env` with your API keys and `config.yaml` to define your agent setup.
 
 5.  **Run the application:**
     Use the provided scripts to start the API server.
@@ -97,6 +84,19 @@ Any LLM at any time can interpret your requests in unexpected ways. Be mindful o
         ```
     Once running, you can access the interactive API documentation at **`http://127.0.0.1:8000/docs`**.
 
+### Interact with the Agent via CLI
+
+Once the server is running, you can send prompts to the agent using the command-line interface:
+
+*   On **Linux/macOS**:
+    ```sh
+    ./scripts/cli.sh "Your prompt for the agent goes here."
+    ```
+*   On **Windows**:
+    ```bat
+    .\scripts\cli.bat "Your prompt for the agent goes here."
+    ```
+
 ## For Developers
 
 This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)** and the **[Creating a New Specialist Guide](./docs/CREATING_A_NEW_SPECIALIST.md)**.
@@ -104,15 +104,6 @@ This repository is designed to be a starting point for your own complex projects
 To set up a full development environment with testing and linting tools, run:
 ```sh
 pip install -r requirements-dev.txt
-```
-
-Once the server is running, you can interact with it from a separate terminal using the CLI script:
-```sh
-./scripts/cli.sh "Your prompt for the agent goes here."
-```
-Or on Windows:
-```bat
-.\scripts\cli.bat "Your prompt for the agent goes here."
 ```
 
 ## License

@@ -11,13 +11,30 @@
 #>
 
 # --- Configuration ---
-$ProjectRoot = (Get-Item -Path ".\" -Verbose).FullName
+$ProjectRoot = (Get-Item -Path "." -Verbose).FullName
 $ServerScript = Join-Path $ProjectRoot "scripts\server.bat"
 $CliScript = Join-Path $ProjectRoot "scripts\cli.bat"
 $Port = 8000
 $HealthCheckUrl = "http://127.0.0.1:$Port/"
 $TestPrompt = "Hello, world! Please respond with a simple confirmation."
 $TimeoutSeconds = 30
+
+# --- Check for jq dependency ---
+# PowerShell doesn't have a direct equivalent of 'command -v'.
+# We check if jq.exe exists in any of the directories listed in the PATH environment variable.
+$jqFound = $false
+$env:Path.Split(';') | ForEach-Object {
+    $jqPath = Join-Path $_ "jq.exe"
+    if (Test-Path $jqPath) {
+        $jqFound = $true
+    }
+}
+
+if (-not $jqFound) {
+    Write-Host "Error: jq is not installed or not found in your PATH. Please install jq to run this verification script."
+    Write-Host "Download from: https://stedolan.github.io/jq/download/"
+    exit 1
+}
 
 # --- Main Logic ---
 try {
@@ -52,16 +69,39 @@ try {
         throw "Verification test FAILED: Server did not become healthy within $TimeoutSeconds seconds."
     }
     
-    # Run the CLI script and check its exit code
+    # Run the CLI script with --json-only flag and capture its output
     Write-Host "--- Running CLI verification test ---"
-    & $CliScript $TestPrompt
-    
-    if ($LASTEXITCODE -ne 0) {
-        throw "Verification test FAILED: CLI script returned a non-zero exit code."
+    $cliOutput = & $CliScript --json-only $TestPrompt
+
+    # Check if JSON_RESPONSE is empty or not valid JSON
+    if ([string]::IsNullOrEmpty($cliOutput)) {
+        throw "Verification test FAILED: No JSON response received from CLI."
     }
-    
-    Write-Host "---"
-    Write-Host "✅ Verification test PASSED." -ForegroundColor Green
+
+    try {
+        $jsonResponse = $cliOutput | ConvertFrom-Json
+    }
+    catch {
+        throw "Verification test FAILED: CLI output was not valid JSON. Details: $($_.Exception.Message)"
+    }
+
+    # Validate the JSON response
+    # Check for non-null next_specialist and meaningful AI message
+    if ($jsonResponse.next_specialist -ne $null -and `
+        $jsonResponse.messages.Count -gt 1 -and `
+        $jsonResponse.messages[-1].type -eq "ai" -and `
+        -not [string]::IsNullOrEmpty($jsonResponse.messages[-1].content)) {
+        
+        Write-Host "---"
+        Write-Host "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully." -ForegroundColor Green
+        exit 0
+    } else {
+        Write-Host "---"
+        Write-Host "❌ Verification test FAILED: Agent response was not meaningful or routing failed." -ForegroundColor Red
+        Write-Host "JSON Response:" -ForegroundColor Red
+        $jsonResponse | ConvertTo-Json -Depth 100 | Write-Host -ForegroundColor Red
+        exit 1
+    }
     
 }
 catch {
