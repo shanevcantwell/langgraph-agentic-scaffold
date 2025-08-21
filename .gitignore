@@ -36,8 +36,6 @@ backups/
 build/
 logs/
 *.bak
-*.egg-info/
-smoke-test.sh
 app/src/ui/*
 
 # --- Agent Notes ---
