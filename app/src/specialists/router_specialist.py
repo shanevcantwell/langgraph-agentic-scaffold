@@ -71,8 +71,8 @@ class RouterSpecialist(BaseSpecialist):
         tool_calls = response_data.get("tool_calls", [])
 
         if not tool_calls:
-            logger.warning("Router LLM did not return a tool call. Defaulting to finish.")
-            return {"next_specialist": END}
+            logger.warning("Router LLM did not return a tool call. Defaulting to prompt_specialist.")
+            return {"next_specialist": "prompt_specialist"} # Default to prompt_specialist
 
         # Extract the routing decision from the tool call.
         next_specialist = tool_calls[0]['args'].get('next_specialist', END)

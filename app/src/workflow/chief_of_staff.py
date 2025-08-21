@@ -71,6 +71,7 @@ class ChiefOfStaff:
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
 
         dynamic_system_prompt = f"{base_prompt}\n\nAVAILABLE SPECIALISTS:\n{tools_list_str}"
+        logger.debug(f"The following specialists are available for routing:\n{tools_list_str}")
 
         # Create a new, context-aware adapter and inject it into the router instance
         router_instance.llm_adapter = AdapterFactory().create_adapter(

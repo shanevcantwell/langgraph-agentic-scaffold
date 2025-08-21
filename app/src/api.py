@@ -17,8 +17,9 @@ logging.basicConfig(
     level=log_level,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
+        # The application is responsible for its own logging, including rotation.
         RotatingFileHandler(log_file, maxBytes=10485760, backupCount=5), # 10MB per file, 5 backups
-        logging.StreamHandler() # Also log to console
+        logging.StreamHandler() # Also log to console for real-time feedback.
     ],
     force=True # This will remove any existing handlers, preventing duplicate logs.
 )

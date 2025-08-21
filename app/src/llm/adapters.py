@@ -88,38 +88,6 @@ class GeminiAdapter(BaseAdapter):
         logger.info("GeminiAdapter returned text response.")
         return {"text_response": response.text}
 
-    def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
-        """
-        Gemini-specific post-processing for JSON responses.
-        """
-        if output_model_class == SystemPlan:
-            # Map 'summary' to 'plan_summary' if present
-            if "summary" in json_response and "plan_summary" not in json_response:
-                json_response["plan_summary"] = json_response.pop("summary")
-            # Map 'components' or 'required_components_list' to 'required_components'
-            if "components" in json_response and "required_components" not in json_response:
-                json_response["required_components"] = json_response.pop("components")
-            elif "required_components_list" in json_response and "required_components" not in json_response:
-                json_response["required_components"] = json_response.pop("required_components_list")
-        elif output_model_class == WebContent:
-            # If the LLM returns a nested structure instead of a flat html_document string
-            if "html" in json_response and "html_document" not in json_response:
-                # Attempt to reconstruct the HTML string from the nested structure
-                # This is a simplified example and might need more robust parsing
-                html_content = ""
-                if "head" in json_response["html"]:
-                    head = json_response["html"]["head"]
-                    title = head.get("title", "")
-                    html_content += f"<head>\n    <title>{title}</title>\n</head>\n"
-                if "body" in json_response["html"]:
-                    body = json_response["html"]["body"]
-                    text = body.get("text", "")
-                    html_content += f"<body>\n    <h1>{text}</h1>\n</body>\n"
-                json_response["html_document"] = f"<!DOCTYPE html>\n<html>\n{html_content}</html>"
-                json_response.pop("html") # Remove the old nested structure
-
-        return json_response
-                                                                        
 class LMStudioAdapter(BaseAdapter):
     # This adapter supports OpenAI-compatible APIs, such as LM Studio.
     # Its invoke method would need to be updated to support tool calling

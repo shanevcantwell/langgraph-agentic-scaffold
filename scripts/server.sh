@@ -44,8 +44,10 @@ start_server() {
     echo "View the interactive documentation at http://127.0.0.1:${PORT}/docs"
     echo "Server logs are at: $SERVER_LOG_FILE"
 
-    # Run the FastAPI server using uvicorn, passing the log-level from the environment.
-    PYTHONUNBUFFERED=1 uvicorn app.src.api:app --host 0.0.0.0 --port ${PORT} --log-level "${LOG_LEVEL_UVICORN,,}" >> "$SERVER_LOG_FILE" 2>&1 &
+    # Run the FastAPI server using uvicorn. The application's logging configuration
+    # handles writing to the log file. We redirect the script's console output
+    # to /dev/null to prevent it from cluttering the console when run in the background.
+    PYTHONUNBUFFERED=1 uvicorn app.src.api:app --host 0.0.0.0 --port ${PORT} --log-level "${LOG_LEVEL_UVICORN,,}" > /dev/null 2>&1 &
     echo $! > "$SERVER_PID_FILE"
     echo "Server started with PID $(cat "$SERVER_PID_FILE")."
 }

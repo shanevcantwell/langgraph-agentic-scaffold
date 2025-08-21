@@ -42,8 +42,11 @@ for i in {1..30}; do
             echo "---"
             echo "✅ Verification test PASSED."
             exit 0
+        else
+            echo "---"
+            echo "❌ Verification test FAILED: CLI command failed."
+            exit 1
         fi
-        # If the CLI fails, the script will exit due to 'set -e'
     fi
     echo -n "."
     sleep 1

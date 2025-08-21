@@ -48,8 +48,10 @@ goto :main
     echo View the interactive documentation at http://127.0.0.1:%PORT%/docs
     echo Server logs are at: %SERVER_LOG_FILE%
     
-    rem Use PowerShell to start uvicorn in a new process, get its PID, and write it to the PID file.
-    powershell -Command "Start-Process python -ArgumentList '-m uvicorn app.src.api:app --host 0.0.0.0 --port %PORT% --log-level %LOG_LEVEL_UVICORN%' -RedirectStandardOutput '%SERVER_LOG_FILE%' -RedirectStandardError '%SERVER_LOG_FILE%' -PassThru | Select-Object -ExpandProperty Id | Out-File -FilePath '%SERVER_PID_FILE%' -Encoding ascii"
+    rem Use PowerShell to start uvicorn in a new process and get its PID.
+    rem The application's own logging configuration handles writing to the log file.
+    rem We do not redirect stdout/stderr here to avoid duplicating log entries.
+    powershell -Command "Start-Process python -ArgumentList '-m uvicorn app.src.api:app --host 0.0.0.0 --port %PORT% --log-level %LOG_LEVEL_UVICORN%' -PassThru | Select-Object -ExpandProperty Id | Out-File -FilePath '%SERVER_PID_FILE%' -Encoding ascii"
     
     rem Brief pause to allow PID file to be written
     timeout /t 1 /nobreak >nul
