@@ -38,7 +38,7 @@ logs/
 *.bak
 *.egg-info/
 smoke-test.sh
-.gitignore
+app/src/ui/*
 
 # --- Agent Notes ---
-/docs/agentic_notes.md
+docs/agent_scratchpad.md
