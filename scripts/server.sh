@@ -5,10 +5,20 @@
 # Activate the virtual environment
 source ./.venv_agents/bin/activate
 
+# Load environment variables from .env file if it exists.
+# This allows for configuration of LOG_LEVEL, etc.
+if [ -f .env ]; then
+  set -a # automatically export all variables
+  source .env
+  set +a
+fi
+
 RUN_DIR="$(pwd)/.run"
-SERVER_PID_FILE="$RUN_DIR/specialisthub_server.pid"
-SERVER_LOG_FILE="$RUN_DIR/specialisthub_server.log"
+LOGS_DIR="$(pwd)/logs"
+SERVER_PID_FILE="$RUN_DIR/agentic_server.pid"
+SERVER_LOG_FILE="$LOGS_DIR/agentic_server.log"
 PORT=8000
+LOG_LEVEL_UVICORN=${LOG_LEVEL:-info} # Default to info if not set
 
 start_server() {
     if [ -f "$SERVER_PID_FILE" ]; then
@@ -23,13 +33,15 @@ start_server() {
     fi
 
     mkdir -p "$RUN_DIR"
-    echo "Starting SpecialistHub API server with Uvicorn..."
+    mkdir -p "$LOGS_DIR"
+    echo "Starting Agentic API server with Uvicorn..."
     echo "Access the API at http://127.0.0.1:${PORT}"
+    echo "Log level set to: ${LOG_LEVEL_UVICORN}"
     echo "View the interactive documentation at http://127.0.0.1:${PORT}/docs"
     echo "Server logs are at: $SERVER_LOG_FILE"
 
-    # Run the FastAPI server using uvicorn in the background and capture its PID
-    PYTHONUNBUFFERED=1 uvicorn app.src.api:app --host 0.0.0.0 --port ${PORT} >> "$SERVER_LOG_FILE" 2>&1 &
+    # Run the FastAPI server using uvicorn, passing the log-level from the environment.
+    PYTHONUNBUFFERED=1 uvicorn app.src.api:app --host 0.0.0.0 --port ${PORT} --log-level "${LOG_LEVEL_UVICORN,,}" >> "$SERVER_LOG_FILE" 2>&1 &
     echo $! > "$SERVER_PID_FILE"
     echo "Server started with PID $(cat "$SERVER_PID_FILE")."
 }

@@ -1,8 +1,8 @@
-# SpecialistHub: System Architecture & Developer's Guide
+# System Architecture & Developer's Guide
 # Version: 2.5
 # Status: ACTIVE
 
-This document provides all the necessary information to understand, run, test, and extend the SpecialistHub agentic system. It is designed to be parsed by both human developers and autonomous AI agents.
+This document provides all the necessary information to understand, run, test, and extend the agentic system. It is designed to be parsed by both human developers and autonomous AI agents.
 
 ## 1.0 Getting Started
 
@@ -65,11 +65,11 @@ These scripts will start the FastAPI web server using Uvicorn. You can access th
 
 On **Linux/macOS**:
 ```sh
-./run.sh start
+./scripts/server.sh start
 ```
 On **Windows**:
 ```bat
-.\windows_run.bat
+.\scripts\server.bat
 ```
 
 ### 1.5 Running Tests
@@ -102,7 +102,9 @@ Once the FastAPI server is running, you can interact with it from the command li
 
 ## 2.0 Mission & Philosophy
 
-**Mission:** To construct a multi-agent system composed of modular, single-responsibility "Specialists." The system must be scalable, maintainable, and testable, driven by a flexible, decoupled configuration.
+**Mission:** To provide the best possible open-source starting point for building any LangGraph-based agentic system. The scaffold focuses on modularity, extensibility, and architectural best practices.
+
+**Open Core Model:** This project is the "core" in an open core model. It provides generic, foundational capabilities under a permissive MIT license. Specialized, proprietary features (e.g., specific product integrations, complex UIs, opinionated agent personas) are intended to be built in separate, private projects that use this scaffold as a dependency or starting point.
 
 **Core Philosophy:** The system is composed of two primary types of agents:
 1.  **Specialists:** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code). They inherit from `BaseSpecialist`.

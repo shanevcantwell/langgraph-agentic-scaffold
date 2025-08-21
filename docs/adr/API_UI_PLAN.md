@@ -2,7 +2,7 @@
 
 ## Proposal: Implement a FastAPI-based API and UI Layer
 ### Objective
-To create a modern, intuitive, and robust interface for the `SpecialistHub` system, enabling external interaction and integration.
+To create a modern, intuitive, and robust interface for the agentic system, enabling external interaction and integration.
 ### Problem Statement
 The system currently lacks a formal external interface, making it difficult to interact with programmatically, test end-to-end, or integrate with other services. All interaction is via local script execution.
 ### Proposed Solution

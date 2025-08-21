@@ -1,10 +1,16 @@
-# langgraph-agentic-scaffold: An Unlabeled Agentic System Scaffold
+# langgraph-agentic-scaffold: The Open Core Scaffold for Agentic Systems
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-A foundational scaffold for building robust, modular, and scalable multi-agent systems using LangGraph. This project provides a production-ready architecture that moves beyond simple scripts to a fully-fledged, API-driven application.
+A foundational scaffold for building robust, modular, and scalable multi-agent systems using LangGraph. This project provides a production-ready architecture that moves beyond simple scripts to a fully-fledged, API-driven application. It is designed to be the best possible starting point for any LangGraph-based agentic system.
+
+### An Open Core Project
+
+`langgraph-agentic-scaffold` is an **Open Core** project, distributed under the permissive MIT license. We are committed to developing and maintaining this core as a powerful, free, and open-source foundation for the entire community. 
+
+The goal of this public scaffold is to provide universally useful, un-opinionated tools and architectural best practices. This core also serves as the base for more advanced, proprietary applications which may include specialized agents, complex integrations, and unique user interfaces.
 
 ## Mission & Philosophy
 

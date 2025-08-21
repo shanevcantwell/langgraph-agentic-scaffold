@@ -3,7 +3,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "specialist-hub-agentic-system"
+name = "langgraph-agentic-scaffold"
 version = "1.0.0"
 description = "A foundational scaffold for building multi-agent systems using LangGraph, featuring a modular 'specialist' architecture."
 readme = "README.md"
