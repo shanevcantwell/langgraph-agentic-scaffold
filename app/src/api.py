@@ -1,17 +1,15 @@
 # app/src/api.py
 import logging
-import os
-from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 from .workflow.runner import WorkflowRunner
 
 # --- Application Bootstrap ---
-# This is the first and most critical step. It loads environment variables
-# from the .env file, making them available to the entire application.
-# This must run before any other application modules are imported.
-load_dotenv()
+# Environment variables are now loaded by the startup script (e.g., server.py)
+# that launches this application. This ensures the environment is configured
+# before the application code is even imported, making the setup more robust.
+
 
 # The application is no longer responsible for configuring logging.
 # It simply requests a logger instance to use. The server process (Uvicorn)
