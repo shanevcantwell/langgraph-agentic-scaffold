@@ -1,29 +1,63 @@
 # app/src/specialists/wrapped_specialist.py
 
 import importlib.util
+import logging
+import os
 from .base import BaseSpecialist
+
+logger = logging.getLogger(__name__)
 
 class WrappedSpecialist(BaseSpecialist):
     """A specialist that wraps an externally-sourced agent."""
 
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name=specialist_name)
+        self.is_enabled = False
+        self.external_agent = None
+
         source = self.specialist_config.get("source")
         if not source:
-            raise ValueError(f"Wrapped specialist '{specialist_name}' is missing the 'source' key in its config.yaml entry.")
+            logger.warning(f"Wrapped specialist '{specialist_name}' is disabled: missing 'source' key in config.yaml.")
+            return
+
+        if not os.path.exists(source):
+            logger.warning(f"Wrapped specialist '{specialist_name}' is disabled: source file not found at '{source}'.")
+            logger.warning(f"Please ensure you have cloned the external agent into the correct directory as per the documentation.")
+            return
+
         # The external agent is loaded once during initialization.
-        self.external_agent = self._load_external_agent(source)
+        try:
+            self.external_agent = self._load_external_agent(source)
+            self.is_enabled = True
+            logger.info(f"Successfully loaded external agent for wrapped specialist '{specialist_name}'.")
+        except Exception as e:
+            logger.error(f"Failed to load external agent for '{specialist_name}' from '{source}': {e}", exc_info=True)
 
     def _load_external_agent(self, source: str):
         """Loads the external agent from the given source path."""
+        class_name = self.specialist_config.get("class_name", "Agent")
+
         spec = importlib.util.spec_from_file_location("external_agent", source)
+        if spec is None:
+            raise ImportError(f"Could not create module spec from source: {source}")
+
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        # Assuming the external agent has a class named 'Agent'
-        return module.Agent()
+
+        if not hasattr(module, class_name):
+            raise AttributeError(f"External agent module from '{source}' does not have a class named '{class_name}'.")
+
+        AgentClass = getattr(module, class_name)
+        return AgentClass()
 
     def _execute_logic(self, state: dict) -> dict:
         """Executes the wrapped external agent."""
+        if not self.is_enabled:
+            error_message = f"'{self.specialist_name}' is not enabled. Check server logs for configuration errors."
+            logger.error(error_message)
+            # Return an error in the state so the graph can handle it gracefully.
+            return {"error": error_message}
+
         # 1. Translate the GraphState to the external agent's input format.
         external_agent_input = self._translate_state_to_input(state)
 

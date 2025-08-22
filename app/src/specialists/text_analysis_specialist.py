@@ -2,7 +2,7 @@
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, SystemMessage
 
 class TextAnalysisSpecialist(BaseSpecialist):
     """
@@ -25,10 +25,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
 
         # Append the text to be analyzed to the message history for full context.
         messages_for_llm = state["messages"] + [
-            HumanMessage(
+            SystemMessage(
                 content=(
                     "--- TEXT TO ANALYZE ---\n"
-                    "Based on our conversation, please perform the requested analysis on the text above.\n\n"
+                    "Based on our conversation, please perform the requested analysis on the following text. The user's original request is in the message history.\n\n"
                     f"{text_to_process}"
                 )
             )

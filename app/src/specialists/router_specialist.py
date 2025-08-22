@@ -4,8 +4,8 @@ from typing import Dict, Any, List
 from enum import Enum
 from langgraph.graph import END
 from pydantic import BaseModel, Field
-from langchain_core.messages import BaseMessage
-
+from langchain_core.messages import BaseMessage, SystemMessage
+ 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
 from ..utils.config_loader import ConfigLoader
@@ -36,7 +36,11 @@ class RouterSpecialist(BaseSpecialist):
         logger.debug(f"Executing turn {turn_count}")
 
         # --- ROUTING LOGIC ---
-        messages: List[BaseMessage] = state["messages"]
+        messages: List[BaseMessage] = state["messages"][:] # Make a copy
+        # The router should make decisions based on the conversation history and tool calls,
+        # not the raw data artifacts. The 'text_to_process' is a payload for the *next*
+        # specialist, not context for the router itself. This prevents cluttering the
+        # router's context window and keeps its reasoning focused on orchestration.
         request = StandardizedLLMRequest(
             messages=messages,
             tools=[Route]

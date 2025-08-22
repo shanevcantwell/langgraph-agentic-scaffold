@@ -4,7 +4,7 @@ import logging
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import ExtractedData
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, AIMessage
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -30,11 +30,11 @@ class DataExtractorSpecialist(BaseSpecialist):
         # Append the text to be processed to the message history so the LLM has full context
         # of the user's request. This is more robust than creating a new, isolated prompt.
         messages_for_llm = state["messages"] + [
-            HumanMessage(
+            SystemMessage(
                 content=(
                     "--- TEXT TO PROCESS ---\n"
-                    "Based on our conversation, please extract the relevant information from the text above "
-                    "into the required JSON format.\n\n"
+                    "Based on our conversation, please extract the relevant information from the following text "
+                    "into the required JSON format. The user's original request is in the message history.\n\n"
                     f"{text_to_process}"
                 )
             )
@@ -54,6 +54,6 @@ class DataExtractorSpecialist(BaseSpecialist):
         new_message = AIMessage(content="I have successfully extracted the structured data.")
         return {
             "messages": state["messages"] + [new_message],
-            "json_artifact": validated_data.extracted_json,
+            "extracted_data": validated_data.extracted_json,
             "text_to_process": None  # Consume the artifact after processing
         }
