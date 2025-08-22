@@ -10,9 +10,10 @@ This document provides all the necessary information to understand, run, test, a
 
 **Open Core Model:** This project is the "core" in an open core model. It provides generic, foundational capabilities under a permissive MIT license. Specialized, proprietary features (e.g., specific product integrations, complex UIs, opinionated agent personas) are intended to be built in separate, private projects that use this scaffold as a dependency or starting point.
 
-**Core Philosophy:** The system is composed of two primary types of agents:
-1.  **Specialists:** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code). They inherit from `BaseSpecialist`.
-2.  **Orchestrators:** High-level components that manage a workflow by compiling a `LangGraph` instance and wiring together the necessary Specialists.
+**Core Philosophy:** The system is composed of several agent types with a clear separation of concerns:
+1.  **Specialists (`BaseSpecialist`):** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code).
+2.  **Runtime Orchestrator (`RouterSpecialist`):** A specialized agent that makes the turn-by-turn routing decisions *within* the running graph. It uses its LLM to analyze the conversation state and decides which Specialist should run next, updating the `GraphState` with its choice.
+3.  **Structural Orchestrator (`ChiefOfStaff`):** A high-level system component responsible for building the `LangGraph` instance, loading all Specialists from the configuration, and enforcing global rules (like max turns or error handling). It reads the decision made by the `RouterSpecialist` to direct the flow of the graph.
 
 ## 2.0 Getting Started
 
@@ -27,13 +28,9 @@ Follow these steps to set up and run the project.
 To set up your development environment, run the appropriate installation script for your operating system from the project root:
 
 *   On **Linux/macOS**:
-    ```sh
-    ./scripts/install.sh
-    ```
+    `./scripts/install.sh`
 *   On **Windows**:
-    ```bat
-    .\scripts\install.bat
-    ```
+    `.\scripts\install.bat`
 
 These scripts will:
 *   Clone the repository (if not already cloned).
@@ -50,53 +47,37 @@ After running the installation script, remember to edit `.env` with your API key
 (This section is now largely handled by the install scripts, but keeping it for reference if manual config is needed)
 
 1.  **Environment Secrets:** In the project root, copy `.env.example` to a new file named `.env`. This file stores secrets and is safely ignored by Git.
-    ```sh
-    cp .env.example .env
-    ```
+    `cp .env.example .env`
     The `scripts/server.py` controller is responsible for loading this `.env` file into the process environment before launching the Uvicorn server. The application code itself assumes these variables are present and does not load the file. This creates a clean separation of concerns between the application and its execution environment.
 
     Then, edit `.env` with your API keys. The log levels for the application and its components are now controlled exclusively by `log_config.yaml`.
 2.  **Application Configuration:** In the project root, copy `config.yaml.example` to a new file named `config.yaml`. This file defines the agentic system's structure and can be modified without tracking changes in Git if desired.
-    ```sh
-    cp config.yaml.example config.yaml
-    ```
+    `cp config.yaml.example config.yaml`
 
 ### 2.4 Running the Application
 
 Use the provided scripts in the project root to run the application.
 
-These scripts will start the FastAPI web server using Uvicorn. You can access the API at `http://127.0.0.1:8000` and view the interactive documentation (Swagger UI) at `http://127.0.0.1:8000/docs`.
-
 On **Linux/macOS**:
-```sh
-./scripts/server.sh start
-```
+`./scripts/server.sh start`
 On **Windows**:
-```bat
-.\scripts\server.bat start
-```
+`.\scripts\server.bat start`
 
 ### 2.5 Running Tests
 
 To ensure the system is functioning correctly, run the full suite of unit tests using `pytest`.
 
-```sh
-pytest
-```
+`pytest`
 
 ### 2.6 Verifying End-to-End Functionality
 
 To quickly confirm that the entire system is wired correctly (server starts, API responds, and a basic agent workflow completes), you can run the verification script. This is a great sanity check to run after making significant changes.
 
 On **Linux/macOS**:
-```sh
-./scripts/verify.sh
-```
+`./scripts/verify.sh`
 
 On **Windows** (requires PowerShell):
-```powershell
-.\scripts\verify.ps1
-```
+`.\scripts\verify.ps1`
 
 These scripts will automatically start the server, run a test prompt via the CLI, report success or failure, and then shut down the server.
 
@@ -112,17 +93,11 @@ Once the FastAPI server is running, you can interact with it from the command li
 2.  **In a separate terminal, run the CLI:**
     Use the provided convenience script for your operating system.
     *   On **Linux/macOS**:
-        ```sh
-        ./scripts/cli.sh "Your prompt for the agent goes here."
-        ```
+        `./scripts/cli.sh "Your prompt for the agent goes here."`
     *   On **Windows**:
-        ```bat
-        .\scripts\cli.bat "Your prompt for the agent goes here."
-        ```
+        `.\scripts\cli.bat "Your prompt for the agent goes here."`
     For example:
-    ```sh
-    .\scripts\cli.bat "Read the DEVELOPERS_GUIDE.md and summarize its main sections."
-    ```
+    `.\scripts\cli.bat "Read the DEVELOPERS_GUIDE.md and summarize its main sections."`
     The CLI will send the prompt to the `/invoke` endpoint and print the final JSON response from the agentic system.
 
 ## 3.0 System Architecture
@@ -204,36 +179,34 @@ This project is structured as an installable Python package. The `pyproject.toml
 ## 5.0 Project Structure Reference
 
 ### 5.1 Directory Structure
-```
 langgraph-agentic-scaffold/
-|-- .env.example         # Example environment file for secrets
-|-- .gitignore           # Files and directories ignored by Git
-|-- LICENSE              # Project license
-|-- README.md            # Main project README
-|-- config.yaml.example  # Example application configuration
-|-- pyproject.toml       # Project definition and dependencies
-|-- requirements-dev.txt # Pinned development dependencies
-|-- requirements.txt     # Pinned production dependencies
-|-- app/
-|   |-- prompts/         # Prompt templates for specialists
-|   |-- src/             # Main application source code
-|   |   |-- api.py           # FastAPI application entry point
-|   |   |-- cli.py           # Command-line interface script
-|   |   |-- specialists/     # Specialist agent implementations
-|   |   |-- workflow/        # LangGraph orchestration logic
-|   |   `-- ... (llm, graph, utils, etc.)
-|   `-- tests/             # Unit and integration tests
-|-- docs/                # All project documentation
-|   |-- DEVELOPERS_GUIDE.md
-|   |-- CREATING_A_NEW_SPECIALIST.md
-|   `-- adr/               # Architecture Decision Records
-|-- external/            # For third-party code (e.g., wrapped agents)
-|   `-- .gitkeep         # Keeps the directory in Git history
-`-- scripts/             # Helper scripts for development
-    |-- server.sh          # Server management (start, stop) for Linux/macOS
-    |-- server.bat         # Server management for Windows
-    `-- ... (verify, cli, sync-reqs scripts)
-```
+    |-- .env.example         # Example environment file for secrets
+    |-- .gitignore           # Files and directories ignored by Git
+    |-- LICENSE              # Project license
+    |-- README.md            # Main project README
+    |-- config.yaml.example  # Example application configuration
+    |-- pyproject.toml       # Project definition and dependencies
+    |-- requirements-dev.txt # Pinned development dependencies
+    |-- requirements.txt     # Pinned production dependencies
+    |-- app/
+    |   |-- prompts/         # Prompt templates for specialists
+    |   |-- src/             # Main application source code
+    |   |   |-- api.py           # FastAPI application entry point
+    |   |   |-- cli.py           # Command-line interface script
+    |   |   |-- specialists/     # Specialist agent implementations
+    |   |   |-- workflow/        # LangGraph orchestration logic
+    |   |   `-- ... (llm, graph, utils, etc.)
+    |   `-- tests/             # Unit and integration tests
+    |-- docs/                # All project documentation
+    |   |-- DEVELOPERS_GUIDE.md
+    |   |-- CREATING_A_NEW_SPECIALIST.md
+    |   `-- adr/               # Architecture Decision Records
+    |-- external/            # For third-party code (e.g., wrapped agents)
+    |   `-- .gitkeep         # Keeps the directory in Git history
+    `-- scripts/             # Helper scripts for development
+        |-- server.sh          # Server management (start, stop) for Linux/macOS
+        |-- server.bat         # Server management for Windows
+        `-- ... (verify, cli, sync-reqs scripts)
 
 ### 5.2 Naming Convention
 *   **Specialist Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains (e.g., `FileSpecialist` in `file_specialist.py`).
