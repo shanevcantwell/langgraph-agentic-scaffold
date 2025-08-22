@@ -40,6 +40,7 @@ class WorkflowRunner:
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal)],
             "next_specialist": None,
+            "suggested_next_specialist": None,
             "text_to_process": None,
             "extracted_data": None,
             "error": None,
@@ -47,6 +48,9 @@ class WorkflowRunner:
             "html_artifact": None,
             "system_plan": None,
             "turn_count": 0,
+            # Initialize the completion flag. This is critical for the router's
+            # programmatic completion check to function correctly.
+            "task_is_complete": False,
         }
 
         try:

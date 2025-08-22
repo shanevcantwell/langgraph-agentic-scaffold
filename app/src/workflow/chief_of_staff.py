@@ -44,12 +44,28 @@ class ChiefOfStaff:
         # This method is correct and remains unchanged.
         logger.info("Conducting 'morning standup' to configure the router...")
         router_instance = specialists[CoreSpecialist.ROUTER.value]
+
+        # Provide the router with a list of valid destinations for self-correction.
+        available_specialist_names = [name for name in configs if name != CoreSpecialist.ROUTER.value]
+        router_instance.set_available_specialists(available_specialist_names)
+
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
         available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in configs.items() if name != CoreSpecialist.ROUTER.value]
         tools_list_str = "\n".join(available_tools_desc)
         base_prompt_file = router_config.get("prompt_file")
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
-        dynamic_system_prompt = f"{base_prompt}\n\nAVAILABLE SPECIALISTS:\n{tools_list_str}"
+        # Add a specific instruction to prioritize feedback from other specialists.
+        # This helps break reasoning loops where the LLM gets stuck on the initial prompt.
+        feedback_instruction = (
+            "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
+            "1. **Task Completion**: If the last message is a report or summary that appears to fully satisfy the user's request, your job is done. You MUST route to `__end__`.\n"
+            "2. **Error Correction**: If the last message is from a specialist reporting an error (e.g., it needs a file to be read first), you MUST use that feedback to select the correct specialist to resolve the issue (e.g., 'file_specialist').\n"
+            "3. **Data Processing**: If the last message is a `ToolMessage` indicating a file's content has been successfully read and is now in context, and the user's request requires understanding or summarizing that content, your next step MUST be to route to an analysis specialist like 'text_analysis_specialist'."
+        )
+        dynamic_system_prompt = (
+            f"{base_prompt}\n{feedback_instruction}\n\n"
+            f"Your available specialists are:\n{tools_list_str}"
+        )
         router_instance.llm_adapter = AdapterFactory().create_adapter(
             specialist_name=CoreSpecialist.ROUTER.value,
             system_prompt=dynamic_system_prompt

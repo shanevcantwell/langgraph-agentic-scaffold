@@ -132,9 +132,9 @@ The system now supports specialists that do not require an associated Large Lang
 
 As outlined in the `PROPOSAL_ Schema-Enforced LLM Output Contracts.md` ADR, the system uses a "hard contract" approach to ensure LLMs produce reliable, structured JSON output. This is implemented via a progressive enhancement strategy in the LLM adapters.
 
-*   **MIME Type Enforcement (e.g., Gemini):** For providers like Google Gemini, the adapter leverages the `response_mime_type` API parameter. When a specialist requests a Pydantic schema, the `GeminiAdapter` sets this parameter to `application/json`. This forces the model to generate a syntactically correct JSON string, while the system prompt guides the content and structure of that JSON.
+*   **MIME Type Enforcement (e.g., Gemini):** For providers like Google Gemini, the `GeminiAdapter` leverages the `response_mime_type` API parameter. This is a "light contract" that forces the model to generate a syntactically correct JSON string, while the system prompt guides the content and structure of that JSON.
 
-*   **Full Schema Enforcement (e.g., LM Studio, OpenAI-compatible):** For providers that support it, the adapter can go a step further. The `LMStudioAdapter`, for example, can take a Pydantic model, convert it into a formal JSON Schema, and pass that schema directly to the API. This enforces not only the JSON format but also the specific fields, types, and structure of the output, offering the highest level of reliability.
+*   **Full Schema Enforcement (e.g., LM Studio, OpenAI-compatible):** For providers that support it, the `LMStudioAdapter` can take a Pydantic model, convert it into a formal JSON Schema, and pass that schema directly to the API using the `response_format` parameter. This enforces not only the JSON format but also the specific fields, types, and structure of the output, offering the highest level of reliability.
 
 This dual approach allows the system to use the strongest enforcement mechanism available for any given provider, with a graceful fallback to prompt-guided generation if a provider supports neither.
 
@@ -151,6 +151,18 @@ The `app/src` directory is organized to enforce a clear separation of concerns, 
 *   `graph/`: This directory defines the structure of the shared state that is passed between all nodes in the LangGraph. The `state.py` file defines the `GraphState` TypedDict, ensuring that all specialists have a consistent view of the application's state.
 
 *   `utils/`: This directory contains shared utility functions and classes that are used across the application. For example, the `config_loader.py` is responsible for loading the `config.yaml` file, and `prompt_loader.py` loads the prompt templates for the specialists.
+
+### 3.7 Agentic Robustness Patterns
+
+This scaffold implements several advanced patterns to move beyond simple instruction-following and create a more robust, resilient agentic system that can reason about its state and self-correct from errors.
+
+*   **Self-Correction via Feedback:** A core principle is that specialists should "fail gracefully." If a specialist is called without its preconditions being met (e.g., `TextAnalysisSpecialist` is called before a file has been read), it should not raise an exception. Instead, it should return a helpful `AIMessage` to the graph's state. This message should explain *why* it couldn't run and, ideally, suggest what should be done next (e.g., "I cannot run because there is no text to process. The 'file_specialist' should probably run first..."). The `RouterSpecialist` is prompted to prioritize these feedback messages, allowing the system to recover from its own planning errors.
+
+*   **Deterministic Routing via Suggestions:** While the `RouterSpecialist`'s LLM is powerful, relying on it for every single state transition is inefficient and can lead to loops. For simple, predictable workflows (e.g., "after reading a file, analyze it"), the system uses a programmatic suggestion mechanism. A specialist can add a `suggested_next_specialist` key to the state it returns. The `RouterSpecialist` is designed to check for this key *before* invoking its LLM. If a valid suggestion is present, it bypasses the LLM call and routes directly to the suggested specialist, making the workflow more efficient and reliable.
+
+*   **Programmatic Task Completion:** Similar to routing, determining when a task is truly "done" can be ambiguous for an LLM. To solve this, terminal specialists (those that produce a final answer, like `TextAnalysisSpecialist`) can set a `task_is_complete: True` flag in the state they return. The `RouterSpecialist` checks for this flag at the beginning of its turn and, if present, immediately routes to `END` without consulting the LLM. This provides a deterministic signal that the user's goal has been met.
+
+*   **Atomic State Updates:** The LangGraph is configured to *add* new messages to the conversation history. Therefore, it is critical that specialists only return the *new* messages or state changes they are responsible for (the "delta"). They should not return the entire message history they received. Adhering to this pattern prevents the conversation history from growing exponentially, which would quickly exhaust the context window of any LLM.
 
 ## 4.0 How to Extend the System
 

@@ -86,8 +86,9 @@ try {
     }
 
     # Validate the JSON response
-    # Check for non-null next_specialist and meaningful AI message
-    if ($jsonResponse.next_specialist -ne $null -and `
+    # A successful multi-step workflow will have a turn_count greater than 1,
+    # which is a more reliable check than looking for a non-null next_specialist.
+    if ($jsonResponse.turn_count -gt 1 -and `
         $jsonResponse.messages.Count -gt 1 -and `
         $jsonResponse.messages[-1].type -eq "ai" -and `
         -not [string]::IsNullOrEmpty($jsonResponse.messages[-1].content)) {

@@ -6,6 +6,7 @@ import sys
 import time
 import logging
 from dotenv import load_dotenv
+from typing_extensions import Annotated
 
 # --- Configuration ---
 # This script should be run from the project root.
@@ -59,13 +60,18 @@ def _is_server_running() -> psutil.Process | None:
     return None
 
 @app.command()
-def start():
-    """Starts the Uvicorn server as a detached background process."""
+def start(
+    foreground: Annotated[bool, typer.Option(
+        "--foreground",
+        "-f",
+        help="Run the server in the foreground, streaming logs to the console."
+    )] = False
+):
+    """Starts the Uvicorn server. By default, it runs as a detached background process."""
     if proc := _is_server_running():
         logging.info(f"Server is already running with PID {proc.pid}.")
         return
 
-    os.makedirs(RUN_DIR, exist_ok=True)
     command = [
         sys.executable,  # Use the same python interpreter that's running this script
         "-m", "uvicorn", "app.src.api:app",
@@ -73,6 +79,21 @@ def start():
         "--log-config", LOG_CONFIG_FILE
     ]
 
+    if foreground:
+        logging.info("Starting Agentic API server in the foreground...")
+        logging.info("Press Ctrl+C to stop the server.")
+        try:
+            # When running in the foreground, we execute directly and block.
+            # The Uvicorn process will inherit the standard streams.
+            subprocess.run(command, cwd=PROJECT_ROOT, check=True)
+        except KeyboardInterrupt:
+            logging.info("\nServer stopped by user.")
+        except subprocess.CalledProcessError as e:
+            logging.error(f"Server process failed with exit code {e.returncode}.")
+        return
+
+    # --- Background process logic ---
+    os.makedirs(RUN_DIR, exist_ok=True)
     logging.info("Starting Agentic API server...")
     logging.info(f"Server logs are configured to be written to: {SERVER_LOG_FILE}")
 
@@ -80,8 +101,8 @@ def start():
     process = subprocess.Popen(
         command,
         stdout=subprocess.PIPE,
-        stderr=subprocess.STDOUT, # Redirect stderr to stdout
-        text=True, # Decode streams as text
+        stderr=subprocess.STDOUT,  # Redirect stderr to stdout
+        text=True,  # Decode streams as text
         cwd=PROJECT_ROOT,
         # On Unix, start_new_session=True detaches the process from the controlling terminal
         # On Windows, DETACHED_PROCESS flag is used for the same purpose.
@@ -90,19 +111,15 @@ def start():
     )
 
     # --- Health Check ---
-    # Wait a moment and see if the process is still alive.
     logging.info("Performing server health check...")
-    time.sleep(3) # Give it a few seconds to start up or fail.
+    time.sleep(3)  # Give it a few seconds to start up or fail.
 
     if process.poll() is not None:
-        # The process has terminated. This means startup failed.
         logging.error("="*80)
         logging.error("SERVER FAILED TO START. See error output below.")
         logging.error("="*80)
-        # Read the output from the failed process
         startup_output, _ = process.communicate()
         logging.error(startup_output)
-        # Also append this to the main log file for a persistent record.
         with open(SERVER_LOG_FILE, "a") as f:
             f.write("\n" + "="*80 + "\n")
             f.write("SERVER FAILED TO START\n")
@@ -110,15 +127,11 @@ def start():
             f.write("="*80 + "\n")
         return
 
-    # If we get here, the server started successfully.
     with open(SERVER_PID_FILE, "w") as f:
         f.write(str(process.pid))
 
     logging.info(f"Server started successfully with PID {process.pid}.")
     logging.info(f"Access the API at http://127.0.0.1:{PORT}")
-    
-    # Now that it's running, we can detach from its output streams.
-    # The process itself will continue to run in the background.
     if process.stdout:
         process.stdout.close()
 

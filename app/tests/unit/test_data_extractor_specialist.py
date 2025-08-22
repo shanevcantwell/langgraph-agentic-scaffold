@@ -59,13 +59,21 @@ def test_data_extractor_success(data_extractor_specialist):
     assert "successfully extracted" in result_state["messages"][-1].content
 
 def test_data_extractor_no_text_to_process(data_extractor_specialist):
-    """Tests that the specialist raises an error if no text is provided."""
+    """
+    Tests that the specialist handles missing input text gracefully by adding
+    a message to the state instead of raising an error.
+    """
     # Arrange
     initial_state = {"messages": [HumanMessage(content="Extract user info.")], "text_to_process": None}
-
-    # Act & Assert
-    with pytest.raises(ValueError, match="Input text not found"):
-        data_extractor_specialist._execute_logic(initial_state)
+ 
+    # Act
+    result_state = data_extractor_specialist._execute_logic(initial_state)
+ 
+    # Assert
+    data_extractor_specialist.llm_adapter.invoke.assert_not_called()
+    assert result_state["extracted_data"] is None
+    assert isinstance(result_state["messages"][-1], AIMessage)
+    assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
 
 def test_data_extractor_llm_fails(data_extractor_specialist):
     """Tests that the specialist raises an error if the LLM returns no JSON."""

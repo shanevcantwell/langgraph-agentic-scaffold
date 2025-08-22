@@ -51,13 +51,15 @@ def invoke(
 
         # --- Verification Logic ---
         # This logic provides a general-purpose check to see if the agent
-        # produced any meaningful output. This is a baseline success metric,
-        # distinct from the stricter routing validation in `verify.sh`.
+        # produced any meaningful output. It's more robust than just checking
+        # the last message, which is often an empty-content tool call from the router.
         messages = final_output.get("messages", [])
-        # The last message is expected to be a dict from AIMessage.
-        last_message_content = None
-        if messages and isinstance(messages[-1], dict):
-            last_message_content = messages[-1].get("content")
+        last_content_message = ""
+        # Find the last message that has actual content, ignoring tool calls.
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("content", "").strip():
+                last_content_message = msg.get("content")
+                break
 
         # Check for any known data artifacts in the root of the output.
         has_artifact = any(
@@ -70,8 +72,8 @@ def invoke(
             ]
         )
 
-        # Success is defined as having an artifact or non-empty content in the last message.
-        is_successful = has_artifact or (last_message_content and last_message_content.strip())
+        # Success is defined as having an artifact or a non-empty content message.
+        is_successful = has_artifact or last_content_message
 
         if not is_successful:
             if not json_only:

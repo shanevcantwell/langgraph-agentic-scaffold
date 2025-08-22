@@ -117,46 +117,49 @@ class FileSpecialist(BaseSpecialist):
         if not json_response:
             error_message = "File Specialist Error: The model did not return a valid, structured tool call. Please rephrase your request."
             # Return an AIMessage, as this is a failure in the LLM's response, not a tool failure.
-            return {"messages": messages + [AIMessage(content=error_message)]}
+            return {"messages": [AIMessage(content=error_message)]}
 
         try:
             structured_response = self.output_model_class(**json_response)
         except Exception as e:
             error_message = f"File Specialist Error: Failed to validate the model's response. Error: {e}"
-            return {"messages": messages + [AIMessage(content=error_message)]}
+            return {"messages": [AIMessage(content=error_message)]}
 
         tool_name = structured_response.tool_name
         tool_input = structured_response.tool_input
         
-        result_message = ""
-        text_to_process = None
+        updated_state: Dict[str, Any] = {}
+        result_content = ""
 
         try:
             if tool_name == "read_file":
-                text_to_process, result_message = self._read_file(tool_input)
+                file_content, result_content = self._read_file(tool_input)
+                if file_content is not None:
+                    updated_state["text_to_process"] = file_content
+                    # After reading a file, the next logical step is often analysis.
+                    # We can provide a deterministic hint to the router to avoid an unnecessary LLM call.
+                    updated_state["suggested_next_specialist"] = "text_analysis_specialist"
             elif tool_name == "list_directory":
-                result_message = self._list_directory(tool_input)
+                result_content = self._list_directory(tool_input)
                 # The list of files is also content that might be processed
-                text_to_process = result_message
+                updated_state["text_to_process"] = result_content
             elif tool_name == "write_file":
-                result_message = self._write_file(tool_input)
+                result_content = self._write_file(tool_input)
             else:
-                result_message = f"Error: Unknown tool '{tool_name}' requested."
+                result_content = f"Error: Unknown tool '{tool_name}' requested."
         except SpecialistError as e:
-            result_message = f"Error executing tool '{tool_name}': {e}"
+            result_content = f"Error executing tool '{tool_name}': {e}"
         except Exception as e:
             logger.error(f"An unexpected error occurred in FileSpecialist during '{tool_name}': {e}", exc_info=True)
-            result_message = f"An unexpected error occurred during '{tool_name}': {e}"
+            result_content = f"An unexpected error occurred during '{tool_name}': {e}"
 
-        # Create a ToolMessage to record the outcome of the tool call.
-        tool_message = ToolMessage(
-            content=result_message,
-            tool_call_id=tool_name # Using tool_name as a stand-in for a real tool_call_id
+        # Create an AIMessage to report the outcome of the operation. This is more
+        # appropriate than a ToolMessage here, as the FileSpecialist is an autonomous
+        # agent performing an action, not a tool responding to a direct call in this context.
+        # This provides a clear, human-readable update for the router's LLM.
+        ai_message = AIMessage(
+            content=f"FileSpecialist action '{tool_name}' completed. Status: {result_content}"
         )
 
-        # Return the updated state, including the text content if a file was read.
-        updated_state = {"messages": messages + [tool_message]}
-        if text_to_process is not None:
-            updated_state["text_to_process"] = text_to_process
-        
+        updated_state["messages"] = [ai_message]
         return updated_state

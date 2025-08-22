@@ -1,10 +1,11 @@
 # app/src/llm/adapters.py
 import logging
 import json
-import requests
+import os
 from typing import Dict, Any, List, Optional, Type
 import google.generativeai as genai
 from pydantic import BaseModel
+from openai import OpenAI
 from langchain_core.messages import BaseMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -96,41 +97,163 @@ class GeminiAdapter(BaseAdapter):
         return {"text_response": response.text}
 
 class LMStudioAdapter(BaseAdapter):
-    # This adapter supports OpenAI-compatible APIs, such as LM Studio.
+    """
+    An adapter for OpenAI-compatible APIs, such as LM Studio.
+    It supports full JSON schema enforcement via the 'tools' API, making it
+    robust for specialists that require structured output.
+    """
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
         super().__init__(model_config)
-        self.api_url = f"{base_url}/chat/completions"
+        self.client = OpenAI(base_url=base_url, api_key=os.getenv("LMSTUDIO_API_KEY", "not-needed"))
         self.system_prompt = system_prompt
-        logger.info(f"INITIALIZED LMStudioAdapter (Model: {self.config['api_identifier']})")
+        self.model_name = self.config.get('api_identifier', 'local-model')
+        if '/' in self.model_name or '\\' in self.model_name:
+            logger.warning(
+                f"The model name '{self.model_name}' contains path separators ('/' or '\\'). "
+                "This can cause issues with some local model servers. "
+                "Ensure this is the exact identifier expected by the server (often the model's filename)."
+            )
 
+        self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
+        logger.info(f"INITIALIZED LMStudioAdapter (Model: {self.model_name})")
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True
+    )
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
-        messages = [{"role": "system", "content": self.system_prompt}]
-        messages.extend([{"role": "user" if m.type == 'human' else "assistant", "content": m.content} for m in request.messages])
+        """
+        Invokes the model, dynamically using the 'response_format' parameter
+        to enforce a JSON schema if a Pydantic model is provided in the request,
+        as per LM Studio's documentation.
+        """
+        # Correctly format messages for the OpenAI-compatible API,
+        # preserving the distinct roles for user, assistant, and tool calls.
+        # This is critical for the model to understand the conversation flow.
+        api_messages = [{"role": "system", "content": self.system_prompt}]
+        for msg in request.messages:
+            if msg.type == 'human':
+                api_messages.append({"role": "user", "content": msg.content})
+            elif msg.type == 'ai':
+                # Format the AIMessage, including any tool calls.
+                ai_msg_dict = {"role": "assistant", "content": msg.content or ""}
+                # The tool_calls from LangGraph/LangChain are dicts. We need to convert
+                # them to the format expected by the OpenAI API (arguments as a JSON string).
+                if msg.tool_calls:
+                    openai_tool_calls = []
+                    for tc in msg.tool_calls:
+                        # The 'args' from LangGraph is a dict, but OpenAI API expects a JSON string.
+                        arguments_str = json.dumps(tc.get('args', {}))
+                        openai_tool_calls.append({
+                            "id": tc.get('id'),
+                            "type": "function",
+                            "function": {"name": tc.get('name'), "arguments": arguments_str},
+                        })
+                    ai_msg_dict["tool_calls"] = openai_tool_calls
+                    ai_msg_dict["content"] = None # Per OpenAI spec, content is null when tool_calls are present
+                api_messages.append(ai_msg_dict)
+            elif msg.type == 'tool':
+                # Format the ToolMessage with its required tool_call_id.
+                api_messages.append({
+                    "role": "tool",
+                    "content": msg.content,
+                    "tool_call_id": str(msg.tool_call_id) # Ensure tool_call_id is a string
+                })
 
-        payload = {
-            "model": self.config['api_identifier'],
-            "messages": messages,
-            **self.config.get('parameters', {})
+        # Dynamically build arguments to avoid sending null values,
+        # which can cause issues with some servers.
+        api_kwargs = {
+            "model": self.model_name,
+            "messages": api_messages,
+            "temperature": self.temperature,
         }
 
-        if self.config.get('supports_schema') and request.output_model_class:
-            payload["response_format"] = {
-                "type": "json_object",
-                "schema": request.output_model_class.model_json_schema()
+        # --- Intent Detection: Prioritize native tool-calling ---
+        # If the request includes tools, use the native tool-calling API.
+        # This is the modern, preferred method for routing and actions.
+        if request.tools:
+            logger.info("LMStudioAdapter: Invoking in native Tool-calling mode.")
+            tool_names = []
+            tools_to_pass = []
+            for tool in request.tools:
+                if issubclass(tool, BaseModel):
+                    tool_name = tool.__name__
+                    tool_names.append(tool_name)
+                    tools_to_pass.append({
+                        "type": "function",
+                        "function": {
+                            "name": tool_name,
+                            "description": tool.__doc__ or f"Schema for {tool.__name__}",
+                            "parameters": tool.model_json_schema()
+                        }
+                    })
+            if tools_to_pass:
+                api_kwargs["tools"] = tools_to_pass
+                # The RouterSpecialist's only job is to route. It should always be
+                # forced to use its 'Route' tool. This prevents it from generating
+                # conversational text, which it is not designed to handle.
+                if len(tool_names) == 1 and tool_names[0] == 'Route':
+                    logger.info("Forcing a tool choice for the RouterSpecialist.")
+                    # Using "required" is a more general way to force a tool call and may be
+                    # more compatible with different OpenAI-compatible servers than specifying
+                    # the tool by name. Since the router only has one tool, this is equivalent.
+                    api_kwargs["tool_choice"] = "required"
+                else:
+                    api_kwargs["tool_choice"] = "auto"
+
+        # If no tools are present, but a specific output model is requested,
+        # use the JSON schema enforcement mode.
+        elif request.output_model_class and issubclass(request.output_model_class, BaseModel):
+            schema_source = request.output_model_class
+            logger.info(f"LMStudioAdapter: Invoking in JSON Schema enforcement mode with schema {schema_source.__name__}.")
+            api_kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_source.__name__,
+                    "strict": True,
+                    "schema": schema_source.model_json_schema(),
+                }
             }
+        # Otherwise, invoke in standard text generation mode.
+        else:
+            logger.info("LMStudioAdapter: Invoking in Text mode.")
 
         try:
-            response = requests.post(self.api_url, json=payload, timeout=REQUEST_TIMEOUT)
-            response.raise_for_status()
-            response_data = response.json()
-            content = response_data['choices'][0]['message']['content']
+            completion = self.client.chat.completions.create(**api_kwargs)
+            message = completion.choices[0].message
 
-            if self.config.get('supports_schema') and request.output_model_class:
-                json_response = json.loads(content)
-                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+            # --- Response Parsing ---
+            # If the model responded with tool calls, parse them.
+            if message.tool_calls:
+                logger.info(f"LMStudioAdapter received native tool calls: {message.tool_calls}")
+                formatted_tool_calls = []
+                for tool_call in message.tool_calls:
+                    try:
+                        # The 'arguments' field from the API is a JSON string that needs to be parsed.
+                        args = json.loads(tool_call.function.arguments)
+                        formatted_tool_calls.append({"name": tool_call.function.name, "args": args, "id": tool_call.id})
+                    except json.JSONDecodeError:
+                        logger.error(f"Failed to decode tool call arguments: {tool_call.function.arguments}", exc_info=True)
+                return {"tool_calls": formatted_tool_calls}
+
+            # If we requested a JSON schema, parse the content as JSON.
+            if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":
+                content = message.content or "{}"
+                try:
+                    json_response = json.loads(content)
+                    return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+                except json.JSONDecodeError:
+                    # If the model fails to return valid JSON despite the request,
+                    # we handle it gracefully by treating it as a text response.
+                    logger.warning(
+                        f"LMStudioAdapter was asked for JSON but received non-JSON text. Content: {content}"
+                    )
+                    return {"text_response": content, "json_response": {}}
             else:
-                return {"text_response": content}
-        except requests.RequestException as e:
+                # Standard text response.
+                return {"text_response": message.content or ""}
+        except Exception as e:
             logger.error(f"LMStudio API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"LMStudio API error: {e}") from e
 

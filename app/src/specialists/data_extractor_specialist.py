@@ -1,59 +1,62 @@
-# src/specialists/data_extractor_specialist.py
-
+# app/src/specialists/data_extractor_specialist.py
 import logging
+from typing import Dict, Any, List
+
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from pydantic import BaseModel
+
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from .schemas import ExtractedData
-from langchain_core.messages import SystemMessage, AIMessage
-from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
 
+class ExtractedData(BaseModel):
+    """A Pydantic model to guide the LLM's JSON output."""
+    extracted_json: Dict[str, Any]
+
 class DataExtractorSpecialist(BaseSpecialist):
     """
-    A functional specialist that extracts structured data from unstructured text.
-    It receives text and outputs a predictable JSON object using schema enforcement.
+    A specialist that extracts structured data from a given text using an LLM.
     """
 
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name=specialist_name)
-
-    def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        """
-        Receives unstructured text from the state and updates the state with
-        structured, extracted data.
-        """
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        messages: List[BaseMessage] = state["messages"][:]
         text_to_process = state.get("text_to_process")
-        if not text_to_process:
-            raise ValueError("Input text not found in state['text_to_process']")
 
-        # Append the text to be processed to the message history so the LLM has full context
-        # of the user's request. This is more robust than creating a new, isolated prompt.
-        messages_for_llm = state["messages"] + [
-            SystemMessage(
-                content=(
-                    "--- TEXT TO PROCESS ---\n"
-                    "Based on our conversation, please extract the relevant information from the following text "
-                    "into the required JSON format. The user's original request is in the message history.\n\n"
-                    f"{text_to_process}"
-                )
+        if not text_to_process:
+            logger.warning("DataExtractorSpecialist was called without text to process. Adding a message to the state and returning control to the router.")
+            # This is a more prescriptive "self-correction" message. It gives the router's LLM
+            # a strong hint about what to do next, helping to break reasoning loops.
+            ai_message = AIMessage(
+                content="I am the Data Extractor. I cannot run because there is no text to process. The user's request seems to involve a file. The 'file_specialist' should probably run first to read the file content into the state."
             )
-        ]
+            return {
+                "messages": [ai_message],
+                "extracted_data": None,
+                "text_to_process": None
+            }
+
+        contextual_messages = messages + [SystemMessage(content=f"Here is the text to analyze:\n\n---\n{text_to_process}\n---")]
 
         request = StandardizedLLMRequest(
-            messages=messages_for_llm,
+            messages=contextual_messages,
             output_model_class=ExtractedData
         )
 
         response_data = self.llm_adapter.invoke(request)
         json_response = response_data.get("json_response")
-        if not json_response:
-            raise ValueError("DataExtractor failed to get a valid JSON response from the LLM.")
 
-        validated_data = ExtractedData(**json_response)
-        new_message = AIMessage(content="I have successfully extracted the structured data.")
+        if not json_response or "extracted_json" not in json_response:
+            raise ValueError("DataExtractorSpecialist failed to get a valid JSON response from the LLM.")
+
+        extracted_data = json_response["extracted_json"]
+        logger.info(f"Successfully extracted data: {extracted_data}")
+
+        ai_message = AIMessage(content=f"I have successfully extracted the following data: {extracted_data}")
+
         return {
-            "messages": state["messages"] + [new_message],
-            "extracted_data": validated_data.extracted_json,
-            "text_to_process": None  # Consume the artifact after processing
+            "messages": [ai_message],
+            "extracted_data": extracted_data,
+            "text_to_process": None,
+            "task_is_complete": True # Signal that a terminal analysis has been performed.
         }

@@ -1,49 +1,65 @@
 # app/src/specialists/text_analysis_specialist.py
+import logging
+from typing import Dict, Any, List
+
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from pydantic import BaseModel
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from langchain_core.messages import AIMessage, SystemMessage
+
+logger = logging.getLogger(__name__)
+
+class AnalysisResult(BaseModel):
+    """A Pydantic model to guide the LLM's JSON output for text analysis."""
+    summary: str
+    main_points: List[str]
 
 class TextAnalysisSpecialist(BaseSpecialist):
     """
-    A specialist that analyzes or summarizes a block of text provided in the state.
-    It expects the text to be present in the `text_to_process` key.
+    A specialist that performs analysis on a given text, such as summarizing
+    or extracting key points.
     """
 
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
-
-    def _execute_logic(self, state: dict) -> dict:
-        """
-        Analyzes text from the state and adds the result to the messages.
-        """
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        messages: List[BaseMessage] = state["messages"]
         text_to_process = state.get("text_to_process")
 
         if not text_to_process:
-            error_message = "TextAnalysisSpecialist was called, but no text was found in the state's 'text_to_process' key."
-            return {"messages": state["messages"] + [AIMessage(content=error_message)]}
-
-        # Append the text to be analyzed to the message history for full context.
-        messages_for_llm = state["messages"] + [
-            SystemMessage(
-                content=(
-                    "--- TEXT TO ANALYZE ---\n"
-                    "Based on our conversation, please perform the requested analysis on the following text. The user's original request is in the message history.\n\n"
-                    f"{text_to_process}"
-                )
+            logger.warning("TextAnalysisSpecialist was called without text to process. Adding a message to the state and returning control to the router.")
+            # This is a prescriptive "self-correction" message. It gives the router's LLM
+            # a strong hint about what to do next, helping to break reasoning loops.
+            ai_message = AIMessage(
+                content="I am the Text Analysis specialist. I cannot run because there is no text to process. The user's request seems to involve a file. The 'file_specialist' should probably run first to read the file content into the state."
             )
-        ]
+            return {"messages": [ai_message], "text_to_process": None}
 
-        request = StandardizedLLMRequest(
-            messages=messages_for_llm
+        last_human_message = next((m.content for m in reversed(messages) if m.type == 'human'), "Analyze the following text.")
+        
+        system_prompt = (
+            f"You are a text analysis expert. Your task is to carefully analyze the provided text based on the user's request. "
+            f"The user's request was: '{last_human_message}'. "
+            f"Respond with a JSON object containing the analysis."
         )
 
-        response_data = self.llm_adapter.invoke(request)
-        ai_response_content = response_data.get("text_response", "I was unable to analyze the text.")
-        ai_message = AIMessage(content=ai_response_content)
+        contextual_messages = [
+            SystemMessage(content=system_prompt),
+            SystemMessage(content=f"Here is the text to analyze:\n\n---\n{text_to_process}\n---")
+        ]
 
-        # Consume the artifact and return the final analysis as the new message.
+        request = StandardizedLLMRequest(messages=contextual_messages, output_model_class=AnalysisResult)
+        response_data = self.llm_adapter.invoke(request)
+        json_response = response_data.get("json_response")
+
+        if not json_response:
+            raise ValueError("TextAnalysisSpecialist failed to get a valid JSON response from the LLM.")
+
+        report = f"I have analyzed the text as requested.\n\n**Summary:**\n{json_response.get('summary', 'N/A')}\n\n**Main Points:**\n"
+        for point in json_response.get("main_points", []):
+            report += f"- {point}\n"
+
         return {
-            "messages": state["messages"] + [ai_message],
-            "text_to_process": None
+            "messages": [AIMessage(content=report)],
+            "text_to_process": None,
+            "task_is_complete": True # Signal that a terminal analysis has been performed.
         }

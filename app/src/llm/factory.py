@@ -30,7 +30,7 @@ class AdapterFactory:
                 api_key=os.getenv("GOOGLE_API_KEY"),
                 system_prompt=system_prompt
             )
-        elif adapter_class_name == 'LMStudioAdapter':
+        elif adapter_class_name.lower() == 'lmstudioadapter':
             return LMStudioAdapter(
                 model_config=model_config,
                 base_url=os.getenv("LMSTUDIO_BASE_URL"),
