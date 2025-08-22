@@ -97,6 +97,11 @@ Once the server is running, you can send prompts to the agent using the command-
     .\scripts\cli.bat "Your prompt for the agent goes here."
     ```
 
+## Contributing
+
+We welcome contributions from the community! If you're interested in helping improve the scaffold, please read our **Contributing Guide**. It contains our "Open Core" philosophy, development workflow, and guidelines for submitting pull requests.
+
+
 ## For Developers
 
 This repository is designed to be a starting point for your own complex projects. For detailed information on the architecture, development protocols, and how to add your own specialists, please see the **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)** and the **[Creating a New Specialist Guide](./docs/CREATING_A_NEW_SPECIALIST.md)**.
