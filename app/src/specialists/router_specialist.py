@@ -103,5 +103,6 @@ class RouterSpecialist(BaseSpecialist):
             # Return only the new message to be appended to the state.
             "messages": [ai_message],
             "next_specialist": next_specialist,
-            "turn_count": turn_count
+            "turn_count": turn_count,
+            "suggested_next_specialist": None # Always consume/clear the suggestion after the router has run.
         }

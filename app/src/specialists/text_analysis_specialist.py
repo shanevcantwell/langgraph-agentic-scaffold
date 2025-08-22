@@ -2,7 +2,7 @@
 import logging
 from typing import Dict, Any, List
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel
 
 from .base import BaseSpecialist
@@ -34,20 +34,14 @@ class TextAnalysisSpecialist(BaseSpecialist):
             )
             return {"messages": [ai_message], "text_to_process": None}
 
-        last_human_message = next((m.content for m in reversed(messages) if m.type == 'human'), "Analyze the following text.")
-        
-        system_prompt = (
-            f"You are a text analysis expert. Your task is to carefully analyze the provided text based on the user's request. "
-            f"The user's request was: '{last_human_message}'. "
-            f"Respond with a JSON object containing the analysis."
+        # The specialist's system prompt (loaded at init) should already instruct it
+        # to analyze text provided in the user message. We will construct a new
+        # message list that includes the text to be processed as a new user turn.
+        contextual_messages = messages + [HumanMessage(content=f"Please perform the requested analysis on the following text:\n\n---\n{text_to_process}\n---")]
+
+        request = StandardizedLLMRequest(
+            messages=contextual_messages, output_model_class=AnalysisResult
         )
-
-        contextual_messages = [
-            SystemMessage(content=system_prompt),
-            SystemMessage(content=f"Here is the text to analyze:\n\n---\n{text_to_process}\n---")
-        ]
-
-        request = StandardizedLLMRequest(messages=contextual_messages, output_model_class=AnalysisResult)
         response_data = self.llm_adapter.invoke(request)
         json_response = response_data.get("json_response")
 
@@ -58,8 +52,14 @@ class TextAnalysisSpecialist(BaseSpecialist):
         for point in json_response.get("main_points", []):
             report += f"- {point}\n"
 
+        # The task is only complete if this specialist was not part of a larger plan.
+        # The presence of a 'system_plan' artifact is the key indicator.
+        is_part_of_larger_plan = state.get("system_plan") is not None
+        task_is_complete = not is_part_of_larger_plan
+
         return {
             "messages": [AIMessage(content=report)],
+            "json_artifact": json_response,
             "text_to_process": None,
-            "task_is_complete": True # Signal that a terminal analysis has been performed.
+            "task_is_complete": task_is_complete
         }

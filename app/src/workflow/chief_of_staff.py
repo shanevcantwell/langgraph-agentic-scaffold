@@ -60,7 +60,8 @@ class ChiefOfStaff:
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
             "1. **Task Completion**: If the last message is a report or summary that appears to fully satisfy the user's request, your job is done. You MUST route to `__end__`.\n"
             "2. **Error Correction**: If the last message is from a specialist reporting an error (e.g., it needs a file to be read first), you MUST use that feedback to select the correct specialist to resolve the issue (e.g., 'file_specialist').\n"
-            "3. **Data Processing**: If the last message is a `ToolMessage` indicating a file's content has been successfully read and is now in context, and the user's request requires understanding or summarizing that content, your next step MUST be to route to an analysis specialist like 'text_analysis_specialist'."
+            "3. **Data Processing**: If the last message is an `AIMessage` from the `file_specialist` indicating a file's content has been successfully read and is now in context, and the user's request requires understanding or summarizing that content, your next step MUST be to route to an analysis specialist like 'text_analysis_specialist'.\n"
+            "4. **Plan Execution**: If a `system_plan` artifact has just been added to the state, you MUST route to the specialist best suited to execute that plan (e.g., `web_builder` for web content, or another coding specialist for other tasks)."
         )
         dynamic_system_prompt = (
             f"{base_prompt}\n{feedback_instruction}\n\n"
@@ -79,8 +80,8 @@ class ChiefOfStaff:
         for name, instance in self.specialists.items():
             workflow.add_node(name, instance.execute)
         workflow.set_entry_point(entry_point_node)
-        conditional_map = {name: name for name in self.specialists if name != CoreSpecialist.ROUTER.value}
-        conditional_map[END] = CoreSpecialist.ARCHIVER.value
+        conditional_map = {name: name for name in self.specialists if name != CoreSpecialist.ROUTER.value} # Map all specialists to themselves
+        conditional_map[END] = END # If the router decides to END, go to the graph's END
         workflow.add_conditional_edges(entry_point_node, self.decide_next_specialist, conditional_map)
         for name in self.specialists:
             if name not in [CoreSpecialist.ROUTER.value, CoreSpecialist.ARCHIVER.value]:

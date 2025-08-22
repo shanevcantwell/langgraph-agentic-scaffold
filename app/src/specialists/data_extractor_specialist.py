@@ -36,7 +36,10 @@ class DataExtractorSpecialist(BaseSpecialist):
                 "text_to_process": None
             }
 
-        contextual_messages = messages + [SystemMessage(content=f"Here is the text to analyze:\n\n---\n{text_to_process}\n---")]
+        # The specialist's system prompt (loaded at init) should already instruct it
+        # to extract data from text provided in the user message. We will construct a new
+        # message list that includes the text to be processed as a new user turn.
+        contextual_messages = messages + [HumanMessage(content=f"Please extract the requested data from the following text:\n\n---\n{text_to_process}\n---")]
 
         request = StandardizedLLMRequest(
             messages=contextual_messages,
@@ -54,9 +57,14 @@ class DataExtractorSpecialist(BaseSpecialist):
 
         ai_message = AIMessage(content=f"I have successfully extracted the following data: {extracted_data}")
 
+        # The task is only complete if this specialist was not part of a larger plan.
+        # The presence of a 'system_plan' artifact is the key indicator.
+        is_part_of_larger_plan = state.get("system_plan") is not None
+        task_is_complete = not is_part_of_larger_plan
+
         return {
             "messages": [ai_message],
             "extracted_data": extracted_data,
             "text_to_process": None,
-            "task_is_complete": True # Signal that a terminal analysis has been performed.
+            "task_is_complete": task_is_complete
         }

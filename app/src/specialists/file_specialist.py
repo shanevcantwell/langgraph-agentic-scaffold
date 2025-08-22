@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Union, Literal, Optional, Dict, Any
+from typing import Optional, Dict, Any
 
 from langchain_core.messages import AIMessage, ToolMessage
 from pydantic import BaseModel, Field
@@ -27,11 +27,6 @@ class ListDirectoryParams(BaseModel):
     """Parameters for listing the contents of a directory."""
     dir_path: str = Field(default=".", description="The relative path to the directory to be listed.")
 
-class FileOperation(BaseModel):
-    """A single file operation to be performed."""
-    tool_name: Literal["read_file", "write_file", "list_directory"]
-    tool_input: Union[ReadFileParams, WriteFileParams, ListDirectoryParams]
-
 
 # --- Specialist Implementation ---
 
@@ -53,8 +48,6 @@ class FileSpecialist(BaseSpecialist):
             logger.warning(f"FileSpecialist safety is ON. No file modifications will be made. To disable, create a file named '{self.safety_lock_file}' in the project root.")
         else:
             logger.warning(f"FileSpecialist safety is OFF. The agent can now write to the filesystem within its workspace.")
-            
-        self.output_model_class = FileOperation
 
     def _get_full_path(self, relative_path: str) -> str:
         """Validates and resolves a relative path against the root directory."""
@@ -109,42 +102,42 @@ class FileSpecialist(BaseSpecialist):
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Executes the file operation based on the LLM's structured output."""
         messages = state["messages"]
-
-        request = StandardizedLLMRequest(messages=messages, output_model_class=self.output_model_class)
+        
+        # Instead of asking for one complex JSON object, we provide a list of tools
+        # and let the LLM choose which one to call. This is more robust.
+        request = StandardizedLLMRequest(
+            messages=messages,
+            tools=[ReadFileParams, WriteFileParams, ListDirectoryParams]
+        )
         response_data = self.llm_adapter.invoke(request)
-        json_response = response_data.get("json_response")
+        tool_calls = response_data.get("tool_calls", [])
 
-        if not json_response:
-            error_message = "File Specialist Error: The model did not return a valid, structured tool call. Please rephrase your request."
-            # Return an AIMessage, as this is a failure in the LLM's response, not a tool failure.
+        if not tool_calls:
+            error_message = "File Specialist Error: The model did not request a valid tool call. Please rephrase your request."
             return {"messages": [AIMessage(content=error_message)]}
 
-        try:
-            structured_response = self.output_model_class(**json_response)
-        except Exception as e:
-            error_message = f"File Specialist Error: Failed to validate the model's response. Error: {e}"
-            return {"messages": [AIMessage(content=error_message)]}
-
-        tool_name = structured_response.tool_name
-        tool_input = structured_response.tool_input
+        # This specialist is designed to handle one tool call at a time for simplicity.
+        tool_call = tool_calls[0]
+        tool_name = tool_call.get("name")
+        tool_args = tool_call.get("args", {})
         
         updated_state: Dict[str, Any] = {}
         result_content = ""
 
         try:
-            if tool_name == "read_file":
-                file_content, result_content = self._read_file(tool_input)
+            if tool_name == ReadFileParams.__name__:
+                file_content, result_content = self._read_file(ReadFileParams(**tool_args))
                 if file_content is not None:
                     updated_state["text_to_process"] = file_content
                     # After reading a file, the next logical step is often analysis.
                     # We can provide a deterministic hint to the router to avoid an unnecessary LLM call.
                     updated_state["suggested_next_specialist"] = "text_analysis_specialist"
-            elif tool_name == "list_directory":
-                result_content = self._list_directory(tool_input)
+            elif tool_name == ListDirectoryParams.__name__:
+                result_content = self._list_directory(ListDirectoryParams(**tool_args))
                 # The list of files is also content that might be processed
                 updated_state["text_to_process"] = result_content
-            elif tool_name == "write_file":
-                result_content = self._write_file(tool_input)
+            elif tool_name == WriteFileParams.__name__:
+                result_content = self._write_file(WriteFileParams(**tool_args))
             else:
                 result_content = f"Error: Unknown tool '{tool_name}' requested."
         except SpecialistError as e:
@@ -155,7 +148,7 @@ class FileSpecialist(BaseSpecialist):
 
         # Create an AIMessage to report the outcome of the operation. This is more
         # appropriate than a ToolMessage here, as the FileSpecialist is an autonomous
-        # agent performing an action, not a tool responding to a direct call in this context.
+        # agent performing an action, not just a tool responding to a direct call.
         # This provides a clear, human-readable update for the router's LLM.
         ai_message = AIMessage(
             content=f"FileSpecialist action '{tool_name}' completed. Status: {result_content}"

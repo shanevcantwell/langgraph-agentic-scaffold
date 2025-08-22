@@ -31,7 +31,18 @@ class GeminiAdapter(BaseAdapter):
         reraise=True # Re-raise the exception after the final attempt
     )
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
-        messages = [{"role": "user" if m.type == 'human' else "model", "parts": [m.content]} for m in request.messages]
+        api_messages = []
+        for msg in request.messages:
+            # Gemini API doesn't accept SystemMessage in the message history.
+            # It's set once at model initialization. We will log a warning and skip.
+            if msg.type == 'system':
+                logger.warning("GeminiAdapter received a SystemMessage at runtime, which is not supported in the message history. It will be ignored.")
+                continue
+            
+            role = "user" if msg.type == 'human' else "model"
+            
+            # This is a simplified handling. A full implementation would need to map LangChain's ToolMessage to Gemini's function_response format.
+            api_messages.append({"role": role, "parts": [msg.content]})
         generation_config = self.config.get('parameters', {}).copy()
 
         # Determine request type and configure API call parameters
@@ -47,7 +58,7 @@ class GeminiAdapter(BaseAdapter):
 
         try:
             response = self.model.generate_content(
-                messages,
+                api_messages,
                 generation_config=generation_config,
                 tools=tools_to_pass,
             )
@@ -133,6 +144,8 @@ class LMStudioAdapter(BaseAdapter):
         # This is critical for the model to understand the conversation flow.
         api_messages = [{"role": "system", "content": self.system_prompt}]
         for msg in request.messages:
+            # The previous attempt to combine system prompts caused issues with some servers.
+            # We revert to the simpler model where only the initial system prompt is used.
             if msg.type == 'human':
                 api_messages.append({"role": "user", "content": msg.content})
             elif msg.type == 'ai':
@@ -220,7 +233,7 @@ class LMStudioAdapter(BaseAdapter):
             logger.info("LMStudioAdapter: Invoking in Text mode.")
 
         try:
-            completion = self.client.chat.completions.create(**api_kwargs)
+            completion = self.client.chat.completions.create(**api_kwargs, timeout=REQUEST_TIMEOUT)
             message = completion.choices[0].message
 
             # --- Response Parsing ---
