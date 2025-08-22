@@ -5,4 +5,19 @@ Based on the conversation history, formulate a plan that includes:
 2.  A list of the necessary software components or modules.
 3.  A sequence of high-level execution steps to bring the plan to life.
 
-Focus on the logical structure of the solution.
+Example JSON Output:
+```json
+{
+  "plan_summary": "Develop a simple web page with a 'Hello World' title.",
+  "required_components": [
+    "HTML file",
+    "Web server (for serving the HTML)"
+  ],
+  "execution_steps": [
+    "Create an index.html file.",
+    "Add basic HTML structure with a title tag.",
+    "Include 'Hello World' in the title.",
+    "Serve the file using a simple HTTP server."
+  ]
+}
+```
