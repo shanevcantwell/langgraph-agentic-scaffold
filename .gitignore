@@ -18,10 +18,6 @@ __pycache__/
 .vscode/
 *.code-workspace
 
-# --- Application Specific ---
-# Ignore the specialist prompt files within the app directory.
-app/prompts/*_prompt.md
-!app/prompts/*_prompt.md.example
 __pycache__/*
 src/__pycache__/*
 src/agents/__pycache__/*
@@ -50,3 +46,5 @@ runverify.sh
 # --- "Safety" Lock for Real Filesystem Changes ---
 .agent_safety_off.lock
 workspace/*
+
+Dockerfile
