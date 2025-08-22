@@ -148,11 +148,12 @@ def test_execute_logic_reads_file(file_specialist, tmp_path):
 
     # Assert
     file_specialist.llm_adapter.invoke.assert_called_once()
-    assert len(result_state["messages"]) == 2
-    assert isinstance(result_state["messages"][-1], ToolMessage)
-    assert "Successfully read file" in result_state["messages"][-1].content
+    assert len(result_state["messages"]) == 1
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert "FileSpecialist action 'read_file' completed" in result_state["messages"][0].content
     assert "text_to_process" in result_state
     assert result_state["text_to_process"] == "file content"
+    assert result_state.get("suggested_next_specialist") == "text_analysis_specialist"
 
 def test_execute_logic_writes_file_safety_on(file_specialist, tmp_path):
     """Tests the full logic for a write_file operation when safety is ON."""
@@ -173,9 +174,9 @@ def test_execute_logic_writes_file_safety_on(file_specialist, tmp_path):
     # Assert
     # Assert that the file was NOT created.
     assert not test_file.exists()
-    assert len(result_state["messages"]) == 2
-    assert isinstance(result_state["messages"][-1], ToolMessage)
-    assert "DRY RUN" in result_state["messages"][-1].content
+    assert len(result_state["messages"]) == 1
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert "DRY RUN" in result_state["messages"][0].content
     assert "text_to_process" not in result_state # Write ops shouldn't populate this
 
 def test_execute_logic_writes_file_safety_off(file_specialist, tmp_path):
@@ -195,7 +196,7 @@ def test_execute_logic_writes_file_safety_off(file_specialist, tmp_path):
     # Assert
     assert test_file.exists()
     assert test_file.read_text() == "written content"
-    assert "Successfully wrote" in result_state["messages"][-1].content
+    assert "Successfully wrote" in result_state["messages"][0].content
 
 def test_execute_logic_handles_llm_failure(file_specialist):
     """Tests that the specialist handles when the LLM fails to return a valid Pydantic object."""
@@ -207,7 +208,7 @@ def test_execute_logic_handles_llm_failure(file_specialist):
     result_state = file_specialist._execute_logic(initial_state)
 
     # Assert
-    assert len(result_state["messages"]) == 2
-    assert isinstance(result_state["messages"][-1], AIMessage)
-    assert "did not return a valid, structured tool call" in result_state["messages"][-1].content
+    assert len(result_state["messages"]) == 1
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert "did not return a valid, structured tool call" in result_state["messages"][0].content
     assert "text_to_process" not in result_state
