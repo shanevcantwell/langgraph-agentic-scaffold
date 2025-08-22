@@ -40,9 +40,12 @@ app/src/ui/*
 
 # --- External Code ---
 # Ignore contents of the external directory, but keep the directory itself.
-external/*
-!external/.gitkeep
+external_agents/*
+!external_agents/.gitkeep
 
 # --- Agent Notes ---
 docs/agent_scratchpad.md
 runverify.sh
+
+# --- "Safety" Lock for Real Filesystem Changes ---
+.agent_safety_off.lock
