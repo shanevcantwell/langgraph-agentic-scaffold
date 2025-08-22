@@ -1,35 +1,23 @@
 # app/src/api.py
 import logging
 import os
-from logging.handlers import RotatingFileHandler
-
-# --- Logging Configuration ---
-log_level = os.environ.get("LOG_LEVEL", "INFO").upper()
-log_dir = "logs"
-log_file = os.path.join(log_dir, "agentic_server.log")
-
-# Create log directory if it doesn't exist
-if not os.path.exists(log_dir):
-    os.makedirs(log_dir)
-
-# Configure root logger
-logging.basicConfig(
-    level=log_level,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        # The application is responsible for its own logging, including rotation.
-        RotatingFileHandler(log_file, maxBytes=10485760, backupCount=5), # 10MB per file, 5 backups
-        logging.StreamHandler() # Also log to console for real-time feedback.
-    ],
-    force=True # This will remove any existing handlers, preventing duplicate logs.
-)
-
-logger = logging.getLogger(__name__)
-
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 from .workflow.runner import WorkflowRunner
+
+# --- Application Bootstrap ---
+# This is the first and most critical step. It loads environment variables
+# from the .env file, making them available to the entire application.
+# This must run before any other application modules are imported.
+load_dotenv()
+
+# The application is no longer responsible for configuring logging.
+# It simply requests a logger instance to use. The server process (Uvicorn)
+# will handle the configuration from an external file.
+# Note: this is the single source of truth for how to handle logging in this file.
+logger = logging.getLogger(__name__)
 
 
 # --- Data Contracts ---

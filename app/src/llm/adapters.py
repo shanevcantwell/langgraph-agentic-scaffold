@@ -1,3 +1,4 @@
+# app/src/llm/adapters.py
 import logging
 import json
 import requests
@@ -5,9 +6,10 @@ from typing import Dict, Any, List, Optional, Type
 import google.generativeai as genai
 from pydantic import BaseModel
 from langchain_core.messages import BaseMessage
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError
-from ..specialists.schemas import SystemPlan, WebContent # Added imports
+from ..specialists.schemas import SystemPlan, WebContent
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 120
@@ -22,6 +24,11 @@ class GeminiAdapter(BaseAdapter):
         )
         logger.info(f"INITIALIZED GeminiAdapter (Model: {self.config['api_identifier']})")
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=4, max=10),
+        reraise=True # Re-raise the exception after the final attempt
+    )
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         messages = [{"role": "user" if m.type == 'human' else "model", "parts": [m.content]} for m in request.messages]
         generation_config = self.config.get('parameters', {}).copy()
@@ -90,8 +97,6 @@ class GeminiAdapter(BaseAdapter):
 
 class LMStudioAdapter(BaseAdapter):
     # This adapter supports OpenAI-compatible APIs, such as LM Studio.
-    # Its invoke method would need to be updated to support tool calling
-    # For now, it remains as it was, supporting text and JSON schema output.
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
         super().__init__(model_config)
         self.api_url = f"{base_url}/chat/completions"
@@ -99,7 +104,6 @@ class LMStudioAdapter(BaseAdapter):
         logger.info(f"INITIALIZED LMStudioAdapter (Model: {self.config['api_identifier']})")
 
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
-        # Implementation remains the same as it doesn't support tool calling yet
         messages = [{"role": "system", "content": self.system_prompt}]
         messages.extend([{"role": "user" if m.type == 'human' else "assistant", "content": m.content} for m in request.messages])
 
@@ -131,8 +135,4 @@ class LMStudioAdapter(BaseAdapter):
             raise LLMInvocationError(f"LMStudio API error: {e}") from e
 
     def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
-        """
-        LM Studio-specific post-processing for JSON responses.
-        Currently, no specific transformations are needed, so it returns as is.
-        """
         return json_response

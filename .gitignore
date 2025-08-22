@@ -45,3 +45,4 @@ external/*
 
 # --- Agent Notes ---
 docs/agent_scratchpad.md
+runverify.sh

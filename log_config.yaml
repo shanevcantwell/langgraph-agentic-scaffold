@@ -1,0 +1,36 @@
+# log_config.yaml
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  default:
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: default
+    stream: ext://sys.stdout
+  file:
+    class: logging.handlers.RotatingFileHandler
+    formatter: default
+    filename: logs/agentic_server.log
+    maxBytes: 10485760 # 10MB
+    backupCount: 5
+    encoding: utf8
+
+# Configure the root logger. This file is now the single source of truth
+# for the application's log level. Set to DEBUG for development.
+# Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+root:
+  level: DEBUG
+  handlers:
+    - console
+    - file
+
+# Keep Uvicorn's own logs less verbose unless needed for debugging the server itself.
+loggers:
+  uvicorn.error:
+    level: INFO
+  uvicorn.access:
+    level: INFO

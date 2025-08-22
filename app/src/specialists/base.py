@@ -1,3 +1,4 @@
+# src/specialists/base.py
 import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any
@@ -27,7 +28,7 @@ class BaseSpecialist(ABC):
     def execute(self, state: dict) -> Dict[str, Any]:
         """
         Template method that wraps the specialist's logic with common
-        functionality like logging and error handling.
+        functionality like logging and robust error handling.
         """
         logger.info(f"---EXECUTING {self.specialist_name.upper()}---")
         logger.debug(f"[{self.specialist_name}] Received state: {state}")
@@ -37,7 +38,10 @@ class BaseSpecialist(ABC):
             return updated_state
         except Exception as e:
             logger.error(f"An unhandled exception occurred in {self.specialist_name}: {e}", exc_info=True)
-            return {"error": f"{self.specialist_name} encountered a critical error: {e}"}
+            # This is the critical change:
+            # Place the error into the 'error' key of the GraphState.
+            # The orchestrator will detect this and halt the workflow.
+            return {"error": f"'{self.specialist_name}' encountered a critical error: {e}"}
 
     @abstractmethod
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

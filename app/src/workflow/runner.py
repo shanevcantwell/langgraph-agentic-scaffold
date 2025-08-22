@@ -1,3 +1,4 @@
+# src/workflow/runner.py
 import logging
 import os
 from typing import Dict, Any
@@ -6,7 +7,6 @@ import json
 from langchain_core.messages import HumanMessage
 
 from ..graph.state import GraphState
-# MODIFIED: Import is now from the local 'workflow' package
 from .chief_of_staff import ChiefOfStaff
 
 logger = logging.getLogger(__name__)
@@ -22,9 +22,7 @@ class WorkflowRunner:
         and compiling the LangGraph application.
         """
         chief_of_staff = ChiefOfStaff()
-        
         self.app = chief_of_staff.get_graph()
-        
         logger.info("WorkflowRunner initialized with compiled graph.")
 
     def run(self, goal: str) -> Dict[str, Any]:
@@ -39,8 +37,6 @@ class WorkflowRunner:
         """
         logger.info(f"--- Starting workflow for goal: '{goal}' ---")
         
-        # The initial state should conform to the GraphState TypedDict.
-        # The router specialist is the entry point and will decide the first step based on the goal.
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal)],
             "next_specialist": None,
@@ -49,6 +45,8 @@ class WorkflowRunner:
             "error": None,
             "json_artifact": None,
             "html_artifact": None,
+            "system_plan": None,
+            "turn_count": 0,
         }
 
         try:
@@ -59,5 +57,6 @@ class WorkflowRunner:
             logger.error(f"--- Workflow failed with an unhandled exception: {e} ---", exc_info=True)
             return {
                 "error": f"Workflow failed catastrophically: {e}",
-                "messages": [HumanMessage(content=goal)]
+                "messages": [HumanMessage(content=goal)],
+                "turn_count": 0, # Ensure a consistent return shape on catastrophic failure
             }
