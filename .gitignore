@@ -49,3 +49,4 @@ runverify.sh
 
 # --- "Safety" Lock for Real Filesystem Changes ---
 .agent_safety_off.lock
+workspace/*

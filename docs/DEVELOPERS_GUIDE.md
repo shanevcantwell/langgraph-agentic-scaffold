@@ -53,12 +53,9 @@ After running the installation script, remember to edit `.env` with your API key
     ```sh
     cp .env.example .env
     ```
-    Then, edit `.env` with your API keys. You can also set the console log level for the API server by adding the following line:
-    ```
-    LOG_LEVEL=DEBUG
-    ```
-    Valid levels are `DEBUG`, `INFO`, `WARNING`, and `ERROR`. If not set, the server defaults to `INFO`.
+    The `scripts/server.py` controller is responsible for loading this `.env` file into the process environment before launching the Uvicorn server. The application code itself assumes these variables are present and does not load the file. This creates a clean separation of concerns between the application and its execution environment.
 
+    Then, edit `.env` with your API keys. The log levels for the application and its components are now controlled exclusively by `log_config.yaml`.
 2.  **Application Configuration:** In the project root, copy `config.yaml.example` to a new file named `config.yaml`. This file defines the agentic system's structure and can be modified without tracking changes in Git if desired.
     ```sh
     cp config.yaml.example config.yaml

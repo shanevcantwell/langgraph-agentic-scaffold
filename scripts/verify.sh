@@ -59,8 +59,11 @@ for i in {1..30}; do
         fi
 
         # Validate the JSON response using jq
-        # Check for non-null next_specialist and meaningful AI message
-        if echo "$JSON_RESPONSE" | jq -e '.next_specialist != null and (.messages | length > 1 and .messages[-1].type == "ai" and .messages[-1].content | length > 0)'; then
+        # A successful multi-step workflow will have a turn_count greater than 1.
+        # e.g., (turn 1: router->file_specialist), (turn 2: router->text_analysis_specialist).
+        # The final state will have turn_count=2. So we check for turn_count > 1.
+        # We also check that the final message is a non-empty AI response.
+        if echo "$JSON_RESPONSE" | jq -e '.turn_count > 1 and (.messages | length > 1 and .messages[-1].type == "ai" and .messages[-1].content | length > 0)'; then
             echo "---"
             echo "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully."
             exit 0

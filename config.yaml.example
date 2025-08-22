@@ -57,8 +57,8 @@ specialists:
     provider: "gemini"
 
   file_specialist:
-    prompt_file: "file_specialist_pydantic_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
-    description: "A specialist that uses a Pydantic schema to interact with the filesystem (read, list)."
+    prompt_file: "file_specialist_prompt.md"
+    description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
     # This model must be good at generating structured JSON.
     api_identifier: "gemini-2.5-flash"
     provider: "gemini"
@@ -66,8 +66,8 @@ specialists:
 
   # --- Data & Analysis ---
   data_extractor_specialist:
-    prompt_file: "data_extractor_prompt.md"
-    description: "Extracts structured JSON data from unstructured text based on a schema."
+    prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
+    description: "Extracts structured data from unstructured text based on a Pydantic schema. Requires 'text_to_process' in the state."
     api_identifier: "gemini-2.5-flash"
     provider: "gemini"
 
