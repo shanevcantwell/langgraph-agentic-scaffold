@@ -1,9 +1,28 @@
 # app/tests/unit/test_chief_of_staff.py
 
 from langgraph.graph import StateGraph
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
+import pytest
 from app.src.workflow.chief_of_staff import ChiefOfStaff
 from app.src.specialists.base import BaseSpecialist
+
+@pytest.fixture
+def chief_of_staff_instance(mocker):
+    """Provides a mocked ChiefOfStaff instance for testing decision logic."""
+    # We patch the __init__ method to prevent it from running its complex setup
+    # logic (loading configs, building graphs), as we only want to test the
+    # decision method in isolation for some tests.
+    with patch.object(ChiefOfStaff, '__init__', lambda x: None):
+        chief = ChiefOfStaff()
+        # Mock any attributes needed by the method under test
+        chief.specialists = {} 
+        yield chief
+
+def test_decide_next_specialist_normal_route(chief_of_staff_instance):
+    """Tests that the function returns the correct specialist name from the state."""
+    state = {"next_specialist": "file_specialist", "turn_count": 1}
+    result = chief_of_staff_instance.decide_next_specialist(state)
+    assert result == "file_specialist"
 
 @patch("app.src.workflow.chief_of_staff.AdapterFactory")
 @patch("app.src.workflow.chief_of_staff.get_specialist_class")
@@ -97,3 +116,21 @@ def test_get_graph(mock_get_specialist_class, mock_config_loader):
     assert isinstance(graph, StateGraph)
     assert "router" in graph.nodes
     assert "some_other_specialist" in graph.nodes
+
+def test_decide_next_specialist_handles_error(chief_of_staff_instance):
+    """Tests that the function routes to END when an error is present in the state."""
+    state = {"error": "A critical error occurred", "turn_count": 1}
+    result = chief_of_staff_instance.decide_next_specialist(state)
+    assert result == END
+
+def test_decide_next_specialist_handles_max_turns(chief_of_staff_instance):
+    """Tests that the function routes to END when the max turn count is reached."""
+    state = {"turn_count": 10, "next_specialist": "file_specialist"}
+    result = chief_of_staff_instance.decide_next_specialist(state)
+    assert result == END
+
+def test_decide_next_specialist_handles_no_route(chief_of_staff_instance):
+    """Tests that the function routes to END if the router fails to provide a next step."""
+    state = {"next_specialist": None, "turn_count": 1}
+    result = chief_of_staff_instance.decide_next_specialist(state)
+    assert result == END

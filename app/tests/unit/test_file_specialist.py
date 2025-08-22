@@ -1,101 +1,213 @@
 import pytest
-from unittest.mock import MagicMock, patch
-from src.specialists.file_specialist import FileSpecialist
-from langchain_core.messages import AIMessage, HumanMessage
+import os
+from unittest.mock import patch, MagicMock
+
+from app.src.specialists.file_specialist import FileSpecialist, ReadFileParams, WriteFileParams, ListDirectoryParams, FileOperation
+from app.src.utils.errors import SpecialistError
+from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
+
 # Architectural Note: The 'tmp_path' fixture is provided by pytest.
 # It creates a unique temporary directory for each test function, ensuring that
 # tests are isolated and do not interfere with each other or leave artifacts
 # on the filesystem. This is the standard best practice for testing file I/O.
 
 @pytest.fixture
-def tmp_path_fixture(tmp_path):
-    """Provides a temporary directory path."""
-    return tmp_path
+def mock_config_loader():
+    """Mocks the ConfigLoader to prevent file system access during tests."""
+    with patch('app.src.specialists.base.ConfigLoader') as mock_loader:
+        mock_loader.return_value.get_specialist_config.return_value = {
+            "root_dir": "./test_workspace",
+            "prompt_file": "fake_prompt.md"
+        }
+        mock_loader.return_value.get_provider_config.return_value = {}
+        yield mock_loader
 
-def test_read_file_happy_path(tmp_path_fixture):
-    """Tests successful file reading."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
-    test_file = tmp_path_fixture / "test.txt"
-    test_file.write_text("Hello, world!")
+@pytest.fixture
+def mock_adapter_factory():
+    """Mocks the AdapterFactory to prevent LLM client instantiation."""
+    with patch('app.src.specialists.base.AdapterFactory') as mock_factory:
+        yield mock_factory
 
-    result = file_specialist._read_file_impl(str(test_file))
-    assert result == "Hello, world!"
+@pytest.fixture
+def mock_load_prompt():
+    """Mocks the prompt loader."""
+    with patch('app.src.specialists.base.load_prompt') as mock_load:
+        mock_load.return_value = "Fake system prompt"
+        yield mock_load
 
-def test_write_file_happy_path(tmp_path_fixture):
-    """Tests successful file writing."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
-    test_file = tmp_path_fixture / "test_write.txt"
+@pytest.fixture
+def file_specialist(tmp_path, mock_config_loader, mock_adapter_factory, mock_load_prompt):
+    """Provides a FileSpecialist instance with a temporary workspace."""
+    workspace = tmp_path / "test_workspace"
+    workspace.mkdir()
+    
+    mock_config_loader.return_value.get_specialist_config.return_value['root_dir'] = str(workspace)
+    
+    specialist = FileSpecialist(specialist_name="file_specialist")
+    assert specialist.root_dir == str(workspace)
+    return specialist
 
-    result = file_specialist._write_file_impl(str(test_file), "Hello again!")
-    assert test_file.read_text() == "Hello again!"
-    assert "Successfully wrote" in result
+def test_get_full_path_success(file_specialist, tmp_path):
+    """Tests that a valid relative path is resolved correctly."""
+    workspace = tmp_path / "test_workspace"
+    expected_path = os.path.abspath(str(workspace / "test.txt"))
+    resolved_path = file_specialist._get_full_path("test.txt")
+    assert resolved_path == expected_path
 
-def test_list_directory_happy_path(tmp_path_fixture):
-    """Tests successful directory listing."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
-    (tmp_path_fixture / "file1.txt").touch()
-    (tmp_path_fixture / "file2.txt").touch()
-
-    result = file_specialist._list_directory_impl(str(tmp_path_fixture))
-    assert "file1.txt" in result
-    assert "file2.txt" in result
-
-def test_path_traversal_prevention(tmp_path_fixture):
-    """Tests that directory traversal is blocked."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
-    with pytest.raises(ValueError, match="directory traversal"):
+def test_get_full_path_traversal_denied(file_specialist):
+    """Tests that directory traversal using '..' is blocked."""
+    with pytest.raises(SpecialistError, match="Only relative paths are allowed"):
         file_specialist._get_full_path("../secret.txt")
 
-def test_execute_routes_to_read(tmp_path_fixture):
-    """Tests that the specialist correctly interprets an LLM call to read a file."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
+def test_get_full_path_absolute_path_denied(file_specialist):
+    """Tests that absolute paths are blocked."""
+    with pytest.raises(SpecialistError, match="Only relative paths are allowed"):
+        file_specialist._get_full_path("/etc/passwd")
 
-    # Mock the LLM client's invoke method directly
-    with patch.object(file_specialist.llm_client, 'invoke') as mock_invoke:
-        mock_invoke.return_value = AIMessage(
-            content="",
-            tool_calls=[{'name': 'read_file', 'args': {'file_path': 'test.txt'}, 'id': 'call_123'}])
+def test_read_file_success(file_specialist, tmp_path):
+    """Tests successful file reading via the internal method."""
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    test_file.write_text("Hello, world!")
+    
+    params = ReadFileParams(file_path="test.txt")
+    content, status = file_specialist._read_file(params)
+    
+    assert content == "Hello, world!"
+    assert "Successfully read" in status
 
-        # Mock the actual file operation to isolate the test to the specialist's logic
-        file_specialist._read_file_impl = MagicMock(return_value="File content")
+def test_read_file_not_found(file_specialist):
+    """Tests reading a file that does not exist."""
+    params = ReadFileParams(file_path="non_existent_file.txt")
+    content, status = file_specialist._read_file(params)
+    
+    assert content is None
+    assert "Error reading file" in status
 
-        state = {"messages": [HumanMessage(content="Read test.txt")]}
-        result = file_specialist.execute(state)
+def test_write_file_safety_on(file_specialist, tmp_path):
+    """Tests that file writing is mocked when safety is ON (default)."""
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    
+    file_specialist.is_safety_on = True # Explicitly set for test clarity
 
-        # Assert that the read_file tool was called and the result is in the output
-        file_specialist._read_file_impl.assert_called_once_with(file_path='test.txt')
-        assert "File content" in str(result["messages"])
+    params = WriteFileParams(file_path="test.txt", content="new content")
+    status = file_specialist._write_file(params)
+    
+    # Assert that the file was NOT created.
+    assert not test_file.exists()
+    assert "DRY RUN" in status
+    assert "Would have written content" in status
 
-def test_execute_routes_to_write(tmp_path_fixture):
-    """Tests that the specialist correctly interprets an LLM call to write a file."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
+def test_write_file_safety_off(file_specialist, tmp_path):
+    """Tests that file writing proceeds when safety is OFF."""
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    file_specialist.is_safety_on = False # Explicitly disable safety for this test
+    params = WriteFileParams(file_path="test.txt", content="new content")
+    status = file_specialist._write_file(params)
+    assert test_file.exists()
+    assert test_file.read_text() == "new content"
+    assert "Successfully wrote" in status
 
-    with patch.object(file_specialist.llm_client, 'invoke') as mock_invoke:
-        mock_invoke.return_value = AIMessage(
-            content="",
-            tool_calls=[{'name': 'write_file', 'args': {'file_path': 'test.txt', 'content': 'new content'}, 'id': 'call_456'}])
+def test_list_directory_success(file_specialist, tmp_path):
+    """Tests successful directory listing."""
+    workspace = tmp_path / "test_workspace"
+    (workspace / "file1.txt").touch()
+    (workspace / "subdir").mkdir()
+    (workspace / "subdir" / "file2.txt").touch()
+    
+    params = ListDirectoryParams(dir_path=".")
+    result = file_specialist._list_directory(params)
+    
+    assert "file1.txt" in result
+    assert "subdir" in result
+    
+    params_subdir = ListDirectoryParams(dir_path="subdir")
+    result_subdir = file_specialist._list_directory(params_subdir)
+    assert "file2.txt" in result_subdir
 
-        file_specialist._write_file_impl = MagicMock(return_value="Successfully wrote to test.txt")
+def test_execute_logic_reads_file(file_specialist, tmp_path):
+    """Tests the full logic execution for a read_file operation."""
+    # Arrange
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    test_file.write_text("file content")
 
-        state = {"messages": [HumanMessage(content="Write to test.txt")]}
-        result = file_specialist.execute(state)
+    # Mock the LLM response
+    mock_json_response = {
+        "tool_name": "read_file",
+        "tool_input": {"file_path": "test.txt"}
+    }
+    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
 
-        file_specialist._write_file_impl.assert_called_once_with(file_path='test.txt', content='new content')
-        assert "Successfully wrote" in str(result["messages"])
+    initial_state = {"messages": [HumanMessage(content="Read test.txt")]}
 
-def test_execute_routes_to_list(tmp_path_fixture):
-    """Tests that the specialist correctly interprets an LLM call to list a directory."""
-    file_specialist = FileSpecialist(llm_provider='gemini', root_dir=str(tmp_path_fixture))
+    # Act
+    result_state = file_specialist._execute_logic(initial_state)
 
-    with patch.object(file_specialist.llm_client, 'invoke') as mock_invoke:
-        mock_invoke.return_value = AIMessage(
-            content="",
-            tool_calls=[{'name': 'list_directory', 'args': {'path': '.'}, 'id': 'call_789'}])
+    # Assert
+    file_specialist.llm_adapter.invoke.assert_called_once()
+    assert len(result_state["messages"]) == 2
+    assert isinstance(result_state["messages"][-1], ToolMessage)
+    assert "Successfully read file" in result_state["messages"][-1].content
+    assert "text_to_process" in result_state
+    assert result_state["text_to_process"] == "file content"
 
-        file_specialist._list_directory_impl = MagicMock(return_value="file1.txt\nfile2.txt")
+def test_execute_logic_writes_file_safety_on(file_specialist, tmp_path):
+    """Tests the full logic for a write_file operation when safety is ON."""
+    # Arrange
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    file_specialist.is_safety_on = True # Explicitly set for test clarity
+    mock_json_response = {
+        "tool_name": "write_file",
+        "tool_input": {"file_path": "test.txt", "content": "written content"}
+    }
+    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    initial_state = {"messages": [HumanMessage(content="Write to test.txt")]}
 
-        state = {"messages": [HumanMessage(content="List files")]}
-        result = file_specialist.execute(state)
+    # Act
+    result_state = file_specialist._execute_logic(initial_state)
 
-        file_specialist._list_directory_impl.assert_called_once_with(path='.')
-        assert "file1.txt" in str(result["messages"])
+    # Assert
+    # Assert that the file was NOT created.
+    assert not test_file.exists()
+    assert len(result_state["messages"]) == 2
+    assert isinstance(result_state["messages"][-1], ToolMessage)
+    assert "DRY RUN" in result_state["messages"][-1].content
+    assert "text_to_process" not in result_state # Write ops shouldn't populate this
+
+def test_execute_logic_writes_file_safety_off(file_specialist, tmp_path):
+    """Tests the full logic for a write_file operation when safety is OFF."""
+    # Arrange
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    file_specialist.is_safety_on = False # Explicitly disable safety for this test
+    mock_json_response = {
+        "tool_name": "write_file",
+        "tool_input": {"file_path": "test.txt", "content": "written content"}
+    }
+    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    initial_state = {"messages": [HumanMessage(content="Write to test.txt")]}
+    # Act
+    result_state = file_specialist._execute_logic(initial_state)
+    # Assert
+    assert test_file.exists()
+    assert test_file.read_text() == "written content"
+    assert "Successfully wrote" in result_state["messages"][-1].content
+
+def test_execute_logic_handles_llm_failure(file_specialist):
+    """Tests that the specialist handles when the LLM fails to return a valid Pydantic object."""
+    # Arrange
+    file_specialist.llm_adapter.invoke.return_value = {"json_response": None}
+    initial_state = {"messages": [HumanMessage(content="gibberish request")]}
+
+    # Act
+    result_state = file_specialist._execute_logic(initial_state)
+
+    # Assert
+    assert len(result_state["messages"]) == 2
+    assert isinstance(result_state["messages"][-1], AIMessage)
+    assert "did not return a valid, structured tool call" in result_state["messages"][-1].content
+    assert "text_to_process" not in result_state
