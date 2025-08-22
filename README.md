@@ -35,18 +35,22 @@ This scaffold is not just a collection of scripts; it's a well-defined architect
 
 This scaffold is designed for architectural exploration and grants significant power to the LLM. The tools you create can execute real code, access your file system, and make external API calls with your keys.
 
-**You are granting the configured LLM direct control over these powerful tools.**
-
-Any LLM at any time can interpret your requests in unexpected ways. Be mindful of what you are turning control over to an emergent property of statistical math. Anything the code you turn over control can do, the LLM will be able to perform. This includes such irreversible actions as file deletion, data exposure, or unintended resource usage. An agentic system allows complicated narratives to form as specialists interact, creating indefinite numbers of calls to inference that can amplify a mistaken understanding. Treat this system with the same caution you would a loaded weapon. You take full and sole responsibility for what you build and run with it.
-
-**Always run this project in a secure, sandboxed environment (like a Docker container or a dedicated VM).**
+> [!WARNING]
+> **You are granting the configured LLM direct control over these powerful tools.**
+>
+> Unlike a single model call, an agentic system can create feedback loops that **amplify** a simple misunderstanding over many iterations. This emergent behavior can lead to complex, unintended, and irreversible actions like file deletion or data exposure.
+>
+> With a nod to the model cards of [Eric Hartford (QuixiAI)](https://github.com/QuixiAI):
+> > This system is your tool, an extension of your will. Just as you are personally responsible for what you do with a knife, gun, fire, car, or the internet, you are the creator and originator of any actions performed by the agents you build and run. You take full and sole responsibility for what you build.
+>
+> **Always run this project in a secure, sandboxed environment (like a Docker container or a dedicated VM).**
 
 ## Getting Started
 
 ### Prerequisites
 
 *   Python 3.10+
-*   Access to an LLM (e.g., via Google AI Studio, OpenAI, or a local server like Ollama).
+*   Access to an LLM (e.g., Google AI Studio, OpenAI, or a local server like LM Studio or Ollama).
 
 ### Installation & Setup
 
@@ -70,7 +74,7 @@ These scripts will:
 *   For Windows, provide a note about PowerShell execution policy if running PowerShell scripts.
 
 After running the installation script, remember to edit `.env` with your API keys and `config.yaml` to define your agent setup.
-
+The server script (`scripts/server.py`) will automatically load the `.env` file into the environment when you run the `start` command.
 
 5.  **Run the application:**
     Use the provided scripts to start the API server.
