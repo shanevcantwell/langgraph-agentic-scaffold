@@ -46,28 +46,37 @@ def invoke(
             print(json.dumps(final_output, indent=2))
         else:
             print("\n✅ --- Agent Final Response ---")
-            # The API returns a JSON object with a 'final_output' key.
-            # We extract and pretty-print that key's value.
             print(json.dumps(final_output, indent=2))
-            print("---\n- End of Response ---") # Test comment
+            print("--- End of Response ---")
 
-        # Check for successful content in the final_output
-        if not final_output.get("text_to_process") and \
-           not final_output.get("extracted_data") and \
-           not final_output.get("json_artifact") and \
-           not final_output.get("html_artifact"):
-            # Also check the last message in the 'messages' list
-            messages = final_output.get("messages", [])
-            if not messages or not messages[-1].get("content"):
-                if not json_only:
-                    print("\n❌ Verification FAILED: Agent did not return any meaningful content.", file=sys.stderr)
-                sys.exit(1)
-            else:
-                if not json_only:
-                    print("\n✅ Verification PASSED: Agent returned meaningful content.")
-        else:
+        # --- Verification Logic ---
+        # This logic provides a general-purpose check to see if the agent
+        # produced any meaningful output. This is a baseline success metric,
+        # distinct from the stricter routing validation in `verify.sh`.
+        messages = final_output.get("messages", [])
+        # The last message is expected to be a dict from AIMessage.
+        last_message_content = None
+        if messages and isinstance(messages[-1], dict):
+            last_message_content = messages[-1].get("content")
+
+        # Check for any known data artifacts in the root of the output.
+        has_artifact = any(
+            final_output.get(key)
+            for key in [
+                "text_to_process",
+                "extracted_data",
+                "json_artifact",
+                "html_artifact",
+            ]
+        )
+
+        # Success is defined as having an artifact or non-empty content in the last message.
+        is_successful = has_artifact or (last_message_content and last_message_content.strip())
+
+        if not is_successful:
             if not json_only:
-                print("\n✅ Verification PASSED: Agent returned meaningful content.")
+                print("\n❌ Verification FAILED: Agent did not return any meaningful content.", file=sys.stderr)
+            sys.exit(1)
 
     except requests.exceptions.RequestException as e:
         if not json_only:

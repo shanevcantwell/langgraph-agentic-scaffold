@@ -81,6 +81,12 @@ specialists:
     # This is a procedural specialist and does not require an LLM.
     description: "A specialist that performs deterministic data processing tasks, like formatting or cleaning, without calling an LLM."
 
+  text_analysis_specialist:
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
+    prompt_file: text_analysis_prompt.md
+    description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
+    
   # --- General & Fallback ---
   prompt_specialist:
     prompt_file: "prompt_prompt.md"

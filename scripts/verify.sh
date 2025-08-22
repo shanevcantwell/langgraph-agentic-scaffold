@@ -22,7 +22,7 @@ fi
 
 PORT=8000
 HEALTH_CHECK_URL="http://127.0.0.1:${PORT}/"
-TEST_PROMPT="Hello, world! Please respond with a simple confirmation."
+TEST_PROMPT="Read the README.md file and list its main sections."
 
 # --- Cleanup function ---
 # This function will be called on script exit to ensure the server is stopped.

@@ -23,12 +23,25 @@ class DataExtractorSpecialist(BaseSpecialist):
         Receives unstructured text from the state and updates the state with
         structured, extracted data.
         """
-        unstructured_text = state.get("text_to_process")
-        if not unstructured_text:
+        text_to_process = state.get("text_to_process")
+        if not text_to_process:
             raise ValueError("Input text not found in state['text_to_process']")
 
+        # Append the text to be processed to the message history so the LLM has full context
+        # of the user's request. This is more robust than creating a new, isolated prompt.
+        messages_for_llm = state["messages"] + [
+            HumanMessage(
+                content=(
+                    "--- TEXT TO PROCESS ---\n"
+                    "Based on our conversation, please extract the relevant information from the text above "
+                    "into the required JSON format.\n\n"
+                    f"{text_to_process}"
+                )
+            )
+        ]
+
         request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=unstructured_text)],
+            messages=messages_for_llm,
             output_model_class=ExtractedData
         )
 
@@ -39,4 +52,8 @@ class DataExtractorSpecialist(BaseSpecialist):
 
         validated_data = ExtractedData(**json_response)
         new_message = AIMessage(content="I have successfully extracted the structured data.")
-        return {"messages": state["messages"] + [new_message], "json_artifact": validated_data.extracted_json}
+        return {
+            "messages": state["messages"] + [new_message],
+            "json_artifact": validated_data.extracted_json,
+            "text_to_process": None  # Consume the artifact after processing
+        }

@@ -24,7 +24,6 @@ First, you need to create a new Python file for your specialist in the `app/src/
 
 Here is a template for a new specialist file:
 
-```python
 # app/src/specialists/code_writer_specialist.py
 
 # Import the necessary base class and data structures
@@ -36,7 +35,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 class CodeWriterSpecialist(BaseSpecialist):
     """A specialist that writes Python code based on a user's request."""
 
-t now    def __init__(self, specialist_name: str):
+    def __init__(self, specialist_name: str):
         """Initializes the specialist.
 
         The most important part of this method is calling the parent class's
@@ -77,7 +76,6 @@ t now    def __init__(self, specialist_name: str):
         #    It is very important to return a dictionary with the updated
         #    "messages" list.
         return {"messages": state["messages"] + [ai_message]}
-```
 
 ### Step 2: Create the Prompt File
 
@@ -85,13 +83,11 @@ Next, create a new prompt file in the `app/prompts/` directory. This file contai
 
 For our `CodeWriterSpecialist`, we can create a file named `code_writer_prompt.md`:
 
-```markdown
 # app/prompts/code_writer_prompt.md
 
 You are a world-class Python programmer. Your task is to write clean, efficient, and well-documented Python code based on the user's request.
 
 Only output the code itself. Do not add any explanations or pleasantries.
-```
 
 ### Step 3: Configure the Specialist in `config.yaml`
 
@@ -99,22 +95,24 @@ Now, you need to register your new specialist in the `config.yaml` file in the r
 
 Add a new entry under the `specialists` key:
 
-```yaml
+*   `code_writer_specialist`: This key must match the `specialist_name` you set in your specialist's `__init__` method.
+*   `api_identifier`: The specific model name to be used for the API call (e.g., "gemini-2.5-flash").
+*   `provider`: The LLM provider to use, which must match a key in the `llm_providers` section.
+*   `prompt_file`: The name of the prompt file you created in the `app/prompts/` directory.
+*   `description`: A clear, concise description of the specialist's capabilities. This is **critical** for the orchestrator to make accurate routing decisions.
+
 # config.yaml
 
+# ... other sections like llm_providers ...
+
 specialists:
-  # ... other specialists
+  # ... other specialists ...
 
   code_writer_specialist:
-    model: gemini-1.5-flash
-    provider: gemini
+    api_identifier: "gemini-2.5-flash"
+    provider: "gemini"
     prompt_file: code_writer_prompt.md
-```
-
-*   `code_writer_specialist`: This key must match the `specialist_name` you set in your specialist's `__init__` method.
-*   `model`: The name of the Language Model to use for this specialist. This must be a model defined in the `models` section of `config.yaml`.
-*   `provider`: The name of the LLM provider. This must be a provider defined in the `providers` section of `config.yaml`.
-*   `prompt_file`: The name of the prompt file you created in the `app/prompts/` directory.
+    description: "A specialist that writes clean, efficient Python code based on a user's request." # This is used by the orchestrator for routing.
 
 ### Step 4: Testing Your New Specialist
 
@@ -122,33 +120,43 @@ After creating your specialist, it's important to test it. You can write a simpl
 
 The project uses `pytest` as its testing framework. Here is an example test for our `CodeWriterSpecialist` that follows the `pytest` style (which is simpler and more direct than using `unittest.TestCase`).
 
-```python
 # app/tests/unit/test_code_writer_specialist.py
 
 from unittest.mock import MagicMock
+from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.code_writer_specialist import CodeWriterSpecialist
 
 def test_code_writer_specialist_execute():
-def test_code_writer_specialist_execute():
     # Arrange
-    # Create an instance of the specialist
-    specialist = CodeWriterSpecialist()
+    # The specialist's __init__ requires a name.
+    specialist = CodeWriterSpecialist("code_writer_specialist")
 
-    # Mock the LLM adapter to avoid making a real API call
-    # Create an instance of the specialist
-    specialist = CodeWriterSpecialist()
-
-    # Mock the LLM adapter to avoid making a real API call
+    # Mock the LLM adapter to avoid making a real API call.
     specialist.llm_adapter = MagicMock()
-    specialist.llm_adapter.invoke.return_value = {"text_response": "print('Hello, World!')"}
-    # Check that the AI message was added to the state
-```
+    mock_response = "print('Hello, World!')"
+    specialist.llm_adapter.invoke.return_value = {"text_response": mock_response}
+
+    # Define the initial state with a user message.
+    initial_state = {
+        "messages": [HumanMessage(content="Write a hello world script.")]
+    }
+
+    # Act
+    # We test the internal `_execute_logic` method directly.
+    result_state = specialist._execute_logic(initial_state)
+
+    # Assert
+    # Check that the LLM adapter was called once.
+    specialist.llm_adapter.invoke.assert_called_once()
+
+    # Check that the new AI message was added to the state correctly.
+    assert len(result_state["messages"]) == 2
+    assert isinstance(result_state["messages"][-1], AIMessage)
+    assert result_state["messages"][-1].content == mock_response
 
 To run the tests, simply run `pytest` from the root directory.
 
 ## Creating a Wrapped Specialist
-
-    result_state = specialist.execute(initial_state)
 
 Wrapped specialists rely on external, third-party code. To keep the project clean and avoid checking in external repositories, this scaffold uses a conventional directory: `external/`.
 
@@ -159,7 +167,6 @@ The `external/` directory at the project root is the designated location for clo
 1.  Clone the external agent's repository into the `external/` directory. For example, to add the `open-swe` agent:
     ```sh
     git clone https://github.com/sweepai/open-swe.git external/open-swe
-    ```
 2.  In your `config.yaml`, set the `source` path for your wrapped specialist to point to the agent's entrypoint script within the `external/` directory.
 
 ---
@@ -170,7 +177,6 @@ In addition to creating specialists from scratch, you can also wrap existing, ex
 
 Create a new Python file in `app/src/specialists/`. This class must inherit from `WrappedSpecialist`.
 
-```python
 # app/src/specialists/open_swe_specialist.py
 
 from .wrapped_specialist import WrappedSpecialist
@@ -187,20 +193,17 @@ class OpenSweSpecialist(WrappedSpecialist):
         """Translates the open-swe agent's output back to the GraphState format."""
         ai_message = AIMessage(content=str(output))
         return {"messages": state["messages"] + [ai_message]}
-```
 
 ### Step 2: Configure the Wrapped Specialist in `config.yaml`
 
 Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: wrapped` and a `source` key pointing to the entry point of the external agent.
 
 Following the convention above, the configuration for `open_swe_specialist` would look like this:
-```yaml
 specialists:
   open_swe_specialist:
     type: wrapped
     source: "./external/open-swe/agent/run.py" # Path relative to project root
     description: "A specialist that wraps the open-swe agent for software engineering tasks."
-```
 
 ## Conclusion
 

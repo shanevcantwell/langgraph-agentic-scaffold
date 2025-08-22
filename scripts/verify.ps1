@@ -16,7 +16,7 @@ $ServerScript = Join-Path $ProjectRoot "scripts\server.bat"
 $CliScript = Join-Path $ProjectRoot "scripts\cli.bat"
 $Port = 8000
 $HealthCheckUrl = "http://127.0.0.1:$Port/"
-$TestPrompt = "Hello, world! Please respond with a simple confirmation."
+$TestPrompt = "Read the README.md file and list its main sections."
 $TimeoutSeconds = 30
 
 # --- Check for jq dependency ---

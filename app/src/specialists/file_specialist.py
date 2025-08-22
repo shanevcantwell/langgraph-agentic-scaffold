@@ -76,7 +76,9 @@ class FileSpecialist(BaseSpecialist):
             no_op_message = llm_response.get("text_response", "File Specialist: No file operation was requested.")
             return {"messages": state["messages"] + [AIMessage(content=no_op_message)]}
 
+        updated_state = state.copy()
         tool_results = []
+        text_to_process = None
         for tool_call in tool_calls:
             tool_name = tool_call.get("name")
             tool_args = tool_call.get("args", {})
@@ -85,6 +87,10 @@ class FileSpecialist(BaseSpecialist):
             if tool_func := tool_map.get(tool_name):
                 try:
                     result = tool_func(**tool_args)
+                    # If we successfully read a file, capture its content to be placed
+                    # into the shared state for other specialists to process.
+                    if tool_name == "read_file" and not str(result).startswith("Error"):
+                        text_to_process = result
                 except TypeError as e:
                     result = f"Error calling tool '{tool_name}': Invalid arguments provided. {e}"
             else:
@@ -92,4 +98,8 @@ class FileSpecialist(BaseSpecialist):
             
             tool_results.append(ToolMessage(content=str(result), tool_call_id=tool_call["id"]))
 
-        return {"messages": state["messages"] + tool_results}
+        updated_state["messages"] = state["messages"] + tool_results
+        if text_to_process:
+            updated_state["text_to_process"] = text_to_process
+
+        return updated_state
