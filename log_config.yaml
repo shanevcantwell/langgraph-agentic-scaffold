@@ -7,10 +7,6 @@ formatters:
     format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 
 handlers:
-  console:
-    class: logging.StreamHandler
-    formatter: default
-    stream: ext://sys.stdout
   file:
     class: logging.handlers.RotatingFileHandler
     formatter: default
@@ -24,9 +20,7 @@ handlers:
 # Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
 root:
   level: DEBUG
-  handlers:
-    - console
-    - file
+  handlers: [file]
 
 # Keep Uvicorn's own logs less verbose unless needed for debugging the server itself.
 loggers:
