@@ -4,6 +4,7 @@
 # Ignore local environment variables. Never commit secrets.
 .env
 .run
+user_settings.yaml
 
 # --- Python ---
 # Ignore cache files, compiled files, and virtual environments.
@@ -25,7 +26,6 @@ src/graph/__pycache__/*
 */.pytest_cache/*
 .venv*/
 app/windows_run.bat
-config.yaml
 output.html
 app/output.html
 backups/

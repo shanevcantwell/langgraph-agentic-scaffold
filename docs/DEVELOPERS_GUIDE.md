@@ -102,15 +102,30 @@ Once the FastAPI server is running, you can interact with it from the command li
 
 ## 3.0 System Architecture
 
-The system is composed of the following layers and components.
+The system is composed of several layers and components, governed by clear configuration philosophy.
 
 ### 3.1 LangGraph: The Runtime Environment
 *   **Role:** Framework / Execution Engine.
 *   **Function:** Manages the computational graph, holds the central `GraphState`, and routes execution between nodes.
 
-### 3.2 Configuration (`config.yaml`): The System Blueprint
-*   **Role:** The single source of truth for the system's structure.
-*   **Function:** Defines all models, providers, and specialists, and declaratively "wires" them together. The application code is a generic engine that interprets this configuration at runtime.
+### 3.2 Configuration Philosophy: The Three Layers
+
+The scaffold uses a three-layer configuration model to cleanly separate concerns. Understanding this is critical to using the system effectively and securely.
+
+1.  **Layer 1: The System Blueprint (`config.yaml`)**
+    *   **Purpose:** Defines the complete set of capabilities for the application. It lists all possible LLM providers and all available specialists.
+    *   **Audience:** The Developer.
+    *   **Source Control:** **This file SHOULD be committed to Git.** It is part of the application's source code, ensuring that every developer works from the same architectural blueprint.
+
+2.  **Layer 2: User Settings (`user_settings.yaml`)**
+    *   **Purpose:** Allows a user to make choices from the options defined in the blueprint. Its primary role is to bind specialists to specific LLM configurations.
+    *   **Audience:** The End-User (or the developer during testing).
+    *   **Source Control:** **This file should NOT be committed to Git.** It is specific to a local environment and is listed in `.gitignore`.
+
+3.  **Layer 3: Secrets (`.env`)**
+    *   **Purpose:** Holds secrets like API keys.
+    *   **Audience:** The machine's environment / the developer setting up an instance.
+    *   **Source Control:** **This file must NEVER be committed to Git.**
 
 ### 3.3 The Adapter Factory Pattern
 *   **Role:** Centralized component instantiation.
@@ -164,17 +179,6 @@ This scaffold implements several advanced patterns to move beyond simple instruc
 
 *   **Atomic State Updates:** The LangGraph is configured to *add* new messages to the conversation history. Therefore, it is critical that specialists only return the *new* messages or state changes they are responsible for (the "delta"). They should not return the entire message history they received. Adhering to this pattern prevents the conversation history from growing exponentially, which would quickly exhaust the context window of any LLM.
 
-### 3.8 Deployment: Developer vs. End-User Configuration
-
-A critical architectural concept in this scaffold is the separation between developer configuration and end-user configuration.
-
-*   **`config.yaml` is for Developers:** This file is the system's blueprint. It is a powerful, developer-level tool for defining the available specialists, their types, their prompts, and their access to resources (like file directories). In a production environment, **this file should be considered part of the application's source code and should not be exposed to or editable by end-users.** Granting users direct access to `config.yaml` would create significant security vulnerabilities.
-
-*   **End-User Settings are Separate:** If you build an application on top of this scaffold that requires user-configurable settings (e.g., letting a user choose their preferred LLM from a safe list, or modifying a specific prompt's behavior), you should implement a separate, more constrained configuration mechanism. This could be:
-    *   A database table.
-    *   A separate, limited `user_settings.yaml` file that the application reads.
-    *   An API endpoint for managing settings.
-
 ## 4.0 How to Extend the System
 
 ### 4.1 Adding New Specialists
@@ -201,35 +205,15 @@ This project is structured as an installable Python package. The `pyproject.toml
 
 ## 5.0 Project Structure Reference
 
-### 5.1 Directory Structure
-langgraph-agentic-scaffold/
-    |-- .env.example         # Example environment file for secrets
-    |-- .gitignore           # Files and directories ignored by Git
-    |-- LICENSE              # Project license
-    |-- README.md            # Main project README
-    |-- config.yaml.example  # Example application configuration
-    |-- pyproject.toml       # Project definition and dependencies
-    |-- requirements-dev.txt # Pinned development dependencies
-    |-- requirements.txt     # Pinned production dependencies
-    |-- app/
-    |   |-- prompts/         # Prompt templates for specialists
-    |   |-- src/             # Main application source code
-    |   |   |-- api.py           # FastAPI application entry point
-    |   |   |-- cli.py           # Command-line interface script
-    |   |   |-- specialists/     # Specialist agent implementations
-    |   |   |-- workflow/        # LangGraph orchestration logic
-    |   |   `-- ... (llm, graph, utils, etc.)
-    |   `-- tests/             # Unit and integration tests
-    |-- docs/                # All project documentation
-    |   |-- DEVELOPERS_GUIDE.md
-    |   |-- CREATING_A_NEW_SPECIALIST.md
-    |   `-- adr/               # Architecture Decision Records
-    |-- external/            # For third-party code (e.g., wrapped agents)
-    |   `-- .gitkeep         # Keeps the directory in Git history
-    `-- scripts/             # Helper scripts for development
-        |-- server.sh          # Server management (start, stop) for Linux/macOS
-        |-- server.bat         # Server management for Windows
-        `-- ... (verify, cli, sync-reqs scripts)
+### 5.1 Directory Structure Overview
+
+This section provides a high-level overview of the repository's layout. For a comprehensive, file-by-file explanation of the project's structure and the purpose of each component, please see the **Project Structure Deep Dive** in `PROJECT_STRUCTURE.md`.
+
+*   `app/`: The main Python package containing all source code (`src/`), tests (`tests/`), and prompts (`prompts/`).
+*   `docs/`: All project documentation, including this guide, tutorials, and Architecture Decision Records (ADRs).
+*   `scripts/`: Helper scripts for common development tasks like running the server, managing dependencies, and verification.
+*   `external/`: A directory for integrating third-party agent code.
+*   **Root files:** Configuration (`config.yaml.example`, `user_settings.yaml.example`), dependencies (`pyproject.toml`), and other project-level files.
 
 ### 5.2 Naming Convention
 *   **Specialist Rule:** A Python file in `src/specialists/` must be the `snake_case` version of the primary `PascalCase` class it contains (e.g., `FileSpecialist` in `file_specialist.py`).
