@@ -196,19 +196,20 @@ Create a new Python file in `app/src/specialists/`. This class must inherit from
 
 # app/src/specialists/open_swe_specialist.py
 
+from typing import Dict, Any
 from .wrapped_specialist import WrappedSpecialist
 from langchain_core.messages import AIMessage
 
 class OpenSweSpecialist(WrappedSpecialist):
     """A wrapper specialist for the open-swe agent."""
 
-    def _translate_state_to_input(self, state: dict) -> any:
+    def _translate_state_to_input(self, state: Dict[str, Any]) -> Any:
         """Translates the GraphState to the open-swe agent's input format."""
         return state["messages"][-1].content
 
-    def _translate_output_to_state(self, state: dict, output: any) -> dict:
+    def _translate_output_to_state(self, output: Any) -> Dict[str, Any]:
         """Translates the open-swe agent's output back to the GraphState format."""
-        ai_message = AIMessage(content=str(output))
+        ai_message = AIMessage(content=str(output), name=self.specialist_name)
         return {"messages": [ai_message]}
 
 ### Step 2: Configure the Wrapped Specialist in `config.yaml`
