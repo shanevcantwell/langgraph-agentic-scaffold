@@ -33,7 +33,7 @@ class DataExtractorSpecialist(BaseSpecialist):
             )
             return {
                 "messages": [ai_message],
-                "suggested_next_specialist": "file_specialist"
+                "recommended_specialists": ["file_specialist"]
             }
 
         # The specialist's system prompt (loaded at init) should already instruct it

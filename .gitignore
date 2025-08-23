@@ -32,6 +32,7 @@ backups/
 build/
 logs/
 *.bak
+docs/adr/private/*
 app/src/ui/*
 
 # --- External Code ---
@@ -46,5 +47,6 @@ runverify.sh
 # --- "Safety" Lock for Real Filesystem Changes ---
 .agent_safety_off.lock
 workspace/*
+
 
 Dockerfile

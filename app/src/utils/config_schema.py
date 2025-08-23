@@ -77,7 +77,7 @@ class RootConfig(BaseModel):
 class UserSettings(BaseModel):
     """The root model for the user_settings.yaml file."""
 
-    specialist_model_bindings: Dict[str, str] = Field(
+    specialist_model_bindings: Optional[Dict[str, str]] = Field(
         default_factory=dict,
         description="Maps a specialist name to the key of an llm_provider from config.yaml.",
     )

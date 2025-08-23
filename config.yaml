@@ -33,7 +33,7 @@ llm_providers:
     # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
     # Example: OLLAMA_BASE_URL=http://localhost:11434
     type: "ollama"
-    api_identifier: "gemma3:27b-abliterated" # The model name registered with Ollama
+    api_identifier: "gemma3:27b" # The model name registered with Ollama
 
   # A configuration for a powerful, general-purpose Gemini model
   gemini_pro:
@@ -108,15 +108,10 @@ specialists:
     description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
 
   # --- General & Fallback ---
-  simple_prompt_specialist:
+  prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
-    description: "A general-purpose specialist for direct, single-turn Q&A and simple instruction following. Use this for 'simple' complexity tasks."
-
-  advanced_prompt_specialist:
-    type: "llm"
-    prompt_file: "prompt_specialist_prompt.md"
-    description: "A powerful, general-purpose specialist for complex, multi-turn Q&A and instruction following. Use this as a fallback for 'complex' tasks that don't fit other specialists."
+    description: "A general-purpose specialist for direct Q&A and instruction following. It can be bound to a simple or advanced model in user_settings.yaml."
 
   # --- Wrapped & External Specialists ---
   open_swe_specialist:

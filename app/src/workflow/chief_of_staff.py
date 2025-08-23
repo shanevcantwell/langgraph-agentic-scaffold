@@ -16,13 +16,31 @@ MAX_TURNS = 10
 class ChiefOfStaff:
     def __init__(self):
         self.config = ConfigLoader().get_config()
-        self.entry_point = self.config.get("workflow", {}).get("entry_point", CoreSpecialist.ROUTER.value)
+
+        # Load specialists first, so we know which ones are available.
         self.specialists = self._load_and_configure_specialists()
+
+        # Now, validate the entry point against the list of *loaded* specialists.
+        raw_entry_point = self.config.get("workflow", {}).get("entry_point", CoreSpecialist.ROUTER.value)
+        if raw_entry_point not in self.specialists:
+            logger.error(
+                f"Configured entry point '{raw_entry_point}' is not an available specialist. "
+                f"This can happen if it's missing from config.yaml or failed to load. "
+                f"Defaulting to '{CoreSpecialist.ROUTER.value}'."
+            )
+            self.entry_point = CoreSpecialist.ROUTER.value
+        else:
+            self.entry_point = raw_entry_point
+
         self.graph = self._build_graph()
-        logger.info("---ChiefOfStaff: Graph compiled successfully.---")
+        logger.info(f"---ChiefOfStaff: Graph compiled successfully with entry point '{self.entry_point}'.---")
 
     def _load_and_configure_specialists(self) -> Dict[str, BaseSpecialist]:
-        # This method is correct and remains unchanged.
+        """
+        Iterates through the validated specialist configurations from ConfigLoader,
+        instantiates each specialist class, and logs errors for any that fail,
+        allowing the application to start with the successfully loaded specialists.
+        """
         specialists_config = self.config.get("specialists", {})
         loaded_specialists: Dict[str, BaseSpecialist] = {}
         for name, config in specialists_config.items():
@@ -32,62 +50,91 @@ class ChiefOfStaff:
                     logger.warning(f"Skipping '{name}': Class '{SpecialistClass.__name__}' does not inherit from BaseSpecialist.")
                     continue
                 instance = SpecialistClass(name)
+                if not instance.is_enabled:
+                    logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")
+                    continue
                 loaded_specialists[name] = instance
                 logger.info(f"Successfully instantiated specialist: {name}")
             except Exception as e:
-                logger.error(f"Failed to instantiate specialist '{name}': {e}", exc_info=True)
-                raise
+                logger.error(f"Failed to load specialist '{name}', it will be disabled. Error: {e}", exc_info=True)
+                continue # Allow the app to start with the specialists that did load correctly.
+
+        # The router configuration needs the full list of potential specialists from the config,
+        # not just the ones that loaded, so it can report on them.
         if CoreSpecialist.ROUTER.value in loaded_specialists:
-            self._configure_router(loaded_specialists, specialists_config)
+            self._configure_router(loaded_specialists, self.config.get("specialists", {}))
+        
+        # If the Triage specialist exists, configure it with the full map of other specialists.
+        if CoreSpecialist.TRIAGE.value in loaded_specialists:
+            self._configure_triage(loaded_specialists, self.config.get("specialists", {}))
+
         return loaded_specialists
 
     def _configure_router(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
-        # This method is correct and remains unchanged.
         logger.info("Conducting 'morning standup' to configure the router...")
         router_instance = specialists[CoreSpecialist.ROUTER.value]
 
-        # Provide the router with a list of valid destinations for self-correction.
-        available_specialist_names = [name for name in configs if name != CoreSpecialist.ROUTER.value]
-        router_instance.set_available_specialists(available_specialist_names)
+        # Provide the router with the full map of specialist configurations.
+        # It will use this map at runtime to filter specialists based on the routing channel.
+        router_instance.set_specialist_map(configs)
 
+        # The static part of the router's prompt. The dynamic list of tools will be
+        # injected by the router itself at runtime based on the state.
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
-        available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in configs.items() if name != CoreSpecialist.ROUTER.value]
-        tools_list_str = "\n".join(available_tools_desc)
         base_prompt_file = router_config.get("prompt_file")
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
-        # Add a specific instruction to prioritize feedback from other specialists.
-        # This helps break reasoning loops where the LLM gets stuck on the initial prompt.
+
         feedback_instruction = (
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
             "1. **Task Completion**: If the last message is a report or summary that appears to fully satisfy the user's request, your job is done. You MUST route to `__end__`.\n"
             "2. **Error Correction**: If the last message is from a specialist reporting an error (e.g., it needs a file to be read first), you MUST use that feedback to select the correct specialist to resolve the issue (e.g., 'file_specialist').\n"
-            "3. **Data Processing**: If the last message is an `AIMessage` from the `file_specialist` indicating a file's content has been successfully read and is now in context, and the user's request requires understanding or summarizing that content, your next step MUST be to route to an analysis specialist like 'text_analysis_specialist'.\n"
-            "4. **Plan Execution**: If a `system_plan` artifact has just been added to the state, you MUST route to the specialist best suited to execute that plan (e.g., `web_builder` for web content, or another coding specialist for other tasks).\n"
-            "5. **Complexity-Based Routing**: If a `json_artifact` from the `prompt_triage_specialist` is present, you MUST use its `estimated_complexity` field to route to the appropriate specialist (e.g., 'simple_prompt_specialist' for simple tasks, 'systems_architect' for complex ones)."
+            "3. **Follow the Plan**: If a `system_plan` or other artifact has just been added to the state, you MUST route to the specialist best suited to execute the next step.\n"
+            "4. **Use Provided Tools**: You will be provided with a list of specialists to choose from based on the current context. You MUST choose from that list."
         )
-        dynamic_system_prompt = (
-            f"{base_prompt}\n{feedback_instruction}\n\n"
-            f"Your available specialists are:\n{tools_list_str}"
-        )
+        dynamic_system_prompt = f"{base_prompt}\n{feedback_instruction}"
         router_instance.llm_adapter = AdapterFactory().create_adapter(
             specialist_name=CoreSpecialist.ROUTER.value,
             system_prompt=dynamic_system_prompt
         )
         logger.info("RouterSpecialist adapter re-initialized with dynamic, context-aware prompt.")
+        logger.debug(f"RouterSpecialist dynamic system prompt: {dynamic_system_prompt}")
+
+    def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
+        """Provides the Triage specialist with the map of all other specialists so it can make recommendations."""
+        logger.info("Configuring the Triage specialist with the system's capabilities...")
+        triage_instance = specialists[CoreSpecialist.TRIAGE.value]
+        triage_instance.set_specialist_map(configs)
 
     def _build_graph(self) -> StateGraph:
-        # This method is correct and remains unchanged.
+        """
+        Builds the LangGraph StateGraph by adding nodes and defining the "hub-and-spoke"
+        edge architecture.
+        """
         workflow = StateGraph(GraphState)
+
+        # 1. Add all successfully loaded specialists as nodes in the graph.
         for name, instance in self.specialists.items():
             workflow.add_node(name, instance.execute)
-        workflow.set_entry_point(self.entry_point)
-        conditional_map = {name: name for name in self.specialists if name != CoreSpecialist.ROUTER.value} # Map all specialists to themselves
-        conditional_map[END] = END # If the router decides to END, go to the graph's END
-        workflow.add_conditional_edges(CoreSpecialist.ROUTER.value, self.decide_next_specialist, conditional_map)
+
+        # 2. The router is the central hub. All decisions on where to go next flow from it.
+        router_name = CoreSpecialist.ROUTER.value
+        destinations = {name: name for name in self.specialists if name != router_name}
+        destinations[END] = END
+        workflow.add_conditional_edges(router_name, self.decide_next_specialist, destinations)
+
+        # 3. After any other specialist runs, control must return to the router for the next decision.
+        #    This creates the "hub-and-spoke" architecture and ensures that an edge exists
+        #    from any non-router entry point back to the router.
         for name in self.specialists:
-            if name not in [CoreSpecialist.ROUTER.value, CoreSpecialist.ARCHIVER.value]:
-                workflow.add_edge(name, CoreSpecialist.ROUTER.value)
-        workflow.add_edge(CoreSpecialist.ARCHIVER.value, END)
+            if name == router_name:
+                continue  # Don't add an edge from the router to itself.
+            if name == CoreSpecialist.ARCHIVER.value:
+                workflow.add_edge(name, END)  # The archiver is a terminal node.
+            else:
+                workflow.add_edge(name, router_name)  # All other specialists loop back to the router.
+
+        # 4. Set the validated entry point for the graph.
+        workflow.set_entry_point(self.entry_point)
         return workflow.compile()
 
     def decide_next_specialist(self, state: GraphState) -> str:

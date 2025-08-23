@@ -36,8 +36,3 @@ Just a plain text message.
 ```
 
 **CRITICAL:** Your response MUST contain ONLY the JSON object. Any additional text, explanations, or conversational elements will cause a critical error in the system. Adhere strictly to the JSON format.
-
----
-User Request:
-{user_request}
----

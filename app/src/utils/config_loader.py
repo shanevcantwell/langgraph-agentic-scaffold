@@ -8,6 +8,7 @@ import copy
 from .errors import ConfigError
 from .config_schema import RootConfig, UserSettings
 from .path_utils import PROJECT_ROOT
+from ..enums import CoreSpecialist
 
 logger = logging.getLogger(__name__)
 BLUEPRINT_CONFIG_FILE = PROJECT_ROOT / "config.yaml"
@@ -75,36 +76,56 @@ class ConfigLoader:
             raise ConfigError(msg) from e
 
     def _merge_configs(self, blueprint: dict, user_settings: dict) -> dict:
-        """Injects user choices into the blueprint to create the final config."""
-        logger.debug("Starting configuration merge process.")
+        """
+        Injects user choices into the blueprint, validates the combined configuration,
+        and filters out any misconfigured specialists to create the final, runnable config.
+        """
+        logger.debug("Starting configuration merge and validation process.")
         merged = copy.deepcopy(blueprint)
-        bindings = user_settings.get("specialist_model_bindings", {})
+        # Robustly get bindings, defaulting to an empty dict if the key is missing or its value is None.
+        bindings = user_settings.get("specialist_model_bindings") or {}
         default_binding = user_settings.get("default_llm_config")
 
+        # 1. Validate that the default binding exists, if provided
         if default_binding:
             logger.debug(f"Default LLM binding set to: '{default_binding}'")
             if default_binding not in merged["llm_providers"]:
                 raise ConfigError(f"The 'default_llm_config' ('{default_binding}') in {USER_SETTINGS_FILE} does not exist in 'llm_providers' in {BLUEPRINT_CONFIG_FILE}.")
 
+        # 2. Validate that all explicit bindings in user_settings point to real specialists
+        for specialist_name in bindings.keys():
+            if specialist_name not in merged["specialists"]:
+                logger.warning(f"Ignoring model binding for '{specialist_name}' in {USER_SETTINGS_FILE} because this specialist is not defined in {BLUEPRINT_CONFIG_FILE}.")
+
+        # 3. Build the final list of specialists, filtering out any that are misconfigured
+        final_specialists = {}
         for name, spec_config in merged["specialists"].items():
             if spec_config.get("type") == "llm":
-                # Determine the binding: specific binding > default binding > None
+                # Determine the binding: specific (if valid) > default
                 binding = bindings.get(name) or default_binding
+
+                # If a specific binding was provided, ensure it's valid before using it
+                if name in bindings and bindings[name] not in merged["llm_providers"]:
+                    logger.warning(f"Model binding '{bindings[name]}' for specialist '{name}' in {USER_SETTINGS_FILE} is invalid. It will be ignored, and we will attempt to use the default binding.")
+                    binding = default_binding
+
                 if not binding:
-                    raise ConfigError(
-                        f"LLM specialist '{name}' has no model assigned. "
-                        f"Assign it in 'specialist_model_bindings' or set a 'default_llm_config' in {USER_SETTINGS_FILE}."
-                    )
-                if binding not in merged["llm_providers"]:
-                    raise ConfigError(
-                        f"Model binding '{binding}' for specialist '{name}' in {USER_SETTINGS_FILE} "
-                        f"does not exist in 'llm_providers' in {BLUEPRINT_CONFIG_FILE}."
-                    )
-                # Inject the final llm_config into the specialist's configuration
+                    logger.warning(f"LLM specialist '{name}' has no model assigned and will be disabled. Assign it in 'specialist_model_bindings' or set a 'default_llm_config' in {USER_SETTINGS_FILE}.")
+                    continue  # Skip this specialist
+
                 spec_config["llm_config"] = binding
                 logger.debug(f"Bound specialist '{name}' to LLM config: '{binding}'")
+                final_specialists[name] = spec_config
+            else:
+                # It's a procedural or wrapped specialist, it's always valid from a binding perspective.
+                final_specialists[name] = spec_config
 
-        logger.debug("Configuration merge process completed.")
+        # 4. Final check: The router is essential for the system to function.
+        if CoreSpecialist.ROUTER.value not in final_specialists:
+            raise ConfigError(f"The '{CoreSpecialist.ROUTER.value}' is essential for the system but was disabled due to a configuration error. Please ensure it has a valid model binding in {USER_SETTINGS_FILE}.")
+
+        merged["specialists"] = final_specialists
+        logger.info(f"Configuration merge complete. Enabled specialists: {list(final_specialists.keys())}")
         return merged
 
     def get_config(self) -> dict:

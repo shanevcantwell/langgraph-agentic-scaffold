@@ -38,9 +38,9 @@ class WorkflowRunner:
         logger.info(f"--- Starting workflow for goal: '{goal}' ---")
         
         initial_state: GraphState = {
-            "messages": [HumanMessage(content=goal)],
+            "messages": [HumanMessage(content=goal, name="user")],
             "next_specialist": None,
-            "suggested_next_specialist": None,
+            "recommended_specialists": None,
             "text_to_process": None,
             "extracted_data": None,
             "error": None,

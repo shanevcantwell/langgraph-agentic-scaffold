@@ -31,6 +31,7 @@ fi
 echo "--- Copying example configuration files ---"
 cp .env.example .env
 cp config.yaml.example config.yaml
+cp user_settings.yaml.example user_settings.yaml
 
 echo "---"
 echo "✅ Development environment setup complete."

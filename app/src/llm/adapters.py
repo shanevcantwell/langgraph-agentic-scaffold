@@ -5,12 +5,13 @@ import os
 from typing import Dict, Any, List, Optional, Type
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
-from pydantic import BaseModel
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError
 from langchain_core.messages import BaseMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
+
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, SafetyFilterError, RateLimitError
-from ..specialists.schemas import SystemPlan, WebContent
+from . import adapters_helpers
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 120
@@ -19,10 +20,11 @@ class GeminiAdapter(BaseAdapter):
     def __init__(self, model_config: Dict[str, Any], api_key: str, system_prompt: str):
         super().__init__(model_config)
         genai.configure(api_key=api_key)
+        # Initialize model WITHOUT system_instruction here, as we'll inject it into messages
         self.model = genai.GenerativeModel(
-            self.config['api_identifier'],
-            system_instruction=system_prompt
+            self.config['api_identifier']
         )
+        self.static_system_prompt = system_prompt # Store the static system prompt
         logger.info(f"INITIALIZED GeminiAdapter (Model: {self.config['api_identifier']})")
 
     @retry(
@@ -31,18 +33,11 @@ class GeminiAdapter(BaseAdapter):
         reraise=True # Re-raise the exception after the final attempt
     )
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
-        api_messages = []
-        for msg in request.messages:
-            # Gemini API doesn't accept SystemMessage in the message history.
-            # It's set once at model initialization. We will log a warning and skip.
-            if msg.type == 'system':
-                logger.warning("GeminiAdapter received a SystemMessage at runtime, which is not supported in the message history. It will be ignored.")
-                continue
-            
-            role = "user" if msg.type == 'human' else "model"
-            
-            # This is a simplified handling. A full implementation would need to map LangChain's ToolMessage to Gemini's function_response format.
-            api_messages.append({"role": role, "parts": [msg.content]})
+        gemini_api_messages = adapters_helpers.format_gemini_messages(
+            messages=request.messages,
+            static_system_prompt=self.static_system_prompt
+        )
+
         generation_config = self.config.get('parameters', {}).copy()
 
         # Determine request type and configure API call parameters
@@ -58,7 +53,7 @@ class GeminiAdapter(BaseAdapter):
 
         try:
             response = self.model.generate_content(
-                api_messages,
+                gemini_api_messages, # Use the prepared messages
                 generation_config=generation_config,
                 tools=tools_to_pass,
             )
@@ -107,6 +102,13 @@ class GeminiAdapter(BaseAdapter):
             if response.candidates and response.candidates[0].content.parts and hasattr(response.candidates[0].content.parts[0], 'function_call'):
                 part = response.candidates[0].content.parts[0]
                 function_call = part.function_call
+
+                # --- ADDED VALIDATION ---
+                # Handle cases where the model hallucinates a tool call with no name.
+                if not function_call.name:
+                    logger.warning("GeminiAdapter received a tool call with an empty name. Treating as a failed tool call.")
+                    return {"tool_calls": []}
+
                 args = {key: value for key, value in function_call.args.items()} if function_call.args else {}
                 tool_call_id = f"call_{function_call.name}"
                 tool_call_response = {
@@ -115,8 +117,10 @@ class GeminiAdapter(BaseAdapter):
                 logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
                 return tool_call_response
             else:
-                logger.info("GeminiAdapter was given tools but returned a text response.")
-                return {"text_response": response.text}
+                logger.warning("GeminiAdapter was given tools but returned a text response instead of a tool call.")
+                # Return an empty tool_calls list to conform to the expected output format for the Router.
+                # The Router will see this and correctly identify it as an LLM failure.
+                return {"tool_calls": []}
 
         # Otherwise, it's a standard text response.
         logger.info("GeminiAdapter returned text response.")
@@ -154,40 +158,10 @@ class LMStudioAdapter(BaseAdapter):
         to enforce a JSON schema if a Pydantic model is provided in the request,
         as per LM Studio's documentation.
         """
-        # Correctly format messages for the OpenAI-compatible API,
-        # preserving the distinct roles for user, assistant, and tool calls.
-        # This is critical for the model to understand the conversation flow.
-        api_messages = [{"role": "system", "content": self.system_prompt}]
-        for msg in request.messages:
-            # The previous attempt to combine system prompts caused issues with some servers.
-            # We revert to the simpler model where only the initial system prompt is used.
-            if msg.type == 'human':
-                api_messages.append({"role": "user", "content": msg.content})
-            elif msg.type == 'ai':
-                # Format the AIMessage, including any tool calls.
-                ai_msg_dict = {"role": "assistant", "content": msg.content or ""}
-                # The tool_calls from LangGraph/LangChain are dicts. We need to convert
-                # them to the format expected by the OpenAI API (arguments as a JSON string).
-                if msg.tool_calls:
-                    openai_tool_calls = []
-                    for tc in msg.tool_calls:
-                        # The 'args' from LangGraph is a dict, but OpenAI API expects a JSON string.
-                        arguments_str = json.dumps(tc.get('args', {}))
-                        openai_tool_calls.append({
-                            "id": tc.get('id'),
-                            "type": "function",
-                            "function": {"name": tc.get('name'), "arguments": arguments_str},
-                        })
-                    ai_msg_dict["tool_calls"] = openai_tool_calls
-                    ai_msg_dict["content"] = None # Per OpenAI spec, content is null when tool_calls are present
-                api_messages.append(ai_msg_dict)
-            elif msg.type == 'tool':
-                # Format the ToolMessage with its required tool_call_id.
-                api_messages.append({
-                    "role": "tool",
-                    "content": msg.content,
-                    "tool_call_id": str(msg.tool_call_id) # Ensure tool_call_id is a string
-                })
+        api_messages = adapters_helpers.format_openai_messages(
+            messages=request.messages,
+            static_system_prompt=self.system_prompt
+        )
 
         # Dynamically build arguments to avoid sending null values,
         # which can cause issues with some servers.
@@ -264,6 +238,12 @@ class LMStudioAdapter(BaseAdapter):
                     except json.JSONDecodeError:
                         logger.error(f"Failed to decode tool call arguments: {tool_call.function.arguments}", exc_info=True)
                 return {"tool_calls": formatted_tool_calls}
+
+            # If a tool call was required but not provided, return an empty list.
+            # This signals a failure to the RouterSpecialist.
+            if api_kwargs.get("tool_choice") == "required":
+                logger.warning("LMStudioAdapter had tool_choice='required' but the model returned a text response.")
+                return {"tool_calls": []}
 
             # If we requested a JSON schema, parse the content as JSON.
             if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":

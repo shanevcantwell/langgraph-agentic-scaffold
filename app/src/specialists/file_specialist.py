@@ -134,9 +134,9 @@ class FileSpecialist(BaseSpecialist):
                 file_content, result_content = self._read_file(ReadFileParams(**tool_args))
                 if file_content is not None:
                     updated_state["text_to_process"] = file_content
-                    # After reading a file, the next logical step is often analysis.
-                    # We can provide a deterministic hint to the router to avoid an unnecessary LLM call.
-                    updated_state["suggested_next_specialist"] = "text_analysis_specialist"
+                    # After reading a file, the next logical step is often analysis. We recommend
+                    # this specialist to the router.
+                    updated_state["recommended_specialists"] = ["text_analysis_specialist"]
             elif tool_name == ListDirectoryParams.__name__:
                 result_content = self._list_directory(ListDirectoryParams(**tool_args))
                 # The list of files is also content that might be processed

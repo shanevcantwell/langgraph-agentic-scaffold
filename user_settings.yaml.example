@@ -16,4 +16,4 @@ default_llm_config: "gemini_flash"
 # The value on the right must be a provider key from `llm_providers` in `config.yaml`.
 specialist_model_bindings:
   systems_architect: "gemini_pro"
-  advanced_prompt_specialist: "gemini_pro"
+  prompt_specialist: "gemini_pro" # Example: Bind the generalist to a powerful model.

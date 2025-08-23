@@ -22,7 +22,7 @@ fi
 
 PORT=8000
 HEALTH_CHECK_URL="http://127.0.0.1:${PORT}/"
-TEST_PROMPT="Read the README.md file and list its main sections."
+TEST_PROMPT="From the installation steps described in README.md, make me a 1970s wood and brushed aluminum themed animated web page with active checklist boxes."
 
 # --- Cleanup function ---
 # This function will be called on script exit to ensure the server is stopped.

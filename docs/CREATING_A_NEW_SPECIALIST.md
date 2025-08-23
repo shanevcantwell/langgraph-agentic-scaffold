@@ -73,9 +73,10 @@ class CodeWriterSpecialist(BaseSpecialist):
         ai_message = AIMessage(content=ai_response_content)
 
         # 4. Return the updated state.
-        #    It is very important to return a dictionary with the updated
-        #    "messages" list.
-        return {"messages": state["messages"] + [ai_message]}
+        #    It is critical to only return the *new* messages you want to add
+        #    to the history. The graph is configured to append these messages
+        #    to the existing list of messages in the state.
+        return {"messages": [ai_message]}
 
 ### Step 2: Create the Prompt File
 
@@ -95,11 +96,10 @@ Now, you need to register your new specialist in the `config.yaml` file in the r
 
 Add a new entry under the `specialists` key:
 
-*   `code_writer_specialist`: This key must match the `specialist_name` you set in your specialist's `__init__` method.
-*   `api_identifier`: The specific model name to be used for the API call (e.g., "gemini-2.5-flash").
-*   `provider`: The LLM provider to use, which must match a key in the `llm_providers` section.
-*   `prompt_file`: The name of the prompt file you created in the `app/prompts/` directory.
-*   `description`: A clear, concise description of the specialist's capabilities. This is **critical** for the orchestrator to make accurate routing decisions.
+*   The key (`code_writer_specialist`) must match the `specialist_name` you set in your specialist's `__init__` method.
+*   `type`: Set to `"llm"` for a standard specialist.
+*   `prompt_file`: The name of the prompt file you created.
+*   `description`: A clear, concise description of the specialist's capabilities. This is **critical** for the `RouterSpecialist` and `PromptTriageSpecialist` to make accurate routing decisions.
 
 # config.yaml
 
@@ -109,10 +109,11 @@ specialists:
   # ... other specialists ...
 
   code_writer_specialist:
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
-    prompt_file: code_writer_prompt.md
-    description: "A specialist that writes clean, efficient Python code based on a user's request." # This is used by the orchestrator for routing.
+    type: "llm"
+    prompt_file: "code_writer_prompt.md"
+    description: "A specialist that writes clean, efficient Python code based on a user's request."
+
+After registering the specialist in the system blueprint (`config.yaml`), you can optionally bind it to a specific LLM configuration in your local `user_settings.yaml` file. If you don't, it will use the `default_llm_config`.
 
 ### Step 4: Testing Your New Specialist
 
@@ -150,11 +151,27 @@ def test_code_writer_specialist_execute():
     specialist.llm_adapter.invoke.assert_called_once()
 
     # Check that the new AI message was added to the state correctly.
-    assert len(result_state["messages"]) == 2
-    assert isinstance(result_state["messages"][-1], AIMessage)
-    assert result_state["messages"][-1].content == mock_response
+    # The specialist should only return the *new* message it created.
+    assert len(result_state["messages"]) == 1
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert result_state["messages"][0].content == mock_response
 
 To run the tests, simply run `pytest` from the root directory.
+
+### Advanced Specialist Patterns
+
+The example above shows a basic specialist. However, the scaffold's architecture supports more advanced patterns for creating robust, intelligent agents. You should leverage these patterns when building your own specialists.
+
+*   **Structured Output:** Instead of returning plain text, you can enforce a specific JSON schema for the LLM's response. This is done by passing an `output_model_class` (a Pydantic model) or a list of `tools` to the `StandardizedLLMRequest`. This dramatically improves reliability.
+    *   **Example:** See how `FileSpecialist` uses Pydantic models like `ReadFileParams` and `WriteFileParams` as tools.
+
+*   **Self-Correction and Recommendations:** A specialist can guide the workflow if it's called at the wrong time. If a specialist cannot perform its task because a precondition is not met (e.g., it needs a file to be read first), it should return a `recommended_specialists` list in its state update. The `RouterSpecialist` will use this recommendation to route to the correct specialist next, effectively "self-correcting" the workflow.
+    *   **Example:** See `TextAnalysisSpecialist`. If it's called when `text_to_process` is not in the state, it returns `{"recommended_specialists": ["file_specialist"]}`.
+
+*   **Programmatic Task Completion:** Some specialists are designed to produce a final answer. To signal that the overall task is finished, the specialist should include `task_is_complete: True` in the state it returns. The `RouterSpecialist` will see this flag and route the graph to `END`.
+    *   **Example:** See `TextAnalysisSpecialist`, which sets this flag to `True` if it determines it has produced the final answer.
+
+For a deeper understanding of these patterns, refer to the **"Agentic Robustness Patterns"** section in the **Developer's Guide**.
 
 ## Creating a Wrapped Specialist
 
@@ -192,7 +209,7 @@ class OpenSweSpecialist(WrappedSpecialist):
     def _translate_output_to_state(self, state: dict, output: any) -> dict:
         """Translates the open-swe agent's output back to the GraphState format."""
         ai_message = AIMessage(content=str(output))
-        return {"messages": state["messages"] + [ai_message]}
+        return {"messages": [ai_message]}
 
 ### Step 2: Configure the Wrapped Specialist in `config.yaml`
 

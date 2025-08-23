@@ -16,6 +16,7 @@ class BaseSpecialist(ABC):
 
     def __init__(self, specialist_name: str):
         self.specialist_name = specialist_name
+        self.is_enabled = True
         self.specialist_config = ConfigLoader().get_config().get("specialists", {}).get(specialist_name, {})
         prompt_file = self.specialist_config.get("prompt_file")
         system_prompt = load_prompt(prompt_file) if prompt_file else ""

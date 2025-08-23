@@ -141,7 +141,7 @@ The scaffold uses a three-layer configuration model to cleanly separate concerns
 *   **Function:** A Specialist performs a single atomic task, usually by creating a `StandardizedLLMRequest` and passing it to its configured LLM adapter.
 
 **LLM-Optional Specialists:**
-The system now supports specialists that do not require an associated Large Language Model (LLM). These are typically procedural specialists that perform deterministic tasks without needing AI inference. To define an LLM-optional specialist, simply omit the `model` and `provider` fields in its configuration within `config.yaml`. The `AdapterFactory` will automatically handle this by providing a `None` LLM adapter to such specialists. This allows for greater flexibility and efficiency by avoiding unnecessary LLM calls for purely procedural tasks.
+The system supports specialists that do not require an LLM. These are typically procedural specialists that perform deterministic tasks. To define one, set `type: "procedural"` in its `config.yaml` entry. The `AdapterFactory` will not create an LLM adapter for specialists of this type, which allows for greater flexibility and efficiency by avoiding unnecessary LLM calls for purely procedural tasks.
 
 ### 3.5 Schema Enforcement Strategy
 
@@ -169,11 +169,17 @@ The `app/src` directory is organized to enforce a clear separation of concerns, 
 
 ### 3.7 Agentic Robustness Patterns
 
-This scaffold implements several advanced patterns to move beyond simple instruction-following and create a more robust, resilient agentic system that can reason about its state and self-correct from errors.
+This scaffold implements several advanced patterns to move beyond simple instruction-following and create a more robust, resilient agentic system.
 
-*   **Self-Correction via Feedback:** A core principle is that specialists should "fail gracefully." If a specialist is called without its preconditions being met (e.g., `TextAnalysisSpecialist` is called before a file has been read), it should not raise an exception. Instead, it should return a helpful `AIMessage` to the graph's state. This message should explain *why* it couldn't run and, ideally, suggest what should be done next (e.g., "I cannot run because there is no text to process. The 'file_specialist' should probably run first..."). The `RouterSpecialist` is prompted to prioritize these feedback messages, allowing the system to recover from its own planning errors.
+*   **Two-Stage Semantic Routing:** The system uses a sophisticated routing mechanism to improve efficiency and accuracy.
+    *   **Stage 1: Recommendation (`PromptTriageSpecialist`):** The workflow begins with the Triage specialist, which acts as a "Semantic Recommender." It analyzes the user's initial prompt against the descriptions of all available specialists and outputs a `recommended_specialists` list into the `GraphState`.
+    *   **Stage 2: Dispatch (`RouterSpecialist`):** The Router uses the `recommended_specialists` list to make an intelligent decision.
+        *   If the list contains exactly one specialist, it's treated as a **deterministic handoff**. The Router bypasses its own LLM call and routes directly to that specialist, increasing speed and reliability.
+        *   If the list contains multiple specialists, the Router uses this list to create a filtered, contextual menu of choices for its LLM call. This simplifies the LLM's task, making it cheaper and more accurate.
+        *   If the list is **absent** (i.e., not provided by a previous step), the Router falls back to using the full list of all available specialists.
+        *   If the list is **empty**, this indicates that the Triage specialist found no relevant specialists, and the workflow will end gracefully.
 
-*   **Deterministic Routing via Suggestions:** While the `RouterSpecialist`'s LLM is powerful, relying on it for every single state transition is inefficient and can lead to loops. For simple, predictable workflows (e.g., "after reading a file, analyze it"), the system uses a programmatic suggestion mechanism. A specialist can add a `suggested_next_specialist` key to the state it returns. The `RouterSpecialist` is designed to check for this key *before* invoking its LLM. If a valid suggestion is present, it bypasses the LLM call and routes directly to the suggested specialist, making the workflow more efficient and reliable.
+*   **Self-Correction via Recommendations:** The recommendation pattern is also used for self-correction. If a specialist is called without its preconditions being met (e.g., `TextAnalysisSpecialist` is called before a file has been read), it returns a helpful `AIMessage` explaining the problem and a `recommended_specialists` list containing the name of the specialist that can resolve the issue (e.g., `["file_specialist"]`). The Router then uses this recommendation to correct the workflow.
 
 *   **Programmatic Task Completion:** Similar to routing, determining when a task is truly "done" can be ambiguous for an LLM. To solve this, terminal specialists (those that produce a final answer, like `TextAnalysisSpecialist`) can set a `task_is_complete: True` flag in the state they return. The `RouterSpecialist` checks for this flag at the beginning of its turn and, if present, immediately routes to `END` without consulting the LLM. This provides a deterministic signal that the user's goal has been met.
 

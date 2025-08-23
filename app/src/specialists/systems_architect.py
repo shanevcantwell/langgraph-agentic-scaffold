@@ -37,6 +37,6 @@ class SystemsArchitect(BaseSpecialist):
         updated_state = {
             "messages": state["messages"] + [new_message],
             "system_plan": plan.dict(),
-            "next_specialist": "web_builder" # Set next specialist
+            "recommended_specialists": ["web_builder"]
         }
         return updated_state

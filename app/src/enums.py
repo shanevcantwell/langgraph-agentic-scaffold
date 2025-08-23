@@ -19,4 +19,5 @@ class CoreSpecialist(str, Enum):
     that the orchestration logic depends on.
     """
     ROUTER = "router_specialist"
+    TRIAGE = "prompt_triage_specialist"
     ARCHIVER = "archiver_specialist"
