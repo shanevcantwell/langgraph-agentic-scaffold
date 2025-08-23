@@ -55,3 +55,11 @@ dev = [
 [tool.setuptools.packages.find]
 # Automatically find all packages under the 'app' directory
 where = ["app"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "app"
+]
+markers = [
+    "live_llm: marks tests that require a live LLM connection and API keys"
+]

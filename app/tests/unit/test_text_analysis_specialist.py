@@ -1,70 +1,50 @@
-import pytest
-from unittest.mock import patch, MagicMock
+# app/tests/unit/test_text_analysis_specialist.py
+from unittest.mock import MagicMock
+from langchain_core.messages import AIMessage, HumanMessage
+from src.specialists.text_analysis_specialist import TextAnalysisSpecialist
 
-from app.src.specialists.text_analysis_specialist import TextAnalysisSpecialist
-from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
-
-# Common fixtures for mocking specialist dependencies
-@pytest.fixture
-def mock_config_loader():
-    with patch('app.src.specialists.base.ConfigLoader') as mock_loader:
-        mock_loader.return_value.get_specialist_config.return_value = {"prompt_file": "fake.md"}
-        mock_loader.return_value.get_provider_config.return_value = {}
-        yield mock_loader
-
-@pytest.fixture
-def mock_adapter_factory():
-    with patch('app.src.specialists.base.AdapterFactory') as mock_factory:
-        mock_adapter = MagicMock()
-        mock_factory.return_value.create_adapter.return_value = mock_adapter
-        yield mock_factory, mock_adapter
-
-@pytest.fixture
-def mock_load_prompt():
-    with patch('app.src.specialists.base.load_prompt') as mock_load:
-        mock_load.return_value = "Fake system prompt"
-        yield mock_load
-
-@pytest.fixture
-def text_analysis_specialist(mock_config_loader, mock_adapter_factory, mock_load_prompt):
-    specialist = TextAnalysisSpecialist(specialist_name="text_analysis_specialist")
-    specialist.llm_adapter = mock_adapter_factory[1]
-    return specialist
-
-# Test cases
-def test_text_analysis_success(text_analysis_specialist):
-    """Tests successful text analysis and state update."""
+def test_text_analysis_with_text():
+    """
+    Tests the normal execution path where text is provided and successfully analyzed.
+    """
     # Arrange
+    specialist = TextAnalysisSpecialist("text_analysis_specialist")
+    specialist.llm_adapter = MagicMock()
+    mock_response = {"summary": "Test summary", "main_points": ["Point 1", "Point 2"]}
+    specialist.llm_adapter.invoke.return_value = {"json_response": mock_response}
+
     initial_state = {
-        "messages": [HumanMessage(content="Summarize this text.")],
-        "text_to_process": "This is a long piece of text that needs summarizing."
+        "messages": [HumanMessage(content="Analyze this.")],
+        "text_to_process": "This is the text to analyze."
     }
-    mock_summary = "This is a summary."
-    text_analysis_specialist.llm_adapter.invoke.return_value = {"text_response": mock_summary}
 
     # Act
-    result_state = text_analysis_specialist._execute_logic(initial_state)
+    result_state = specialist._execute_logic(initial_state)
 
     # Assert
-    text_analysis_specialist.llm_adapter.invoke.assert_called_once()
-    # Check that a SystemMessage with the text to analyze was added for the LLM call
-    call_args, _ = text_analysis_specialist.llm_adapter.invoke.call_args
-    llm_messages = call_args[0].messages
-    assert any("long piece of text" in msg.content for msg in llm_messages if isinstance(msg, SystemMessage))
+    specialist.llm_adapter.invoke.assert_called_once()
+    assert "json_artifact" in result_state
+    assert result_state["json_artifact"] == mock_response
+    assert result_state["text_to_process"] is None # Should be consumed
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert "Test summary" in result_state["messages"][0].content
 
-    assert result_state["text_to_process"] is None # Artifact should be consumed
-    assert isinstance(result_state["messages"][-1], AIMessage)
-    assert result_state["messages"][-1].content == mock_summary
-
-def test_text_analysis_no_text_to_process(text_analysis_specialist):
-    """Tests graceful handling when no text is provided."""
+def test_text_analysis_without_text_self_correction():
+    """
+    Tests the self-correction mechanism where no text is provided.
+    """
     # Arrange
-    initial_state = {"messages": [HumanMessage(content="Summarize this text.")], "text_to_process": None}
+    specialist = TextAnalysisSpecialist("text_analysis_specialist")
+    specialist.llm_adapter = MagicMock() # Mock the adapter
+
+    initial_state = {"messages": [HumanMessage(content="Analyze this.")]}
 
     # Act
-    result_state = text_analysis_specialist._execute_logic(initial_state)
+    result_state = specialist._execute_logic(initial_state)
 
     # Assert
-    assert text_analysis_specialist.llm_adapter.invoke.call_count == 0
-    assert isinstance(result_state["messages"][-1], AIMessage)
-    assert "no text was found" in result_state["messages"][-1].content
+    specialist.llm_adapter.invoke.assert_not_called() # LLM should not be called
+    assert "recommended_specialists" in result_state
+    assert result_state["recommended_specialists"] == ["file_specialist"]
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert "I cannot run because there is no text to process" in result_state["messages"][0].content

@@ -56,14 +56,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
         for point in json_response.get("main_points", []):
             report += f"- {point}\n"
 
-        # The task is only complete if this specialist was not part of a larger plan.
-        # The presence of a 'system_plan' artifact is the key indicator.
-        is_part_of_larger_plan = state.get("system_plan") is not None
-        task_is_complete = not is_part_of_larger_plan
-
         return {
             "messages": [AIMessage(content=report, name=self.specialist_name)],
             "json_artifact": json_response,
             "text_to_process": None,
-            "task_is_complete": task_is_complete
+            # This specialist should NOT decide if the task is complete.
+            # It provides its analysis and returns control to the router.
         }

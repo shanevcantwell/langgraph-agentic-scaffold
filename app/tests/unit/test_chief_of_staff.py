@@ -3,8 +3,8 @@
 from langgraph.graph import StateGraph
 from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
-from app.src.workflow.chief_of_staff import ChiefOfStaff
-from app.src.specialists.base import BaseSpecialist
+from src.workflow.chief_of_staff import ChiefOfStaff
+from src.specialists.base import BaseSpecialist
 
 @pytest.fixture
 def chief_of_staff_instance(mocker):
@@ -24,9 +24,9 @@ def test_decide_next_specialist_normal_route(chief_of_staff_instance):
     result = chief_of_staff_instance.decide_next_specialist(state)
     assert result == "file_specialist"
 
-@patch("app.src.workflow.chief_of_staff.AdapterFactory")
-@patch("app.src.workflow.chief_of_staff.get_specialist_class")
-@patch("app.src.workflow.chief_of_staff.ConfigLoader")
+@patch("src.workflow.chief_of_staff.AdapterFactory")
+@patch("src.workflow.chief_of_staff.get_specialist_class")
+@patch("src.workflow.chief_of_staff.ConfigLoader")
 def test_load_specialists_and_configure_router(mock_config_loader, mock_get_specialist_class, mock_adapter_factory):
     """
     Tests that specialists are loaded and that the router specialist is
@@ -85,8 +85,8 @@ def test_load_specialists_and_configure_router(mock_config_loader, mock_get_spec
     # Check that the router's adapter was replaced with the new one
     assert chief_of_staff.specialists["router_specialist"].llm_adapter == mock_adapter_factory.create_adapter.return_value
 
-@patch("app.src.workflow.chief_of_staff.ConfigLoader")
-@patch("app.src.workflow.chief_of_staff.get_specialist_class")
+@patch("src.workflow.chief_of_staff.ConfigLoader")
+@patch("src.workflow.chief_of_staff.get_specialist_class")
 def test_get_graph(mock_get_specialist_class, mock_config_loader):
     """Tests that a valid graph is built and returned with all nodes."""
     # --- Arrange ---

@@ -2,16 +2,16 @@ import pytest
 from unittest.mock import patch, MagicMock
 from langchain_core.messages import AIMessage, HumanMessage
 
-from app.src.specialists.prompt_specialist import PromptSpecialist
-from app.src.graph.state import GraphState
-from app.src.llm.exceptions import LLMInvocationError
+from src.specialists.prompt_specialist import PromptSpecialist
+from src.graph.state import GraphState
+from src.llm.adapter import LLMInvocationError
 
 @pytest.fixture
 def default_state():
     """Provides a default state for tests."""
     return GraphState(messages=[HumanMessage(content="What should I do next?")])
 
-@patch('app.src.specialists.base.AdapterFactory.create_adapter')
+@patch('src.specialists.base.AdapterFactory.create_adapter')
 def test_prompt_specialist_happy_path(mock_create_adapter, default_state):
     """Tests that the specialist correctly processes a response and updates the state."""
     mock_adapter = MagicMock()
@@ -27,7 +27,7 @@ def test_prompt_specialist_happy_path(mock_create_adapter, default_state):
     assert result["messages"][-1] == expected_response
     assert "error" not in result
 
-@patch('app.src.specialists.base.AdapterFactory.create_adapter')
+@patch('src.specialists.base.AdapterFactory.create_adapter')
 def test_prompt_specialist_handles_adapter_failure(mock_create_adapter, default_state):
     """
     Tests that the specialist gracefully handles a connection or invocation error

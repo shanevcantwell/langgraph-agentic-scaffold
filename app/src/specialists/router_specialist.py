@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from ..utils.config_loader import ConfigLoader
+from ..enums import CoreSpecialist
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +39,25 @@ class RouterSpecialist(BaseSpecialist):
         # --- COMPLETION CHECK ---
         # If a previous specialist has signaled that the task is complete,
         # bypass the LLM and route directly to the end.
-        if state.get("task_is_complete"):
-            logger.info("A specialist has signaled task completion. Routing to END.")
-            return {"next_specialist": END, "turn_count": turn_count}
+        if state.get("task_is_complete", False):
+            # Check if the archiver is available before routing to it.
+            if CoreSpecialist.ARCHIVER.value in self.specialist_map:
+                logger.info("A specialist has signaled task completion. Routing to ArchiverSpecialist for final report.")
+                ai_message = AIMessage(
+                    content="Task is complete. Routing to ArchiverSpecialist for final report.",
+                    name=self.specialist_name,
+                    additional_kwargs={"routing_decision": CoreSpecialist.ARCHIVER.value, "routing_type": "completion_signal"}
+                )
+                return {
+                    "messages": [ai_message],
+                    "next_specialist": CoreSpecialist.ARCHIVER.value,
+                    "turn_count": turn_count,
+                    "task_is_complete": False # Consume the flag
+                }
+            else:
+                # Fallback if archiver isn't defined for some reason.
+                logger.info("A specialist has signaled task completion, but ArchiverSpecialist is not available. Routing to END.")
+                return {"next_specialist": END, "turn_count": turn_count}
 
         # --- RECOMMENDATION CHECK (Two-Stage Routing) ---
         recommended_specialists = state.get("recommended_specialists")

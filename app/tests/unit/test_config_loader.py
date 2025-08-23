@@ -2,7 +2,7 @@
 
 import unittest
 from unittest.mock import patch, mock_open
-from app.src.utils.config_loader import ConfigLoader
+from src.utils.config_loader import ConfigLoader
 
 class TestConfigLoader(unittest.TestCase):
 
@@ -23,4 +23,3 @@ class TestConfigLoader(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
-

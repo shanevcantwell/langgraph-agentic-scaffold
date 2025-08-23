@@ -168,8 +168,8 @@ The example above shows a basic specialist. However, the scaffold's architecture
 *   **Self-Correction and Recommendations:** A specialist can guide the workflow if it's called at the wrong time. If a specialist cannot perform its task because a precondition is not met (e.g., it needs a file to be read first), it should return a `recommended_specialists` list in its state update. The `RouterSpecialist` will use this recommendation to route to the correct specialist next, effectively "self-correcting" the workflow.
     *   **Example:** See `TextAnalysisSpecialist`. If it's called when `text_to_process` is not in the state, it returns `{"recommended_specialists": ["file_specialist"]}`.
 
-*   **Programmatic Task Completion:** Some specialists are designed to produce a final answer. To signal that the overall task is finished, the specialist should include `task_is_complete: True` in the state it returns. The `RouterSpecialist` will see this flag and route the graph to `END`.
-    *   **Example:** See `TextAnalysisSpecialist`, which sets this flag to `True` if it determines it has produced the final answer.
+*   **Programmatic Task Completion:** Specialists that produce a final, user-facing artifact (like a webpage) should signal that the primary goal is achieved. To do this, they include `task_is_complete: True` in the state they return. The `RouterSpecialist` will see this flag and route the workflow to the `archiver_specialist` for a final report before the graph ends. This provides a clean, deterministic way to finish a task.
+    *   **Example:** See `web_builder`. After it successfully generates the HTML, it sets this flag to `True`. This is appropriate because creating the webpage is often the final step of a user's request.
 
 For a deeper understanding of these patterns, refer to the **"Agentic Robustness Patterns"** section in the **Developer's Guide**.
 

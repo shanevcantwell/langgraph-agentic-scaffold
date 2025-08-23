@@ -1,22 +1,38 @@
 import pytest
-from src.llm.factory import LLMClientFactory
+import os
+from src.llm.factory import AdapterFactory
+from src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.live_llm
-def test_live_gemini_client_interaction():
-    """Tests a basic interaction with the live Gemini LLM client."""
+def test_live_gemini_adapter_interaction():
+    """Tests a basic interaction with a live Gemini model via the AdapterFactory."""
+    if not os.getenv("GEMINI_API_KEY"):
+        pytest.skip("GEMINI_API_KEY not set. Skipping live Gemini test.")
+
     try:
-        client = LLMClientFactory.create_client(provider="gemini")
-        
-        # Simple prompt for a basic response
-        messages = [HumanMessage(content="Hello, what is your name?")]
-        
-        response = client.invoke(messages)
-        
-        assert response.content is not None
-        assert isinstance(response.content, str)
-        assert len(response.content) > 0
-        print(f"Live LLM Response: {response.content}")
-        
+        # We'll test the adapter created for the 'systems_architect'
+        # which is configured to use a Gemini model in the default config.
+        factory = AdapterFactory()
+        # The system prompt can be simple for this test.
+        adapter = factory.create_adapter(
+            specialist_name="systems_architect",
+            system_prompt="You are a helpful assistant."
+        )
+
+        assert adapter is not None, "Adapter creation failed."
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Hello, what is your name?")]
+        )
+
+        response = adapter.invoke(request)
+
+        assert "text_response" in response
+        assert response["text_response"] is not None
+        assert isinstance(response["text_response"], str)
+        assert len(response["text_response"]) > 0
+        print(f"\nLive Gemini Response: {response['text_response']}")
+
     except Exception as e:
         pytest.fail(f"Live LLM test failed: {e}")

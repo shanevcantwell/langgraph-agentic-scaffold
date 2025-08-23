@@ -15,7 +15,7 @@ Artifact Aggregation: It scans the final state for any generated artifacts, such
 
 Report Generation: It formats all the gathered information into a single, human-readable Markdown (.md) file. This report serves as the definitive output of the entire agentic run.
 
-Termination Signal: It explicitly sets the next_specialist to a terminal value (e.g., __FINISH__), which tells the workflow runner to stop, preventing the kind of loop you observed.
+Termination Signal: The archiver itself does not set a termination signal. It relies on the graph's structure. The `ChiefOfStaff` is responsible for creating a hard-coded edge from the `archiver_specialist` node directly to the `END` node, ensuring that once the archiver runs, the workflow cleanly terminates.
 
 Input & Output
 Input: The Archiver receives the entire final state object from the specialist that completed the primary work (e.g., web_builder). It will look for keys like:
@@ -30,9 +30,9 @@ error: Any errors that occurred.
 
 Output:
 
-A new artifact: archive_report, which is a well-structured Markdown string.
+A new artifact: `archive_report`, which is a well-structured Markdown string.
 
-An updated state object: with the next_specialist flag set to __FINISH__.
+An updated state object: containing the `archive_report` and a final `AIMessage`. It does not modify the `next_specialist` flag.
 
 ## Example Report Structure (Markdown)
 This is what the generated archive_report artifact could look like. It's designed to be a comprehensive summary of the job.

@@ -22,7 +22,7 @@ fi
 
 PORT=8000
 HEALTH_CHECK_URL="http://127.0.0.1:${PORT}/"
-TEST_PROMPT="From the installation steps described in README.md, make me a 1970s wood and brushed aluminum themed animated web page with active checklist boxes."
+TEST_PROMPT="From the installation steps described in README.md, make me a 1970s wood and brushed aluminum themed animated web page with active checklist boxes. Iterate on the page at least twice, checking with the systems architect between iterations."
 
 # --- Cleanup function ---
 # This function will be called on script exit to ensure the server is stopped.
@@ -59,11 +59,10 @@ for i in {1..30}; do
         fi
 
         # Validate the JSON response using jq
-        # A successful multi-step workflow will have a turn_count greater than 1.
-        # e.g., (turn 1: router->file_specialist), (turn 2: router->text_analysis_specialist).
-        # The final state will have turn_count=2. So we check for turn_count > 1.
+        # A successful iterative workflow will have a high turn count.
+        # We check for turn_count > 5 as a robust indicator of a multi-step, iterative process.
         # We also check that the final message is a non-empty AI response.
-        if echo "$JSON_RESPONSE" | jq -e '.turn_count > 1 and (.messages | length > 1 and .messages[-1].type == "ai" and .messages[-1].content | length > 0)'; then
+        if echo "$JSON_RESPONSE" | jq -e '.turn_count > 5 and (.messages | length > 1 and .messages[-1].type == "ai" and .messages[-1].content | length > 0)'; then
             echo "---"
             echo "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully."
             exit 0

@@ -1,53 +1,83 @@
 import pytest
 from unittest.mock import patch
-from src.llm.factory import LLMClientFactory
-from src.llm.clients import GeminiClient, OllamaClient, LMStudioClient
+from src.llm.factory import AdapterFactory
+from src.llm.adapters import GeminiAdapter, LMStudioAdapter
 
-@pytest.fixture(autouse=True)
-def clear_factory_instances():
-    """Fixture to clear the LLMClientFactory instances before each test."""
-    LLMClientFactory._instances = {}
-    yield
-    LLMClientFactory._instances = {}
-
-@patch.dict('os.environ', {'GEMINI_API_KEY': 'test_key'})
-def test_factory_creates_gemini_singleton(mocker):
-    """Tests that the factory creates only one instance of a Gemini client."""
-    mocker.patch('src.llm.clients.GeminiClient.__init__', return_value=None)
+@patch('src.llm.factory.ConfigLoader')
+def test_factory_creates_gemini_adapter(mock_config_loader):
+    """Tests that the factory correctly creates a GeminiAdapter."""
+    # Arrange
+    mock_config = {
+        "llm_providers": {
+            "gemini_config": {"type": "gemini", "api_identifier": "gemini-test"}
+        },
+        "specialists": {
+            "test_specialist": {"type": "llm", "llm_config": "gemini_config"}
+        }
+    }
+    mock_config_loader.return_value.get_config.return_value = mock_config
     
-    client1 = LLMClientFactory.create_client("gemini")
-    client2 = LLMClientFactory.create_client("gemini")
+    # Act
+    factory = AdapterFactory()
+    adapter = factory.create_adapter("test_specialist", "system prompt")
 
-    assert client1 is client2
-    assert isinstance(client1, GeminiClient)
-    # __init__ should only be called once for the first creation
-    assert GeminiClient.__init__.call_count == 1
+    # Assert
+    assert isinstance(adapter, GeminiAdapter)
 
-def test_factory_creates_multiple_different_clients(mocker):
-    """Tests that the factory can create different clients."""
-    mocker.patch.dict('os.environ', {'GEMINI_API_KEY': 'test_key', 'OLLAMA_MODEL': 'test-ollama'})
-    mocker.patch('src.llm.clients.GeminiClient.__init__', return_value=None)
-    mocker.patch('src.llm.clients.OllamaClient.__init__', return_value=None)
-
-    gemini_client = LLMClientFactory.create_client("gemini")
-    ollama_client = LLMClientFactory.create_client("ollama")
-
-    assert gemini_client is not ollama_client
-    assert isinstance(gemini_client, GeminiClient)
-    assert isinstance(ollama_client, OllamaClient)
-
-@patch.dict('os.environ', {'LMSTUDIO_BASE_URL': 'http://fake-lmstudio-url:1234/v1'})
-def test_factory_creates_lmstudio_client(mocker):
-    """Tests that the factory can create an LMStudioClient."""
-    mocker.patch('src.llm.clients.LMStudioClient.__init__', return_value=None)
+@patch('src.llm.factory.ConfigLoader')
+def test_factory_creates_lmstudio_adapter(mock_config_loader):
+    """Tests that the factory correctly creates an LMStudioAdapter."""
+    # Arrange
+    mock_config = {
+        "llm_providers": {
+            "lmstudio_config": {"type": "lmstudio", "api_identifier": "lmstudio-test"}
+        },
+        "specialists": {
+            "test_specialist": {"type": "llm", "llm_config": "lmstudio_config"}
+        }
+    }
+    mock_config_loader.return_value.get_config.return_value = mock_config
     
-    client = LLMClientFactory.create_client("lmstudio")
+    # Act
+    factory = AdapterFactory()
+    adapter = factory.create_adapter("test_specialist", "system prompt")
 
-    assert isinstance(client, LMStudioClient)
-    LMStudioClient.__init__.assert_called_once()
+    # Assert
+    assert isinstance(adapter, LMStudioAdapter)
 
-def test_factory_raises_error_for_missing_lmstudio_url(mocker):
-    """Tests that the factory raises a ValueError if LMSTUDIO_BASE_URL is not set."""
-    mocker.patch.dict('os.environ', clear=True)
-    with pytest.raises(ValueError, match="LMSTUDIO_BASE_URL environment variable not set"):
-        LLMClientFactory.create_client("lmstudio")
+@patch('src.llm.factory.ConfigLoader')
+def test_factory_returns_none_for_procedural_specialist(mock_config_loader):
+    """Tests that the factory returns None for non-LLM specialists."""
+    # Arrange
+    mock_config = {
+        "specialists": {
+            "procedural_specialist": {"type": "procedural"}
+        }
+    }
+    mock_config_loader.return_value.get_config.return_value = mock_config
+    
+    # Act
+    factory = AdapterFactory()
+    adapter = factory.create_adapter("procedural_specialist", "system prompt")
+
+    # Assert
+    assert adapter is None
+
+@patch('src.llm.factory.ConfigLoader')
+def test_factory_raises_error_for_unknown_provider(mock_config_loader):
+    """Tests that the factory raises a ValueError for an unregistered provider type."""
+    # Arrange
+    mock_config = {
+        "llm_providers": {
+            "unknown_config": {"type": "unknown_provider", "api_identifier": "test"}
+        },
+        "specialists": {
+            "test_specialist": {"type": "llm", "llm_config": "unknown_config"}
+        }
+    }
+    mock_config_loader.return_value.get_config.return_value = mock_config
+    
+    # Act & Assert
+    factory = AdapterFactory()
+    with pytest.raises(ValueError, match="Unknown base provider type 'unknown_provider'"):
+        factory.create_adapter("test_specialist", "system prompt")

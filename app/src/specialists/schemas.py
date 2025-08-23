@@ -4,6 +4,10 @@ from typing import List, Dict, Any, Optional, Literal
 class SystemPlan(BaseModel):
     """A structured plan for a software system or component."""
     plan_summary: str = Field(description="A brief, human-readable summary of the proposed plan.")
+    refinement_cycles: Optional[int] = Field(
+        default=1,
+        description="The number of times a specialist like WebBuilder should iterate on its work. Set this if the user asks for refinement or multiple iterations."
+    )
     required_components: List[str] = Field(description="A list of software components or modules to be developed.")
     execution_steps: List[str] = Field(description="A sequence of high-level steps to implement the plan.")
 

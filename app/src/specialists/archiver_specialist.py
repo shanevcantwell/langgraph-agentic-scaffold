@@ -1,36 +1,86 @@
 
 import logging
-from typing import Dict, Any
-
+from typing import Dict, Any, List
+from datetime import datetime
+from langchain_core.messages import AIMessage, BaseMessage
 from .base import BaseSpecialist
-from ..graph.state import GraphState
 
 logger = logging.getLogger(__name__)
 
 class ArchiverSpecialist(BaseSpecialist):
     """
-    The Archiver Specialist is responsible for summarizing the conversation
-    and preparing the final report. It's the last step in the workflow.
+    A procedural specialist that creates a final summary report of the agentic run.
+    It gathers all artifacts and conversation history into a single markdown file.
     """
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name)
+        # This is a procedural specialist, so no LLM adapter is needed.
 
-    def _execute_logic(self, state: GraphState) -> Dict[str, Any]:
-        logger.info("---Executing Archiver Specialist---")
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Gathers all artifacts from the state and compiles a final report.
+        """
+        logger.info("Executing ArchiverSpecialist to create final report.")
 
-        messages = state.get("messages", [])
-        summary = "Conversation summary:\n"
-        for msg in messages:
-            summary += f"- {msg.type}: {msg.content}\n"
+        report_parts = []
+        run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
 
-        # In a real implementation, this would be a more sophisticated summary.
-        # For now, we just join the messages.
+        # --- Header ---
+        report_parts.append(f"# Archive Report: Run {run_id}")
+        report_parts.append(f"- **Status:** Completed")
+        report_parts.append("---")
 
-        report = f"# Archive Report\n\n{summary}"
+        # --- System Plan ---
+        if system_plan := state.get("system_plan"):
+            report_parts.append("## 📝 System Plan")
+            report_parts.append(f"_{system_plan.get('description', 'No plan description provided.')}_")
+            if steps := system_plan.get('steps'):
+                steps_md = "\n".join([f"{i+1}. {step}" for i, step in enumerate(steps)])
+                report_parts.append(f"\n**Execution Steps:**\n{steps_md}")
+            report_parts.append("---")
 
-        logger.info("Successfully generated archive report.")
+        # --- Artifacts ---
+        artifacts = {
+            "HTML": ("html_artifact", "html"),
+            "JSON": ("json_artifact", "json"),
+            "Text": ("text_to_process", "text"),
+        }
+        has_artifacts = False
+        artifact_section = ["## artifacts"]
+        for title, (key, lang) in artifacts.items():
+            if content := state.get(key):
+                has_artifacts = True
+                artifact_section.append(f"### 📄 {title} Output")
+                artifact_section.append(f"```{lang}\n{str(content)}\n```")
+        
+        if has_artifacts:
+            report_parts.extend(artifact_section)
+            report_parts.append("---")
 
+        # --- Conversation Summary ---
+        messages: List[BaseMessage] = state.get("messages", [])
+        if messages:
+            report_parts.append("## 💬 Conversation Summary")
+            # Create a simplified, clean summary of the interaction flow
+            summary_lines = []
+            for i, msg in enumerate(messages):
+                # Robustly get the sender's name, falling back to type, then to a default.
+                sender_val = getattr(msg, 'name', None) or getattr(msg, 'type', 'unknown_sender')
+                sender = str(sender_val).replace('_', ' ').title()
+                content_preview = msg.content.split('\n')[0] # First line for brevity
+                summary_lines.append(f"{i+1}. **{sender}:** *{content_preview}...*")
+            report_parts.append("\n".join(summary_lines))
+
+        final_report = "\n\n".join(report_parts)
+
+        ai_message = AIMessage(
+            content="Final report has been generated and the workflow is complete.",
+            name=self.specialist_name
+        )
+
+        # The ChiefOfStaff is configured to route from this specialist to END.
+        # We do not need to set next_specialist; the graph structure handles it.
         return {
-            "archive_report": report,
-            "next_specialist": "__FINISH__" # Signal to end the graph
+            "messages": [ai_message],
+            "archive_report": final_report
         }

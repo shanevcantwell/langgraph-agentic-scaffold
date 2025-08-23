@@ -40,14 +40,22 @@ class GeminiAdapter(BaseAdapter):
 
         generation_config = self.config.get('parameters', {}).copy()
 
-        # Determine request type and configure API call parameters
+        # Initialize API call parameters
         tools_to_pass = None
+        tool_config = None
+
+        # Determine request type and configure API call parameters
         if request.output_model_class:
             logger.info("GeminiAdapter: Invoking in JSON mode.")
             generation_config["response_mime_type"] = "application/json"
         elif request.tools:
             logger.info("GeminiAdapter: Invoking in Tool-calling mode.")
             tools_to_pass = request.tools
+            # Force the model to call a tool. This is critical for the router,
+            # which should never return a text response. This is the Gemini
+            # equivalent of OpenAI's `tool_choice="required"`.
+            tool_config = {"function_calling_config": {"mode": "ANY"}}
+            logger.info("GeminiAdapter: Forcing a tool call using tool_config.")
         else:
             logger.info("GeminiAdapter: Invoking in Text mode.")
 
@@ -56,6 +64,7 @@ class GeminiAdapter(BaseAdapter):
                 gemini_api_messages, # Use the prepared messages
                 generation_config=generation_config,
                 tools=tools_to_pass,
+                tool_config=tool_config,
             )
             return self._parse_and_format_response(request, response)
 
@@ -94,8 +103,17 @@ class GeminiAdapter(BaseAdapter):
         # If we requested JSON, we expect JSON.
         if request.output_model_class:
             logger.info("GeminiAdapter returned JSON response.")
-            json_response = json.loads(response.text)
-            return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+            content = response.text or "{}"
+            try:
+                json_response = json.loads(content)
+                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+            except json.JSONDecodeError:
+                # If the model fails to return valid JSON despite the request,
+                # we handle it gracefully by treating it as a text response.
+                logger.warning(
+                    f"GeminiAdapter was asked for JSON but received non-JSON text. Content: {content}"
+                )
+                return {"text_response": content, "json_response": {}}
 
         # If we passed tools, check for a tool call.
         if request.tools:

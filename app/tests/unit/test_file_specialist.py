@@ -2,8 +2,8 @@ import pytest
 import os
 from unittest.mock import patch, MagicMock
 
-from app.src.specialists.file_specialist import FileSpecialist, ReadFileParams, WriteFileParams, ListDirectoryParams, FileOperation
-from app.src.utils.errors import SpecialistError
+from src.specialists.file_specialist import FileSpecialist, ReadFileParams, WriteFileParams, ListDirectoryParams
+from src.utils.errors import SpecialistError
 from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 
 # Architectural Note: The 'tmp_path' fixture is provided by pytest.
@@ -14,7 +14,7 @@ from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 @pytest.fixture
 def mock_config_loader():
     """Mocks the ConfigLoader to prevent file system access during tests."""
-    with patch('app.src.specialists.base.ConfigLoader') as mock_loader:
+    with patch('src.specialists.base.ConfigLoader') as mock_loader:
         mock_loader.return_value.get_specialist_config.return_value = {
             "root_dir": "./test_workspace",
             "prompt_file": "fake_prompt.md"
@@ -25,13 +25,13 @@ def mock_config_loader():
 @pytest.fixture
 def mock_adapter_factory():
     """Mocks the AdapterFactory to prevent LLM client instantiation."""
-    with patch('app.src.specialists.base.AdapterFactory') as mock_factory:
+    with patch('src.specialists.base.AdapterFactory') as mock_factory:
         yield mock_factory
 
 @pytest.fixture
 def mock_load_prompt():
     """Mocks the prompt loader."""
-    with patch('app.src.specialists.base.load_prompt') as mock_load:
+    with patch('src.specialists.base.load_prompt') as mock_load:
         mock_load.return_value = "Fake system prompt"
         yield mock_load
 
