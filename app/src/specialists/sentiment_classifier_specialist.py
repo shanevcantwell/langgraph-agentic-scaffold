@@ -30,7 +30,8 @@ class SentimentClassifierSpecialist(BaseSpecialist):
             raise ValueError("SentimentClassifier failed to get a valid JSON response from the LLM.")
 
         classification = Sentiment(**json_response)
-        ai_message = AIMessage(content=f"The sentiment of the message is: {classification.sentiment}")
+        ai_message = AIMessage(content=f"The sentiment of the message is: {classification.sentiment}", name=self.specialist_name)
 
-        # Return the updated messages and the structured sentiment as a new artifact
-        return {"messages": state["messages"] + [ai_message], "sentiment": classification.sentiment}
+        # Return only the new message and artifact. The graph will append them to the state.
+        # This follows the "atomic state updates" pattern.
+        return {"messages": [ai_message], "json_artifact": classification.model_dump()}

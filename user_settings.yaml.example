@@ -1,0 +1,19 @@
+# ==============================================================================
+# USER-LEVEL SETTINGS
+# This file is for you, the user, to make choices from the options defined
+# in the main `config.yaml` blueprint.
+#
+# It is safe to edit and is not tracked by Git.
+# ==============================================================================
+
+# (Optional) Set a default model configuration for any LLM specialist that isn't
+# explicitly assigned a model below. This key must exist in the `llm_providers`
+# section of `config.yaml`.
+default_llm_config: "gemini_flash"
+
+# Assign a specific, pre-defined model configuration to a specialist.
+# The key on the left must be a specialist name from `config.yaml`.
+# The value on the right must be a provider key from `llm_providers` in `config.yaml`.
+specialist_model_bindings:
+  systems_architect: "gemini_pro"
+  advanced_prompt_specialist: "gemini_pro"

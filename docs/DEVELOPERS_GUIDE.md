@@ -164,6 +164,17 @@ This scaffold implements several advanced patterns to move beyond simple instruc
 
 *   **Atomic State Updates:** The LangGraph is configured to *add* new messages to the conversation history. Therefore, it is critical that specialists only return the *new* messages or state changes they are responsible for (the "delta"). They should not return the entire message history they received. Adhering to this pattern prevents the conversation history from growing exponentially, which would quickly exhaust the context window of any LLM.
 
+### 3.8 Deployment: Developer vs. End-User Configuration
+
+A critical architectural concept in this scaffold is the separation between developer configuration and end-user configuration.
+
+*   **`config.yaml` is for Developers:** This file is the system's blueprint. It is a powerful, developer-level tool for defining the available specialists, their types, their prompts, and their access to resources (like file directories). In a production environment, **this file should be considered part of the application's source code and should not be exposed to or editable by end-users.** Granting users direct access to `config.yaml` would create significant security vulnerabilities.
+
+*   **End-User Settings are Separate:** If you build an application on top of this scaffold that requires user-configurable settings (e.g., letting a user choose their preferred LLM from a safe list, or modifying a specific prompt's behavior), you should implement a separate, more constrained configuration mechanism. This could be:
+    *   A database table.
+    *   A separate, limited `user_settings.yaml` file that the application reads.
+    *   An API endpoint for managing settings.
+
 ## 4.0 How to Extend the System
 
 ### 4.1 Adding New Specialists

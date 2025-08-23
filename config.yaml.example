@@ -1,5 +1,11 @@
 # SpecialistHub Configuration Example
-# Version: 2.1
+# Version: 2.2
+#
+# ==============================================================================
+# DEVELOPER-LEVEL CONFIGURATION
+# This file is the system's blueprint, intended for developers to define the
+# agent's architecture. It should NOT be exposed to or editable by end-users.
+# ==============================================================================
 #
 # This file defines the structure of the agentic system. It is the single
 # source of truth for wiring together providers, models, and specialists.
@@ -15,17 +21,40 @@
 # Supported providers: "lmstudio", "ollama", "gemini"
 # ==============================================================================
 llm_providers:
-  lmstudio:
+  # A configuration for a local model via LM Studio
+  local_lmstudio:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
-    provider: "lmstudio"
-  ollama:
+    type: "lmstudio"
+    api_identifier: "local-model/nous-hermes-2-pro-gguf" # The exact model identifier for the server
+
+  # A configuration for a local model via Ollama
+  local_ollama:
     # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
     # Example: OLLAMA_BASE_URL=http://localhost:11434
-    provider: "ollama"
-  gemini:
+    type: "ollama"
+    api_identifier: "gemma3:27b-abliterated" # The model name registered with Ollama
+
+  # A configuration for a powerful, general-purpose Gemini model
+  gemini_pro:
     # Uses GEMINI_API_KEY from your .env file
-    provider: "gemini"
+    type: "gemini"
+    api_identifier: "gemini-2.5-pro"
+    # Future parameters could go here, e.g., temperature: 0.5
+
+  # A configuration for a fast, cheaper Gemini model
+  gemini_flash:
+    # Uses GEMINI_API_KEY from your .env file
+    type: "gemini"
+    api_identifier: "gemini-2.5-flash"
+
+# ==============================================================================
+# WORKFLOW CONFIGURATION
+# ==============================================================================
+# Define the entry point for the graph. Defaults to 'router_specialist'.
+# ==============================================================================
+workflow:
+  entry_point: "prompt_triage_specialist"
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION
@@ -37,69 +66,70 @@ llm_providers:
 specialists:
   # --- Orchestration & Planning ---
   router_specialist:
+    type: "llm"
     prompt_file: "router_prompt.md"
-    description: "The master router and planner. It analyzes the user's request and routes it to the appropriate specialist. It is the entry point of the graph."
-    # This model should be capable of reliable tool/function calling.
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
+    description: "The master router and planner. It analyzes the user's request and routes it to the appropriate specialist. Its model should be capable of reliable tool/function calling."
 
   systems_architect:
+    type: "llm"
     prompt_file: "systems_architect_prompt.md"
     description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
 
   # --- Core Capabilities ---
   web_builder:
+    type: "llm"
     prompt_file: "web_builder_prompt.md"
     description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
 
   file_specialist:
+    type: "llm"
     prompt_file: "file_specialist_prompt.md"
     description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
-    # This model must be good at generating structured JSON.
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
     root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
 
   # --- Data & Analysis ---
   data_extractor_specialist:
+    type: "llm"
     prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
     description: "Extracts structured data from unstructured text based on a Pydantic schema. Requires 'text_to_process' in the state."
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
 
   sentiment_classifier_specialist:
+    type: "llm"
     prompt_file: "sentiment_classifier_prompt.md"
     description: "Classifies the sentiment of a given text as positive, negative, or neutral."
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
 
   data_processor_specialist:
-    # This is a procedural specialist and does not require an LLM.
+    type: "procedural"
     description: "A specialist that performs deterministic data processing tasks, like formatting or cleaning, without calling an LLM."
 
   text_analysis_specialist:
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
+    type: "llm"
     prompt_file: "text_analysis_prompt.md"
     description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
-    
+
   # --- General & Fallback ---
-  prompt_specialist:
-    prompt_file: "prompt_prompt.md"
-    description: "A general-purpose specialist for direct Q&A and instruction following. Acts as a fallback."
-    api_identifier: "gemini-2.5-flash"
-    provider: "gemini"
+  simple_prompt_specialist:
+    type: "llm"
+    prompt_file: "prompt_specialist_prompt.md"
+    description: "A general-purpose specialist for direct, single-turn Q&A and simple instruction following. Use this for 'simple' complexity tasks."
+
+  advanced_prompt_specialist:
+    type: "llm"
+    prompt_file: "prompt_specialist_prompt.md"
+    description: "A powerful, general-purpose specialist for complex, multi-turn Q&A and instruction following. Use this as a fallback for 'complex' tasks that don't fit other specialists."
 
   # --- Wrapped & External Specialists ---
   open_swe_specialist:
-    type: wrapped
-    source: "./external_agents/open_swe/run.py" # Relative path from project root
+    type: "wrapped"
+    source: "./external/open-swe/agent/run.py" # Path relative to project root
     class_name: "Agent" # The name of the class to instantiate from the source file.
     description: "A specialist that wraps the open-swe agent for software engineering tasks."
 
   archiver_specialist:
+    type: "procedural"
     description: "Summarizes the conversation and prepares the final report. This is the final step."
+
+  prompt_triage_specialist:
+    type: "llm"
+    prompt_file: "prompt_triage_prompt.md"
+    description: "A specialist that performs a pre-flight check on the user's initial prompt for sentiment, coherence, and actionability."

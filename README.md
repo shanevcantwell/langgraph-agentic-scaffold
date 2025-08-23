@@ -29,6 +29,7 @@ This scaffold is not just a collection of scripts; it's a well-defined architect
 *   **Schema-Enforced Reliability:** Utilizes Pydantic models to define "hard contracts" for LLM outputs. For supported providers, this guarantees that the LLM will return a valid JSON object matching your schema, dramatically reducing runtime errors and validation boilerplate.
 *   **Wrapped Specialists:** Extend the system by wrapping external agents. A `WrappedSpecialist` base class allows you to integrate third-party agents into your workflow by implementing simple data translation methods.
 *   **Modern Python Tooling:** Uses `pyproject.toml` for project definition and `pip-tools` to generate pinned `requirements.txt` files, ensuring reproducible and reliable builds for both production and development.
+*   **Developer vs. User Configuration:** The scaffold makes a clear distinction between developer-level system definition (`config.yaml`) and potential end-user settings. `config.yaml` is a developer artifact for building the system; for a deployed application, a separate, more constrained configuration layer should be exposed to users.
 *   **Model-Specific Prompts:** The configuration allows you to assign different prompt files to the same specialist based on the model it's using. This enables fine-tuning instructions for specific model families (e.g., a more verbose prompt for a smaller model, a different format for an OpenAI vs. a Gemini model) without code changes.
 
 ## ⚠️ A Critical Note on Security

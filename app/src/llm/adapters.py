@@ -4,12 +4,12 @@ import json
 import os
 from typing import Dict, Any, List, Optional, Type
 import google.generativeai as genai
+from google.api_core import exceptions as google_exceptions
 from pydantic import BaseModel
-from openai import OpenAI
+from openai import OpenAI, RateLimitError as OpenAIRateLimitError
 from langchain_core.messages import BaseMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
-
-from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError
+from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, SafetyFilterError, RateLimitError
 from ..specialists.schemas import SystemPlan, WebContent
 
 logger = logging.getLogger(__name__)
@@ -64,6 +64,12 @@ class GeminiAdapter(BaseAdapter):
             )
             return self._parse_and_format_response(request, response)
 
+        # Be specific about the exceptions we can handle gracefully.
+        except google_exceptions.ResourceExhausted as e:
+            error_message = f"Gemini API rate limit exceeded: {e}"
+            logger.error(error_message, exc_info=True)
+            raise RateLimitError(error_message) from e
+
         except Exception as e:
             logger.error(f"Gemini API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"Gemini API error: {e}") from e
@@ -76,10 +82,19 @@ class GeminiAdapter(BaseAdapter):
         """
         # Robustness check for safety filtering
         if not response.candidates:
-            logger.warning("GeminiAdapter received a response with no candidates. This may be due to content filtering.")
-            if request.output_model_class: return {"json_response": {}}
-            if request.tools: return {"tool_calls": []}
-            return {"text_response": "The model did not provide a response, possibly due to safety filters."}
+            # First, check for a documented safety block. This is the most likely reason for an empty response.
+            if hasattr(response, 'prompt_feedback') and getattr(response.prompt_feedback, 'block_reason', None):
+                block_reason = response.prompt_feedback.block_reason
+                ratings = response.prompt_feedback.safety_ratings
+                error_message = (f"Gemini response blocked due to safety filters. "
+                                 f"Reason: {block_reason}. Ratings: {ratings}")
+                logger.error(error_message)
+                raise SafetyFilterError(error_message)
+            else:
+                # If there are no candidates and no documented block reason, it's a different, more generic API issue.
+                error_message = "Gemini API returned an empty response with no candidates and no specific safety block reason. This could be a transient API issue."
+                logger.error(f"{error_message} Full response object: {response}")
+                raise LLMInvocationError(error_message)
 
         # If we requested JSON, we expect JSON.
         if request.output_model_class:
@@ -266,6 +281,12 @@ class LMStudioAdapter(BaseAdapter):
             else:
                 # Standard text response.
                 return {"text_response": message.content or ""}
+        
+        except OpenAIRateLimitError as e:
+            error_message = f"LMStudio API rate limit exceeded: {e}"
+            logger.error(error_message, exc_info=True)
+            raise RateLimitError(error_message) from e
+
         except Exception as e:
             logger.error(f"LMStudio API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"LMStudio API error: {e}") from e

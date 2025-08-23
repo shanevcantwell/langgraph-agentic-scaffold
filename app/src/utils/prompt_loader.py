@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from .path_utils import APP_ROOT
 class PromptLoader:
     """
     A utility class to load prompt templates from the filesystem.
@@ -20,8 +21,7 @@ class PromptLoader:
         Raises:
             FileNotFoundError: If the prompt file does not exist.
         """
-        # Use _specialist_prompt.md as the standard format for prompt files
-        prompt_path = Path(__file__).parent.parent.parent / "prompts" / prompt_name
+        prompt_path = APP_ROOT / "prompts" / prompt_name
         
         if not prompt_path.exists():
             raise FileNotFoundError(f"Prompt file not found at: {prompt_path}")

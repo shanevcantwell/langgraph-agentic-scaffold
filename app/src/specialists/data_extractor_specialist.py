@@ -2,7 +2,7 @@
 import logging
 from typing import Dict, Any, List
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel
 
 from .base import BaseSpecialist
@@ -24,16 +24,16 @@ class DataExtractorSpecialist(BaseSpecialist):
         text_to_process = state.get("text_to_process")
 
         if not text_to_process:
-            logger.warning("DataExtractorSpecialist was called without text to process. Adding a message to the state and returning control to the router.")
-            # This is a more prescriptive "self-correction" message. It gives the router's LLM
-            # a strong hint about what to do next, helping to break reasoning loops.
+            logger.warning("DataExtractorSpecialist was called without text to process. Suggesting file_specialist.")
+            # This is a "self-correction" action. Instead of just failing, the specialist
+            # provides a structured suggestion to the router, making the system more robust.
             ai_message = AIMessage(
-                content="I am the Data Extractor. I cannot run because there is no text to process. The user's request seems to involve a file. The 'file_specialist' should probably run first to read the file content into the state."
+                content="I am the Data Extractor. I cannot run because there is no text to process. I am suggesting that the 'file_specialist' should run to read the required file.",
+                name=self.specialist_name
             )
             return {
                 "messages": [ai_message],
-                "extracted_data": None,
-                "text_to_process": None
+                "suggested_next_specialist": "file_specialist"
             }
 
         # The specialist's system prompt (loaded at init) should already instruct it
@@ -55,7 +55,7 @@ class DataExtractorSpecialist(BaseSpecialist):
         extracted_data = json_response["extracted_json"]
         logger.info(f"Successfully extracted data: {extracted_data}")
 
-        ai_message = AIMessage(content=f"I have successfully extracted the following data: {extracted_data}")
+        ai_message = AIMessage(content=f"I have successfully extracted the following data: {extracted_data}", name=self.specialist_name)
 
         # The task is only complete if this specialist was not part of a larger plan.
         # The presence of a 'system_plan' artifact is the key indicator.

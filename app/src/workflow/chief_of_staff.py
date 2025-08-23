@@ -16,6 +16,7 @@ MAX_TURNS = 10
 class ChiefOfStaff:
     def __init__(self):
         self.config = ConfigLoader().get_config()
+        self.entry_point = self.config.get("workflow", {}).get("entry_point", CoreSpecialist.ROUTER.value)
         self.specialists = self._load_and_configure_specialists()
         self.graph = self._build_graph()
         logger.info("---ChiefOfStaff: Graph compiled successfully.---")
@@ -61,7 +62,8 @@ class ChiefOfStaff:
             "1. **Task Completion**: If the last message is a report or summary that appears to fully satisfy the user's request, your job is done. You MUST route to `__end__`.\n"
             "2. **Error Correction**: If the last message is from a specialist reporting an error (e.g., it needs a file to be read first), you MUST use that feedback to select the correct specialist to resolve the issue (e.g., 'file_specialist').\n"
             "3. **Data Processing**: If the last message is an `AIMessage` from the `file_specialist` indicating a file's content has been successfully read and is now in context, and the user's request requires understanding or summarizing that content, your next step MUST be to route to an analysis specialist like 'text_analysis_specialist'.\n"
-            "4. **Plan Execution**: If a `system_plan` artifact has just been added to the state, you MUST route to the specialist best suited to execute that plan (e.g., `web_builder` for web content, or another coding specialist for other tasks)."
+            "4. **Plan Execution**: If a `system_plan` artifact has just been added to the state, you MUST route to the specialist best suited to execute that plan (e.g., `web_builder` for web content, or another coding specialist for other tasks).\n"
+            "5. **Complexity-Based Routing**: If a `json_artifact` from the `prompt_triage_specialist` is present, you MUST use its `estimated_complexity` field to route to the appropriate specialist (e.g., 'simple_prompt_specialist' for simple tasks, 'systems_architect' for complex ones)."
         )
         dynamic_system_prompt = (
             f"{base_prompt}\n{feedback_instruction}\n\n"
@@ -76,13 +78,12 @@ class ChiefOfStaff:
     def _build_graph(self) -> StateGraph:
         # This method is correct and remains unchanged.
         workflow = StateGraph(GraphState)
-        entry_point_node = CoreSpecialist.ROUTER.value
         for name, instance in self.specialists.items():
             workflow.add_node(name, instance.execute)
-        workflow.set_entry_point(entry_point_node)
+        workflow.set_entry_point(self.entry_point)
         conditional_map = {name: name for name in self.specialists if name != CoreSpecialist.ROUTER.value} # Map all specialists to themselves
         conditional_map[END] = END # If the router decides to END, go to the graph's END
-        workflow.add_conditional_edges(entry_point_node, self.decide_next_specialist, conditional_map)
+        workflow.add_conditional_edges(CoreSpecialist.ROUTER.value, self.decide_next_specialist, conditional_map)
         for name in self.specialists:
             if name not in [CoreSpecialist.ROUTER.value, CoreSpecialist.ARCHIVER.value]:
                 workflow.add_edge(name, CoreSpecialist.ROUTER.value)

@@ -2,10 +2,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Type, Any, Optional
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
-
-class LLMInvocationError(Exception):
-    """Custom exception for errors during LLM adapter invocation."""
-    pass
+from ..utils.errors import LLMInvocationError, SafetyFilterError, RateLimitError
 
 class StandardizedLLMRequest(BaseModel):
     """A provider-agnostic request object that captures the specialist's runtime intent."""

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.utils.errors import SpecialistError
+from app.src.utils.path_utils import PROJECT_ROOT
 from app.src.specialists.base import BaseSpecialist
 
 logger = logging.getLogger(__name__)
@@ -38,8 +39,12 @@ class FileSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name)
-        self.root_dir = os.path.abspath(self.specialist_config.get("root_dir", "."))
-        logger.info(f"Initialized {self.__class__.__name__} with root directory: {self.root_dir}")
+        # Resolve root_dir relative to the project root for robustness.
+        # This prevents issues where the script is run from a different directory.
+        relative_root_dir = self.specialist_config.get("root_dir", "./workspace")
+        self.root_dir = str(PROJECT_ROOT / relative_root_dir)
+        os.makedirs(self.root_dir, exist_ok=True) # Ensure the workspace exists
+        logger.info(f"Initialized {self.__class__.__name__} with workspace directory: {self.root_dir}")
         
         # Dead man's switch: Check for a lock file to enable write operations.
         self.safety_lock_file = ".agent_safety_off.lock"
@@ -114,7 +119,7 @@ class FileSpecialist(BaseSpecialist):
 
         if not tool_calls:
             error_message = "File Specialist Error: The model did not request a valid tool call. Please rephrase your request."
-            return {"messages": [AIMessage(content=error_message)]}
+            return {"messages": [AIMessage(content=error_message, name=self.specialist_name)]}
 
         # This specialist is designed to handle one tool call at a time for simplicity.
         tool_call = tool_calls[0]
@@ -151,7 +156,8 @@ class FileSpecialist(BaseSpecialist):
         # agent performing an action, not just a tool responding to a direct call.
         # This provides a clear, human-readable update for the router's LLM.
         ai_message = AIMessage(
-            content=f"FileSpecialist action '{tool_name}' completed. Status: {result_content}"
+            content=f"FileSpecialist action '{tool_name}' completed. Status: {result_content}",
+            name=self.specialist_name
         )
 
         updated_state["messages"] = [ai_message]

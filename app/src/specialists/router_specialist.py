@@ -51,12 +51,13 @@ class RouterSpecialist(BaseSpecialist):
         if suggested_next := state.get("suggested_next_specialist"):
             if suggested_next in self.available_specialists:
                 logger.info(f"Using suggested next specialist: {suggested_next}")
-                ai_message = AIMessage(content=f"Proceeding with suggested specialist: {suggested_next}")
+                # Sign the message with the specialist's name
+                ai_message = AIMessage(content=f"Proceeding with suggested specialist: {suggested_next}", name=self.specialist_name)
                 return {
                     "messages": [ai_message],
                     "next_specialist": suggested_next,
                     "turn_count": turn_count,
-                    "suggested_next_specialist": None # Consume the suggestion
+                    "suggested_next_specialist": None  # Consume the suggestion
                 }
             else:
                 logger.warning(f"Ignoring invalid suggestion for next specialist: {suggested_next}")
@@ -78,8 +79,8 @@ class RouterSpecialist(BaseSpecialist):
         # and record the failure in the message history.
         if not tool_calls or not tool_calls[0].get('args'):
             logger.warning("Router LLM did not return a valid tool call. Ending workflow.")
-            next_specialist = END
-            ai_message = AIMessage(content="Router failed to select a valid next specialist. Ending workflow.")
+            next_specialist_name = END
+            ai_message = AIMessage(content="Router failed to select a valid next specialist. Ending workflow.", name=self.specialist_name)
         else:
             next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist', END)
 
@@ -88,21 +89,26 @@ class RouterSpecialist(BaseSpecialist):
             # This prevents KeyErrors in the graph if the LLM hallucinates a name.
             if next_specialist_from_llm not in self.available_specialists and next_specialist_from_llm != END:
                 logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {self.available_specialists + [END]}. Routing to END.")
-                next_specialist = END
-                ai_message = AIMessage(content=f"Router attempted to route to an unknown specialist '{next_specialist_from_llm}'. Halting workflow.")
+                next_specialist_name = END
+                ai_message = AIMessage(content=f"Router attempted to route to an unknown specialist '{next_specialist_from_llm}'. Halting workflow.", name=self.specialist_name)
             else:
-                next_specialist = next_specialist_from_llm
-                # Create an AIMessage that records the successful tool call.
-                ai_message = AIMessage(content="", tool_calls=tool_calls)
+                next_specialist_name = next_specialist_from_llm
+                # Create an AIMessage that records the successful tool call and explicitly states the destination.
+                content = f"Routing to specialist: {next_specialist_name}" if next_specialist_name != END else "Task is complete. Routing to END."
+                ai_message = AIMessage(
+                    content=content,
+                    tool_calls=tool_calls,
+                    name=self.specialist_name
+                )
         
-        logger.info(f"Router decision: Routing to {next_specialist}")
+        logger.info(f"Router decision: Routing to {next_specialist_name}")
 
         # CORRECTED: Return a dictionary with all state updates.
         # LangGraph will merge this into the global state.
         return {
             # Return only the new message to be appended to the state.
             "messages": [ai_message],
-            "next_specialist": next_specialist,
+            "next_specialist": next_specialist_name,
             "turn_count": turn_count,
-            "suggested_next_specialist": None # Always consume/clear the suggestion after the router has run.
+            "suggested_next_specialist": None  # Always consume/clear the suggestion after the router has run.
         }

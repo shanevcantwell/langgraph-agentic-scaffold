@@ -26,13 +26,17 @@ class TextAnalysisSpecialist(BaseSpecialist):
         text_to_process = state.get("text_to_process")
 
         if not text_to_process:
-            logger.warning("TextAnalysisSpecialist was called without text to process. Adding a message to the state and returning control to the router.")
-            # This is a prescriptive "self-correction" message. It gives the router's LLM
-            # a strong hint about what to do next, helping to break reasoning loops.
+            logger.warning("TextAnalysisSpecialist was called without text to process. Suggesting file_specialist.")
+            # This is a "self-correction" action. Instead of just failing, the specialist
+            # provides a structured suggestion to the router, making the system more robust.
             ai_message = AIMessage(
-                content="I am the Text Analysis specialist. I cannot run because there is no text to process. The user's request seems to involve a file. The 'file_specialist' should probably run first to read the file content into the state."
+                content="I am the Text Analysis specialist. I cannot run because there is no text to process. I am suggesting that the 'file_specialist' should run to read the required file.",
+                name=self.specialist_name
             )
-            return {"messages": [ai_message], "text_to_process": None}
+            return {
+                "messages": [ai_message],
+                "suggested_next_specialist": "file_specialist"
+            }
 
         # The specialist's system prompt (loaded at init) should already instruct it
         # to analyze text provided in the user message. We will construct a new
@@ -58,7 +62,7 @@ class TextAnalysisSpecialist(BaseSpecialist):
         task_is_complete = not is_part_of_larger_plan
 
         return {
-            "messages": [AIMessage(content=report)],
+            "messages": [AIMessage(content=report, name=self.specialist_name)],
             "json_artifact": json_response,
             "text_to_process": None,
             "task_is_complete": task_is_complete

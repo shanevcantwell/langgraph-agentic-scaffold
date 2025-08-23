@@ -12,15 +12,6 @@ def get_specialist_class(specialist_name: str, specialist_config: Dict[str, Any]
     This function assumes the file is named `specialist_name.py` and the class
     is named `SpecialistName` (PascalCase), as per the project's naming conventions.
     """
-    if specialist_config.get("type") == "wrapped":
-        # For wrapped specialists, we have a different loading mechanism.
-        # We can make this more generic if we have more wrapped specialists.
-        if specialist_name == "open_swe_specialist":
-            from .open_swe_specialist import OpenSweSpecialist
-            return OpenSweSpecialist
-        else:
-            raise ImportError(f"Unknown wrapped specialist: {specialist_name}")
-
     module_name = f".{specialist_name}"
     # Convert snake_case (e.g., "data_processor_specialist") to PascalCase (e.g., "DataProcessorSpecialist")
     class_name = inflection.camelize(specialist_name)

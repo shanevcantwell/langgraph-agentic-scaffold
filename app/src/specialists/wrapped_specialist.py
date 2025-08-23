@@ -4,6 +4,7 @@ import importlib.util
 import logging
 import os
 from .base import BaseSpecialist
+from ..utils.path_utils import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
@@ -15,28 +16,35 @@ class WrappedSpecialist(BaseSpecialist):
         self.is_enabled = False
         self.external_agent = None
 
-        source = self.specialist_config.get("source")
-        if not source:
-            logger.warning(f"Wrapped specialist '{specialist_name}' is disabled: missing 'source' key in config.yaml.")
-            return
+        source = self.specialist_config.get("source")        
+        class_name = self.specialist_config.get("class_name")
 
-        if not os.path.exists(source):
-            logger.warning(f"Wrapped specialist '{specialist_name}' is disabled: source file not found at '{source}'.")
+        if not source or not class_name:
+            logger.warning(f"Wrapped specialist '{specialist_name}' is disabled: missing 'source' or 'class_name' key in config.yaml.")
+            return
+        
+        # Resolve the source path relative to the project root to make it robust.
+        source_path = PROJECT_ROOT / source
+
+        if not source_path.exists():
+            logger.warning(f"Wrapped specialist '{specialist_name}' is disabled: source file not found at '{source_path}'.")
             logger.warning(f"Please ensure you have cloned the external agent into the correct directory as per the documentation.")
             return
 
         # The external agent is loaded once during initialization.
         try:
-            self.external_agent = self._load_external_agent(source)
+            self.external_agent = self._load_external_agent(str(source_path))
             self.is_enabled = True
             logger.info(f"Successfully loaded external agent for wrapped specialist '{specialist_name}'.")
         except Exception as e:
-            logger.error(f"Failed to load external agent for '{specialist_name}' from '{source}': {e}", exc_info=True)
+            logger.error(f"Failed to load external agent for '{specialist_name}' from '{source_path}': {e}", exc_info=True)
 
     def _load_external_agent(self, source: str):
         """Loads the external agent from the given source path."""
-        class_name = self.specialist_config.get("class_name", "Agent")
-
+        class_name = self.specialist_config.get("class_name")
+        if not class_name:
+            # This case is now handled by the __init__ check, but as a safeguard:
+            raise ValueError("Cannot load external agent: 'class_name' is missing from configuration.")
         spec = importlib.util.spec_from_file_location("external_agent", source)
         if spec is None:
             raise ImportError(f"Could not create module spec from source: {source}")
