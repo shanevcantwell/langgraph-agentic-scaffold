@@ -3,30 +3,15 @@ import os
 from typing import Optional, Dict, Any
 
 from langchain_core.messages import AIMessage, ToolMessage
-from pydantic import BaseModel, Field
 
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.utils.errors import SpecialistError
 from app.src.utils.path_utils import PROJECT_ROOT
 from app.src.specialists.base import BaseSpecialist
+from .helpers import create_llm_message
+from .schemas import ReadFileParams, WriteFileParams, ListDirectoryParams
 
 logger = logging.getLogger(__name__)
-
-# --- Pydantic Models for Tool Definitions ---
-# This defines the "hard contract" for the LLM. It must fill these fields.
-
-class ReadFileParams(BaseModel):
-    """Parameters for reading the contents of a file."""
-    file_path: str = Field(..., description="The relative path to the file to be read.")
-
-class WriteFileParams(BaseModel):
-    """Parameters for writing content to a file."""
-    file_path: str = Field(..., description="The relative path to the file to be written.")
-    content: str = Field(..., description="The content to write into the file.")
-
-class ListDirectoryParams(BaseModel):
-    """Parameters for listing the contents of a directory."""
-    dir_path: str = Field(default=".", description="The relative path to the directory to be listed.")
 
 
 # --- Specialist Implementation ---
@@ -155,9 +140,10 @@ class FileSpecialist(BaseSpecialist):
         # appropriate than a ToolMessage here, as the FileSpecialist is an autonomous
         # agent performing an action, not just a tool responding to a direct call.
         # This provides a clear, human-readable update for the router's LLM.
-        ai_message = AIMessage(
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=f"FileSpecialist action '{tool_name}' completed. Status: {result_content}",
-            name=self.specialist_name
         )
 
         updated_state["messages"] = [ai_message]

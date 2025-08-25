@@ -5,6 +5,7 @@ from langgraph.graph import END
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from .base import BaseSpecialist
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from ..enums import CoreSpecialist
 
@@ -134,9 +135,10 @@ class RouterSpecialist(BaseSpecialist):
         else:
             content = f"Routing to specialist: {next_specialist_name}" if next_specialist_name != END else "Task is complete. Routing to END."
 
-        ai_message = AIMessage(
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=content,
-            name=self.specialist_name,
             additional_kwargs={
                 "routing_decision": next_specialist_name,
                 "routing_type": "llm_decision",

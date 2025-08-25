@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Any, List
 
 from .base import BaseSpecialist
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import WebContent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -67,11 +68,10 @@ class WebBuilder(BaseSpecialist):
         next_iteration = current_iteration + 1
 
         # --- Prepare state update ---
-        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
-        ai_message = AIMessage(
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=f"Completed HTML generation/refinement cycle {next_iteration}.",
-            name=self.specialist_name,
-            additional_kwargs={"llm_name": llm_name} if llm_name else {}
         )
         updated_state = {
             "messages": [ai_message],

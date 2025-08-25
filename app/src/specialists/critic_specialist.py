@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any, List
 
 from .base import BaseSpecialist
-from .helpers import create_missing_artifact_response
+from .helpers import create_missing_artifact_response, create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
@@ -41,8 +41,13 @@ class CriticSpecialist(BaseSpecialist):
 
         logger.info("Critique generated. Recommending SystemsArchitect for plan revision.")
 
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
+            content=f"Critique complete. The next step is to revise the plan.",
+        )
         return {
-            "messages": [AIMessage(content=f"Critique complete. The next step is to revise the plan.", name=self.specialist_name)],
+            "messages": [ai_message],
             "critique_artifact": critique,
             "recommended_specialists": ["systems_architect"]
         }

@@ -115,9 +115,31 @@ class ChiefOfStaff:
 
     def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         """Provides the Triage specialist with the map of all other specialists so it can make recommendations."""
-        logger.info("Configuring the Triage specialist with the system's capabilities...")
+        logger.info("Configuring the Triage specialist with a dynamic prompt of system capabilities...")
         triage_instance = specialists[CoreSpecialist.TRIAGE.value]
-        triage_instance.set_specialist_map(configs)
+
+        # The Triage specialist needs to know about all other functional specialists for its prompt.
+        # Exclude orchestration specialists to prevent loops or nonsensical recommendations.
+        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value]
+        available_specialists = {name: conf for name, conf in configs.items() if name not in excluded}
+        
+        # This call is still useful for the specialist's internal logic.
+        triage_instance.set_specialist_map(available_specialists)
+
+        triage_config = configs.get(CoreSpecialist.TRIAGE.value, {})
+        base_prompt_file = triage_config.get("prompt_file")
+        base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
+
+        specialist_descs = [f"- {name}: {conf.get('description', 'No description available.')}" for name, conf in available_specialists.items()]
+        available_specialists_prompt = "\n".join(specialist_descs)
+        
+        dynamic_system_prompt = f"{base_prompt}\n\n--- AVAILABLE SPECIALISTS ---\nYou MUST choose one or more of the following specialists:\n{available_specialists_prompt}"
+        triage_instance.llm_adapter = AdapterFactory().create_adapter(
+            specialist_name=CoreSpecialist.TRIAGE.value,
+            system_prompt=dynamic_system_prompt
+        )
+        logger.info("Triage specialist adapter re-initialized with dynamic, context-aware prompt.")
+        logger.debug(f"Triage specialist dynamic system prompt: {dynamic_system_prompt}")
 
     def _create_safe_executor(self, specialist_instance: BaseSpecialist):
         """

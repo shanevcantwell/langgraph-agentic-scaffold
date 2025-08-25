@@ -1,6 +1,7 @@
 # app/src/specialists/sentiment_classifier_specialist.py
 
 from .base import BaseSpecialist
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import Sentiment
 from langchain_core.messages import AIMessage, BaseMessage
@@ -30,7 +31,11 @@ class SentimentClassifierSpecialist(BaseSpecialist):
             raise ValueError("SentimentClassifier failed to get a valid JSON response from the LLM.")
 
         classification = Sentiment(**json_response)
-        ai_message = AIMessage(content=f"The sentiment of the message is: {classification.sentiment}", name=self.specialist_name)
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
+            content=f"The sentiment of the message is: {classification.sentiment}",
+        )
 
         # Return only the new message and artifact. The graph will append them to the state.
         # This follows the "atomic state updates" pattern.

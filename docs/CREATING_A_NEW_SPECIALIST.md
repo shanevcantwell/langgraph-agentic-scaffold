@@ -28,6 +28,7 @@ Here is a template for a new specialist file:
 
 # Import the necessary base class and data structures
 from .base import BaseSpecialist
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import AIMessage, HumanMessage
 
@@ -73,12 +74,11 @@ class CodeWriterSpecialist(BaseSpecialist):
             "text_response", "I am unable to provide a response at this time."
         )
 
-        # Get the model name from the adapter to include in the final report for traceability.
-        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
-        ai_message = AIMessage(
+        # Use the helper to create a standardized message with the LLM name included.
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=ai_response_content,
-            name=self.specialist_name,
-            additional_kwargs={"llm_name": llm_name} if llm_name else {},
         )
 
         # 4. Return the updated state.

@@ -26,7 +26,8 @@ llm_providers:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "openai-oss-20b" # The exact model identifier for the server
+    # For many local servers, this can be a placeholder. For others, it must match the loaded model's identifier/filename exactly.
+    api_identifier: "lmstudio-community/gpt-oss-20b-gguf/router-gpt-oss-20b-mxfp4.gguf" # The exact model identifier for the server
 
   # A configuration for a local model via Ollama
   local_ollama:

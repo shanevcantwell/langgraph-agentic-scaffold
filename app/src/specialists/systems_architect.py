@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Any, List
 
 from .base import BaseSpecialist
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import SystemPlan
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -42,10 +43,20 @@ class SystemsArchitect(BaseSpecialist):
 
         plan = SystemPlan(**json_response)
 
+        # --- Robustness Check for Refinement Cycles ---
+        # Some models fail to set refinement_cycles despite the prompt.
+        # We can add a check to enforce it based on the user's original request.
+        user_prompt = state["messages"][0].content.lower()
+        if plan.refinement_cycles <= 1:
+            if "iterate" in user_prompt or "refine" in user_prompt or "twice" in user_prompt or "three times" in user_prompt:
+                logger.warning("SystemsArchitect LLM did not set refinement_cycles. Overriding to 2 based on user prompt analysis.")
+                plan.refinement_cycles = 2
+
         # Add a summary message for the router and a structured artifact for other specialists/API response
-        new_message = AIMessage(
+        new_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=f"I have created a system plan: {plan.plan_summary}",
-            name=self.specialist_name
         )
         # Return only the delta (the new changes) to the state, per the "Atomic State Updates" pattern.
         updated_state = {

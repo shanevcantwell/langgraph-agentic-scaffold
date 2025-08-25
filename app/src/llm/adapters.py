@@ -2,6 +2,7 @@
 import logging
 import json
 import os
+import re
 from typing import Dict, Any, List, Optional, Type
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
@@ -164,18 +165,55 @@ class LMStudioAdapter(BaseAdapter):
     """
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
         super().__init__(model_config)
+        if not base_url:
+            raise ValueError(
+                "LMStudioAdapter requires a 'base_url'. "
+                "Please set the LMSTUDIO_BASE_URL environment variable in your .env file."
+            )
         self.client = OpenAI(base_url=base_url, api_key=os.getenv("LMSTUDIO_API_KEY", "not-needed"))
         self.system_prompt = system_prompt
         self.model_name = self.config.get('api_identifier', 'local-model')
         if '/' in self.model_name or '\\' in self.model_name:
             logger.warning(
                 f"The model name '{self.model_name}' contains path separators ('/' or '\\'). "
-                "This can cause issues with some local model servers. "
-                "Ensure this is the exact identifier expected by the server (often the model's filename)."
+                "This can cause issues with some local model servers. Ensure this is the exact "
+                "identifier expected by the server (often the model's filename)."
             )
 
+        self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
         self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
-        logger.info(f"INITIALIZED LMStudioAdapter (Model: {self.model_name})")
+        logger.info(f"INITIALIZED LMStudioAdapter. Requests will be sent to '{base_url}' for model "
+                    f"'{self.model_name}' with a timeout of {self.timeout} seconds. "
+                    "Ensure this matches your LM Studio server setup.")
+
+    def _extract_json_from_response(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Tries to extract a JSON object from a string that might contain extraneous text
+        or be wrapped in markdown code blocks.
+        """
+        if not isinstance(text, str):
+            return None
+
+        # Pattern to find JSON within markdown code blocks (```json ... ```)
+        match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(1))
+            except json.JSONDecodeError:
+                logger.warning("Found a JSON code block, but failed to parse it.")
+                pass
+
+        # Fallback to finding the first '{' and last '}'
+        try:
+            start_index = text.find('{')
+            end_index = text.rfind('}')
+            if start_index != -1 and end_index != -1 and end_index > start_index:
+                json_str = text[start_index:end_index+1]
+                return json.loads(json_str)
+        except (json.JSONDecodeError, IndexError):
+            pass
+
+        return None
 
     @retry(
         stop=stop_after_attempt(3),
@@ -252,7 +290,7 @@ class LMStudioAdapter(BaseAdapter):
             logger.info("LMStudioAdapter: Invoking in Text mode.")
 
         try:
-            completion = self.client.chat.completions.create(**api_kwargs, timeout=REQUEST_TIMEOUT)
+            completion = self.client.chat.completions.create(**api_kwargs, timeout=self.timeout)
             message = completion.choices[0].message
 
             # --- Response Parsing ---
@@ -278,14 +316,23 @@ class LMStudioAdapter(BaseAdapter):
             # If we requested a JSON schema, parse the content as JSON.
             if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":
                 content = message.content or "{}"
+                json_response = None
                 try:
+                    # First, try to parse directly
                     json_response = json.loads(content)
-                    return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
                 except json.JSONDecodeError:
-                    # If the model fails to return valid JSON despite the request,
-                    # we handle it gracefully by treating it as a text response.
+                    # If direct parsing fails, try to extract from a potentially messy string
                     logger.warning(
-                        f"LMStudioAdapter was asked for JSON but received non-JSON text. Content: {content}"
+                        f"LMStudioAdapter received non-JSON text when JSON was expected. Attempting to extract JSON. Content: {content[:500]}..."
+                    )
+                    json_response = self._extract_json_from_response(content)
+
+                if json_response:
+                    return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+                else:
+                    # If extraction also fails, log the failure and return as text.
+                    logger.error(
+                        f"Failed to parse or extract JSON from the model's response."
                     )
                     return {"text_response": content, "json_response": {}}
             else:

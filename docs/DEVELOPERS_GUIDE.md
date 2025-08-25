@@ -44,6 +44,7 @@ After running the installation script, remember to edit `.env` with your API key
 You can also set environment variables in `.env` to control specific features. For example:
 *   `AGENTIC_SCAFFOLD_ARCHIVE_PATH=/path/to/my/reports`: Overrides the default location for run reports.
 *   `AGENTIC_SCAFFOLD_ARCHIVER_ENABLED=false`: Disables the archiving feature entirely.
+*   `LMSTUDIO_TIMEOUT=300`: Sets the request timeout for LM Studio to 300 seconds.
 
 ### 2.3 Configuration
 

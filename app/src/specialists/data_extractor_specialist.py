@@ -3,17 +3,13 @@ import logging
 from typing import Dict, Any, List
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from pydantic import BaseModel
 
 from .base import BaseSpecialist
-from .helpers import create_missing_artifact_response
+from .helpers import create_missing_artifact_response, create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
+from .schemas import ExtractedData
 
 logger = logging.getLogger(__name__)
-
-class ExtractedData(BaseModel):
-    """A Pydantic model to guide the LLM's JSON output."""
-    extracted_json: Dict[str, Any]
 
 class DataExtractorSpecialist(BaseSpecialist):
     """
@@ -50,11 +46,10 @@ class DataExtractorSpecialist(BaseSpecialist):
         extracted_data = json_response["extracted_json"]
         logger.info(f"Successfully extracted data: {extracted_data}")
 
-        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
-        ai_message = AIMessage(
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=f"I have successfully extracted the following data: {extracted_data}",
-            name=self.specialist_name,
-            additional_kwargs={"llm_name": llm_name} if llm_name else {}
         )
 
         # The task is only complete if this specialist was not part of a larger plan.

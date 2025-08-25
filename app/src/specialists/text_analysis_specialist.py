@@ -3,18 +3,13 @@ import logging
 from typing import Dict, Any, List
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
-from pydantic import BaseModel
 
 from .base import BaseSpecialist
-from .helpers import create_missing_artifact_response
+from .helpers import create_missing_artifact_response, create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
+from .schemas import AnalysisResult
 
 logger = logging.getLogger(__name__)
-
-class AnalysisResult(BaseModel):
-    """A Pydantic model to guide the LLM's JSON output for text analysis."""
-    summary: str
-    main_points: List[str]
 
 class TextAnalysisSpecialist(BaseSpecialist):
     """
@@ -55,11 +50,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
         for point in json_response.get("main_points", []):
             report += f"- {point}\n"
 
-        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
-        ai_message = AIMessage(
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=report,
-            name=self.specialist_name,
-            additional_kwargs={"llm_name": llm_name} if llm_name else {}
         )
         return {
             "messages": [ai_message],

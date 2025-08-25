@@ -10,7 +10,7 @@ The plan should be broken down into:
 1.  `plan_summary`: A concise, one-sentence summary of the overall plan.
 2.  `refinement_cycles`: (Optional) The number of refinement iterations requested by the user.
 3.  `required_components`: A list of technologies, libraries, or assets needed.
-4.  `execution_steps`: A detailed, step-by-step list of actions to be taken by other specialists.
+4.  `execution_steps`: A detailed, step-by-step list of actions to be taken by other specialists. The items in this list should be sentences and should NOT be numbered.
 
 Example JSON Output:
 ```json
