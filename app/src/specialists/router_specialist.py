@@ -150,5 +150,6 @@ class RouterSpecialist(BaseSpecialist):
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
-            "recommended_specialists": None
+            "recommended_specialists": None,
+            "routing_history": [next_specialist_name]
         }

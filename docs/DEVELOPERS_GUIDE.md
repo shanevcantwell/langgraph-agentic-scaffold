@@ -13,7 +13,7 @@ This document provides all the necessary information to understand, run, test, a
 **Core Philosophy:** The system is composed of several agent types with a clear separation of concerns:
 1.  **Specialists (`BaseSpecialist`):** Functional, LLM-driven components that perform a single, well-defined task (e.g., writing to a file, generating code).
 2.  **Runtime Orchestrator (`RouterSpecialist`):** A specialized agent that makes the turn-by-turn routing decisions *within* the running graph. It uses its LLM to analyze the conversation state and decides which Specialist should run next, updating the `GraphState` with its choice.
-3.  **Structural Orchestrator (`ChiefOfStaff`):** A high-level system component responsible for building the `LangGraph` instance, loading all Specialists from the configuration, and enforcing global rules (like max turns or error handling). It reads the decision made by the `RouterSpecialist` to direct the flow of the graph.
+3.  **Structural Orchestrator (`ChiefOfStaff`):** A high-level system component responsible for building the `LangGraph` instance, loading all Specialists from the configuration, and enforcing global rules (like detecting unproductive loops or handling errors). It reads the decision made by the `RouterSpecialist` to direct the flow of the graph.
 
 ## 2.0 Getting Started
 

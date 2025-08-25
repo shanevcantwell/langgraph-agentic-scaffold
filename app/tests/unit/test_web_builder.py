@@ -29,7 +29,7 @@ def test_web_builder_single_cycle():
 
 def test_web_builder_multi_cycle_loop():
     """
-    Tests the first iteration of a multi-cycle refinement, ensuring it loops back to itself.
+    Tests the first iteration of a multi-cycle refinement, ensuring it recommends the critic.
     """
     # Arrange
     specialist = WebBuilder("web_builder")
@@ -48,12 +48,12 @@ def test_web_builder_multi_cycle_loop():
 
     # Assert
     assert "task_is_complete" not in result_state
-    assert result_state["recommended_specialists"] == ["web_builder"]
+    assert result_state["recommended_specialists"] == ["critic_specialist"]
     assert result_state["web_builder_iteration"] == 1
 
 def test_web_builder_multi_cycle_intermediate_loop():
     """
-    Tests an intermediate iteration of a multi-cycle refinement.
+    Tests an intermediate iteration of a multi-cycle refinement, ensuring it recommends the critic.
     """
     # Arrange
     specialist = WebBuilder("web_builder")
@@ -72,7 +72,7 @@ def test_web_builder_multi_cycle_intermediate_loop():
 
     # Assert
     assert "task_is_complete" not in result_state
-    assert result_state["recommended_specialists"] == ["web_builder"]
+    assert result_state["recommended_specialists"] == ["critic_specialist"]
     assert result_state["web_builder_iteration"] == 2
 
 def test_web_builder_multi_cycle_final():
@@ -98,3 +98,30 @@ def test_web_builder_multi_cycle_final():
     assert result_state["task_is_complete"] is True
     assert "recommended_specialists" not in result_state
     assert result_state["web_builder_iteration"] is None # Counter is cleaned up
+
+def test_web_builder_handles_none_iteration_state():
+    """
+    Tests that the builder correctly handles the case where the iteration
+    counter is explicitly set to None in the state, which happens on the
+    first run.
+    """
+    # Arrange
+    specialist = WebBuilder("web_builder")
+    specialist.llm_adapter = MagicMock()
+    mock_response = {"html_document": "<html><body>Hello</body></html>"}
+    specialist.llm_adapter.invoke.return_value = {"json_response": mock_response}
+
+    initial_state = {
+        "messages": [],
+        "system_plan": {"description": "Make a site."},
+        "web_builder_iteration": None # Explicitly set to None
+    }
+
+    # Act
+    result_state = specialist._execute_logic(initial_state)
+
+    # Assert
+    # The main assertion is that this doesn't crash with a TypeError.
+    specialist.llm_adapter.invoke.assert_called_once()
+    assert result_state["task_is_complete"] is True
+    assert result_state["web_builder_iteration"] is None

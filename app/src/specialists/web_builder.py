@@ -22,10 +22,11 @@ class WebBuilder(BaseSpecialist):
         if not system_plan:
             raise ValueError("WebBuilder Error: 'system_plan' not found in state.")
 
-        # --- Iteration Control ---
-        # Default to 1 cycle (current behavior) if not specified in the plan.
+        # --- Refinement Loop Control ---
         refinement_cycles = system_plan.get("refinement_cycles", 1)
-        current_iteration = state.get("web_builder_iteration", 0)
+        # Coalesce None to 0 to handle initial state and cleanup from previous runs.
+        current_iteration = state.get("web_builder_iteration") or 0
+        critique = state.get("critique_artifact")
         
         logger.info(f"Executing WebBuilder iteration {current_iteration + 1} of {refinement_cycles}.")
 
@@ -43,10 +44,10 @@ class WebBuilder(BaseSpecialist):
                 content=f"Use the following text as the primary content and context for building the webpage:\n\n---\n{text_to_process}\n---"
             ))
 
-        # If we have existing HTML and this is a refinement cycle, add it to the context.
-        if current_html and current_iteration > 0:
+        # If we have existing HTML and a critique, this is a refinement cycle. Add them to the context.
+        if current_html and critique:
             refinement_prompt = HumanMessage(
-                content=f"This is refinement cycle {current_iteration + 1} of {refinement_cycles}. Please review and improve the following HTML based on the original plan and content.\n\n```html\n{current_html}\n```"
+                content=f"This is refinement cycle {current_iteration + 1} of {refinement_cycles}. Please improve the following HTML based on the new plan, which was created in response to a critique.\n\nPREVIOUS HTML:\n```html\n{current_html}\n```"
             )
             contextual_messages.append(refinement_prompt)
 
@@ -73,10 +74,11 @@ class WebBuilder(BaseSpecialist):
         if next_iteration >= refinement_cycles:
             logger.info(f"WebBuilder has completed all {refinement_cycles} refinement cycles. Signaling task completion.")
             updated_state["task_is_complete"] = True
-            updated_state["web_builder_iteration"] = None # Clean up the counter from the state
+            # Clean up state fields used during the loop
+            updated_state["web_builder_iteration"] = None
+            updated_state["critique_artifact"] = None
         else:
-            # More iterations to go. Loop back to self via the router.
-            logger.info(f"Recommending 'web_builder' for next refinement cycle.")
-            updated_state["recommended_specialists"] = ["web_builder"]
+            logger.info(f"WebBuilder recommending 'critic_specialist' to begin next refinement cycle.")
+            updated_state["recommended_specialists"] = ["critic_specialist"]
 
         return updated_state

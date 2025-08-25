@@ -2,6 +2,8 @@
 import os
 import logging
 from typing import Dict, Any, List
+import json
+import codecs
 from datetime import datetime
 from langchain_core.messages import AIMessage, BaseMessage
 from .base import BaseSpecialist
@@ -61,8 +63,23 @@ class ArchiverSpecialist(BaseSpecialist):
         for title, (key, lang) in artifacts.items():
             if content := state.get(key):
                 has_artifacts = True
+
+                # For structured data, pretty-print it as JSON. For others, just use string representation.
+                if isinstance(content, (dict, list)):
+                    content_str = json.dumps(content, indent=2)
+                else:
+                    content_str = str(content)
+
+                # Un-escape sequences like \n and \" to make the final report more readable.
+                try:
+                    # This handles escaped sequences that might be present in the string content.
+                    final_content = codecs.decode(content_str, 'unicode_escape')
+                except UnicodeDecodeError:
+                    logger.warning(f"Could not unicode-decode artifact '{key}'. Using raw string representation.")
+                    final_content = content_str
+
                 artifact_section.append(f"### 📄 {title} Output")
-                artifact_section.append(f"```{lang}\n{str(content)}\n```")
+                artifact_section.append(f"```{lang}\n{final_content}\n```")
         
         if has_artifacts:
             report_parts.extend(artifact_section)

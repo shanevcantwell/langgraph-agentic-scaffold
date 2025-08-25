@@ -100,10 +100,22 @@ class GeminiAdapter(BaseAdapter):
                 logger.error(f"{error_message} Full response object: {response}")
                 raise LLMInvocationError(error_message)
 
+        # Helper to safely access response.text, which can fail if the model
+        # returns a tool call or other non-text part.
+        def _get_safe_text(response_obj: Any) -> str:
+            try:
+                return response_obj.text
+            except ValueError:
+                logger.warning(
+                    "response.text accessor failed. This can happen if the model returns a tool call "
+                    "or empty content. Returning empty string."
+                )
+                return ""
+
         # If we requested JSON, we expect JSON.
         if request.output_model_class:
             logger.info("GeminiAdapter returned JSON response.")
-            content = response.text or "{}"
+            content = _get_safe_text(response) or "{}"
             try:
                 json_response = json.loads(content)
                 return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
@@ -142,7 +154,7 @@ class GeminiAdapter(BaseAdapter):
 
         # Otherwise, it's a standard text response.
         logger.info("GeminiAdapter returned text response.")
-        return {"text_response": response.text}
+        return {"text_response": _get_safe_text(response)}
 
 class LMStudioAdapter(BaseAdapter):
     """

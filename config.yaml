@@ -55,6 +55,9 @@ llm_providers:
 # ==============================================================================
 workflow:
   entry_point: "prompt_triage_specialist"
+  # The number of times a short sequence of specialists can repeat before the
+  # workflow is halted to prevent unproductive loops.
+  max_loop_cycles: 3
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION
@@ -74,6 +77,11 @@ specialists:
     type: "llm"
     prompt_file: "systems_architect_prompt.md"
     description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
+
+  critic_specialist:
+    type: "llm"
+    prompt_file: "critic_prompt.md"
+    description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
 
   # --- Core Capabilities ---
   web_builder:

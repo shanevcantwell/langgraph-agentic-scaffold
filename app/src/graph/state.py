@@ -30,6 +30,7 @@ class GraphState(TypedDict):
     html_artifact: Optional[str]
     system_plan: Optional[Dict[str, Any]]
     recommended_specialists: Optional[List[str]]
+    critique_artifact: Optional[str]
     archive_report: Optional[str]
 
     # --- Control Flow & Metadata ---

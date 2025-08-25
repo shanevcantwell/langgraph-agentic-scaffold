@@ -11,7 +11,6 @@ from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
 
 logger = logging.getLogger(__name__)
-MAX_TURNS = 10
 
 class ChiefOfStaff:
     def __init__(self):
@@ -21,7 +20,8 @@ class ChiefOfStaff:
         self.specialists = self._load_and_configure_specialists()
 
         # Now, validate the entry point against the list of *loaded* specialists.
-        raw_entry_point = self.config.get("workflow", {}).get("entry_point", CoreSpecialist.ROUTER.value)
+        workflow_config = self.config.get("workflow", {})
+        raw_entry_point = workflow_config.get("entry_point", CoreSpecialist.ROUTER.value)
         if raw_entry_point not in self.specialists:
             logger.error(
                 f"Configured entry point '{raw_entry_point}' is not an available specialist. "
@@ -31,6 +31,11 @@ class ChiefOfStaff:
             self.entry_point = CoreSpecialist.ROUTER.value
         else:
             self.entry_point = raw_entry_point
+
+        # Configure loop detection parameters
+        self.max_loop_cycles = workflow_config.get("max_loop_cycles", 3)
+        self.min_loop_len = 2 # A loop must involve at least 2 specialists
+        logger.info(f"Loop detection configured with max_loop_cycles={self.max_loop_cycles}")
 
         self.graph = self._build_graph()
         logger.info(f"---ChiefOfStaff: Graph compiled successfully with entry point '{self.entry_point}'.---")
@@ -181,13 +186,30 @@ class ChiefOfStaff:
             logger.error(f"Error detected in state: '{error}'. Halting workflow.")
             return END
 
-        # This check enforces the maximum turn limit for the entire workflow,
-        # acting as a safeguard against infinite loops.
-        turn_count = state.get("turn_count", 0)
-        if turn_count >= MAX_TURNS:
-            logger.error(f"Maximum turn limit of {MAX_TURNS} reached. Halting workflow.")
-            return END
-
+        # Check for unproductive loops to prevent the system from getting stuck.
+        # This is a more intelligent safeguard than a simple max turn count.
+        routing_history = state.get("routing_history", [])
+        if len(routing_history) >= self.min_loop_len * self.max_loop_cycles:
+            # Iterate through possible loop lengths
+            for loop_len in range(self.min_loop_len, (len(routing_history) // self.max_loop_cycles) + 1):
+                # Extract the most recent block, which is our reference pattern
+                last_block = tuple(routing_history[-loop_len:])
+                is_loop = True
+                # Compare it with the preceding blocks
+                for i in range(1, self.max_loop_cycles):
+                    start_index = -(i + 1) * loop_len
+                    end_index = -i * loop_len
+                    preceding_block = tuple(routing_history[start_index:end_index])
+                    if last_block != preceding_block:
+                        is_loop = False
+                        break
+                if is_loop:
+                    logger.error(
+                        f"Unproductive loop detected. The specialist sequence '{list(last_block)}' "
+                        f"has repeated {self.max_loop_cycles} times. Halting workflow."
+                    )
+                    return END
+        
         next_specialist = state.get("next_specialist")
         logger.info(f"Router has selected next specialist: {next_specialist}")
 

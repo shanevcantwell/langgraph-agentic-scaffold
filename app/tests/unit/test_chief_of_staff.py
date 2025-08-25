@@ -15,6 +15,8 @@ def chief_of_staff_instance(mocker):
     with patch.object(ChiefOfStaff, '__init__', lambda x: None):
         chief = ChiefOfStaff()
         # Mock any attributes needed by the method under test
+        chief.max_loop_cycles = 3
+        chief.min_loop_len = 2
         chief.specialists = {} 
         yield chief
 
@@ -122,11 +124,31 @@ def test_decide_next_specialist_handles_error(chief_of_staff_instance):
     result = chief_of_staff_instance.decide_next_specialist(state)
     assert result == END
 
-def test_decide_next_specialist_handles_max_turns(chief_of_staff_instance):
-    """Tests that the function routes to END when the max turn count is reached."""
-    state = {"turn_count": 10, "next_specialist": "file_specialist"}
+def test_decide_next_specialist_detects_loop(chief_of_staff_instance):
+    """Tests that the function routes to END when a repeating loop is detected."""
+    # Configure the instance for the test
+    chief_of_staff_instance.max_loop_cycles = 2
+    chief_of_staff_instance.min_loop_len = 2
+
+    # This history represents a loop of ['A', 'B'] repeating twice.
+    state = {
+        "routing_history": ["C", "A", "B", "A", "B"],
+        "next_specialist": "some_specialist"
+    }
     result = chief_of_staff_instance.decide_next_specialist(state)
     assert result == END
+
+def test_decide_next_specialist_allows_non_loop(chief_of_staff_instance):
+    """Tests that the function does not halt for a non-looping history."""
+    chief_of_staff_instance.max_loop_cycles = 2
+    chief_of_staff_instance.min_loop_len = 2
+
+    state = {
+        "routing_history": ["A", "B", "C", "D"],
+        "next_specialist": "some_specialist"
+    }
+    result = chief_of_staff_instance.decide_next_specialist(state)
+    assert result == "some_specialist"
 
 def test_decide_next_specialist_handles_no_route(chief_of_staff_instance):
     """Tests that the function routes to END if the router fails to provide a next step."""
