@@ -15,6 +15,16 @@ class ArchiverSpecialist(BaseSpecialist):
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name)
         # This is a procedural specialist, so no LLM adapter is needed.
+        if os.environ.get("AGENTIC_SCAFFOLD_ARCHIVER_ENABLED", "true").lower() == "false":
+            self.is_enabled = False
+        # Determine the archive path with a clear order of precedence:
+        # 1. Environment variable (AGENTIC_SCAFFOLD_ARCHIVE_PATH) for user-level overrides.
+        # 2. Specialist configuration in config.yaml (archive_path) for project-level settings.
+        # 3. A hardcoded default ('./archives') as a fallback.
+        env_path = os.environ.get("AGENTIC_SCAFFOLD_ARCHIVE_PATH")
+        config_path = self.specialist_config.get("archive_path")
+        default_path = "./archives"
+        archive_dir_path = env_path or config_path or default_path
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """

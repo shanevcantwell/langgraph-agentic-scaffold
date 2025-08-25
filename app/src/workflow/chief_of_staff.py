@@ -1,6 +1,6 @@
 # src/workflow/chief_of_staff.py
 import logging
-from typing import Dict
+from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 
 from ..utils.config_loader import ConfigLoader
@@ -78,11 +78,17 @@ class ChiefOfStaff:
         # It will use this map at runtime to filter specialists based on the routing channel.
         router_instance.set_specialist_map(configs)
 
-        # The static part of the router's prompt. The dynamic list of tools will be
-        # injected by the router itself at runtime based on the state.
+        # The static part of the router's prompt, including the full list of specialists.
+        # A dynamic, filtered list may be added at runtime by the router itself.
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
         base_prompt_file = router_config.get("prompt_file")
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
+
+        # The router needs to know about all other specialists for its prompt.
+        available_specialists = {name: conf for name, conf in configs.items() if name != CoreSpecialist.ROUTER.value}
+        standup_report = "\n\n--- AVAILABLE SPECIALISTS (Morning Standup) ---\n"
+        specialist_descs = [f"- {name}: {conf.get('description', 'No description available.')}" for name, conf in available_specialists.items()]
+        standup_report += "\n".join(specialist_descs)
 
         feedback_instruction = (
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
@@ -91,7 +97,7 @@ class ChiefOfStaff:
             "3. **Follow the Plan**: If a `system_plan` or other artifact has just been added to the state, you MUST route to the specialist best suited to execute the next step.\n"
             "4. **Use Provided Tools**: You will be provided with a list of specialists to choose from based on the current context. You MUST choose from that list."
         )
-        dynamic_system_prompt = f"{base_prompt}\n{feedback_instruction}"
+        dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"
         router_instance.llm_adapter = AdapterFactory().create_adapter(
             specialist_name=CoreSpecialist.ROUTER.value,
             system_prompt=dynamic_system_prompt
@@ -105,26 +111,44 @@ class ChiefOfStaff:
         triage_instance = specialists[CoreSpecialist.TRIAGE.value]
         triage_instance.set_specialist_map(configs)
 
-    def _build_graph(self) -> StateGraph:
+    def _create_safe_executor(self, specialist_instance: BaseSpecialist):
         """
-        Builds the LangGraph StateGraph by adding nodes and defining the "hub-and-spoke"
-        edge architecture.
+        Creates a wrapper around a specialist's execute method to enforce
+        the rule that only the router can modify the 'turn_count'.
+        This prevents other specialists from accidentally resetting the counter.
         """
-        workflow = StateGraph(GraphState)
+        def safe_executor(state: GraphState) -> Dict[str, Any]:
+            update = specialist_instance.execute(state)
+            if "turn_count" in update:
+                logger.warning(
+                    f"Specialist '{specialist_instance.specialist_name}' returned a 'turn_count'. "
+                    "This is not allowed and will be ignored to preserve the global count."
+                )
+                del update["turn_count"]
+            return update
+        return safe_executor
 
-        # 1. Add all successfully loaded specialists as nodes in the graph.
+    def _add_nodes_to_graph(self, workflow: StateGraph):
+        """Adds all loaded specialists as nodes to the graph."""
         for name, instance in self.specialists.items():
-            workflow.add_node(name, instance.execute)
+            if name == CoreSpecialist.ROUTER.value:
+                # The router is special; it manages turn count and doesn't need the safe wrapper.
+                workflow.add_node(name, instance.execute)
+            else:
+                # All other specialists are wrapped to prevent them from modifying the turn count.
+                workflow.add_node(name, self._create_safe_executor(instance))
 
-        # 2. The router is the central hub. All decisions on where to go next flow from it.
+    def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
+        """Defines the 'hub-and-spoke' architecture for the graph."""
         router_name = CoreSpecialist.ROUTER.value
+
+        # 1. The router is the central hub. All decisions on where to go next flow from it.
         destinations = {name: name for name in self.specialists if name != router_name}
         destinations[END] = END
         workflow.add_conditional_edges(router_name, self.decide_next_specialist, destinations)
 
-        # 3. After any other specialist runs, control must return to the router for the next decision.
-        #    This creates the "hub-and-spoke" architecture and ensures that an edge exists
-        #    from any non-router entry point back to the router.
+        # 2. After any other specialist runs, control must return to the router for the next decision.
+        #    This creates the "hub-and-spoke" architecture.
         for name in self.specialists:
             if name == router_name:
                 continue  # Don't add an edge from the router to itself.
@@ -133,7 +157,16 @@ class ChiefOfStaff:
             else:
                 workflow.add_edge(name, router_name)  # All other specialists loop back to the router.
 
-        # 4. Set the validated entry point for the graph.
+    def _build_graph(self) -> StateGraph:
+        """
+        Builds the LangGraph StateGraph by adding nodes and defining the "hub-and-spoke"
+        edge architecture.
+        """
+        workflow = StateGraph(GraphState)
+        self._add_nodes_to_graph(workflow)
+        self._wire_hub_and_spoke_edges(workflow)
+
+        # Set the validated entry point for the graph.
         workflow.set_entry_point(self.entry_point)
         return workflow.compile()
 
@@ -148,8 +181,8 @@ class ChiefOfStaff:
             logger.error(f"Error detected in state: '{error}'. Halting workflow.")
             return END
 
-        # Check for infinite loops. This check is now for observation;
-        # the actual termination is handled by the router node's state update.
+        # This check enforces the maximum turn limit for the entire workflow,
+        # acting as a safeguard against infinite loops.
         turn_count = state.get("turn_count", 0)
         if turn_count >= MAX_TURNS:
             logger.error(f"Maximum turn limit of {MAX_TURNS} reached. Halting workflow.")

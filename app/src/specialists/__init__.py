@@ -28,7 +28,7 @@ def get_specialist_class(specialist_name: str, config: dict) -> type:
     module_name = f".{specialist_name}"
     try:
         # Dynamically import the module within the 'specialists' package.
-        module = importlib.import_module(module_name, package='src.specialists')
+        module = importlib.import_module(module_name, package='app.src.specialists')
         return getattr(module, class_name)
     except (ImportError, AttributeError) as e:
         logger.error(f"Failed to import specialist '{specialist_name}'. Could not find class '{class_name}' in module '{module_name}'. Error: {e}", exc_info=True)

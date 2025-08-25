@@ -41,6 +41,9 @@ These scripts will:
 *   For Windows, provide a note about PowerShell execution policy if running PowerShell scripts.
 
 After running the installation script, remember to edit `.env` with your API keys and `config.yaml` to define your agent setup.
+You can also set environment variables in `.env` to control specific features. For example:
+*   `AGENTIC_SCAFFOLD_ARCHIVE_PATH=/path/to/my/reports`: Overrides the default location for run reports.
+*   `AGENTIC_SCAFFOLD_ARCHIVER_ENABLED=false`: Disables the archiving feature entirely.
 
 ### 2.3 Configuration
 
@@ -185,7 +188,9 @@ This scaffold implements several advanced patterns to move beyond simple instruc
 
 *   **Iterative Refinement (Self-Looping):** A specialist can perform iterative refinement on its own work. This is managed by including a cycle count (e.g., `refinement_cycles: 3`) in the `system_plan`. The specialist (`web_builder`) manages a counter in the `GraphState`. For each cycle, it performs its work and then uses the `recommended_specialists` pattern to recommend itself, creating a controlled loop. Once the cycles are complete, it sets `task_is_complete: True`. This allows the agent to improve its work over multiple steps without getting stuck in an infinite loop.
 
-*   **Atomic State Updates:** The LangGraph is configured to *add* new messages to the conversation history. Therefore, it is critical that specialists only return the *new* messages or state changes they are responsible for (the "delta"). They should not return the entire message history they received. Adhering to this pattern prevents the conversation history from growing exponentially, which would quickly exhaust the context window of any LLM.
+*   **Centralized State Integrity:** To enforce critical rules across all specialists, the system uses two key patterns.
+    *   **Declarative State Updates:** The `GraphState` itself defines how its fields are updated. By using `typing.Annotated` (e.g., `messages: Annotated[List, operator.add]`), we instruct LangGraph to always *append* to the message history, rather than replacing it. This is a structural guarantee that prevents any specialist from accidentally wiping the conversation history.
+    *   **Protective Wrappers:** For rules that cannot be declared in the state (like preventing specialists from modifying the `turn_count`), the `ChiefOfStaff` wraps each specialist's execution function in a "safe executor." This wrapper intercepts the specialist's output and sanitizes it before it's merged into the global state, providing centralized enforcement of global rules.
 
 ## 4.0 How to Extend the System
 

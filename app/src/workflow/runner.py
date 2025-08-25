@@ -48,6 +48,8 @@ class WorkflowRunner:
             "html_artifact": None,
             "system_plan": None,
             "turn_count": 0,
+            "archive_report": None,
+            "web_builder_iteration": None,
             # Initialize the completion flag. This is critical for the router's
             # programmatic completion check to function correctly.
             "task_is_complete": False,

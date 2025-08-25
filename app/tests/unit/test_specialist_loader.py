@@ -11,7 +11,7 @@ def test_get_specialist_class_success():
     # We test with a real, existing specialist
     from app.src.specialists.router_specialist import RouterSpecialist
     
-    loaded_class = get_specialist_class("router_specialist")
+    loaded_class = get_specialist_class("router_specialist", config={})
     assert loaded_class == RouterSpecialist
 
 @patch('importlib.import_module')
@@ -24,6 +24,6 @@ def test_get_specialist_class_import_error(mock_import_module):
     mock_import_module.side_effect = ImportError(f"No module named {specialist_name}")
 
     with pytest.raises(ImportError):
-        get_specialist_class(specialist_name)
+        get_specialist_class(specialist_name, config={})
 
     mock_import_module.assert_called_once_with(f".{specialist_name}", package="app.src.specialists")

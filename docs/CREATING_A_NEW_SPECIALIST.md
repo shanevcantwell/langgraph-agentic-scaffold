@@ -78,6 +78,15 @@ class CodeWriterSpecialist(BaseSpecialist):
         #    to the existing list of messages in the state.
         return {"messages": [ai_message]}
 
+### Specialist Best Practices
+
+To ensure your specialist integrates smoothly and reliably into the system, please follow these best practices:
+
+*   **Return Only Deltas:** Your specialist should only return the *new* state changes (the "delta"). For example, only return the new `AIMessage` you created, not the entire message history. The graph is configured to append new messages automatically.
+*   **Do Not Modify Global State Counters:** The `turn_count` is managed exclusively by the `RouterSpecialist`. Do not attempt to change this value from within your specialist, as it will break the workflow in unpredictable ways.
+*   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (`recommended_specialists`) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows. See the `DEVELOPERS_GUIDE.md` for more details.
+
+
 ### Step 2: Create the Prompt File
 
 Next, create a new prompt file in the `app/prompts/` directory. This file contains the instructions that will be sent to the Language Model. The filename should be descriptive and match the `prompt_file` key you will set in `config.yaml`.

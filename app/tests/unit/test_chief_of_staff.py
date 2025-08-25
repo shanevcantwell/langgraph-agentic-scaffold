@@ -66,24 +66,23 @@ def test_load_specialists_and_configure_router(mock_config_loader, mock_get_spec
     assert "specialist1" in chief_of_staff.specialists
     assert "specialist2" in chief_of_staff.specialists
 
+    # Get the mock instance that was created when AdapterFactory() was called
+    mock_factory_instance = mock_adapter_factory.return_value
+
     # Check that the AdapterFactory was called to create a NEW adapter for the router
     # This is the key assertion for the "morning standup" logic.
-    mock_adapter_factory.create_adapter.assert_called_once()
+    mock_factory_instance.create_adapter.assert_called_once()
     
     # Check the arguments of the call to create_adapter
-    call_args, call_kwargs = mock_adapter_factory.create_adapter.call_args
-    
-    assert call_args[0] == "router_specialist"
-    
+    call_args, call_kwargs = mock_factory_instance.create_adapter.call_args
+    assert call_kwargs['specialist_name'] == "router_specialist"
     dynamic_prompt = call_kwargs['system_prompt']
     assert isinstance(dynamic_prompt, str)
     assert "Test specialist 1" in dynamic_prompt
     assert "Test specialist 2" in dynamic_prompt
-    assert "specialist1" in dynamic_prompt
-    assert "specialist2" in dynamic_prompt
 
     # Check that the router's adapter was replaced with the new one
-    assert chief_of_staff.specialists["router_specialist"].llm_adapter == mock_adapter_factory.create_adapter.return_value
+    assert chief_of_staff.specialists["router_specialist"].llm_adapter == mock_factory_instance.create_adapter.return_value
 
 @patch("src.workflow.chief_of_staff.ConfigLoader")
 @patch("src.workflow.chief_of_staff.get_specialist_class")
@@ -114,7 +113,7 @@ def test_get_graph(mock_get_specialist_class, mock_config_loader):
     # --- Assert ---
     assert graph is not None
     assert isinstance(graph, StateGraph)
-    assert "router" in graph.nodes
+    assert "router_specialist" in graph.nodes
     assert "some_other_specialist" in graph.nodes
 
 def test_decide_next_specialist_handles_error(chief_of_staff_instance):

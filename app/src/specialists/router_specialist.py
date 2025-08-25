@@ -30,17 +30,9 @@ class RouterSpecialist(BaseSpecialist):
         self.specialist_map = {k: v for k, v in specialist_configs.items() if k != self.specialist_name}
         logger.info(f"Router now aware of all specialist configurations.")
 
-    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        # --- STATE MANAGEMENT ---
-        # The router node is now responsible for managing the turn count.
-        turn_count = state.get("turn_count", 0) + 1
-        logger.debug(f"Executing turn {turn_count}")
-
-        # --- COMPLETION CHECK ---
-        # If a previous specialist has signaled that the task is complete,
-        # bypass the LLM and route directly to the end.
+    def _handle_completion_signal(self, state: Dict[str, Any], turn_count: int) -> Optional[Dict[str, Any]]:
+        """Checks for and handles the task_is_complete flag."""
         if state.get("task_is_complete", False):
-            # Check if the archiver is available before routing to it.
             if CoreSpecialist.ARCHIVER.value in self.specialist_map:
                 logger.info("A specialist has signaled task completion. Routing to ArchiverSpecialist for final report.")
                 ai_message = AIMessage(
@@ -52,17 +44,16 @@ class RouterSpecialist(BaseSpecialist):
                     "messages": [ai_message],
                     "next_specialist": CoreSpecialist.ARCHIVER.value,
                     "turn_count": turn_count,
-                    "task_is_complete": False # Consume the flag
+                    "task_is_complete": False  # Consume the flag
                 }
             else:
-                # Fallback if archiver isn't defined for some reason.
                 logger.info("A specialist has signaled task completion, but ArchiverSpecialist is not available. Routing to END.")
                 return {"next_specialist": END, "turn_count": turn_count}
+        return None
 
-        # --- RECOMMENDATION CHECK (Two-Stage Routing) ---
+    def _handle_deterministic_recommendation(self, state: Dict[str, Any], turn_count: int) -> Optional[Dict[str, Any]]:
+        """Checks for and handles a single, deterministic specialist recommendation."""
         recommended_specialists = state.get("recommended_specialists")
-
-        # 1. Deterministic Handoff: If exactly one specialist is recommended, route directly.
         if recommended_specialists and len(recommended_specialists) == 1:
             next_specialist = recommended_specialists[0]
             if next_specialist in self.specialist_map:
@@ -80,84 +71,84 @@ class RouterSpecialist(BaseSpecialist):
                 }
             else:
                 logger.warning(f"Ignoring invalid recommendation for specialist: {next_specialist}")
+        return None
 
-        # 2. LLM-based Choice (Filtered or Full)
-        messages: List[BaseMessage] = state["messages"][:] # Make a copy
+    def _get_llm_choice(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Invokes the LLM to get the next specialist and returns the validated decision."""
+        messages: List[BaseMessage] = state["messages"][:]  # Make a copy
+        recommended_specialists = state.get("recommended_specialists")
 
         if recommended_specialists:
-            # Use the recommended list to filter choices for the LLM
             current_specialists = {name: self.specialist_map[name] for name in recommended_specialists if name in self.specialist_map}
             logger.info(f"Filtering router choices based on Triage recommendations: {list(current_specialists.keys())}")
         else:
-            # Fallback to all available specialists
             current_specialists = self.specialist_map
 
-        # If, after filtering, there are no specialists available, end the workflow.
         if not current_specialists:
             logger.warning("Router has no specialists to choose from after filtering. Ending workflow.")
-            return {
-                "messages": [AIMessage(content="No specialists available to route to. Ending workflow.", name=self.specialist_name)],
-                "next_specialist": END,
-                "turn_count": turn_count
-            }
+            return {"next_specialist": END, "ai_message_content": "No specialists available to route to. Ending workflow."}
 
-        # Dynamically build the tool list for the prompt
         available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in current_specialists.items()]
         tools_list_str = "\n".join(available_tools_desc)
         contextual_prompt_addition = f"Based on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
         
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
-        request = StandardizedLLMRequest(
-            messages=final_messages,
-            tools=[Route]
-        )
+        request = StandardizedLLMRequest(messages=final_messages, tools=[Route])
         response_data = self.llm_adapter.invoke(request)
         tool_calls = response_data.get("tool_calls", [])
 
-        # If the model fails to return a valid tool call, end the workflow gracefully
-        # and record the failure in the message history.
         if not tool_calls or not tool_calls[0].get('args'):
             logger.warning("Router LLM did not return a valid tool call. Ending workflow.")
-            next_specialist_name = END
-            ai_message = AIMessage(
-                content="Router failed to select a valid next specialist. Ending workflow.",
-                name=self.specialist_name,
-                additional_kwargs={"routing_decision": END, "routing_type": "llm_failure"}
-            )
-        else:
-            next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist', END)
-
-            # --- VALIDATION ---
-            # Check if the LLM's choice is a valid, known specialist.
-            valid_options = list(current_specialists.keys())
-            if next_specialist_from_llm not in valid_options and next_specialist_from_llm != END:
-                logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options + [END]}. Routing to END.")
-                next_specialist_name = END
-                ai_message = AIMessage(
-                    content=f"Router attempted to route to an unknown specialist '{next_specialist_from_llm}'. Halting workflow.",
-                    name=self.specialist_name,
-                    additional_kwargs={"routing_decision": END, "invalid_route_attempt": next_specialist_from_llm}
-                )
-            else:
-                next_specialist_name = next_specialist_from_llm
-                # Create an AIMessage that records the successful tool call and explicitly states the destination.
-                content = f"Routing to specialist: {next_specialist_name}" if next_specialist_name != END else "Task is complete. Routing to END."
-                ai_message = AIMessage(
-                    content=content,
-                    tool_calls=tool_calls,
-                    name=self.specialist_name,
-                    additional_kwargs={"routing_decision": next_specialist_name, "routing_type": "llm_success"}
-                )
+            return {"next_specialist": END, "tool_calls": [], "ai_message_content": "Router failed to select a valid next specialist. Ending workflow."}
         
+        next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist', END)
+        
+        # Validate the choice
+        valid_options = list(current_specialists.keys())
+        if next_specialist_from_llm not in valid_options and next_specialist_from_llm != END:
+            logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options + [END]}. Routing to END.")
+            return {"next_specialist": END, "tool_calls": tool_calls, "ai_message_content": f"Router attempted to route to an unknown specialist '{next_specialist_from_llm}'. Halting workflow."}
+        
+        return {"next_specialist": next_specialist_from_llm, "tool_calls": tool_calls}
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        turn_count = state.get("turn_count", 0) + 1
+        logger.debug(f"Executing turn {turn_count}")
+
+        # Priority 1: Handle task completion signal
+        if (completion_result := self._handle_completion_signal(state, turn_count)):
+            return completion_result
+
+        # Priority 2: Handle deterministic recommendation
+        if (recommendation_result := self._handle_deterministic_recommendation(state, turn_count)):
+            return recommendation_result
+
+        # Priority 3: Fallback to LLM-based routing
+        llm_decision = self._get_llm_choice(state)
+        next_specialist_name = llm_decision["next_specialist"]
+        tool_calls = llm_decision.get("tool_calls", [])
+        
+        if "ai_message_content" in llm_decision:
+            content = llm_decision["ai_message_content"]
+        else:
+            content = f"Routing to specialist: {next_specialist_name}" if next_specialist_name != END else "Task is complete. Routing to END."
+
+        ai_message = AIMessage(
+            content=content,
+            name=self.specialist_name,
+            additional_kwargs={
+                "routing_decision": next_specialist_name,
+                "routing_type": "llm_decision",
+                "tool_calls": tool_calls,
+            },
+        )
+
         logger.info(f"Router decision: Routing to {next_specialist_name}")
 
-        # CORRECTED: Return a dictionary with all state updates.
-        # LangGraph will merge this into the global state.
         return {
-            # Return only the new message to be appended to the state.
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
-            "recommended_specialists": None  # Always consume/clear the recommendation after the router has run.
+            "recommended_specialists": None
         }

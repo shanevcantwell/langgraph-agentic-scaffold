@@ -122,6 +122,12 @@ specialists:
 
   archiver_specialist:
     type: "procedural"
+    archive_path: "./archives" # The directory to save final run reports.
+    # Pruning strategy for the archive directory to prevent it from growing indefinitely.
+    # Options: "none", "count", "size".
+    pruning_strategy: "count"
+    pruning_max_count: 50      # Max number of reports to keep if strategy is "count".
+    # pruning_max_size_mb: 100 # Max total size in MB if strategy is "size".
     description: "Summarizes the conversation and prepares the final report. This is the final step."
 
   prompt_triage_specialist:
