@@ -22,19 +22,39 @@
 # ==============================================================================
 llm_providers:
   # A configuration for a local model via LM Studio
-  local_lmstudio:
+  lmstudio_router:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    # For many local servers, this can be a placeholder. For others, it must match the loaded model's identifier/filename exactly.
-    api_identifier: "lmstudio-community/gpt-oss-20b-gguf/router-gpt-oss-20b-mxfp4.gguf" # The exact model identifier for the server
+    api_identifier: "router-gpt-oss-20b" # The model identifier for the server.
+    # The model's total context window (input + output). This value is used by the llm
+    # adapter to proactively prune the conversation history to prevent context overflow errors.
+    context_window: 4096
+
+  lmstudio_specialist:
+    # Uses the LMSTUDIO_BASE_URL from your .env file
+    # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
+    type: "lmstudio"
+    api_identifier: "gpt-oss-20b" # The model identifier for the server.
+    # The model's total context window (input + output).
+    context_window: 8192
+    # Parameters to pass to the model's API.
+    parameters:
+      # max_tokens controls the maximum length of the model's *output*.
+      # It should be less than the context_window to leave room for the input prompt.
+      max_tokens: 8192
 
   # A configuration for a local model via Ollama
   local_ollama:
     # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
     # Example: OLLAMA_BASE_URL=http://localhost:11434
     type: "ollama"
-    api_identifier: "gemma3:27b" # The model name registered with Ollama
+    api_identifier: "gemma3:27b" # The model name registered with Ollama.
+    # Ollama uses different parameter names than OpenAI-compatible servers.
+    parameters:
+      # num_predict is Ollama's equivalent of max_tokens. It controls the
+      # maximum number of tokens to generate in the response.
+      num_predict: 4096
 
   # A configuration for a powerful, general-purpose Gemini model
   gemini_pro:
@@ -59,6 +79,9 @@ workflow:
   # The number of times a short sequence of specialists can repeat before the
   # workflow is halted to prevent unproductive loops.
   max_loop_cycles: 3
+  # The maximum number of steps the graph can take before halting. This is a
+  # final safeguard against infinite loops.
+  recursion_limit: 40
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION

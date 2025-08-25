@@ -1,7 +1,7 @@
 # src/specialists/base.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..llm.factory import AdapterFactory
 from ..utils.config_loader import ConfigLoader
@@ -18,13 +18,8 @@ class BaseSpecialist(ABC):
         self.specialist_name = specialist_name
         self.is_enabled = True
         self.specialist_config = ConfigLoader().get_config().get("specialists", {}).get(specialist_name, {})
-        prompt_file = self.specialist_config.get("prompt_file")
-        system_prompt = load_prompt(prompt_file) if prompt_file else ""
-        self.llm_adapter = AdapterFactory().create_adapter(
-            specialist_name=specialist_name,
-            system_prompt=system_prompt
-        )
-        logger.info(f"---INITIALIZED {self.__class__.__name__}---")
+        self.llm_adapter: Optional[AdapterFactory] = None # Adapter is now assigned by the orchestrator.
+        logger.info(f"---INITIALIZED {self.__class__.__name__} (adapter pending assignment)---")
 
     def execute(self, state: dict) -> Dict[str, Any]:
         """

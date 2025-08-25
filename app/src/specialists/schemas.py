@@ -25,6 +25,13 @@ class SystemPlan(BaseModel):
     execution_steps: List[str] = Field(..., description="A list of detailed, sequential steps to implement the plan.")
     refinement_cycles: int = Field(default=1, description="The number of refinement cycles (e.g., with a critic) to perform.")
 
+class Critique(BaseModel):
+    """A structured critique of a generated artifact, used by the CriticSpecialist."""
+    overall_assessment: str = Field(..., description="A brief, one-paragraph summary of the critique, assessing how well the artifact meets the requirements.")
+    points_for_improvement: List[str] = Field(..., description="A list of specific, actionable points of feedback for what to change or add in the next iteration.")
+    positive_feedback: List[str] = Field(..., description="Specific aspects of the artifact that were well-executed and should be kept or built upon.")
+
+
 # --- File Operations ---
 class ReadFileParams(BaseModel):
     """Parameters for reading the contents of a file."""

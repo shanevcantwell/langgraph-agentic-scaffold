@@ -3,6 +3,7 @@ from unittest.mock import patch, MagicMock
 
 from app.src.specialists.router_specialist import RouterSpecialist, Route
 from langchain_core.messages import HumanMessage
+from langgraph.graph import END
 
 @pytest.fixture
 def mock_config_loader():
@@ -57,13 +58,15 @@ def test_router_routes_successfully(router_specialist):
     assert result_state["next_specialist"] == "file_specialist"
     assert result_state["turn_count"] == 1
 
-def test_router_handles_no_tool_call(router_specialist):
+def test_router_handles_no_tool_call_with_fallback(router_specialist):
     """
     Tests that the router correctly falls back to the prompt_specialist
     when the LLM fails to return a tool call.
     """
     # Arrange
     initial_state = {"messages": [HumanMessage(content="Confusing prompt")], "turn_count": 2}
+    # Ensure the fallback specialist is in the map for this test
+    router_specialist.specialist_map = {"prompt_specialist": {}}
     # Simulate the LLM returning no tool calls
     router_specialist.llm_adapter.invoke.return_value = {"tool_calls": []}
 
@@ -74,3 +77,22 @@ def test_router_handles_no_tool_call(router_specialist):
     router_specialist.llm_adapter.invoke.assert_called_once()
     assert result_state["next_specialist"] == "prompt_specialist"
     assert result_state["turn_count"] == 3 # Ensure turn count is still incremented
+    assert "I am having trouble deciding" in result_state["messages"][0].content
+
+def test_router_handles_no_tool_call_without_fallback(router_specialist):
+    """
+    Tests that the router correctly routes to END when the LLM fails and
+    the fallback 'prompt_specialist' is not available.
+    """
+    # Arrange
+    initial_state = {"messages": [HumanMessage(content="Confusing prompt")], "turn_count": 2}
+    # Ensure the fallback specialist is NOT in the map for this test
+    router_specialist.specialist_map = {"file_specialist": {}}
+    router_specialist.llm_adapter.invoke.return_value = {"tool_calls": []}
+
+    # Act
+    result_state = router_specialist._execute_logic(initial_state)
+
+    # Assert
+    assert result_state["next_specialist"] == END
+    assert "no fallback is available" in result_state["messages"][0].content

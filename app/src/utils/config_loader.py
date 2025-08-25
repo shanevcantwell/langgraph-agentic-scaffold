@@ -100,25 +100,31 @@ class ConfigLoader:
         # 3. Build the final list of specialists, filtering out any that are misconfigured
         final_specialists = {}
         for name, spec_config in merged["specialists"].items():
-            if spec_config.get("type") == "llm":
-                # Determine the binding: specific (if valid) > default
-                binding = bindings.get(name) or default_binding
-
-                # If a specific binding was provided, ensure it's valid before using it
-                if name in bindings and bindings[name] not in merged["llm_providers"]:
-                    logger.warning(f"Model binding '{bindings[name]}' for specialist '{name}' in {USER_SETTINGS_FILE} is invalid. It will be ignored, and we will attempt to use the default binding.")
-                    binding = default_binding
-
-                if not binding:
-                    logger.warning(f"LLM specialist '{name}' has no model assigned and will be disabled. Assign it in 'specialist_model_bindings' or set a 'default_llm_config' in {USER_SETTINGS_FILE}.")
-                    continue  # Skip this specialist
-
-                spec_config["llm_config"] = binding
-                logger.debug(f"Bound specialist '{name}' to LLM config: '{binding}'")
-                final_specialists[name] = spec_config
-            else:
+            if spec_config.get("type") != "llm":
                 # It's a procedural or wrapped specialist, it's always valid from a binding perspective.
                 final_specialists[name] = spec_config
+                continue
+
+            # Logic for LLM specialists:
+            binding = None
+            specific_binding = bindings.get(name)
+
+            if specific_binding:
+                if specific_binding in merged["llm_providers"]:
+                    logger.debug(f"Applying specific binding '{specific_binding}' to specialist '{name}'.")
+                    binding = specific_binding
+                else:
+                    logger.warning(f"Model binding '{specific_binding}' for specialist '{name}' in {USER_SETTINGS_FILE} is invalid. It will be ignored, and we will attempt to use the default binding.")
+                    binding = default_binding # Fallback to default
+            else:
+                binding = default_binding # No specific binding, use the default
+
+            if not binding:
+                logger.warning(f"LLM specialist '{name}' has no model assigned and will be disabled. Assign it in 'specialist_model_bindings' or set a 'default_llm_config' in {USER_SETTINGS_FILE}.")
+                continue
+
+            spec_config["llm_config"] = binding
+            final_specialists[name] = spec_config
 
         # 4. Final check: The router is essential for the system to function.
         if CoreSpecialist.ROUTER.value not in final_specialists:

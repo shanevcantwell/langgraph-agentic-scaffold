@@ -37,7 +37,8 @@ class ChiefOfStaff:
 
         # Configure loop detection parameters
         self.max_loop_cycles = workflow_config.get("max_loop_cycles", 3)
-        self.min_loop_len = 2 # A loop must involve at least 2 specialists
+        # A loop can involve one or more specialists. Start detection at 1.
+        self.min_loop_len = 1
         logger.info(f"Loop detection configured with max_loop_cycles={self.max_loop_cycles}")
 
         self.graph = self._build_graph()
@@ -61,14 +62,26 @@ class ChiefOfStaff:
                 if not instance.is_enabled:
                     logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")
                     continue
+
+                # The ChiefOfStaff is now responsible for creating and assigning the adapter.
+                if config.get("type") == "llm":
+                    # Defer adapter creation for special cases to their dedicated methods.
+                    if name in [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value]:
+                        logger.info(f"Deferring adapter creation for '{name}' to its specialized configuration method.")
+                    else:
+                        prompt_file = config.get("prompt_file")
+                        system_prompt = load_prompt(prompt_file) if prompt_file else ""
+                        instance.llm_adapter = AdapterFactory().create_adapter(
+                            specialist_name=name,
+                            system_prompt=system_prompt
+                        )
+
                 loaded_specialists[name] = instance
                 logger.info(f"Successfully instantiated specialist: {name}")
             except Exception as e:
                 logger.error(f"Failed to load specialist '{name}', it will be disabled. Error: {e}", exc_info=True)
                 continue # Allow the app to start with the specialists that did load correctly.
 
-        # The router configuration needs the full list of potential specialists from the config,
-        # not just the ones that loaded, so it can report on them.
         if CoreSpecialist.ROUTER.value in loaded_specialists:
             self._configure_router(loaded_specialists, self.config.get("specialists", {}))
         
@@ -105,13 +118,15 @@ class ChiefOfStaff:
             "3. **Follow the Plan**: If a `system_plan` or other artifact has just been added to the state, you MUST route to the specialist best suited to execute the next step.\n"
             "4. **Use Provided Tools**: You will be provided with a list of specialists to choose from based on the current context. You MUST choose from that list."
         )
-        dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"
+        dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"        
+        
+        # Create the adapter from scratch with the final, complete prompt.
+        # This ensures the router gets the correct configuration and prompt in one step.
         router_instance.llm_adapter = AdapterFactory().create_adapter(
             specialist_name=CoreSpecialist.ROUTER.value,
             system_prompt=dynamic_system_prompt
         )
-        logger.info("RouterSpecialist adapter re-initialized with dynamic, context-aware prompt.")
-        logger.debug(f"RouterSpecialist dynamic system prompt: {dynamic_system_prompt}")
+        logger.info("RouterSpecialist adapter created with dynamic, context-aware prompt.")
 
     def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         """Provides the Triage specialist with the map of all other specialists so it can make recommendations."""
@@ -138,8 +153,7 @@ class ChiefOfStaff:
             specialist_name=CoreSpecialist.TRIAGE.value,
             system_prompt=dynamic_system_prompt
         )
-        logger.info("Triage specialist adapter re-initialized with dynamic, context-aware prompt.")
-        logger.debug(f"Triage specialist dynamic system prompt: {dynamic_system_prompt}")
+        logger.info("Triage specialist adapter created with dynamic, context-aware prompt.")
 
     def _create_safe_executor(self, specialist_instance: BaseSpecialist):
         """
@@ -229,35 +243,46 @@ class ChiefOfStaff:
         This is now a pure decision function. It reads the state and returns
         the next node's name. It does not and cannot modify the state.
         """
-        logger.info("--- ChiefOfStaff: Deciding next specialist ---")
+        turn_count = state.get("turn_count", 0)
+        # The number of graph steps is roughly 2 * turn_count because of the hub-and-spoke model (Specialist -> Router).
+        # This log helps clarify why a recursion limit might be reached.
+        approx_steps = (turn_count * 2) + 1
+        logger.info(f"--- ChiefOfStaff: Deciding next specialist (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
         
         if error := state.get("error"):
             logger.error(f"Error detected in state: '{error}'. Halting workflow.")
             return END
 
-        # Check for unproductive loops to prevent the system from getting stuck.
-        # This is a more intelligent safeguard than a simple max turn count.
-        routing_history = state.get("routing_history", [])
-        if len(routing_history) >= self.min_loop_len * self.max_loop_cycles:
-            # Iterate through possible loop lengths
-            for loop_len in range(self.min_loop_len, (len(routing_history) // self.max_loop_cycles) + 1):
-                # Extract the most recent block, which is our reference pattern
-                last_block = tuple(routing_history[-loop_len:])
-                is_loop = True
-                # Compare it with the preceding blocks
-                for i in range(1, self.max_loop_cycles):
-                    start_index = -(i + 1) * loop_len
-                    end_index = -i * loop_len
-                    preceding_block = tuple(routing_history[start_index:end_index])
-                    if last_block != preceding_block:
-                        is_loop = False
-                        break
-                if is_loop:
-                    logger.error(
-                        f"Unproductive loop detected. The specialist sequence '{list(last_block)}' "
-                        f"has repeated {self.max_loop_cycles} times. Halting workflow."
-                    )
-                    return END
+        # --- Intentional Loop Check ---
+        # If a specialist is managing its own iterative loop (like WebBuilder),
+        # we should bypass the ChiefOfStaff's generic loop detection to avoid
+        # prematurely halting a productive, intentional process.
+        if (state.get("web_builder_iteration") or 0) > 0:
+            logger.info("Intentional refinement loop detected (web_builder_iteration > 0). Bypassing generic loop detection for this turn.")
+        else:
+            # Check for unproductive loops to prevent the system from getting stuck.
+            # This is a more intelligent safeguard than a simple max turn count.
+            routing_history = state.get("routing_history", [])
+            if len(routing_history) >= self.min_loop_len * self.max_loop_cycles:
+                # Iterate through possible loop lengths
+                for loop_len in range(self.min_loop_len, (len(routing_history) // self.max_loop_cycles) + 1):
+                    # Extract the most recent block, which is our reference pattern
+                    last_block = tuple(routing_history[-loop_len:])
+                    is_loop = True
+                    # Compare it with the preceding blocks
+                    for i in range(1, self.max_loop_cycles):
+                        start_index = -(i + 1) * loop_len
+                        end_index = -i * loop_len
+                        preceding_block = tuple(routing_history[start_index:end_index])
+                        if last_block != preceding_block:
+                            is_loop = False
+                            break
+                    if is_loop:
+                        logger.error(
+                            f"Unproductive loop detected. The specialist sequence '{list(last_block)}' "
+                            f"has repeated {self.max_loop_cycles} times. Halting workflow."
+                        )
+                        return END
         
         next_specialist = state.get("next_specialist")
         logger.info(f"Router has selected next specialist: {next_specialist}")

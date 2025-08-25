@@ -16,6 +16,7 @@ class BaseAdapter(ABC):
     """
     def __init__(self, model_config: Dict[str, Any]):
         self.config = model_config
+        self.model_name: Optional[str] = model_config.get("api_identifier")
 
     @abstractmethod
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:

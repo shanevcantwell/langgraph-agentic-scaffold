@@ -58,7 +58,6 @@ class TextAnalysisSpecialist(BaseSpecialist):
         return {
             "messages": [ai_message],
             "json_artifact": json_response,
-            "text_to_process": None,
             # This specialist should NOT decide if the task is complete.
             # It provides its analysis and returns control to the router.
         }

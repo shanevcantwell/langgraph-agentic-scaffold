@@ -22,6 +22,7 @@ class WorkflowRunner:
         and compiling the LangGraph application.
         """
         chief_of_staff = ChiefOfStaff()
+        self.recursion_limit = chief_of_staff.config.get("workflow", {}).get("recursion_limit", 25)
         self.app = chief_of_staff.get_graph()
         logger.info("WorkflowRunner initialized with compiled graph.")
 
@@ -48,6 +49,7 @@ class WorkflowRunner:
             "html_artifact": None,
             "system_plan": None,
             "turn_count": 0,
+            "routing_history": [],
             "archive_report": None,
             "web_builder_iteration": None,
             # Initialize the completion flag. This is critical for the router's
@@ -56,7 +58,7 @@ class WorkflowRunner:
         }
 
         try:
-            final_state = self.app.invoke(initial_state)
+            final_state = self.app.invoke(initial_state, config={"recursion_limit": self.recursion_limit})
             logger.info("--- Workflow completed successfully ---")
             return final_state
         except Exception as e:

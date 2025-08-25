@@ -27,16 +27,18 @@ class AdapterFactory:
             logger.debug(f"Specialist '{specialist_name}' is not of type 'llm'. No adapter will be created.")
             return None
 
-        # The ConfigLoader guarantees this key exists for 'llm' types.
+        # The ConfigLoader is now the single source of truth for merging and validation.
+        # If we are here, we can trust that 'llm_config' exists and is valid.
         provider_config_key = spec_config.get("llm_config")
         if not provider_config_key:
-             # This should be unreachable if ConfigLoader is correct, but serves as a safeguard.
-            raise ValueError(f"LLM specialist '{specialist_name}' is missing 'llm_config' key in merged config.")
+            # This should be unreachable if ConfigLoader is correct, but serves as a safeguard.
+            raise ValueError(f"LLM specialist '{specialist_name}' is missing 'llm_config' key in merged config. This indicates a bug in ConfigLoader.")
 
         # Get the full provider configuration block from the top-level `llm_providers`
         provider_config = full_config.get("llm_providers", {}).get(provider_config_key)
         if not provider_config:
-            raise ValueError(f"Provider configuration '{provider_config_key}' referenced by specialist '{specialist_name}' not found in 'llm_providers'.")
+            # This should also be unreachable if ConfigLoader is correct.
+            raise ValueError(f"Provider configuration '{provider_config_key}' referenced by specialist '{specialist_name}' not found. This indicates a bug in ConfigLoader.")
 
         # This is the actual provider type, e.g., "gemini" or "lmstudio"
         base_provider_type = provider_config.get('type')
@@ -50,8 +52,8 @@ class AdapterFactory:
         # creating a much cleaner separation of concerns.
         model_config = {
             "api_identifier": provider_config.get("api_identifier"),
-            # Future-proofing for when we add parameters to the provider config
-            "parameters": provider_config.get("parameters", {})
+            "parameters": provider_config.get("parameters", {}),
+            "context_window": provider_config.get("context_window")
         }
 
         # Instantiate the correct adapter based on the provider name.

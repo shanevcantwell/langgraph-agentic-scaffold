@@ -113,21 +113,41 @@ class FileSpecialist(BaseSpecialist):
         
         updated_state: Dict[str, Any] = {}
         result_content = ""
+        action_name_for_report = tool_name # Keep original for logging
 
         try:
-            if tool_name == ReadFileParams.__name__:
-                file_content, result_content = self._read_file(ReadFileParams(**tool_args))
+            # --- Tool Name Normalization ---
+            # Create a mapping from various possible LLM-hallucinated names to the
+            # canonical Pydantic class. This makes the system more robust.
+            tool_map = {
+                ReadFileParams.__name__: ReadFileParams,
+                "read_file": ReadFileParams,
+                "ReadFile": ReadFileParams,
+                WriteFileParams.__name__: WriteFileParams,
+                "write_file": WriteFileParams,
+                "WriteFile": WriteFileParams,
+                ListDirectoryParams.__name__: ListDirectoryParams,
+                "list_directory": ListDirectoryParams,
+                "ListDirectory": ListDirectoryParams,
+            }
+
+            TargetToolClass = tool_map.get(tool_name)
+
+            if TargetToolClass == ReadFileParams:
+                action_name_for_report = "ReadFile"
+                file_content, result_content = self._read_file(TargetToolClass(**tool_args))
                 if file_content is not None:
                     updated_state["text_to_process"] = file_content
-                    # After reading a file, the next logical step is often analysis. We recommend
-                    # this specialist to the router.
-                    updated_state["recommended_specialists"] = ["text_analysis_specialist"]
-            elif tool_name == ListDirectoryParams.__name__:
-                result_content = self._list_directory(ListDirectoryParams(**tool_args))
+                    # By not making a recommendation, we return control to the router
+                    # to make an intelligent decision based on the new context.
+            elif TargetToolClass == ListDirectoryParams:
+                action_name_for_report = "ListDirectory"
+                result_content = self._list_directory(TargetToolClass(**tool_args))
                 # The list of files is also content that might be processed
                 updated_state["text_to_process"] = result_content
-            elif tool_name == WriteFileParams.__name__:
-                result_content = self._write_file(WriteFileParams(**tool_args))
+            elif TargetToolClass == WriteFileParams:
+                action_name_for_report = "WriteFile"
+                result_content = self._write_file(TargetToolClass(**tool_args))
             else:
                 result_content = f"Error: Unknown tool '{tool_name}' requested."
         except SpecialistError as e:
@@ -136,14 +156,10 @@ class FileSpecialist(BaseSpecialist):
             logger.error(f"An unexpected error occurred in FileSpecialist during '{tool_name}': {e}", exc_info=True)
             result_content = f"An unexpected error occurred during '{tool_name}': {e}"
 
-        # Create an AIMessage to report the outcome of the operation. This is more
-        # appropriate than a ToolMessage here, as the FileSpecialist is an autonomous
-        # agent performing an action, not just a tool responding to a direct call.
-        # This provides a clear, human-readable update for the router's LLM.
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content=f"FileSpecialist action '{tool_name}' completed. Status: {result_content}",
+            content=f"FileSpecialist action '{action_name_for_report}' completed. Status: {result_content}",
         )
 
         updated_state["messages"] = [ai_message]

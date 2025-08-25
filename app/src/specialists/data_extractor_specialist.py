@@ -60,6 +60,5 @@ class DataExtractorSpecialist(BaseSpecialist):
         return {
             "messages": [ai_message],
             "extracted_data": extracted_data,
-            "text_to_process": None,
             "task_is_complete": task_is_complete
         }

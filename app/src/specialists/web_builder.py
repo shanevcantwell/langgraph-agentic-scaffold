@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, List
 
 from .base import BaseSpecialist
-from .helpers import create_llm_message
+from .helpers import create_llm_message, create_missing_artifact_response
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import WebContent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -23,6 +23,18 @@ class WebBuilder(BaseSpecialist):
         if not system_plan:
             raise ValueError("WebBuilder Error: 'system_plan' not found in state.")
 
+        text_to_process = state.get("text_to_process")
+        if not text_to_process:
+            # This is a critical piece of context for this task.
+            # If it's missing, the LLM will likely hallucinate or fail.
+            # It's better to fail fast with a clear error and self-correct.
+            return create_missing_artifact_response(
+                specialist_name=self.specialist_name,
+                required_artifact="text_to_process (e.g., from README.md)",
+                recommended_specialist="file_specialist",
+                guidance="Please read the 'README.md' file from the root directory to provide context for building the web page."
+            )
+
         # --- Refinement Loop Control ---
         refinement_cycles = system_plan.get("refinement_cycles", 1)
         # Coalesce None to 0 to handle initial state and cleanup from previous runs.
@@ -34,7 +46,6 @@ class WebBuilder(BaseSpecialist):
         # --- Contextual Prompting ---
         messages: List[BaseMessage] = state["messages"]
         current_html = state.get("html_artifact")
-        text_to_process = state.get("text_to_process")
         
         contextual_messages = messages[:] # Make a copy
 
@@ -42,7 +53,11 @@ class WebBuilder(BaseSpecialist):
         # This ensures the generated HTML uses the content from the file.
         if text_to_process:
             contextual_messages.append(HumanMessage(
-                content=f"Use the following text as the primary content and context for building the webpage:\n\n---\n{text_to_process}\n---"
+                content=(
+                    "The following text has been provided as a resource. Use it to find the information "
+                    "needed to execute the system plan. Do not simply copy the entire text into the webpage. "
+                    f"Extract only the relevant information as guided by the plan.\n\n---\n{text_to_process}\n---"
+                )
             ))
 
         # If we have existing HTML and a critique, this is a refinement cycle. Add them to the context.

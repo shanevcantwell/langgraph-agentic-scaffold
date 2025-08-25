@@ -1,6 +1,6 @@
 # app/src/utils/config_schema.py
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Dict, Literal, Union, Optional
+from typing import Dict, Literal, Union, Optional, Any
 
 
 class LLMProviderConfig(BaseModel):
@@ -12,6 +12,12 @@ class LLMProviderConfig(BaseModel):
     api_identifier: str = Field(
         ...,
         description="The specific model identifier for the provider's API (e.g., 'gemini-1.5-pro' or 'local-model/nous-hermes-gguf').",
+    )
+    context_window: Optional[int] = Field(
+        None, description="The total context window size of the model (input + output)."
+    )
+    parameters: Optional[Dict[str, Any]] = Field(
+        default_factory=dict, description="A dictionary of parameters to pass to the model's API (e.g., max_tokens, temperature)."
     )
 
 

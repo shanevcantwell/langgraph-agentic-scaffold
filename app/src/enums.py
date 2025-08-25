@@ -21,3 +21,4 @@ class CoreSpecialist(str, Enum):
     ROUTER = "router_specialist"
     TRIAGE = "prompt_triage_specialist"
     ARCHIVER = "archiver_specialist"
+    PROMPT = "prompt_specialist"
