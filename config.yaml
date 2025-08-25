@@ -80,7 +80,10 @@ specialists:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
     description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
-
+  code_writer_specialist:
+    type: "llm"
+    prompt_file: "code_writer_prompt.md"
+    description: "A specialist that writes clean, efficient Python code based on a user's request."    
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
