@@ -52,4 +52,10 @@ def read_root():
 def invoke_graph(request: InvokeRequest):
     logger.info(f"Received request to invoke graph with prompt: '{request.input_prompt}'")
     final_state = workflow_runner.run(goal=request.input_prompt)
+
+    # Check if a detailed error report was generated. If so, prioritize it.
+    if error_report := final_state.get("error_report"):
+        logger.error("Workflow ended with an error. Returning error report.")
+        return InvokeResponse(final_output={"error_report": error_report})
+
     return InvokeResponse(final_output=final_state)

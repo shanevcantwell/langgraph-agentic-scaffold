@@ -42,6 +42,17 @@ def invoke(
         response_json = response.json()
         final_output = response_json.get("final_output", {})
 
+        # Check for a specific error report first. If it exists, the run failed.
+        if error_report := final_output.get("error_report"):
+            if not json_only:
+                print("\n❌ --- Agent Workflow Failed ---")
+                # The report is already formatted as markdown, so just print it.
+                print(error_report)
+                print("--- End of Error Report ---")
+            else:
+                print(json.dumps(final_output, indent=2))
+            sys.exit(1) # Exit with an error code
+
         if json_only:
             print(json.dumps(final_output, indent=2))
         else:
@@ -69,6 +80,7 @@ def invoke(
                 "extracted_data",
                 "json_artifact",
                 "html_artifact",
+                "archive_report",
             ]
         )
 

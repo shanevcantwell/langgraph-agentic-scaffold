@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any, List
 import json
 import codecs
+import html
 from datetime import datetime
 from langchain_core.messages import AIMessage, BaseMessage
 from .base import BaseSpecialist
@@ -25,9 +26,9 @@ class ArchiverSpecialist(BaseSpecialist):
         # 2. Specialist configuration in config.yaml (archive_path) for project-level settings.
         # 3. A hardcoded default ('./archives') as a fallback.
         env_path = os.environ.get("AGENTIC_SCAFFOLD_ARCHIVE_PATH")
-        config_path = self.specialist_config.get("archive_path")
+        config_path = self.specialist_config.get("archive_path") if self.specialist_config else None
         default_path = "./archives"
-        archive_dir_path = env_path or config_path or default_path
+        self.archive_dir_path = env_path or config_path or default_path
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -46,8 +47,8 @@ class ArchiverSpecialist(BaseSpecialist):
         # --- System Plan ---
         if system_plan := state.get("system_plan"):
             report_parts.append("## 📝 System Plan")
-            report_parts.append(f"_{system_plan.get('description', 'No plan description provided.')}_")
-            if steps := system_plan.get('steps'):
+            report_parts.append(f"_{system_plan.get('plan_summary', 'No plan summary provided.')}_")
+            if steps := system_plan.get('execution_steps'):
                 steps_md = "\n".join([f"{i+1}. {step}" for i, step in enumerate(steps)])
                 report_parts.append(f"\n**Execution Steps:**\n{steps_md}")
             report_parts.append("---")
@@ -70,13 +71,16 @@ class ArchiverSpecialist(BaseSpecialist):
                 else:
                     content_str = str(content)
 
-                # Un-escape sequences like \n and \" to make the final report more readable.
-                try:
-                    # This handles escaped sequences that might be present in the string content.
-                    final_content = codecs.decode(content_str, 'unicode_escape')
-                except UnicodeDecodeError:
-                    logger.warning(f"Could not unicode-decode artifact '{key}'. Using raw string representation.")
-                    final_content = content_str
+                # Process content for readability in the final report.
+                if key == "html_artifact":
+                    # Un-escape HTML entities to make the raw HTML readable in the report.
+                    final_content = html.unescape(content_str)
+                else:
+                    try:
+                        final_content = codecs.decode(content_str, 'unicode_escape')
+                    except (UnicodeDecodeError, TypeError):
+                        logger.warning(f"Could not unicode-decode artifact '{key}'. Using raw string representation.")
+                        final_content = content_str
 
                 artifact_section.append(f"### 📄 {title} Output")
                 artifact_section.append(f"```{lang}\n{final_content}\n```")
@@ -100,6 +104,17 @@ class ArchiverSpecialist(BaseSpecialist):
             report_parts.append("\n".join(summary_lines))
 
         final_report = "\n\n".join(report_parts)
+
+        # --- Save Report to File ---
+        if self.is_enabled:
+            try:
+                os.makedirs(self.archive_dir_path, exist_ok=True)
+                file_path = os.path.join(self.archive_dir_path, f"run_report_{run_id}.md")
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(final_report)
+                logger.info(f"Successfully saved archive report to {file_path}")
+            except Exception as e:
+                logger.error(f"Failed to save archive report. Error: {e}", exc_info=True)
 
         ai_message = AIMessage(
             content="Final report has been generated and the workflow is complete.",

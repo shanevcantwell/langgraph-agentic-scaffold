@@ -35,6 +35,7 @@ class GraphState(TypedDict):
 
     # --- Control Flow & Metadata ---
     error: Optional[str]
+    error_report: Optional[str]
     turn_count: int
     task_is_complete: bool
     web_builder_iteration: Optional[int]

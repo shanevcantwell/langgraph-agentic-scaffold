@@ -1,10 +1,13 @@
 # src/workflow/chief_of_staff.py
 import logging
+import traceback
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 
 from ..utils.config_loader import ConfigLoader
 from ..utils.prompt_loader import load_prompt
+from ..utils import state_pruner
+from ..utils.report_schema import ErrorReport
 from ..specialists import get_specialist_class, BaseSpecialist
 from ..graph.state import GraphState
 from ..enums import CoreSpecialist
@@ -118,19 +121,43 @@ class ChiefOfStaff:
 
     def _create_safe_executor(self, specialist_instance: BaseSpecialist):
         """
-        Creates a wrapper around a specialist's execute method to enforce
-        the rule that only the router can modify the 'turn_count'.
-        This prevents other specialists from accidentally resetting the counter.
+        Creates a wrapper around a specialist's execute method to enforce global
+        rules like turn count modification and to provide centralized exception
+        handling and reporting.
         """
         def safe_executor(state: GraphState) -> Dict[str, Any]:
-            update = specialist_instance.execute(state)
-            if "turn_count" in update:
-                logger.warning(
-                    f"Specialist '{specialist_instance.specialist_name}' returned a 'turn_count'. "
-                    "This is not allowed and will be ignored to preserve the global count."
+            try:
+                update = specialist_instance.execute(state)
+                if "turn_count" in update:
+                    logger.warning(
+                        f"Specialist '{specialist_instance.specialist_name}' returned a 'turn_count'. "
+                        "This is not allowed and will be ignored to preserve the global count."
+                    )
+                    del update["turn_count"]
+                return update
+            except Exception as e:
+                logger.error(
+                    f"Caught unhandled exception from specialist '{specialist_instance.specialist_name}': {e}",
+                    exc_info=True
                 )
-                del update["turn_count"]
-            return update
+                # Generate a detailed error report for debugging and user feedback.
+                tb_str = traceback.format_exc()
+                pruned_state = state_pruner.prune_state(state)
+                routing_history = state.get("routing_history", [])
+
+                report_data = ErrorReport(
+                    error_message=str(e),
+                    traceback=tb_str,
+                    routing_history=routing_history,
+                    pruned_state=pruned_state
+                )
+                markdown_report = state_pruner.generate_report(report_data)
+
+                # Return an update that halts the graph and provides the report.
+                return {
+                    "error": f"Specialist '{specialist_instance.specialist_name}' failed. See report for details.",
+                    "error_report": markdown_report
+                }
         return safe_executor
 
     def _add_nodes_to_graph(self, workflow: StateGraph):

@@ -46,9 +46,11 @@ class WebBuilder(BaseSpecialist):
 
         # If we have existing HTML and a critique, this is a refinement cycle. Add them to the context.
         if current_html and critique:
-            refinement_prompt = HumanMessage(
-                content=f"This is refinement cycle {current_iteration + 1} of {refinement_cycles}. Please improve the following HTML based on the new plan, which was created in response to a critique.\n\nPREVIOUS HTML:\n```html\n{current_html}\n```"
-            )
+            refinement_prompt = HumanMessage(content=(
+                f"This is refinement cycle {current_iteration + 1} of {refinement_cycles}. Please improve the following HTML based on the critique provided in the conversation history.\n\n"
+                f"Here is the previous HTML to improve:\n```html\n{current_html}\n```\n\n"
+                f"And here is the critique to address:\n```\n{critique}\n```"
+            ))
             contextual_messages.append(refinement_prompt)
 
         request = StandardizedLLMRequest(
