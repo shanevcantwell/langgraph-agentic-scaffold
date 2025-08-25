@@ -69,13 +69,20 @@ class CodeWriterSpecialist(BaseSpecialist):
         # 3. Process the response from the LLM.
         #    In this case, we are just taking the text response and adding it
         #    to the message history as an AI message.
-        ai_response_content = response_data.get("text_response", "I am unable to provide a response at this time.")
-        ai_message = AIMessage(content=ai_response_content)
+        ai_response_content = response_data.get(
+            "text_response", "I am unable to provide a response at this time."
+        )
+
+        # Get the model name from the adapter to include in the final report for traceability.
+        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
+        ai_message = AIMessage(
+            content=ai_response_content,
+            name=self.specialist_name,
+            additional_kwargs={"llm_name": llm_name} if llm_name else {},
+        )
 
         # 4. Return the updated state.
-        #    It is critical to only return the *new* messages you want to add
-        #    to the history. The graph is configured to append these messages
-        #    to the existing list of messages in the state.
+        #    Only return the *new* messages you want to add to the history.
         return {"messages": [ai_message]}
 
 ### Specialist Best Practices

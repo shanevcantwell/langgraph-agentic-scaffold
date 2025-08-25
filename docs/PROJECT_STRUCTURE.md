@@ -29,6 +29,7 @@ This is the main Python package for the application.
     -   `app/src/cli.py`: The command-line interface for interacting with the running API server.
     -   `app/src/specialists/`: The heart of the agentic system. Each `.py` file defines a `BaseSpecialist` subclass that encapsulates a specific skill (e.g., `file_specialist.py`, `web_builder.py`).
         -   `app/src/specialists/base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from.
+        -   `app/src/specialists/helpers.py`: Provides helper functions to reduce boilerplate in specialists, such as creating standardized "self-correction" responses.
     -   `app/src/workflow/`: Contains the high-level orchestration logic.
         -   `app/src/workflow/chief_of_staff.py`: Responsible for reading the configuration, instantiating all specialists, and compiling the final `LangGraph` object.
     -   `app/src/llm/`: Manages all interactions with Large Language Models.

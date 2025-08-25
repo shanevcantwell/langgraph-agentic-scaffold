@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel
 
 from .base import BaseSpecialist
+from .helpers import create_missing_artifact_response
 from ..llm.adapter import StandardizedLLMRequest
 
 logger = logging.getLogger(__name__)
@@ -26,12 +27,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
         text_to_process = state.get("text_to_process")
 
         if not text_to_process:
-            logger.warning("TextAnalysisSpecialist was called without text to process. Suggesting file_specialist.")
-            # This is a "self-correction" action. Instead of just failing, the specialist
-            # provides a structured suggestion to the router, making the system more robust.
-            ai_message = AIMessage(
-                content="I am the Text Analysis specialist. I cannot run because there is no text to process. I am suggesting that the 'file_specialist' should run to read the required file.",
-                name=self.specialist_name
+            return create_missing_artifact_response(
+                specialist_name=self.specialist_name,
+                required_artifact="text_to_process",
+                recommended_specialist="file_specialist"
             )
             return {
                 "messages": [ai_message],
@@ -56,8 +55,14 @@ class TextAnalysisSpecialist(BaseSpecialist):
         for point in json_response.get("main_points", []):
             report += f"- {point}\n"
 
+        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
+        ai_message = AIMessage(
+            content=report,
+            name=self.specialist_name,
+            additional_kwargs={"llm_name": llm_name} if llm_name else {}
+        )
         return {
-            "messages": [AIMessage(content=report, name=self.specialist_name)],
+            "messages": [ai_message],
             "json_artifact": json_response,
             "text_to_process": None,
             # This specialist should NOT decide if the task is complete.

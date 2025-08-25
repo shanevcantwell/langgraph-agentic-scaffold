@@ -67,8 +67,14 @@ class WebBuilder(BaseSpecialist):
         next_iteration = current_iteration + 1
 
         # --- Prepare state update ---
+        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
+        ai_message = AIMessage(
+            content=f"Completed HTML generation/refinement cycle {next_iteration}.",
+            name=self.specialist_name,
+            additional_kwargs={"llm_name": llm_name} if llm_name else {}
+        )
         updated_state = {
-            "messages": [AIMessage(content=f"Completed HTML generation/refinement cycle {next_iteration}.", name=self.specialist_name)],
+            "messages": [ai_message],
             "html_artifact": web_content.html_document,
             "web_builder_iteration": next_iteration
         }

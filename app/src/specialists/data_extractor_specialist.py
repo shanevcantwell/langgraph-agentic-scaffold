@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from pydantic import BaseModel
 
 from .base import BaseSpecialist
+from .helpers import create_missing_artifact_response
 from ..llm.adapter import StandardizedLLMRequest
 
 logger = logging.getLogger(__name__)
@@ -24,18 +25,12 @@ class DataExtractorSpecialist(BaseSpecialist):
         text_to_process = state.get("text_to_process")
 
         if not text_to_process:
-            logger.warning("DataExtractorSpecialist was called without text to process. Suggesting file_specialist.")
-            # This is a "self-correction" action. Instead of just failing, the specialist
-            # provides a structured suggestion to the router, making the system more robust.
-            ai_message = AIMessage(
-                content="I am the Data Extractor. I cannot run because there is no text to process. I am suggesting that the 'file_specialist' should run to read the required file.",
-                name=self.specialist_name
+            return create_missing_artifact_response(
+                specialist_name=self.specialist_name,
+                required_artifact="text_to_process",
+                recommended_specialist="file_specialist"
             )
-            return {
-                "messages": [ai_message],
-                "recommended_specialists": ["file_specialist"]
-            }
-
+            
         # The specialist's system prompt (loaded at init) should already instruct it
         # to extract data from text provided in the user message. We will construct a new
         # message list that includes the text to be processed as a new user turn.
@@ -55,7 +50,12 @@ class DataExtractorSpecialist(BaseSpecialist):
         extracted_data = json_response["extracted_json"]
         logger.info(f"Successfully extracted data: {extracted_data}")
 
-        ai_message = AIMessage(content=f"I have successfully extracted the following data: {extracted_data}", name=self.specialist_name)
+        llm_name = self.llm_adapter.model_name if self.llm_adapter else None
+        ai_message = AIMessage(
+            content=f"I have successfully extracted the following data: {extracted_data}",
+            name=self.specialist_name,
+            additional_kwargs={"llm_name": llm_name} if llm_name else {}
+        )
 
         # The task is only complete if this specialist was not part of a larger plan.
         # The presence of a 'system_plan' artifact is the key indicator.

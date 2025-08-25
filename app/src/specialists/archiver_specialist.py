@@ -97,8 +97,14 @@ class ArchiverSpecialist(BaseSpecialist):
             summary_lines = []
             for i, msg in enumerate(messages):
                 # Robustly get the sender's name, falling back to type, then to a default.
-                sender_val = getattr(msg, 'name', None) or getattr(msg, 'type', 'unknown_sender')
-                sender = str(sender_val).replace('_', ' ').title()
+                sender_name_val = getattr(msg, 'name', None) or getattr(msg, 'type', 'unknown_sender')
+                sender = str(sender_name_val).replace('_', ' ').title()
+
+                # Check for the LLM name in additional_kwargs and append it if present.
+                llm_name = msg.additional_kwargs.get("llm_name") if hasattr(msg, 'additional_kwargs') else None
+                if llm_name:
+                    sender += f" ({llm_name})"
+
                 content_preview = msg.content.split('\n')[0] # First line for brevity
                 summary_lines.append(f"{i+1}. **{sender}:** *{content_preview}...*")
             report_parts.append("\n".join(summary_lines))
