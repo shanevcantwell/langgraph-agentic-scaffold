@@ -189,55 +189,90 @@ The example above shows a basic specialist. However, the scaffold's architecture
 
 For a deeper understanding of these patterns, refer to the **"Agentic Robustness Patterns"** section in the **Developer's Guide**.
 
-## Creating a Wrapped Specialist
+## Advanced: Creating a `WrappedCodeSpecialist`
 
-Wrapped specialists rely on external, third-party code. To keep the project clean and avoid checking in external repositories, this scaffold uses a conventional directory: `external/`.
+A `WrappedCodeSpecialist` allows you to integrate powerful, third-party Python libraries or agents into the scaffold by creating a simple "wrapper" class. This is a great way to leverage existing tools like `open-interpreter` without having to rewrite their logic.
 
-The `external/` directory at the project root is the designated location for cloning any third-party agent repositories. Its contents are ignored by Git (via `.gitignore`), so you can safely manage external code without cluttering your project's history.
+### How it Works
 
-**To add an external agent:**
+1.  **Install the Library:** The external tool is installed as a standard Python dependency via `pip`.
+2.  **Create a Wrapper Class:** You create a small Python class in the `external_agents/` directory. This class must have a `run(self, input)` method. Its job is to translate the simple input from your specialist into the specific API calls required by the external library and return a simple output.
+3.  **Create the Specialist:** You create a specialist class that inherits from `WrappedCodeSpecialist`. This specialist is very thin; it only needs to translate the graph's state to the input for your wrapper's `run` method, and translate the wrapper's output back into the graph's state.
+4.  **Configure:** You register the specialist in `config.yaml` with `type: "wrapped_code"`, pointing to your wrapper class.
 
-1.  Clone the external agent's repository into the `external/` directory. For example, to add the `open-swe` agent:
-    ```sh
-    git clone https://github.com/sweepai/open-swe.git external/open-swe
-2.  In your `config.yaml`, set the `source` path for your wrapped specialist to point to the agent's entrypoint script within the `external/` directory.
+### Example: Wrapping `open-interpreter`
 
----
+Let's walk through wrapping the `open-interpreter` library, which allows an LLM to execute code locally.
 
-In addition to creating specialists from scratch, you can also wrap existing, externally-sourced agents. This is useful for integrating third-party agents or agents from other repositories into your workflow.
+#### Step 1: Install the Dependency
 
-### Step 1: Create the Wrapper Specialist File
+First, add `open-interpreter` to your `pyproject.toml` and run the sync script (`./scripts/sync-reqs.sh`) to install it.
 
-Create a new Python file in `app/src/specialists/`. This class must inherit from `WrappedSpecialist`.
+#### Step 2: Create the Wrapper Class
 
-# app/src/specialists/open_swe_specialist.py
+Create a new file `external_agents/OpenInterpreter/open_interpreter_wrapper.py`. This class will act as the bridge to the `open-interpreter` library.
 
+```python
+# external_agents/OpenInterpreter/open_interpreter_wrapper.py
+from interpreter import interpreter
+
+class OpenInterpreterAgent:
+    def __init__(self):
+        interpreter.auto_run = True
+        interpreter.system_message = "You are Open Interpreter..." # (abbreviated for docs)
+
+    def run(self, prompt: str) -> str:
+        interpreter.messages = []
+        messages = interpreter.chat(prompt)
+        assistant_responses = [m['content'] for m in messages if m['role'] == 'assistant']
+        return "\n".join(assistant_responses) if assistant_responses else "Task completed."
+```
+
+### Step 3: Create the Wrapper Specialist File
+
+Create a new Python file in `app/src/specialists/`. This class must inherit from `WrappedCodeSpecialist`.
+
+```python
+# app/src/specialists/open_interpreter_specialist.py
 from typing import Dict, Any
-from .wrapped_specialist import WrappedSpecialist
+from .wrapped_code_specialist import WrappedCodeSpecialist
 from langchain_core.messages import AIMessage
 
-class OpenSweSpecialist(WrappedSpecialist):
-    """A wrapper specialist for the open-swe agent."""
+class OpenInterpreterSpecialist(WrappedCodeSpecialist):
+    """A wrapper specialist for the Open Interpreter agent."""
 
     def _translate_state_to_input(self, state: Dict[str, Any]) -> Any:
-        """Translates the GraphState to the open-swe agent's input format."""
         return state["messages"][-1].content
 
-    def _translate_output_to_state(self, output: Any) -> Dict[str, Any]:
-        """Translates the open-swe agent's output back to the GraphState format."""
+    def _translate_output_to_state(self, state: dict, output: Any) -> Dict[str, Any]:
         ai_message = AIMessage(content=str(output), name=self.specialist_name)
         return {"messages": [ai_message]}
+```
 
-### Step 2: Configure the Wrapped Specialist in `config.yaml`
+### Step 4: Configure the `WrappedCodeSpecialist` in `config.yaml`
 
-Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: wrapped` and a `source` key pointing to the entry point of the external agent.
+Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: "wrapped_code"`, a `wrapper_path` key pointing to the Python file containing your wrapper class, and the `class_name` to instantiate.
 
-Following the convention above, the configuration for `open_swe_specialist` would look like this:
 specialists:
-  open_swe_specialist:
-    type: wrapped
-    source: "./external/open-swe/agent/run.py" # Path relative to project root
-    description: "A specialist that wraps the open-swe agent for software engineering tasks."
+  open_interpreter_specialist:
+    type: "wrapped_code"
+    wrapper_path: "./external_agents/OpenInterpreter/open_interpreter_wrapper.py" # Path to the wrapper class file, relative to the project root.
+    class_name: "OpenInterpreterAgent"
+    description: "A powerful specialist that can execute code (Python, Shell, etc.) on the local machine to perform a wide variety of tasks, including file manipulation, data analysis, and web research. Use for complex, multi-step tasks that require coding."
+
+## Advanced: Creating a `RemoteSpecialist`
+
+Another common pattern is to create a specialist that interacts with an external API. The `FooocusSpecialist` is a good example of this pattern, using a Gradio API instead of wrapping a local Python class.
+
+This is handled by a `remote` specialist type. This specialist type does not have a shared base class like `WrappedCodeSpecialist`; instead, it inherits directly from `BaseSpecialist` and implements the API call logic within its `_execute_logic` method.
+
+See `app/src/specialists/fooocus_specialist.py` for a complete implementation example. The configuration in `config.yaml` is simple:
+
+specialists:
+  fooocus_specialist:
+    type: "remote"
+    api_url: "http://127.0.0.1:7860/run/predict" # The Gradio API endpoint for Fooocus.
+    description: "A specialist that uses the Fooocus API to generate images from a text prompt."
 
 ## Conclusion
 

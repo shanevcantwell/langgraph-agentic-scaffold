@@ -82,12 +82,18 @@ class ChiefOfStaff:
                 logger.error(f"Failed to load specialist '{name}', it will be disabled. Error: {e}", exc_info=True)
                 continue # Allow the app to start with the specialists that did load correctly.
 
+        # This is the key change: only provide the orchestration specialists (Router, Triage)
+        # with a list of specialists that were *successfully* loaded. This prevents them
+        # from trying to route to a specialist that is configured but failed to start.
+        all_configs = self.config.get("specialists", {})
+        available_configs = {name: all_configs[name] for name in loaded_specialists.keys() if name in all_configs}
+
         if CoreSpecialist.ROUTER.value in loaded_specialists:
-            self._configure_router(loaded_specialists, self.config.get("specialists", {}))
+            self._configure_router(loaded_specialists, available_configs)
         
         # If the Triage specialist exists, configure it with the full map of other specialists.
         if CoreSpecialist.TRIAGE.value in loaded_specialists:
-            self._configure_triage(loaded_specialists, self.config.get("specialists", {}))
+            self._configure_triage(loaded_specialists, available_configs)
 
         return loaded_specialists
 

@@ -37,8 +37,10 @@ app/src/ui/*
 
 # --- External Code ---
 # Ignore contents of the external directory, but keep the directory itself.
+# We make an exception for our own Python wrapper files.
 external_agents/*
 !external_agents/.gitkeep
+!external_agents/**/*.py
 
 # --- Agent Notes ---
 docs/agent_scratchpad.md

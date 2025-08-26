@@ -2,6 +2,7 @@
 import logging
 from typing import Dict, Any, List
 
+import jmespath
 from .base import BaseSpecialist
 from .helpers import create_missing_artifact_response, create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
@@ -49,49 +50,42 @@ class CriticSpecialist(BaseSpecialist):
             logger.warning("Critic LLM failed to return a valid structured response. Falling back to text.")
             critique_text = response_data.get("text_response", "The critic LLM failed to provide a response.")
         else:
-            # --- Response Normalization ---
-            # Some models (like Gemini) might nest the response inside a single key
-            # (e.g., {"critique": {...}}). If the top-level dict has one key and
-            # its value is a dict, we'll assume that's the actual payload.
-            critique_data = json_response
-            if isinstance(json_response, dict) and len(json_response) == 1:
-                key = next(iter(json_response))
-                if isinstance(json_response[key], dict):
-                    logger.debug(f"Found response nested under key '{key}'. Un-nesting.")
-                    critique_data = json_response[key]
+            # Use JMESPath to robustly extract data, regardless of nesting.
+            # Check for keys at the top level, or nested one level under a 'critique' key.
+            assessment_str = jmespath.search('overall_assessment || assessment || critique.overall_assessment || critique.assessment', json_response)
+            improvements_list = jmespath.search('points_for_improvement || improvements || critique.points_for_improvement || critique.improvements', json_response) or []
+            positives_list = jmespath.search('positive_feedback || critique.positive_feedback', json_response) or []
 
-            # --- Flattening Logic ---
-            # Now, check if the data matches the schema or if it's further nested by category.
-            expected_keys = Critique.model_fields.keys()
-            if not any(key in critique_data for key in expected_keys):
-                logger.debug("Response appears to be nested by category. Attempting to flatten.")
-                flattened_data = {
-                    "overall_assessment": [],
-                    "points_for_improvement": [],
-                    "positive_feedback": []
-                }
-                # Iterate through the categorized dictionary (e.g., {"visual_design": {...}, "code_quality": {...}})
-                for category, details in critique_data.items():
-                    if isinstance(details, dict):
-                        # Look for keys that sound like our target fields.
-                        # This is more robust than hardcoding 'assessment', 'improvements', etc.
-                        for key, value in details.items():
-                            if 'assess' in key.lower() and isinstance(value, str):
-                                flattened_data["overall_assessment"].append(value)
-                            elif 'improve' in key.lower() and isinstance(value, list):
-                                flattened_data["points_for_improvement"].extend(value)
-                            elif 'positive' in key.lower() and isinstance(value, list):
-                                flattened_data["positive_feedback"].extend(value)
-                
-                # Join the collected assessments into a single string.
-                flattened_data["overall_assessment"] = " ".join(flattened_data["overall_assessment"])
-                critique_data = flattened_data
+            final_assessment = str(assessment_str) if assessment_str else "No assessment provided."
+            
+            final_improvements = []
+            if isinstance(improvements_list, list):
+                for item in improvements_list:
+                    if isinstance(item, dict):
+                        # If the item is a dict, join its values into a string.
+                        final_improvements.append(": ".join(str(v) for v in item.values()))
+                    elif isinstance(item, str):
+                        final_improvements.append(item)
+
+            final_positives = []
+            if isinstance(positives_list, list):
+                for item in positives_list:
+                    if isinstance(item, dict):
+                        final_positives.append(": ".join(str(v) for v in item.values()))
+                    elif isinstance(item, str):
+                        final_positives.append(item)
+
+            critique_data = {
+                "overall_assessment": final_assessment,
+                "points_for_improvement": final_improvements,
+                "positive_feedback": final_positives,
+            }
 
             try:
                 # Format the structured critique into a readable markdown string for the artifact
                 critique = Critique(**critique_data)
             except Exception as e:
-                logger.error(f"Pydantic validation failed for critic even after attempting to flatten the response: {e}")
+                logger.error(f"Pydantic validation failed for critic even after JMESPath extraction: {e}", exc_info=True)
                 raise e # Re-raise to be caught by the base specialist's error handler
 
             critique_text_parts = [f"**Overall Assessment:**\n{critique.overall_assessment}\n"]
@@ -103,15 +97,15 @@ class CriticSpecialist(BaseSpecialist):
                 critique_text_parts.append(f"**What Went Well:**\n{positive_points}")
             critique_text = "\n".join(critique_text_parts)
 
-        logger.info("Critique generated. Recommending SystemsArchitect for plan revision.")
+        logger.info("Critique generated. Recommending WebBuilder for refinement.")
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content=f"Critique complete. The next step is to revise the plan.",
+            content=f"Critique complete. Returning to the Web Builder for refinement.",
         )
         return {
             "messages": [ai_message],
             "critique_artifact": critique_text,
-            "recommended_specialists": ["systems_architect"]
+            "recommended_specialists": ["web_builder"]
         }

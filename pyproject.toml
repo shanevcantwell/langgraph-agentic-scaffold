@@ -29,9 +29,11 @@ dependencies = [
     "langchain-openai>=0.1.6",
     "python-dotenv",
     "PyYAML",
+    "jmespath",
     "google-generativeai",
     "tenacity",
     "inflection",
+    "open-interpreter",
     # Add specific LLM provider packages here as needed
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]

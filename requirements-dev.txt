@@ -107,6 +107,8 @@ itsdangerous==2.2.0
     # via fastapi
 jinja2==3.1.6
     # via fastapi
+jmespath==1.0.1
+    # via specialist-hub-agentic-system (pyproject.toml)
 jiter==0.10.0
     # via openai
 jsonpatch==1.33

@@ -51,10 +51,6 @@ class LLMSpecialistConfig(BaseSpecialistConfig):
         ...,
         description="The filename of the markdown prompt for this specialist, located in the `app/prompts` directory.",
     )
-    llm_config: Optional[str] = Field(
-        None,
-        description="A fallback LLM provider key from the top-level 'llm_providers'. This is overridden by settings in user_settings.yaml."
-    )
 
 
 class ProceduralSpecialistConfig(BaseSpecialistConfig):
@@ -63,17 +59,17 @@ class ProceduralSpecialistConfig(BaseSpecialistConfig):
     type: Literal["procedural"]
 
 
-class WrappedSpecialistConfig(BaseSpecialistConfig):
-    """Configuration for a specialist that wraps an external, third-party agent."""
+class WrappedCodeSpecialistConfig(BaseSpecialistConfig):
+    """Configuration for a specialist that wraps an external, third-party Python class."""
 
-    type: Literal["wrapped"]
-    source: str = Field(..., description="Path to the source file of the external agent, relative to the project root.")
+    type: Literal["wrapped_code"]
+    wrapper_path: str = Field(..., description="Path to the Python file containing the wrapper class, relative to the project root.")
     class_name: str = Field(..., description="The name of the class to instantiate from the source file.")
 
 
 # A discriminated union to handle the different types of specialists.
 # Pydantic will use the 'type' field to determine which model to use for validation.
-SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig, WrappedSpecialistConfig]
+SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig, WrappedCodeSpecialistConfig]
 
 
 class RootConfig(BaseModel):
