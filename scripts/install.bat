@@ -26,6 +26,7 @@ if %errorlevel% neq 0 (
 echo --- Copying example configuration files ---
 copy .env.example .env >nul
 copy config.yaml.example config.yaml >nul
+copy user_settings.yaml.example user_settings.yaml >nul
 
 echo ---
 echo ✅ Development environment setup complete.

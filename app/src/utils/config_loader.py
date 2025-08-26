@@ -97,34 +97,39 @@ class ConfigLoader:
             if specialist_name not in merged["specialists"]:
                 logger.warning(f"Ignoring model binding for '{specialist_name}' in {USER_SETTINGS_FILE} because this specialist is not defined in {BLUEPRINT_CONFIG_FILE}.")
 
-        # 3. Build the final list of specialists, filtering out any that are misconfigured
+        # 3. Build the final list of specialists, applying layered configuration.
         final_specialists = {}
         for name, spec_config in merged["specialists"].items():
             if spec_config.get("type") != "llm":
-                # It's a procedural or wrapped specialist, it's always valid from a binding perspective.
+                # It's a procedural or wrapped specialist, no LLM binding needed.
                 final_specialists[name] = spec_config
                 continue
 
-            # Logic for LLM specialists:
-            binding = None
-            specific_binding = bindings.get(name)
+            # --- Layered Binding Logic ---
+            # Determine the binding by checking layers in order of precedence:
+            # 1. A specific binding for this specialist in user_settings.yaml.
+            # 2. The default binding from user_settings.yaml.
+            # 3. A fallback binding defined directly in config.yaml.
+            user_specific_binding = bindings.get(name)
+            blueprint_fallback_binding = spec_config.get("llm_config")
 
-            if specific_binding:
-                if specific_binding in merged["llm_providers"]:
-                    logger.debug(f"Applying specific binding '{specific_binding}' to specialist '{name}'.")
-                    binding = specific_binding
-                else:
-                    logger.warning(f"Model binding '{specific_binding}' for specialist '{name}' in {USER_SETTINGS_FILE} is invalid. It will be ignored, and we will attempt to use the default binding.")
-                    binding = default_binding # Fallback to default
+            final_binding = None
+            # Layer 2: User-specific binding
+            if user_specific_binding and user_specific_binding in merged["llm_providers"]:
+                final_binding = user_specific_binding
+            # Layer 2: User-default binding (if no valid specific one was found)
+            elif default_binding and default_binding in merged["llm_providers"]:
+                final_binding = default_binding
+            # Layer 1: Blueprint fallback binding (if no user settings applied)
+            elif blueprint_fallback_binding and blueprint_fallback_binding in merged["llm_providers"]:
+                final_binding = blueprint_fallback_binding
+
+            if final_binding:
+                spec_config["llm_config"] = final_binding
+                final_specialists[name] = spec_config
             else:
-                binding = default_binding # No specific binding, use the default
-
-            if not binding:
-                logger.warning(f"LLM specialist '{name}' has no model assigned and will be disabled. Assign it in 'specialist_model_bindings' or set a 'default_llm_config' in {USER_SETTINGS_FILE}.")
+                logger.warning(f"LLM specialist '{name}' has no valid model binding and will be disabled. Check bindings in {USER_SETTINGS_FILE} and {BLUEPRINT_CONFIG_FILE}.")
                 continue
-
-            spec_config["llm_config"] = binding
-            final_specialists[name] = spec_config
 
         # 4. Final check: The router is essential for the system to function.
         if CoreSpecialist.ROUTER.value not in final_specialists:

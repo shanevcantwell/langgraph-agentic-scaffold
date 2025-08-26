@@ -81,7 +81,8 @@ class RouterSpecialist(BaseSpecialist):
                     "messages": [ai_message],
                     "next_specialist": CoreSpecialist.ARCHIVER.value,
                     "turn_count": turn_count,
-                    "task_is_complete": False,  # Consume the flag
+                    # "task_is_complete": False,  # Do not consume the flag. Let it persist as True in the final state,
+                                                 # since the archiver is a terminal node.
                     "routing_history": [CoreSpecialist.ARCHIVER.value],
                     "recommended_specialists": None # Consume any lingering recommendations
                 }
@@ -158,7 +159,17 @@ class RouterSpecialist(BaseSpecialist):
         valid_options = list(current_specialists.keys())
         if next_specialist_from_llm not in valid_options and next_specialist_from_llm != END:
             logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options + [END]}. Routing to END.")
-            return {"next_specialist": END, "tool_calls": tool_calls, "ai_message_content": f"Router attempted to route to an unknown specialist '{next_specialist_from_llm}'. Halting workflow."}
+            next_specialist_from_llm = END # Correct the invalid choice to END
+        
+        # If the LLM decides to end, route to the archiver to be consistent
+        # with the programmatic completion signal.
+        if next_specialist_from_llm == END:
+            if CoreSpecialist.ARCHIVER.value in self.specialist_map:
+                logger.info("Router LLM chose to end. Rerouting to ArchiverSpecialist for final report.")
+                next_specialist_from_llm = CoreSpecialist.ARCHIVER.value
+            else:
+                logger.info("Router LLM chose to end, but ArchiverSpecialist is not available. Routing to END.")
+                # It's already END, so no change needed.
         
         return {"next_specialist": next_specialist_from_llm, "tool_calls": tool_calls}
 

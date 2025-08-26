@@ -131,5 +131,6 @@ class ArchiverSpecialist(BaseSpecialist):
         # We do not need to set next_specialist; the graph structure handles it.
         return {
             "messages": [ai_message],
-            "archive_report": final_report
+            "archive_report": final_report,
+            "task_is_complete": True
         }

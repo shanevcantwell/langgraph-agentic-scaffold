@@ -51,6 +51,10 @@ class LLMSpecialistConfig(BaseSpecialistConfig):
         ...,
         description="The filename of the markdown prompt for this specialist, located in the `app/prompts` directory.",
     )
+    llm_config: Optional[str] = Field(
+        None,
+        description="A fallback LLM provider key from the top-level 'llm_providers'. This is overridden by settings in user_settings.yaml."
+    )
 
 
 class ProceduralSpecialistConfig(BaseSpecialistConfig):
