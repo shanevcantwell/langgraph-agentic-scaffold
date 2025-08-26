@@ -183,11 +183,10 @@ class LMStudioAdapter(BaseAdapter):
                 # forced to use its 'Route' tool. This prevents it from generating
                 # conversational text, which it is not designed to handle.
                 if len(tool_names) == 1 and tool_names[0] == 'Route':
-                    logger.info("Forcing a tool choice for the RouterSpecialist.")
-                    # Using "required" is a more general way to force a tool call and may be
-                    # more compatible with different OpenAI-compatible servers than specifying
-                    # the tool by name. Since the router only has one tool, this is equivalent.
-                    api_kwargs["tool_choice"] = "required"
+                    logger.info("Forcing a 'Route' tool call for the RouterSpecialist.")
+                    # By explicitly naming the tool, we create a stronger guarantee that the
+                    # router will perform its function, mirroring the robust implementation in the Gemini adapter.
+                    api_kwargs["tool_choice"] = {"type": "function", "function": {"name": "Route"}}
                 else:
                     api_kwargs["tool_choice"] = "auto"
 
@@ -226,10 +225,11 @@ class LMStudioAdapter(BaseAdapter):
                         logger.error(f"Failed to decode tool call arguments: {tool_call.function.arguments}", exc_info=True)
                 return {"tool_calls": formatted_tool_calls}
 
-            # If a tool call was required but not provided, return an empty list.
-            # This signals a failure to the RouterSpecialist.
-            if api_kwargs.get("tool_choice") == "required":
-                logger.warning("LMStudioAdapter had tool_choice='required' but the model returned a text response.")
+            # If a tool call was forced (either by 'required' or by name) but not provided,
+            # it's a failure. Return an empty list to signal this to the caller (e.g., the Router).
+            tool_choice = api_kwargs.get("tool_choice")
+            if tool_choice and tool_choice != "auto":
+                logger.warning(f"LMStudioAdapter had tool_choice='{tool_choice}' but the model returned a text response instead of a tool call.")
                 return {"tool_calls": []}
 
             # If we requested a JSON schema, parse the content as JSON.

@@ -1,3 +1,7 @@
+### **Status: PROPOSAL**
+### **Note: This document outlines a proposed feature and does not reflect the current implementation of the scaffold.**
+---
+
 ### **\#\# Design for a Curator Agent**
 
 The Curator is the agent that does the heavy lifting *before* the Historian can perform its magic. It's the team of librarians and archivists who organize the library so the researcher (the Historian) can find things.

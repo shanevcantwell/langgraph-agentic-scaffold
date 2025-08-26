@@ -52,6 +52,8 @@ class WorkflowRunner:
             "routing_history": [],
             "archive_report": None,
             "web_builder_iteration": None,
+            # Add the new field for preserving triage recommendations.
+            "triage_recommendations": None,
             # Initialize the completion flag. This is critical for the router's
             # programmatic completion check to function correctly.
             "task_is_complete": False,

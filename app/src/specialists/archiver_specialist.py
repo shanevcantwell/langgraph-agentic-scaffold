@@ -44,6 +44,16 @@ class ArchiverSpecialist(BaseSpecialist):
         report_parts.append(f"- **Status:** Completed")
         report_parts.append("---")
 
+        # --- Triage Recommendations ---
+        if triage_recs := state.get("triage_recommendations"):
+            report_parts.append("## 🚦 Triage Recommendations")
+            if triage_recs:
+                recs_md = "\n".join([f"- `{rec}`" for rec in triage_recs])
+                report_parts.append(f"The initial prompt was triaged with the following specialist recommendations:\n{recs_md}")
+            else:
+                report_parts.append("The Triage Specialist found no relevant specialists for the initial prompt.")
+            report_parts.append("---")
+
         # --- System Plan ---
         if system_plan := state.get("system_plan"):
             report_parts.append("## 📝 System Plan")

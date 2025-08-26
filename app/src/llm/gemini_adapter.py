@@ -51,7 +51,16 @@ class GeminiAdapter(BaseAdapter):
             # which should never return a text response. This is the Gemini
             # equivalent of OpenAI's `tool_choice="required"`.
             tool_config = {"function_calling_config": {"mode": "ANY"}}
-            logger.info("GeminiAdapter: Forcing a tool call using tool_config.")
+
+            # --- Add special handling for the Router ---
+            # If the only tool is 'Route', we can be more specific to ensure
+            # the model makes a routing decision. This is a more robust way to
+            # force a tool call than just using mode: "ANY".
+            if len(request.tools) == 1 and hasattr(request.tools[0], '__name__') and request.tools[0].__name__ == 'Route':
+                logger.info("GeminiAdapter: Forcing a 'Route' tool call for the RouterSpecialist by specifying allowed_function_names.")
+                tool_config["function_calling_config"]["allowed_function_names"] = ["Route"]
+            else:
+                logger.info("GeminiAdapter: Forcing a tool call using generic tool_config.")
         else:
             logger.info("GeminiAdapter: Invoking in Text mode.")
 

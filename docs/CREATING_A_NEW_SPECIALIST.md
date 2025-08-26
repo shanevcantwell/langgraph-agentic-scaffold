@@ -260,20 +260,6 @@ specialists:
     class_name: "OpenInterpreterAgent"
     description: "A powerful specialist that can execute code (Python, Shell, etc.) on the local machine to perform a wide variety of tasks, including file manipulation, data analysis, and web research. Use for complex, multi-step tasks that require coding."
 
-## Advanced: Creating a `RemoteSpecialist`
-
-Another common pattern is to create a specialist that interacts with an external API. The `FooocusSpecialist` is a good example of this pattern, using a Gradio API instead of wrapping a local Python class.
-
-This is handled by a `remote` specialist type. This specialist type does not have a shared base class like `WrappedCodeSpecialist`; instead, it inherits directly from `BaseSpecialist` and implements the API call logic within its `_execute_logic` method.
-
-See `app/src/specialists/fooocus_specialist.py` for a complete implementation example. The configuration in `config.yaml` is simple:
-
-specialists:
-  fooocus_specialist:
-    type: "remote"
-    api_url: "http://127.0.0.1:7860/run/predict" # The Gradio API endpoint for Fooocus.
-    description: "A specialist that uses the Fooocus API to generate images from a text prompt."
-
 ## Conclusion
 
 That's it! You have successfully created a new specialist agent. The `ChiefOfStaff` class will automatically discover and integrate your new specialist at runtime. By following these steps, you can extend the system with new capabilities. Remember to always keep your specialists focused on a single task to maintain a clean and modular architecture.

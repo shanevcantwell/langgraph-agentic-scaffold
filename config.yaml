@@ -113,11 +113,11 @@ specialists:
     prompt_file: "web_builder_prompt.md"
     description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
 
-  # file_specialist:
-  #   type: "llm"
-  #   prompt_file: "file_specialist_prompt.md"
-  #   description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
-  #   root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
+  file_specialist:
+    type: "llm"
+    prompt_file: "file_specialist_prompt.md"
+    description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
+    root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
 
   # --- Data & Analysis ---
   data_extractor_specialist:

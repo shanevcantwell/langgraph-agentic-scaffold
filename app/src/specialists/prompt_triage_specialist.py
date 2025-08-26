@@ -60,5 +60,6 @@ class PromptTriageSpecialist(BaseSpecialist):
         )
         return {
             "messages": [ai_message],
-            "recommended_specialists": recommendations
+            "recommended_specialists": recommendations,
+            "triage_recommendations": recommendations,  # Persist for final report
         }
