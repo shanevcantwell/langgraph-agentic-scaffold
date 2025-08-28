@@ -3,6 +3,7 @@ import os
 from src.llm.factory import AdapterFactory
 from src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage
+from src.utils.config_loader import ConfigLoader
 
 @pytest.mark.live_llm
 def test_live_gemini_adapter_interaction():
@@ -11,10 +12,12 @@ def test_live_gemini_adapter_interaction():
         pytest.skip("GEMINI_API_KEY not set. Skipping live Gemini test.")
 
     try:
-        # We'll test the adapter created for the 'systems_architect'
-        # which is configured to use a Gemini model in the default config.
-        factory = AdapterFactory()
-        # The system prompt can be simple for this test.
+        # Manually load the config, which now resolves env vars. This keeps the
+        # test integrated with the actual config files.
+        config = ConfigLoader().get_config()
+
+        # Instantiate the factory with the loaded config
+        factory = AdapterFactory(config)
         adapter = factory.create_adapter(
             specialist_name="systems_architect",
             system_prompt="You are a helpful assistant."

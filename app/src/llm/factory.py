@@ -1,7 +1,6 @@
 # app/src/llm/factory.py
-import os
 import logging
-from ..utils.config_loader import ConfigLoader
+from typing import Dict, Any
 from .adapter import BaseAdapter
 from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
 
@@ -18,9 +17,11 @@ ADAPTER_REGISTRY = {
 }
 
 class AdapterFactory:
+    def __init__(self, full_config: Dict[str, Any]):
+        self.full_config = full_config
+
     def create_adapter(self, specialist_name: str, system_prompt: str) -> BaseAdapter | None:
-        full_config = ConfigLoader().get_config()
-        spec_config = full_config.get("specialists", {}).get(specialist_name, {})
+        spec_config = self.full_config.get("specialists", {}).get(specialist_name, {})
 
         # The new config structure makes this check explicit and simple.
         if spec_config.get("type") != "llm":
@@ -35,7 +36,7 @@ class AdapterFactory:
             raise ValueError(f"LLM specialist '{specialist_name}' is missing 'llm_config' key in merged config. This indicates a bug in ConfigLoader.")
 
         # Get the full provider configuration block from the top-level `llm_providers`
-        provider_config = full_config.get("llm_providers", {}).get(provider_config_key)
+        provider_config = self.full_config.get("llm_providers", {}).get(provider_config_key)
         if not provider_config:
             # This should also be unreachable if ConfigLoader is correct.
             raise ValueError(f"Provider configuration '{provider_config_key}' referenced by specialist '{specialist_name}' not found. This indicates a bug in ConfigLoader.")
@@ -60,13 +61,13 @@ class AdapterFactory:
         if base_provider_type == 'gemini':
             return AdapterClass(
                 model_config=model_config,
-                api_key=os.getenv("GEMINI_API_KEY"),
+                api_key=provider_config.get("api_key"),
                 system_prompt=system_prompt
             )
         elif base_provider_type == 'lmstudio':
             return AdapterClass(
                 model_config=model_config,
-                base_url=os.getenv("LMSTUDIO_BASE_URL"),
+                base_url=provider_config.get("base_url"),
                 system_prompt=system_prompt
             )
 

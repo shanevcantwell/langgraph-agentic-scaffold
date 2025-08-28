@@ -1,13 +1,11 @@
 import pytest
 import os
-from unittest.mock import patch
 from src.llm.factory import AdapterFactory
 from src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage
 
 @pytest.mark.live_llm
-@patch('src.utils.config_loader.ConfigLoader')
-def test_live_lmstudio_adapter_interaction(mock_config_loader):
+def test_live_lmstudio_adapter_interaction():
     """Tests a basic interaction with a live LM Studio model via the AdapterFactory."""
     if not os.getenv("LMSTUDIO_BASE_URL"):
         pytest.skip("LMSTUDIO_BASE_URL environment variable not set. Skipping live LM Studio test.")
@@ -17,7 +15,8 @@ def test_live_lmstudio_adapter_interaction(mock_config_loader):
         "llm_providers": {
             "local_lmstudio": {
                 "type": "lmstudio",
-                "api_identifier": "local-model" # A generic identifier
+                "api_identifier": "local-model", # A generic identifier
+                "base_url": os.getenv("LMSTUDIO_BASE_URL")
             }
         },
         "specialists": {
@@ -28,10 +27,9 @@ def test_live_lmstudio_adapter_interaction(mock_config_loader):
             }
         }
     }
-    mock_config_loader.return_value.get_config.return_value = mock_config
 
     try:
-        factory = AdapterFactory()
+        factory = AdapterFactory(mock_config)
         adapter = factory.create_adapter(
             specialist_name="prompt_specialist",
             system_prompt="You are a helpful assistant."

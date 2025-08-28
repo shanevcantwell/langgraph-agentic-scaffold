@@ -52,6 +52,10 @@ class CodeWriterSpecialist(BaseSpecialist):
         common boilerplate like logging and error handling. You only need to
         implement the logic specific to this specialist.
         """
+        # The specialist's configuration is injected by the ChiefOfStaff and
+        # is available via `self.specialist_config`.
+        # For example: my_setting = self.specialist_config.get("my_setting")
+
         # Get the full message history from the state.
         messages = state["messages"]
 
@@ -148,6 +152,9 @@ def test_code_writer_specialist_execute():
     # The specialist's __init__ requires a name.
     specialist = CodeWriterSpecialist("code_writer_specialist")
 
+    # In tests, you may need to manually set the config if your logic uses it.
+    specialist.specialist_config = {}
+    
     # Mock the LLM adapter to avoid making a real API call.
     specialist.llm_adapter = MagicMock()
     mock_response = "print('Hello, World!')"

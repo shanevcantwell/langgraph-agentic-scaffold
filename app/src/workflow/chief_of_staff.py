@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 class ChiefOfStaff:
     def __init__(self):
         self.config = ConfigLoader().get_config()
+        self.adapter_factory = AdapterFactory(self.config)
 
         # Load specialists first, so we know which ones are available.
         self.specialists = self._load_and_configure_specialists()
@@ -58,7 +59,11 @@ class ChiefOfStaff:
                 if not issubclass(SpecialistClass, BaseSpecialist):
                     logger.warning(f"Skipping '{name}': Class '{SpecialistClass.__name__}' does not inherit from BaseSpecialist.")
                     continue
+                # Instantiate with only the name to support existing specialist __init__ signatures.
                 instance = SpecialistClass(name)
+                # Inject the configuration via property setter. This decouples specialists
+                # from ConfigLoader without forcing a breaking change on all constructors.
+                instance.specialist_config = config
                 if not instance.is_enabled:
                     logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")
                     continue
@@ -71,7 +76,7 @@ class ChiefOfStaff:
                     else:
                         prompt_file = config.get("prompt_file")
                         system_prompt = load_prompt(prompt_file) if prompt_file else ""
-                        instance.llm_adapter = AdapterFactory().create_adapter(
+                        instance.llm_adapter = self.adapter_factory.create_adapter(
                             specialist_name=name,
                             system_prompt=system_prompt
                         )
@@ -129,7 +134,7 @@ class ChiefOfStaff:
         
         # Create the adapter from scratch with the final, complete prompt.
         # This ensures the router gets the correct configuration and prompt in one step.
-        router_instance.llm_adapter = AdapterFactory().create_adapter(
+        router_instance.llm_adapter = self.adapter_factory.create_adapter(
             specialist_name=CoreSpecialist.ROUTER.value,
             system_prompt=dynamic_system_prompt
         )
@@ -156,7 +161,7 @@ class ChiefOfStaff:
         available_specialists_prompt = "\n".join(specialist_descs)
         
         dynamic_system_prompt = f"{base_prompt}\n\n--- AVAILABLE SPECIALISTS ---\nYou MUST choose one or more of the following specialists:\n{available_specialists_prompt}"
-        triage_instance.llm_adapter = AdapterFactory().create_adapter(
+        triage_instance.llm_adapter = self.adapter_factory.create_adapter(
             specialist_name=CoreSpecialist.TRIAGE.value,
             system_prompt=dynamic_system_prompt
         )

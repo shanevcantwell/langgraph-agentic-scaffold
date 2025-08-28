@@ -75,6 +75,26 @@ class ConfigLoader:
             logger.error(msg)
             raise ConfigError(msg) from e
 
+    def _resolve_provider_env_vars(self, providers: dict):
+        """
+        Resolves environment variables for LLM providers and injects them into the config.
+        """
+        if not providers:
+            return
+
+        for provider_key, provider_config in providers.items():
+            provider_type = provider_config.get("type")
+            if provider_type == "gemini":
+                api_key = os.getenv("GEMINI_API_KEY")
+                if not api_key:
+                    logger.warning(f"GEMINI_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
+                provider_config["api_key"] = api_key
+            elif provider_type == "lmstudio":
+                base_url = os.getenv("LMSTUDIO_BASE_URL")
+                if not base_url:
+                    logger.warning(f"LMSTUDIO_BASE_URL not found for provider '{provider_key}'. This provider may be unusable.")
+                provider_config["base_url"] = base_url
+
     def _merge_configs(self, blueprint: dict, user_settings: dict) -> dict:
         """
         Injects user choices into the blueprint, validates the combined configuration,
@@ -82,6 +102,8 @@ class ConfigLoader:
         """
         logger.debug("Starting configuration merge and validation process.")
         merged = copy.deepcopy(blueprint)
+        self._resolve_provider_env_vars(merged.get("llm_providers"))
+
         # Robustly get bindings, defaulting to an empty dict if the key is missing or its value is None.
         bindings = user_settings.get("specialist_model_bindings") or {}
         default_binding = user_settings.get("default_llm_config")
