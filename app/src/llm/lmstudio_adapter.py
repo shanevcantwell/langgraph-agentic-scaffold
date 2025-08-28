@@ -1,5 +1,6 @@
 # app/src/llm/lmstudio_adapter.py
 import logging
+import html
 import json
 import os
 import tiktoken
@@ -183,10 +184,13 @@ class LMStudioAdapter(BaseAdapter):
                 # forced to use its 'Route' tool. This prevents it from generating
                 # conversational text, which it is not designed to handle.
                 if len(tool_names) == 1 and tool_names[0] == 'Route':
-                    logger.info("Forcing a 'Route' tool call for the RouterSpecialist.")
-                    # By explicitly naming the tool, we create a stronger guarantee that the
-                    # router will perform its function, mirroring the robust implementation in the Gemini adapter.
-                    api_kwargs["tool_choice"] = {"type": "function", "function": {"name": "Route"}}
+                    logger.info("Forcing a tool call for the RouterSpecialist using tool_choice='required'.")
+                    # While the OpenAI API allows forcing a specific tool by passing an object,
+                    # many local model servers (like older versions of LM Studio) only support
+                    # the string values "none", "auto", or "required". Using "required" is a
+                    # more compatible way to ensure the router performs a tool call instead of
+                    # generating conversational text.
+                    api_kwargs["tool_choice"] = "required"
                 else:
                     api_kwargs["tool_choice"] = "auto"
 
@@ -278,4 +282,10 @@ class LMStudioAdapter(BaseAdapter):
             raise LLMInvocationError(f"LMStudio API error: {e}") from e
 
     def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
+        # Some local models, when instructed to return JSON containing an HTML
+        # document, will incorrectly HTML-escape the string content of the
+        # 'html_document' field. This method corrects that by un-escaping it.
+        if 'html_document' in json_response and isinstance(json_response.get('html_document'), str):
+            logger.info("Found 'html_document' in response. Applying HTML un-escaping to its content.")
+            json_response['html_document'] = html.unescape(json_response['html_document'])
         return json_response

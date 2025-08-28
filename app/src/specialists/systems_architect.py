@@ -23,19 +23,17 @@ class SystemsArchitect(BaseSpecialist):
         text_to_process = state.get("text_to_process")
         user_prompt = messages[0].content.lower()
 
-        # The architect's primary job is to plan based on the user's request.
-        # If the request implies using a file (like README.md) and that file's
-        # content isn't in the state yet, the architect should request it first.
-        if "readme.md" in user_prompt and not text_to_process:
-            logger.info("SystemsArchitect requires 'README.md' content, which is not yet in the state. Recommending file_specialist.")
-            return create_missing_artifact_response(
-                specialist_name=self.specialist_name,
-                required_artifact="text_to_process from README.md",
-                recommended_specialist="file_specialist",
-                guidance="Please read the 'README.md' file from the root directory. The user's request depends on its content."
-            )
-
         contextual_messages = messages[:] # Make a copy
+
+        # If the prompt mentions a file like README.md and we don't have its content,
+        # we need to inform the LLM about the potential accessibility issue due to sandboxing.
+        # This is more robust than making a hard-coded recommendation for a file that
+        # may not be in the accessible workspace.
+        if "readme.md" in user_prompt and not text_to_process:
+            logger.warning("SystemsArchitect identified a dependency on 'README.md'. Adding a note to the LLM context about file access restrictions.")
+            contextual_messages.append(
+                HumanMessage(content="SYSTEM NOTE: The user's request requires information from 'README.md'. This file is part of the project's core documentation and is likely outside the sandboxed 'workspace' directory accessible to file system tools. Your plan should account for this. You can either proceed using general knowledge of a README's installation steps, or create a plan that first asks the user for the necessary text via the 'prompt_specialist'.")
+            )
 
         # If there's text in the state from another specialist (e.g., file_specialist),
         # add it to the context for the architect to create a more informed plan.

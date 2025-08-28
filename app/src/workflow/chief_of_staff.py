@@ -256,10 +256,6 @@ class ChiefOfStaff:
         approx_steps = (turn_count * 2) + 1
         logger.info(f"--- ChiefOfStaff: Deciding next specialist (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
         
-        if error := state.get("error"):
-            logger.error(f"Error detected in state: '{error}'. Halting workflow.")
-            return END
-
         # --- Intentional Loop Check ---
         # If a specialist is managing its own iterative loop (like WebBuilder),
         # we should bypass the ChiefOfStaff's generic loop detection to avoid
