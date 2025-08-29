@@ -12,8 +12,8 @@ class DataProcessorSpecialist(BaseSpecialist):
     A procedural (LLM-optional) specialist that processes a JSON artifact
     found in the state.
     """
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         json_artifact = state.get("json_artifact")

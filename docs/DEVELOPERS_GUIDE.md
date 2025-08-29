@@ -147,7 +147,7 @@ The scaffold uses a three-layer configuration model to cleanly separate concerns
 **Procedural Specialists:**
 The system supports specialists that do not require an LLM adapter from the main factory. These are "procedural" specialists that perform deterministic tasks or, in advanced cases, manage their own external libraries that may have their own LLM.
 *   **Simple Procedural:** For tasks like archiving or data cleaning, a procedural specialist executes Python code without any LLM.
-*   **Procedural with External LLM:** For integrating tools like `open-interpreter`, a procedural specialist can be configured with an `external_llm_provider_binding`. This allows the specialist to instantiate and configure the external tool with a specific LLM from `config.yaml`, keeping all LLM configuration centralized.
+*   **Procedural with External LLM:** For integrating tools like `open-interpreter`, a procedural specialist can be bound to an LLM provider in `user_settings.yaml` just like a standard LLM specialist. The `ConfigLoader` will apply this binding, and the `ChiefOfStaff` will create and inject the necessary `llm_adapter`, allowing the procedural specialist to configure and use the external library.
 
 ### 3.5 Schema Enforcement Strategy
 

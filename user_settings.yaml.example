@@ -16,4 +16,15 @@ default_llm_config: "gemini_flash"
 # The value on the right must be a provider key from `llm_providers` in `config.yaml`.
 specialist_model_bindings:
   systems_architect: "gemini_pro"
-  prompt_specialist: "gemini_pro" # Example: Bind the generalist to a powerful model.
+  prompt_specialist: "gemini_pro"
+
+  # --- Orchestration Bindings ---
+  # It's good practice to bind the core orchestrators explicitly.
+  router_specialist: "lmstudio_router"
+  prompt_triage_specialist: "lmstudio_router"
+
+  # --- Procedural Specialist Bindings ---
+  # The Open Interpreter specialist is procedural, but it requires an LLM to function.
+  # You MUST bind it to an LLM provider here for it to work. An OpenAI-compatible
+  # provider (like LM Studio) is recommended.
+  open_interpreter_specialist: "lmstudio_specialist"

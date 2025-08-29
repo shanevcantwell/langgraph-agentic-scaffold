@@ -15,8 +15,8 @@ class PromptTriageSpecialist(BaseSpecialist):
     and recommends the next specialist(s) to engage. It uses a constrained
     tool call to ensure its recommendations are valid.
     """
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
         self.specialist_map: Dict[str, Dict] = {}
         logger.info("Initialized PromptTriageSpecialist (awaiting contextual configuration).")
 

@@ -17,8 +17,8 @@ class CriticSpecialist(BaseSpecialist):
     improvement. It is a key part of the refinement loop.
     """
 
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
         logger.info("---INITIALIZED CriticSpecialist---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

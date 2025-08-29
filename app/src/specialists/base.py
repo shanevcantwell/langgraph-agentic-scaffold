@@ -1,7 +1,7 @@
 # app/src/specialists/base.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..llm.adapter import BaseAdapter
 
@@ -10,30 +10,14 @@ logger = logging.getLogger(__name__)
 class BaseSpecialist(ABC):
     """Abstract base class for all specialists."""
 
-    def __init__(self, specialist_name: str):
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         """
-        Initializes the specialist. The specialist_config is injected later
-        by the ChiefOfStaff.
+        Initializes the specialist, injecting its configuration via the constructor.
         """
         self.specialist_name = specialist_name
-        self._specialist_config: Dict[str, Any] = {}
-        self.llm_adapter: BaseAdapter | None = None
-        self.is_enabled = True # Default, updated when config is set.
-
-    @property
-    def specialist_config(self) -> Dict[str, Any]:
-        """The configuration dictionary for this specific specialist."""
-        return self._specialist_config
-
-    @specialist_config.setter
-    def specialist_config(self, value: Dict[str, Any]):
-        """
-        Sets the specialist's configuration and updates related properties
-        like 'is_enabled'.
-        """
-        self._specialist_config = value
-        # Update is_enabled whenever the config is set.
-        self.is_enabled = self._specialist_config.get("enabled", True)
+        self.specialist_config = specialist_config
+        self.llm_adapter: Optional[BaseAdapter] = None
+        self.is_enabled = self.specialist_config.get("enabled", True)
 
     @abstractmethod
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

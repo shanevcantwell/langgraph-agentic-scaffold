@@ -106,12 +106,19 @@ specialists:
     type: "llm"
     prompt_file: "critic_prompt.md"
     description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
+    requires_artifacts: ["html_artifact"]
+    artifact_providers:
+      html_artifact: "web_builder"
 
   # --- Core Capabilities ---
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
     description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
+    requires_artifacts: ["system_plan", "text_to_process"]
+    artifact_providers:
+      system_plan: "systems_architect"
+      text_to_process: "file_specialist"
 
   file_specialist:
     type: "llm"
@@ -124,6 +131,9 @@ specialists:
     type: "llm"
     prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
     description: "Extracts structured data from unstructured text based on a Pydantic schema. Requires 'text_to_process' in the state."
+    requires_artifacts: ["text_to_process"]
+    artifact_providers:
+      text_to_process: "file_specialist"
 
   sentiment_classifier_specialist:
     type: "llm"
@@ -133,11 +143,17 @@ specialists:
   data_processor_specialist:
     type: "procedural"
     description: "A specialist that performs deterministic data processing tasks, like formatting or cleaning, without calling an LLM."
+    requires_artifacts: ["json_artifact"]
+    artifact_providers:
+      json_artifact: "data_extractor_specialist"
 
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
     description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
+    requires_artifacts: ["text_to_process"]
+    artifact_providers:
+      text_to_process: "file_specialist"
 
   # --- General & Fallback ---
   prompt_specialist:

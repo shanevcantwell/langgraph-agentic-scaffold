@@ -36,14 +36,15 @@ from langchain_core.messages import AIMessage, HumanMessage
 class CodeWriterSpecialist(BaseSpecialist):
     """A specialist that writes Python code based on a user's request."""
 
-    def __init__(self, specialist_name: str):
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         """Initializes the specialist.
 
         The most important part of this method is calling the parent class's
-        __init__ method with the specialist's name.
+        __init__ method with the specialist's name and its configuration dictionary.
         """
-        # The specialist_name is passed in by the ChiefOfStaff and must match the key in config.yaml.
-        super().__init__(specialist_name)
+        # The specialist_name and specialist_config are passed in by the ChiefOfStaff.
+        # The name must match the key in config.yaml.
+        super().__init__(specialist_name, specialist_config)
 
     def _execute_logic(self, state: dict) -> dict:
         """This is the main method where your specialist's core logic goes.
@@ -52,9 +53,8 @@ class CodeWriterSpecialist(BaseSpecialist):
         common boilerplate like logging and error handling. You only need to
         implement the logic specific to this specialist.
         """
-        # The specialist's configuration is injected by the ChiefOfStaff and
-        # is available via `self.specialist_config`.
-        # For example: my_setting = self.specialist_config.get("my_setting")
+        # The specialist's configuration was injected by the ChiefOfStaff via the
+        # constructor and is available as `self.specialist_config`.
 
         # Get the full message history from the state.
         messages = state["messages"]
@@ -143,17 +143,19 @@ The project uses `pytest` as its testing framework. Here is an example test for 
 
 # app/tests/unit/test_code_writer_specialist.py
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, ANY
+from typing import Dict, Any
 from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.code_writer_specialist import CodeWriterSpecialist
 
 def test_code_writer_specialist_execute():
     # Arrange
-    # The specialist's __init__ requires a name.
-    specialist = CodeWriterSpecialist("code_writer_specialist")
-
-    # In tests, you may need to manually set the config if your logic uses it.
-    specialist.specialist_config = {}
+    # The specialist's __init__ now requires a name and a config dictionary.
+    specialist_config: Dict[str, Any] = {}
+    specialist = CodeWriterSpecialist(
+        specialist_name="code_writer_specialist",
+        specialist_config=specialist_config
+    )
     
     # Mock the LLM adapter to avoid making a real API call.
     specialist.llm_adapter = MagicMock()
@@ -171,7 +173,7 @@ def test_code_writer_specialist_execute():
 
     # Assert
     # Check that the LLM adapter was called once.
-    specialist.llm_adapter.invoke.assert_called_once()
+    specialist.llm_adapter.invoke.assert_called_once_with(ANY)
 
     # Check that the new AI message was added to the state correctly.
     # The specialist should only return the *new* message it created.
@@ -238,9 +240,6 @@ specialists:
   open_interpreter_specialist:
     type: "procedural"
     description: "Executes shell commands and code (Python, etc.) to perform file system operations, data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
-    # This key is the magic. It tells the ChiefOfStaff to inject the 'lmstudio_router'
-    # provider configuration into this specialist, so it can configure open-interpreter.
-    external_llm_provider_binding: "lmstudio_router"
 ```
 
 #### Step 3: Create the Specialist Class
@@ -270,8 +269,8 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         "You are Open Interpreter, a world-class programmer..."
     )
 
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

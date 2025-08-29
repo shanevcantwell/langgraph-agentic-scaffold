@@ -21,8 +21,8 @@ class Route(BaseModel):
     )
 
 class RouterSpecialist(BaseSpecialist):
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
         self.specialist_map: Dict[str, Dict] = {}
         logger.info("Initialized RouterSpecialist (awaiting contextual configuration from ChiefOfStaff).")
 

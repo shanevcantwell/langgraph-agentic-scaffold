@@ -22,8 +22,8 @@ class FileSpecialist(BaseSpecialist):
     It can read files and list directories. Write operations are disabled by a safety lock.
     """
 
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
         # Resolve root_dir relative to the project root for robustness.
         # This prevents issues where the script is run from a different directory.
         relative_root_dir = self.specialist_config.get("root_dir", "./workspace")

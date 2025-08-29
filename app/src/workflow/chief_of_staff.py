@@ -12,6 +12,7 @@ from ..specialists import get_specialist_class, BaseSpecialist
 from ..graph.state import GraphState
 from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
+from ..specialists.helpers import create_missing_artifact_response
 
 logger = logging.getLogger(__name__)
 
@@ -59,27 +60,23 @@ class ChiefOfStaff:
                 if not issubclass(SpecialistClass, BaseSpecialist):
                     logger.warning(f"Skipping '{name}': Class '{SpecialistClass.__name__}' does not inherit from BaseSpecialist.")
                     continue
-                # Instantiate with only the name to support existing specialist __init__ signatures.
-                instance = SpecialistClass(name)
+                # Instantiate the specialist, injecting its name and its specific configuration block.
+                # This completes the decoupling of specialists from a global config loader.
+                instance = SpecialistClass(specialist_name=name, specialist_config=config)
 
                 # --- Pre-flight Check ---
                 # Immediately after instantiation, check if the specialist's dependencies are met.
                 if not instance._perform_pre_flight_checks():
-                    logger.error(
-                        f"Specialist '{name}' failed pre-flight checks. It will be disabled."
-                    )
+                    logger.error(f"Specialist '{name}' failed pre-flight checks. It will be disabled.")
                     continue
 
-                # Inject the main configuration via property setter. This decouples specialists
-                # from ConfigLoader and may trigger initialization logic within the specialist.
-                instance.specialist_config = config
                 if not instance.is_enabled:
                     logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")
                     continue
                 
                 # --- Adapter Creation ---
                 # Any specialist that needs an LLM, regardless of type, gets an adapter.
-                # The presence of a binding key is the trigger.
+                # The presence of the 'llm_config' key, added by the ConfigLoader, is the trigger.
                 binding_key = config.get("llm_config")
                 if binding_key:
                     # Defer adapter creation for router/triage as they have complex, dynamic prompt construction.
@@ -184,11 +181,35 @@ class ChiefOfStaff:
 
     def _create_safe_executor(self, specialist_instance: BaseSpecialist):
         """
-        Creates a wrapper around a specialist's execute method to enforce global
-        rules like turn count modification and to provide centralized exception
-        handling and reporting.
+        Creates a wrapper around a specialist's execute method to enforce global rules
+        like turn count modification, declarative preconditions, and to provide
+        centralized exception handling and reporting.
         """
+        specialist_name = specialist_instance.specialist_name
+        specialist_config = specialist_instance.specialist_config
+        required_artifacts = specialist_config.get("requires_artifacts", [])
+        artifact_providers = specialist_config.get("artifact_providers", {})
+
         def safe_executor(state: GraphState) -> Dict[str, Any]:
+            # --- Declarative State Artifact Check (Runtime) ---
+            if required_artifacts:
+                for artifact in required_artifacts:
+                    # Check for presence and non-empty value. Handles None, empty strings, empty lists etc.
+                    if not state.get(artifact):
+                        logger.warning(
+                            f"Specialist '{specialist_name}' cannot execute. "
+                            f"Missing required artifact: '{artifact}'. Bypassing execution."
+                        )
+                        # Look up the recommended specialist to fix this.
+                        recommended_specialist = artifact_providers.get(artifact)
+
+                        # Generate a standardized response to inform the router.
+                        return create_missing_artifact_response(
+                            specialist_name=specialist_name,
+                            missing_artifact=artifact,
+                            recommended_specialist=recommended_specialist,
+                        )
+
             try:
                 update = specialist_instance.execute(state)
                 if "turn_count" in update:

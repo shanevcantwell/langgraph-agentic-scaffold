@@ -122,31 +122,32 @@ class ConfigLoader:
         # 3. Build the final list of specialists, applying layered configuration.
         final_specialists = {}
         for name, spec_config in merged["specialists"].items():
-            if spec_config.get("type") != "llm":
-                # It's a procedural or wrapped specialist, no LLM binding needed.
-                final_specialists[name] = spec_config
-                continue
-
             # --- Layered Binding Logic ---
-            # Determine the binding by checking layers in order of precedence:
+            # Determine the binding for ANY specialist by checking layers in order of precedence:
             # 1. A specific binding for this specialist in user_settings.yaml (Layer 2).
-            # 2. The default binding from user_settings.yaml (Layer 2).
+            # 2. The default binding from user_settings.yaml (Layer 2), ONLY if it's an LLM specialist.
             user_specific_binding = bindings.get(name)
 
-            final_binding = None
+            final_binding = ""  # Use empty string to signify no binding found
+
             # Layer 2: User-specific binding
             if user_specific_binding and user_specific_binding in merged["llm_providers"]:
                 final_binding = user_specific_binding
             # Layer 2: User-default binding
-            elif default_binding and default_binding in merged["llm_providers"]:
+            elif spec_config.get("type") == "llm" and default_binding and default_binding in merged["llm_providers"]:
                 final_binding = default_binding
 
+            # Apply the binding if one was found
             if final_binding:
                 spec_config["llm_config"] = final_binding
-                final_specialists[name] = spec_config
-            else:
+            # If no binding was found AND it's a required LLM specialist, disable it.
+            elif spec_config.get("type") == "llm":
                 logger.warning(f"LLM specialist '{name}' has no model binding and will be disabled. Provide a binding in {USER_SETTINGS_FILE}.")
                 continue
+
+            # Add the configured specialist to the final list.
+            # Procedural specialists without a binding will pass through here correctly.
+            final_specialists[name] = spec_config
 
         # 4. Final check: The router is essential for the system to function.
         if CoreSpecialist.ROUTER.value not in final_specialists:
