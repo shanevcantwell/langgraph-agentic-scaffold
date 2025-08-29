@@ -40,6 +40,14 @@ class BaseSpecialist(ABC):
         """The core logic for the specialist."""
         pass
 
+    def _perform_pre_flight_checks(self) -> bool:
+        """
+        Performs startup-time checks for external dependencies.
+        Returns True if all dependencies are met, False otherwise.
+        This default implementation assumes no external dependencies.
+        """
+        return True
+
     def execute(self, state: dict) -> Dict[str, Any]:
         """Public method to execute the specialist's task."""
         logger.info(f"--- Executing specialist: {self.specialist_name} ---")

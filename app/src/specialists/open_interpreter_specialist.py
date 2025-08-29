@@ -74,6 +74,21 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         )
         logger.info(f"OpenInterpreter configured to use LLM provider: {binding_key}")
 
+    def _perform_pre_flight_checks(self) -> bool:
+        """Checks if the 'open-interpreter' package is installed."""
+        try:
+            import interpreter
+            logger.info("'open-interpreter' package found. OpenInterpreterSpecialist is enabled.")
+            return True
+        except ImportError:
+            logger.error(
+                "The 'open-interpreter' package is not installed. "
+                "OpenInterpreterSpecialist will be disabled. "
+                "Please install it by adding 'open-interpreter' to your pyproject.toml "
+                "and running './scripts/sync-reqs.sh'."
+            )
+            return False
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         if not self.specialist_config:
             raise RuntimeError("OpenInterpreterSpecialist cannot execute without being configured.")

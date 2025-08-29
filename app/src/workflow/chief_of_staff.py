@@ -62,6 +62,14 @@ class ChiefOfStaff:
                 # Instantiate with only the name to support existing specialist __init__ signatures.
                 instance = SpecialistClass(name)
 
+                # --- Pre-flight Check ---
+                # Immediately after instantiation, check if the specialist's dependencies are met.
+                if not instance._perform_pre_flight_checks():
+                    logger.error(
+                        f"Specialist '{name}' failed pre-flight checks. It will be disabled."
+                    )
+                    continue
+
                 # If the specialist needs an external LLM, inject that provider's config
                 # BEFORE setting the main specialist_config, as the latter may trigger configuration logic.
                 if binding_key := config.get("external_llm_provider_binding"):

@@ -29,13 +29,13 @@ llm_providers:
     api_identifier: "router-gpt-oss-20b" # The model identifier for the server.
     # The model's total context window (input + output). This value is used by the llm
     # adapter to proactively prune the conversation history to prevent context overflow errors.
-    context_window: 4096
+    context_window: 8192
 
   lmstudio_specialist:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "gemma-3-27b-it-abliterated@q8_0" # The model identifier for the server.
+    api_identifier: "gpt-oss-20b" # The model identifier for the server.
     # The model's total context window (input + output).
     context_window: 8192
     # Parameters to pass to the model's API.
