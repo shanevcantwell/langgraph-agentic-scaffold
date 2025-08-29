@@ -61,8 +61,26 @@ class ChiefOfStaff:
                     continue
                 # Instantiate with only the name to support existing specialist __init__ signatures.
                 instance = SpecialistClass(name)
-                # Inject the configuration via property setter. This decouples specialists
-                # from ConfigLoader without forcing a breaking change on all constructors.
+
+                # If the specialist needs an external LLM, inject that provider's config
+                # BEFORE setting the main specialist_config, as the latter may trigger configuration logic.
+                if binding_key := config.get("external_llm_provider_binding"):
+                    provider_config = self.config.get("llm_providers", {}).get(binding_key)
+                    if not provider_config:
+                        # Fail fast if the binding is specified but not found.
+                        raise ValueError(f"LLM provider '{binding_key}' for specialist '{name}' not found in config.")
+                    
+                    # Use hasattr for loose coupling, allowing specialists to opt-in to this injection.
+                    if hasattr(instance, "external_provider_config"):
+                        instance.external_provider_config = provider_config
+                    else:
+                        logger.warning(
+                            f"Specialist '{name}' has 'external_llm_provider_binding' but no "
+                            f"'external_provider_config' property. The binding will be ignored."
+                        )
+
+                # Inject the main configuration via property setter. This decouples specialists
+                # from ConfigLoader and may trigger initialization logic within the specialist.
                 instance.specialist_config = config
                 if not instance.is_enabled:
                     logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")

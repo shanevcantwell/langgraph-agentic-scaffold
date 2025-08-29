@@ -85,9 +85,9 @@ class ConfigLoader:
         for provider_key, provider_config in providers.items():
             provider_type = provider_config.get("type")
             if provider_type == "gemini":
-                api_key = os.getenv("GEMINI_API_KEY")
+                api_key = os.getenv("GOOGLE_API_KEY")
                 if not api_key:
-                    logger.warning(f"GEMINI_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
+                    logger.warning(f"GOOGLE_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
                 provider_config["api_key"] = api_key
             elif provider_type == "lmstudio":
                 base_url = os.getenv("LMSTUDIO_BASE_URL")

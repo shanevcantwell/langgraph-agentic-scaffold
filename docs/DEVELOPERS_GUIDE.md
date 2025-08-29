@@ -144,8 +144,10 @@ The scaffold uses a three-layer configuration model to cleanly separate concerns
     *   The public `execute` method is defined in the base class and provides a template with logging and error handling. You should not override it unless you have a specific reason.
 *   **Function:** A Specialist performs a single atomic task, usually by creating a `StandardizedLLMRequest` and passing it to its configured LLM adapter.
 
-**LLM-Optional Specialists:**
-The system supports specialists that do not require an LLM. These are typically procedural specialists that perform deterministic tasks. To define one, set `type: "procedural"` in its `config.yaml` entry. The `AdapterFactory` will not create an LLM adapter for specialists of this type, which allows for greater flexibility and efficiency by avoiding unnecessary LLM calls for purely procedural tasks.
+**Procedural Specialists:**
+The system supports specialists that do not require an LLM adapter from the main factory. These are "procedural" specialists that perform deterministic tasks or, in advanced cases, manage their own external libraries that may have their own LLM.
+*   **Simple Procedural:** For tasks like archiving or data cleaning, a procedural specialist executes Python code without any LLM.
+*   **Procedural with External LLM:** For integrating tools like `open-interpreter`, a procedural specialist can be configured with an `external_llm_provider_binding`. This allows the specialist to instantiate and configure the external tool with a specific LLM from `config.yaml`, keeping all LLM configuration centralized.
 
 ### 3.5 Schema Enforcement Strategy
 
@@ -201,7 +203,7 @@ This scaffold implements several advanced patterns to move beyond simple instruc
 
 The primary way to extend the system's capabilities is by adding new specialists. This can be done by creating a new standard specialist from scratch or by wrapping an existing, external agent.
 
-For a detailed, step-by-step tutorial on both of these processes, please refer to the **Creating a New Specialist** guide.
+For a detailed, step-by-step tutorial on this process, please refer to the **Creating a New Specialist** guide.
 
 ### 4.2 Managing Dependencies
 
@@ -228,7 +230,7 @@ This section provides a high-level overview of the repository's layout. For a co
 *   `app/`: The main Python package containing all source code (`src/`), tests (`tests/`), and prompts (`prompts/`).
 *   `docs/`: All project documentation, including this guide, tutorials, and Architecture Decision Records (ADRs).
 *   `scripts/`: Helper scripts for common development tasks like running the server, managing dependencies, and verification.
-*   `external/`: A directory for integrating third-party agent code.
+*   `archives/`, `workspace/`: Directories created at runtime for agent outputs, ignored by Git.
 *   **Root files:** Configuration (`config.yaml.example`, `user_settings.yaml.example`), dependencies (`pyproject.toml`), and other project-level files.
 
 ### 5.2 Naming Convention

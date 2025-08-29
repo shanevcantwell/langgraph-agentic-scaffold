@@ -57,19 +57,15 @@ class ProceduralSpecialistConfig(BaseSpecialistConfig):
     """Configuration for a specialist that executes deterministic Python code without an LLM."""
 
     type: Literal["procedural"]
-
-
-class WrappedCodeSpecialistConfig(BaseSpecialistConfig):
-    """Configuration for a specialist that wraps an external, third-party Python class."""
-
-    type: Literal["wrapped_code"]
-    wrapper_path: str = Field(..., description="Path to the Python file containing the wrapper class, relative to the project root.")
-    class_name: str = Field(..., description="The name of the class to instantiate from the source file.")
+    external_llm_provider_binding: Optional[str] = Field(
+        None,
+        description="For procedural specialists that wrap an external library which requires its own LLM, this key binds it to an llm_provider from config.yaml."
+    )
 
 
 # A discriminated union to handle the different types of specialists.
 # Pydantic will use the 'type' field to determine which model to use for validation.
-SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig, WrappedCodeSpecialistConfig]
+SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig]
 
 
 class RootConfig(BaseModel):

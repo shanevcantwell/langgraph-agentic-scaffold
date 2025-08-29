@@ -19,6 +19,7 @@ class CriticSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name)
+        logger.info("---INITIALIZED CriticSpecialist---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         logger.info("Executing CriticSpecialist logic.")

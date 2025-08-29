@@ -196,76 +196,131 @@ The example above shows a basic specialist. However, the scaffold's architecture
 
 For a deeper understanding of these patterns, refer to the **"Agentic Robustness Patterns"** section in the **Developer's Guide**.
 
-## Advanced: Creating a `WrappedCodeSpecialist`
+## Advanced: Creating a Procedural Specialist
 
-A `WrappedCodeSpecialist` allows you to integrate powerful, third-party Python libraries or agents into the scaffold by creating a simple "wrapper" class. This is a great way to leverage existing tools like `open-interpreter` without having to rewrite their logic.
+A "procedural" specialist is one that executes Python code directly, rather than making a request to an LLM through the system's adapter factory. This pattern is ideal for two scenarios:
+
+1.  **Deterministic Tasks:** For simple, predictable tasks like data formatting or creating a final report, a procedural specialist is more efficient and reliable than an LLM. The `ArchiverSpecialist` is a good example.
+2.  **Integrating External Libraries:** For integrating powerful, third-party libraries that may have their own internal LLM (like `open-interpreter`), a procedural specialist acts as a clean integration point.
+
+This guide focuses on the second, more advanced use case.
 
 ### How it Works
 
-1.  **Install the Library:** The external tool is installed as a standard Python dependency via `pip`.
-2.  **Create a Wrapper Class:** You create a small Python class in the `external_agents/` directory. This class must have a `run(self, input)` method. Its job is to translate the simple input from your specialist into the specific API calls required by the external library and return a simple output.
-3.  **Create the Specialist:** You create a specialist class that inherits from `WrappedCodeSpecialist`. This specialist is very thin; it only needs to translate the graph's state to the input for your wrapper's `run` method, and translate the wrapper's output back into the graph's state.
-4.  **Configure:** You register the specialist in `config.yaml` with `type: "wrapped_code"`, pointing to your wrapper class.
+The key is a clean separation of concerns. The specialist class itself contains the integration logic, while the `config.yaml` file provides all the necessary configuration, including which LLM the external library should use.
 
-### Example: Wrapping `open-interpreter`
+1.  **Install the Library:** The external tool is installed as a standard Python dependency via `pip-tools`.
+2.  **Configure in `config.yaml`:** You register the specialist with `type: "procedural"`. Crucially, you add an `external_llm_provider_binding` key to tell the specialist which `llm_provider` configuration it should use for the external library.
+3.  **Create the Specialist Class:** The specialist inherits from `BaseSpecialist`. It uses a property-setter pattern to receive its configuration from the `ChiefOfStaff`. This allows it to configure the external library *after* it has been instantiated.
+4.  **Implement the Logic:** The specialist's `_execute_logic` method calls the external library directly.
 
-Let's walk through wrapping the `open-interpreter` library, which allows an LLM to execute code locally.
+### Example: Integrating `open-interpreter`
+
+Let's walk through the modern way to integrate `open-interpreter`, which allows an LLM to execute code locally.
 
 #### Step 1: Install the Dependency
 
-First, add `open-interpreter` to your `pyproject.toml` and run the sync script (`./scripts/sync-reqs.sh`) to install it.
+First, add `open-interpreter` to your `pyproject.toml` and run the sync script to install it and update your `requirements.txt` file.
 
-#### Step 2: Create the Wrapper Class
-
-Create a new file `external_agents/OpenInterpreter/open_interpreter_wrapper.py`. This class will act as the bridge to the `open-interpreter` library.
-
-```python
-# external_agents/OpenInterpreter/open_interpreter_wrapper.py
-from interpreter import interpreter
-
-class OpenInterpreterAgent:
-    def __init__(self):
-        interpreter.auto_run = True
-        interpreter.system_message = "You are Open Interpreter..." # (abbreviated for docs)
-
-    def run(self, prompt: str) -> str:
-        interpreter.messages = []
-        messages = interpreter.chat(prompt)
-        assistant_responses = [m['content'] for m in messages if m['role'] == 'assistant']
-        return "\n".join(assistant_responses) if assistant_responses else "Task completed."
+```bash
+./scripts/sync-reqs.sh
 ```
 
-### Step 3: Create the Wrapper Specialist File
+#### Step 2: Configure the Specialist in `config.yaml`
 
-Create a new Python file in `app/src/specialists/`. This class must inherit from `WrappedCodeSpecialist`.
+Add a new entry to your `config.yaml` file under the `specialists` key.
+
+```yaml
+specialists:
+  # ... other specialists ...
+
+  open_interpreter_specialist:
+    type: "procedural"
+    description: "Executes shell commands and code (Python, etc.) to perform file system operations, data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
+    # This key is the magic. It tells the ChiefOfStaff to inject the 'lmstudio_router'
+    # provider configuration into this specialist, so it can configure open-interpreter.
+    external_llm_provider_binding: "lmstudio_router"
+```
+
+#### Step 3: Create the Specialist Class
+
+Create the specialist file `app/src/specialists/open_interpreter_specialist.py`. The key is the property-setter pattern, which allows the `ChiefOfStaff` to inject dependencies in a controlled order.
 
 ```python
 # app/src/specialists/open_interpreter_specialist.py
-from typing import Dict, Any
-from .wrapped_code_specialist import WrappedCodeSpecialist
+import logging
+from typing import Dict, Any, Optional
+
+from interpreter import interpreter
 from langchain_core.messages import AIMessage
 
-class OpenInterpreterSpecialist(WrappedCodeSpecialist):
-    """A wrapper specialist for the Open Interpreter agent."""
+from .base import BaseSpecialist
 
-    def _translate_state_to_input(self, state: Dict[str, Any]) -> Any:
-        return state["messages"][-1].content
+logger = logging.getLogger(__name__)
 
-    def _translate_output_to_state(self, state: dict, output: Any) -> Dict[str, Any]:
-        ai_message = AIMessage(content=str(output), name=self.specialist_name)
+class OpenInterpreterSpecialist(BaseSpecialist):
+    """
+    A procedural specialist that uses the open-interpreter library to execute code.
+    It is configured via the `external_llm_provider_binding` in config.yaml.
+    """
+
+    def __init__(self, specialist_name: str):
+        super().__init__(specialist_name)
+        self._specialist_config: Optional[Dict[str, Any]] = None
+        # This will be injected by the ChiefOfStaff *before* specialist_config is set.
+        self.external_provider_config: Optional[Dict[str, Any]] = None
+
+    @property
+    def specialist_config(self) -> Optional[Dict[str, Any]]:
+        return self._specialist_config
+
+    @specialist_config.setter
+    def specialist_config(self, config: Dict[str, Any]):
+        """
+        Sets the specialist configuration and triggers the interpreter setup.
+        This method is called by the ChiefOfStaff during its loading process.
+        """
+        self._specialist_config = config
+        self._configure_interpreter()
+        logger.info("---INITIALIZED OpenInterpreterSpecialist---")
+
+    def _configure_interpreter(self):
+        """Configures the open-interpreter singleton based on the injected provider config."""
+        if not self.external_provider_config:
+            raise ValueError("OpenInterpreter's external_provider_config was not injected.")
+        
+        provider_config = self.external_provider_config
+        binding_key = self.specialist_config.get("external_llm_provider_binding")
+
+        # Configure the interpreter singleton with the correct API details
+        interpreter.auto_run = True
+        interpreter.model = provider_config.get("api_identifier")
+        
+        provider_type = provider_config.get("type")
+        if provider_type == "lmstudio" or provider_type == "ollama":
+            interpreter.api_base = provider_config.get("base_url")
+            interpreter.api_key = "lm-studio"  # Can be any non-empty string
+        elif provider_type == "gemini":
+            interpreter.api_key = provider_config.get("api_key")
+        
+        interpreter.system_message = (
+            "You are Open Interpreter, a world-class programmer that can complete any task by executing code. "
+            "You are in a sandboxed environment. You can only read/write files in the './workspace' directory. "
+            "When you are done, respond with a summary of what you have done."
+        )
+        logger.info(f"OpenInterpreter configured to use LLM provider: {binding_key}")
+
+    def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        last_message = state["messages"][-1].content
+        interpreter.messages = [] # Reset history for each run
+        response_messages = interpreter.chat(last_message, display=False, stream=False)
+        
+        assistant_responses = [m['content'] for m in response_messages if m['role'] == 'assistant']
+        final_output = "\n".join(assistant_responses) if assistant_responses else "Task completed with no output."
+        
+        ai_message = AIMessage(content=final_output, name=self.specialist_name)
         return {"messages": [ai_message]}
 ```
-
-### Step 4: Configure the `WrappedCodeSpecialist` in `config.yaml`
-
-Add a new entry to your `config.yaml` file under the `specialists` key. This entry must include `type: "wrapped_code"`, a `wrapper_path` key pointing to the Python file containing your wrapper class, and the `class_name` to instantiate.
-
-specialists:
-  open_interpreter_specialist:
-    type: "wrapped_code"
-    wrapper_path: "./external_agents/OpenInterpreter/open_interpreter_wrapper.py" # Path to the wrapper class file, relative to the project root.
-    class_name: "OpenInterpreterAgent"
-    description: "A powerful specialist that can execute code (Python, Shell, etc.) on the local machine to perform a wide variety of tasks, including file manipulation, data analysis, and web research. Use for complex, multi-step tasks that require coding."
 
 ## Conclusion
 

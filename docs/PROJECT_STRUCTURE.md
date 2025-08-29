@@ -53,10 +53,6 @@ Contains all project documentation.
 -   `docs/PROJECT_STRUCTURE.md`: (This file) A detailed breakdown of the repository layout.
 -   `docs/adr/`: Contains Architecture Decision Records (ADRs) that document key architectural choices and their rationale.
 
-## `external/`
-
-A designated directory for placing third-party code that might be "wrapped" by a `WrappedSpecialist`. It is kept in Git via `.gitkeep` but its contents are ignored.
-
 ## `scripts/`
 
 A collection of helper scripts to simplify common development tasks. These scripts ensure consistency across different developer environments (Linux, macOS, Windows).
