@@ -8,6 +8,7 @@ from interpreter import interpreter
 from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
+from .helpers import create_llm_message
 from ..llm.lmstudio_adapter import LMStudioAdapter
 
 logger = logging.getLogger(__name__)
@@ -129,5 +130,11 @@ class OpenInterpreterSpecialist(BaseSpecialist):
                 final_output = "\n".join(assistant_content) if assistant_content else "Task completed with no user-facing output."
 
         logger.info(f"Open Interpreter finished execution. Parsed Output: {final_output[:200]}...")
-        ai_message = AIMessage(content=final_output, name=self.specialist_name)
-        return {"messages": [ai_message]}
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
+            content=final_output,
+        )
+        # Signal to the router that this task is complete, which will trigger the
+        # archiver to create a final report.
+        return {"messages": [ai_message], "task_is_complete": True}

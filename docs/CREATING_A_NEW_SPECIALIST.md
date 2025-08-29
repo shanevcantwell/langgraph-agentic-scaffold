@@ -207,11 +207,11 @@ This guide focuses on the second, more advanced use case.
 
 ### How it Works
 
-The key is a clean separation of concerns. The specialist class itself contains the integration logic, while the `config.yaml` file provides all the necessary configuration, including which LLM the external library should use.
+The key is a clean separation of concerns. The specialist class itself contains the integration logic, while the `config.yaml` file provides all the necessary configuration.
 
 1.  **Install the Library:** The external tool is installed as a standard Python dependency via `pip-tools`.
-2.  **Configure in `config.yaml`:** You register the specialist with `type: "procedural"`. Crucially, you add an `external_llm_provider_binding` key to tell the specialist which `llm_provider` configuration it should use for the external library.
-3.  **Create the Specialist Class:** The specialist inherits from `BaseSpecialist`. It uses a property-setter pattern to receive its configuration from the `ChiefOfStaff`. This allows it to configure the external library *after* it has been instantiated.
+2.  **Configure in `config.yaml`:** You register the specialist with `type: "procedural"`. If the specialist needs to call an LLM (as `open-interpreter` does), you add an `llm_config` key to bind it to a provider.
+3.  **Create the Specialist Class:** The specialist inherits from `BaseSpecialist`. The `ChiefOfStaff` will see the binding in the config and automatically create and inject a configured `llm_adapter` instance into the specialist.
 4.  **Implement the Logic:** The specialist's `_execute_logic` method calls the external library directly.
 
 ### Example: Integrating `open-interpreter`
@@ -244,82 +244,75 @@ specialists:
 
 #### Step 3: Create the Specialist Class
 
-Create the specialist file `app/src/specialists/open_interpreter_specialist.py`. The key is the property-setter pattern, which allows the `ChiefOfStaff` to inject dependencies in a controlled order.
+Create the specialist file `app/src/specialists/open_interpreter_specialist.py`. The logic is clean and simple: it uses the `llm_adapter` that the `ChiefOfStaff` provides to configure and run the `interpreter` library.
 
 ```python
 # app/src/specialists/open_interpreter_specialist.py
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 
+import litellm
 from interpreter import interpreter
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
+from ..llm.lmstudio_adapter import LMStudioAdapter
 
 logger = logging.getLogger(__name__)
 
 class OpenInterpreterSpecialist(BaseSpecialist):
     """
-    A procedural specialist that uses the open-interpreter library to execute code.
-    It is configured via the `external_llm_provider_binding` in config.yaml.
+    A procedural specialist that uses the open-interpreter library.
     """
+
+    SYSTEM_PROMPT = (
+        "You are Open Interpreter, a world-class programmer..."
+    )
 
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name)
-        self._specialist_config: Optional[Dict[str, Any]] = None
-        # This will be injected by the ChiefOfStaff *before* specialist_config is set.
-        self.external_provider_config: Optional[Dict[str, Any]] = None
-
-    @property
-    def specialist_config(self) -> Optional[Dict[str, Any]]:
-        return self._specialist_config
-
-    @specialist_config.setter
-    def specialist_config(self, config: Dict[str, Any]):
-        """
-        Sets the specialist configuration and triggers the interpreter setup.
-        This method is called by the ChiefOfStaff during its loading process.
-        """
-        self._specialist_config = config
-        self._configure_interpreter()
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
-    def _configure_interpreter(self):
-        """Configures the open-interpreter singleton based on the injected provider config."""
-        if not self.external_provider_config:
-            raise ValueError("OpenInterpreter's external_provider_config was not injected.")
-        
-        provider_config = self.external_provider_config
-        binding_key = self.specialist_config.get("external_llm_provider_binding")
-
-        # Configure the interpreter singleton with the correct API details
-        interpreter.auto_run = True
-        interpreter.model = provider_config.get("api_identifier")
-        
-        provider_type = provider_config.get("type")
-        if provider_type == "lmstudio" or provider_type == "ollama":
-            interpreter.api_base = provider_config.get("base_url")
-            interpreter.api_key = "lm-studio"  # Can be any non-empty string
-        elif provider_type == "gemini":
-            interpreter.api_key = provider_config.get("api_key")
-        
-        interpreter.system_message = (
-            "You are Open Interpreter, a world-class programmer that can complete any task by executing code. "
-            "You are in a sandboxed environment. You can only read/write files in the './workspace' directory. "
-            "When you are done, respond with a summary of what you have done."
-        )
-        logger.info(f"OpenInterpreter configured to use LLM provider: {binding_key}")
-
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        last_message = state["messages"][-1].content
-        interpreter.messages = [] # Reset history for each run
-        response_messages = interpreter.chat(last_message, display=False, stream=False)
-        
-        assistant_responses = [m['content'] for m in response_messages if m['role'] == 'assistant']
-        final_output = "\n".join(assistant_responses) if assistant_responses else "Task completed with no output."
-        
+        if not self.llm_adapter:
+            raise RuntimeError("OpenInterpreterSpecialist requires an LLM adapter.")
+
+        # Find the last human message to act on.
+        messages = state.get("messages", [])
+        last_human_message_content = next(
+            (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
+            None
+        )
+        if not last_human_message_content:
+            # Handle case where there's no user command
+            return {"messages": [AIMessage(content="No user command found.", name=self.specialist_name)]}
+
+        # Configure the interpreter singleton just-in-time using the injected adapter.
+        litellm.disable_cost_logging = True
+        model_string = self.llm_adapter.model_name
+        if isinstance(self.llm_adapter, LMStudioAdapter):
+            model_string = f"openai/{self.llm_adapter.model_name}"
+
+        interpreter.llm.model = model_string
+        interpreter.llm.api_base = self.llm_adapter.api_base
+        interpreter.llm.api_key = self.llm_adapter.api_key
+        interpreter.llm.tool_choice = {"type": "function", "function": {"name": "execute"}}
+        interpreter.system_message = self.SYSTEM_PROMPT
+        interpreter.auto_run = True
+        interpreter.messages = []
+
+        # Execute the command
+        response_messages = interpreter.chat(
+            last_human_message_content, display=False, stream=False
+        )
+
+        # Parse the output to find the result of the code execution.
+        computer_outputs = [m['content'] for m in response_messages if m.get('role') == 'computer']
+        final_output = "\n".join(computer_outputs) if computer_outputs else "Task completed with no output."
+
         ai_message = AIMessage(content=final_output, name=self.specialist_name)
-        return {"messages": [ai_message]}
+        # Signal that the task is complete to trigger the archiver.
+        return {"messages": [ai_message], "task_is_complete": True}
 ```
 
 ## Conclusion
