@@ -2,114 +2,113 @@
 
 import logging
 from typing import Dict, Any
-# Import litellm to configure it directly
-import litellm
-from interpreter import interpreter
-from langchain_core.messages import AIMessage, HumanMessage
+
+# DO NOT IMPORT 'interpreter' HERE AT THE MODULE LEVEL
+from langchain_core.messages import HumanMessage
 
 from .base import BaseSpecialist
 from .helpers import create_llm_message
-from ..llm.lmstudio_adapter import LMStudioAdapter
+from ..llm.adapter import StandardizedLLMRequest
+from .schemas import CodeExecutionParams
 
 logger = logging.getLogger(__name__)
 
 
 class OpenInterpreterSpecialist(BaseSpecialist):
     """
-    A procedural specialist that uses the open-interpreter library to execute code.
+    A specialist that uses the open-interpreter library to execute code.
+    It follows a robust two-phase process:
+    1. Plan: Use its own LLM adapter to generate a structured code block.
+    2. Execute: Programmatically run the generated code using the interpreter library.
     """
-
-    SYSTEM_PROMPT = (
-        "You are Open Interpreter, a world-class programmer that can complete any task by executing code. "
-        "You are in a sandboxed environment. You can only read/write files in the './workspace' directory. "
-        "When you are done, respond with a summary of what you have done."
-    )
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
+        # The constructor is now clean and has no side effects.
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
-    def _perform_pre_flight_checks(self) -> bool:
-        """Checks if the 'open-interpreter' package is installed."""
+    def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        """
+        Generates and executes code based on the user's request.
+        """
+        # --- Lazy Load and Configure the Interpreter ---
+        # By importing here, we contain all side effects (network calls, etc.)
+        # to the execution phase of this specialist only.
         try:
-            import interpreter
-            logger.info("'open-interpreter' package found. OpenInterpreterSpecialist is enabled.")
-            return True
+            from interpreter import interpreter
+            # Configure the interpreter instance just-in-time.
+            interpreter.auto_run = True
+            interpreter.llm.model = ""
+            interpreter.llm.api_key = "none"
+            interpreter.llm.api_base = "none"
         except ImportError:
             logger.error(
                 "The 'open-interpreter' package is not installed. "
-                "OpenInterpreterSpecialist will be disabled. "
-                "Please install it by adding 'open-interpreter' to your pyproject.toml "
-                "and running './scripts/sync-reqs.sh'."
+                "Please add 'open-interpreter' to pyproject.toml and run './scripts/sync-reqs.sh'."
             )
-            return False
+            return {"error": "Required package 'open-interpreter' is not installed."}
 
-    def _execute_logic(self, state: dict) -> Dict[str, Any]:
         if not self.llm_adapter:
-            # This error will trigger if the specialist is not bound to an LLM provider
-            # in user_settings.yaml, as it requires an LLM to function.
-            raise RuntimeError("OpenInterpreterSpecialist requires an LLM adapter. Ensure it is bound to a provider in user_settings.yaml.")
+            raise RuntimeError(
+                "OpenInterpreterSpecialist requires an LLM adapter to generate code. "
+                "Ensure it is bound to a provider in user_settings.yaml."
+            )
 
-        # Find the last human message to use as the prompt. This is more robust
-        # than just taking the last message, which is often a routing message
-        # from the RouterSpecialist.
         messages = state.get("messages", [])
+        
         last_human_message_content = next(
             (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
-            None
+            "No specific user instruction found. Review the conversation history and decide on the next code action."
         )
 
-        if not last_human_message_content:
-            logger.warning("OpenInterpreterSpecialist could not find a human message to execute. Skipping.")
-            ai_message = AIMessage(
-                content="I was asked to run, but I could not find a specific command from the user to execute. Please provide a clear instruction.",
-                name=self.specialist_name
-            )
-            return {"messages": [ai_message]}
-
-        # --- Configure litellm for local model usage ---
-        # Disable cost logging to prevent noisy errors for unmapped local models.
-        litellm.disable_cost_logging = True
-
-        # --- Configure the interpreter singleton for this execution ---
-        # The open-interpreter library uses a global singleton. We must configure it
-        # before each use to ensure it has the correct settings from our adapter.
-        model_string = self.llm_adapter.model_name
-        if isinstance(self.llm_adapter, LMStudioAdapter):
-            model_string = f"openai/{self.llm_adapter.model_name}"
-
-        interpreter.llm.model = model_string
-        interpreter.llm.api_base = self.llm_adapter.api_base
-        interpreter.llm.api_key = self.llm_adapter.api_key
-        interpreter.llm.tool_choice = {"type": "function", "function": {"name": "execute"}}
-        interpreter.system_message = self.SYSTEM_PROMPT
-        interpreter.auto_run = True
-        interpreter.messages = []  # Reset history for each run
-
-        logger.info(f"Executing prompt with Open Interpreter: {last_human_message_content[:100]}...")
-        response_messages = interpreter.chat(
-            last_human_message_content,
-            display=False,
-            stream=False,
+        # --- Phase 1: Plan the Code to Execute ---
+        logger.info("Phase 1: Generating code execution plan...")
+        planning_prompt = (
+            "Based on the following user request and conversation history, your task is to generate a single, "
+            "self-contained code block to be executed by the open-interpreter. "
+            "You must respond by calling the 'CodeExecutionParams' tool.\n\n"
+            f"USER REQUEST: {last_human_message_content}"
         )
+        
+        request = StandardizedLLMRequest(
+            messages=messages + [HumanMessage(content=planning_prompt)],
+            tools=[CodeExecutionParams]
+        )
+        
+        response_data = self.llm_adapter.invoke(request)
+        tool_calls = response_data.get("tool_calls", [])
 
-        # --- Intelligent Parsing of Open Interpreter's Output ---
-        computer_outputs = [m['content'] for m in response_messages if m.get('role') == 'computer' and m.get('type') == 'output']
+        if not tool_calls or not tool_calls[0].get('args'):
+            logger.error("LLM failed to generate a valid code execution plan. Aborting.")
+            return {"error": "OpenInterpreterSpecialist's LLM failed to produce a valid code plan."}
 
-        if computer_outputs:
-            final_output = "\n".join(computer_outputs)
-        else:
-            assistant_summaries = [m['content'] for m in response_messages if m.get('role') == 'assistant' and m.get('type') == 'message']
-            if assistant_summaries:
-                final_output = "\n".join(assistant_summaries)
-            else:
-                assistant_content = [m['content'] for m in response_messages if m.get('role') == 'assistant']
-                final_output = "\n".join(assistant_content) if assistant_content else "Task completed with no user-facing output."
+        try:
+            code_params = CodeExecutionParams(**tool_calls[0]['args'])
+        except Exception as e:
+            logger.error(f"Failed to parse LLM tool call into CodeExecutionParams: {e}", exc_info=True)
+            return {"error": f"Failed to parse code plan: {e}"}
 
-        logger.info(f"Open Interpreter finished execution. Parsed Output: {final_output[:200]}...")
+        logger.info(f"Phase 1 Complete. Plan: execute '{code_params.language}' code.")
+
+        # --- Phase 2: Execute the Code ---
+        logger.info(f"Phase 2: Executing code...\n---\n{code_params.code}\n---")
+        
+        interpreter.messages = []
+        interpreter.run(code_params.code, language=code_params.language)
+        
+        outputs = [
+            msg.get('content', '') for msg in interpreter.messages 
+            if msg.get('role') == 'computer' and msg.get('type') == 'output'
+        ]
+        final_output = "\n".join(outputs) if outputs else "Code executed with no output."
+        
+        logger.info(f"Phase 2 Complete. Execution output: {final_output[:500]}...")
+
+        # --- Create a Standardized Response ---
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content=final_output,
+            content=f"I have executed the following {code_params.language} code:\n\n```\n{code_params.code}\n```\n\n**Result:**\n{final_output}",
         )
+        
         return {"messages": [ai_message], "task_is_complete": True}

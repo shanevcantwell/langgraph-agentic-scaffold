@@ -59,3 +59,9 @@ class AnalysisResult(BaseModel):
 class Sentiment(BaseModel):
     """A Pydantic model for sentiment classification."""
     sentiment: str = Field(..., description="The sentiment of the text, e.g., 'positive', 'negative', 'neutral'.")
+
+class CodeExecutionParams(BaseModel):
+    """Parameters for executing a block of code."""
+    language: str = Field(..., description="The programming language of the code to execute (e.g., 'python', 'bash').")
+    code: str = Field(..., description="The block of code to execute.")
+
