@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, List
 
 from .base import BaseSpecialist
-from .helpers import create_llm_message, create_missing_artifact_response
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import WebContent
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -14,26 +14,13 @@ class WebBuilder(BaseSpecialist):
     A specialist that generates a self-contained HTML document based on a
     system_plan artifact in the state.
     """
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name=specialist_name)
-        logger.info("---INITIALIZED WebBuilder---")
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
+        logger.info(f"---INITIALIZED {self.specialist_name}---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         system_plan = state.get("system_plan")
-        if not system_plan:
-            raise ValueError("WebBuilder Error: 'system_plan' not found in state.")
-
         text_to_process = state.get("text_to_process")
-        if not text_to_process:
-            # This is a critical piece of context for this task.
-            # If it's missing, the LLM will likely hallucinate or fail.
-            # It's better to fail fast with a clear error and self-correct.
-            return create_missing_artifact_response(
-                specialist_name=self.specialist_name,
-                required_artifact="text_to_process (e.g., from README.md)",
-                recommended_specialist="file_specialist",
-                guidance="Please read the 'README.md' file from the root directory to provide context for building the web page."
-            )
 
         # --- Refinement Loop Control ---
         refinement_cycles = system_plan.get("refinement_cycles", 1)

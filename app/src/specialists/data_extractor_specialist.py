@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from .base import BaseSpecialist
-from .helpers import create_missing_artifact_response, create_llm_message
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import ExtractedData
 
@@ -20,13 +20,6 @@ class DataExtractorSpecialist(BaseSpecialist):
         messages: List[BaseMessage] = state["messages"][:]
         text_to_process = state.get("text_to_process")
 
-        if not text_to_process:
-            return create_missing_artifact_response(
-                specialist_name=self.specialist_name,
-                required_artifact="text_to_process",
-                recommended_specialist="file_specialist"
-            )
-            
         # The specialist's system prompt (loaded at init) should already instruct it
         # to extract data from text provided in the user message. We will construct a new
         # message list that includes the text to be processed as a new user turn.

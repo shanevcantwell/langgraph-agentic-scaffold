@@ -16,8 +16,8 @@ class ArchiverSpecialist(BaseSpecialist):
     A procedural specialist that creates a final summary report of the agentic run.
     It gathers all artifacts and conversation history into a single markdown file.
     """
-    def __init__(self, specialist_name: str):
-        super().__init__(specialist_name)
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
         # This is a procedural specialist, so no LLM adapter is needed.
         if os.environ.get("AGENTIC_SCAFFOLD_ARCHIVER_ENABLED", "true").lower() == "false":
             self.is_enabled = False
@@ -26,7 +26,7 @@ class ArchiverSpecialist(BaseSpecialist):
         # 2. Specialist configuration in config.yaml (archive_path) for project-level settings.
         # 3. A hardcoded default ('./archives') as a fallback.
         env_path = os.environ.get("AGENTIC_SCAFFOLD_ARCHIVE_PATH")
-        config_path = self.specialist_config.get("archive_path") if self.specialist_config else None
+        config_path = self.specialist_config.get("archive_path")
         default_path = "./archives"
         self.archive_dir_path = env_path or config_path or default_path
 

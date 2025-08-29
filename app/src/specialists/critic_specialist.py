@@ -4,7 +4,7 @@ from typing import Dict, Any, List
 
 import jmespath
 from .base import BaseSpecialist
-from .helpers import create_missing_artifact_response, create_llm_message
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import Critique
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -24,12 +24,6 @@ class CriticSpecialist(BaseSpecialist):
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         logger.info("Executing CriticSpecialist logic.")
         html_artifact = state.get("html_artifact")
-        if not html_artifact:
-            return create_missing_artifact_response(
-                specialist_name=self.specialist_name,
-                required_artifact="html_artifact",
-                recommended_specialist="web_builder"
-            )
 
         messages: List[BaseMessage] = state["messages"]
         contextual_messages = messages[:]

@@ -5,7 +5,7 @@ from typing import Dict, Any, List
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from .base import BaseSpecialist
-from .helpers import create_missing_artifact_response, create_llm_message
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import AnalysisResult
 
@@ -20,17 +20,6 @@ class TextAnalysisSpecialist(BaseSpecialist):
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         messages: List[BaseMessage] = state["messages"]
         text_to_process = state.get("text_to_process")
-
-        if not text_to_process:
-            return create_missing_artifact_response(
-                specialist_name=self.specialist_name,
-                required_artifact="text_to_process",
-                recommended_specialist="file_specialist"
-            )
-            return {
-                "messages": [ai_message],
-                "recommended_specialists": ["file_specialist"]
-            }
 
         # The specialist's system prompt (loaded at init) should already instruct it
         # to analyze text provided in the user message. We will construct a new

@@ -17,9 +17,6 @@ class DataProcessorSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         json_artifact = state.get("json_artifact")
-        if not json_artifact:
-            raise ValueError("DataProcessor Error: 'json_artifact' not found in state.")
-
         if isinstance(json_artifact, str):
             data = json.loads(json_artifact)
         else:

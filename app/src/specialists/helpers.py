@@ -1,55 +1,51 @@
 # app/src/specialists/helpers.py
-import logging
 from typing import Dict, Any, Optional
+
 from langchain_core.messages import AIMessage
 from ..llm.adapter import BaseAdapter
 
-logger = logging.getLogger(__name__)
-
-def create_missing_artifact_response(
-    specialist_name: str,
-    required_artifact: str,
-    recommended_specialist: str,
-    guidance: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Creates a standardized "self-correction" response when a required artifact is missing.
-
-    This helper function generates a log message, a user-facing AIMessage, and a
-    recommendation for the router, making the agent more robust.
-    """
-    error_message = (
-        f"I am the {specialist_name}. I cannot run because the required artifact "
-        f"'{required_artifact}' is missing from the state. I am suggesting that the "
-        f"'{recommended_specialist}' should run to create it."
-    )
-    if guidance:
-        error_message += f" {guidance}"
-    logger.warning(f"{specialist_name} was called without '{required_artifact}'. Suggesting {recommended_specialist}.")
-
-    ai_message = AIMessage(content=error_message, name=specialist_name)
-
-    return {
-        "messages": [ai_message],
-        "recommended_specialists": [recommended_specialist]
-    }
 
 def create_llm_message(
     specialist_name: str,
     llm_adapter: Optional[BaseAdapter],
     content: str,
-    additional_kwargs: Optional[Dict[str, Any]] = None
+    additional_kwargs: Optional[Dict[str, Any]] = None,
 ) -> AIMessage:
-    """
-    Creates a standardized AIMessage from an LLM-based specialist, automatically
-    including the model name for traceability in the final report.
-    """
+    """Creates a standardized AIMessage with metadata about the LLM used."""
+    # Initialize with any provided kwargs to support flexible metadata.
     final_kwargs = additional_kwargs.copy() if additional_kwargs else {}
-    
-    llm_name = llm_adapter.model_name if llm_adapter and hasattr(llm_adapter, 'model_name') else None
-    if llm_name:
-        final_kwargs["llm_name"] = llm_name
-        
+
+    model_name = "unknown_model"
+    if llm_adapter:
+        # Correctly access the model_name property instead of a method.
+        model_name = llm_adapter.model_name
+
+    # Add the llm_name, which is a standard piece of metadata we want on all messages.
+    final_kwargs.setdefault("llm_name", model_name)
+
     return AIMessage(
-        content=content, name=specialist_name, additional_kwargs=final_kwargs
+        content=content,
+        name=specialist_name,
+        additional_kwargs=final_kwargs,
     )
+
+
+def create_missing_artifact_response(
+    specialist_name: str,
+    missing_artifact: str,
+    recommended_specialist: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Creates a standardized response when a required artifact is missing from the state.
+
+    This response is designed to be interpreted by the Router, which can then
+    use the recommendation to self-correct the workflow.
+    """
+    ai_message_content = f"I, {specialist_name}, cannot execute. The required artifact '{missing_artifact}' is missing from the current state. The workflow must be re-routed to a specialist capable of generating this artifact before I can proceed."
+    ai_message = AIMessage(content=ai_message_content, name=specialist_name)
+
+    response = {"messages": [ai_message]}
+    if recommended_specialist:
+        response["recommended_specialists"] = [recommended_specialist]
+
+    return response
