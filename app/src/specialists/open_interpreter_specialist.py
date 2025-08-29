@@ -1,12 +1,14 @@
 # app/src/specialists/open_interpreter_specialist.py
 
 import logging
-from typing import Dict, Any, Optional
-
+from typing import Dict, Any
+# Import litellm to configure it directly
+import litellm
 from interpreter import interpreter
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
+from ..llm.lmstudio_adapter import LMStudioAdapter
 
 logger = logging.getLogger(__name__)
 
@@ -17,62 +19,15 @@ class OpenInterpreterSpecialist(BaseSpecialist):
     It is configured via the `external_llm_provider_binding` in config.yaml.
     """
 
+    SYSTEM_PROMPT = (
+        "You are Open Interpreter, a world-class programmer that can complete any task by executing code. "
+        "You are in a sandboxed environment. You can only read/write files in the './workspace' directory. "
+        "When you are done, respond with a summary of what you have done."
+    )
+
     def __init__(self, specialist_name: str):
         super().__init__(specialist_name)
-        # The specialist_config will be injected by the ChiefOfStaff after initialization.
-        # We use a property setter to trigger configuration when the config is assigned.
-        self._specialist_config: Optional[Dict[str, Any]] = None
-        # This will be injected by the ChiefOfStaff before specialist_config is set.
-        self.external_provider_config: Optional[Dict[str, Any]] = None
-
-    @property
-    def specialist_config(self) -> Optional[Dict[str, Any]]:
-        """Gets the specialist configuration."""
-        return self._specialist_config
-
-    @specialist_config.setter
-    def specialist_config(self, config: Dict[str, Any]):
-        """
-        Sets the specialist configuration and triggers the interpreter setup.
-        This method is called by the ChiefOfStaff during its loading process.
-        """
-        self._specialist_config = config
-        self._configure_interpreter()
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
-
-    def _configure_interpreter(self):
-        """Configures the open-interpreter singleton based on the specialist's config."""
-        if not self.specialist_config:
-            logger.warning("Cannot configure OpenInterpreter: specialist_config is not set.")
-            return
-
-        binding_key = self.specialist_config.get("external_llm_provider_binding")
-        if not self.external_provider_config:
-            # This case should be prevented by the ChiefOfStaff's loading logic.
-            raise ValueError(
-                f"OpenInterpreterSpecialist has binding '{binding_key}' but "
-                "its external_provider_config was not injected."
-            )
-        
-        provider_config = self.external_provider_config
-
-        # Configure interpreter based on provider type
-        interpreter.auto_run = True
-        interpreter.model = provider_config.get("api_identifier")
-        
-        provider_type = provider_config.get("type")
-        if provider_type == "lmstudio" or provider_type == "ollama":
-            interpreter.api_base = provider_config.get("base_url")
-            interpreter.api_key = "lm-studio"  # Can be any non-empty string
-        elif provider_type == "gemini":
-            interpreter.api_key = provider_config.get("api_key")
-        
-        interpreter.system_message = (
-            "You are Open Interpreter, a world-class programmer that can complete any task by executing code. "
-            "You are in a sandboxed environment. You can only read/write files in the './workspace' directory. "
-            "When you are done, respond with a summary of what you have done."
-        )
-        logger.info(f"OpenInterpreter configured to use LLM provider: {binding_key}")
 
     def _perform_pre_flight_checks(self) -> bool:
         """Checks if the 'open-interpreter' package is installed."""
@@ -90,15 +45,89 @@ class OpenInterpreterSpecialist(BaseSpecialist):
             return False
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        if not self.specialist_config:
-            raise RuntimeError("OpenInterpreterSpecialist cannot execute without being configured.")
+        if not self.llm_adapter:
+            raise RuntimeError(
+                "OpenInterpreterSpecialist requires an LLM adapter. "
+                "Ensure 'external_llm_provider_binding' is set in config.yaml."
+            )
 
-        last_message = state["messages"][-1].content
-        interpreter.messages = []
-        logger.info(f"Executing prompt with Open Interpreter: {last_message[:100]}...")
-        response_messages = interpreter.chat(last_message, display=False, stream=False)
-        assistant_responses = [m['content'] for m in response_messages if m['role'] == 'assistant']
-        final_output = "\n".join(assistant_responses) if assistant_responses else "Task completed with no output."
-        logger.info(f"Open Interpreter finished execution. Output: {final_output[:200]}...")
+        # Find the last human message to use as the prompt. This is more robust
+        # than just taking the last message, which is often a routing message
+        # from the RouterSpecialist.
+        messages = state.get("messages", [])
+        last_human_message_content = next(
+            (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
+            None
+        )
+
+        if not last_human_message_content:
+            logger.warning("OpenInterpreterSpecialist could not find a human message to execute. Skipping.")
+            ai_message = AIMessage(
+                content="I was asked to run, but I could not find a specific command from the user to execute. Please provide a clear instruction.",
+                name=self.specialist_name
+            )
+            return {"messages": [ai_message]}
+
+        # --- Configure litellm for local model usage ---
+        # Disable cost logging to prevent noisy errors for unmapped local models.
+        litellm.disable_cost_logging = True
+
+        # --- Configure the interpreter singleton for this execution ---
+        # The open-interpreter library uses a global singleton. We must configure it
+        # before each use to ensure it has the correct settings from our adapter.
+        # The logic for constructing the model string for litellm is now contained
+        # here, based on the type of the adapter, which is much cleaner than
+        # checking the provider type from the config.
+        model_string = self.llm_adapter.model_name
+        if isinstance(self.llm_adapter, LMStudioAdapter):
+            model_string = f"openai/{self.llm_adapter.model_name}"
+
+        # The open-interpreter library nests its LLM configuration under the 'llm' attribute.
+        # We must set the model, api_base, and api_key on this nested object for the
+        # settings to be recognized by the `chat` method.
+        interpreter.llm.model = model_string
+        interpreter.llm.api_base = self.llm_adapter.api_base
+        interpreter.llm.api_key = self.llm_adapter.api_key
+        # Force the model to use the 'execute' tool by name. This is a more specific
+        # and robust way to "lock down" the specialist than simply using "required".
+        # It prevents the model from trying to call a non-existent tool, mirroring
+        # the more advanced patterns seen in the system's adapters.
+        interpreter.llm.tool_choice = {"type": "function", "function": {"name": "execute"}}
+        interpreter.system_message = self.SYSTEM_PROMPT
+        interpreter.auto_run = True
+        interpreter.messages = []  # Reset history for each run
+
+        logger.info(f"Executing prompt with Open Interpreter: {last_human_message_content[:100]}...")
+        # The chat method does not accept configuration arguments; they must be set on the singleton.
+        response_messages = interpreter.chat(
+            last_human_message_content,
+            display=False,
+            stream=False,
+        )
+
+        # --- Intelligent Parsing of Open Interpreter's Output ---
+        # The 'open-interpreter' library returns a rich transcript. We need to parse it
+        # to find the most useful information for the user, which is typically the
+        # output from the code execution, not the code itself or conversational filler.
+
+        # Look for the output from the 'computer' role, which contains stdout/stderr.
+        computer_outputs = [m['content'] for m in response_messages if m.get('role') == 'computer' and m.get('type') == 'output']
+
+        # If there's direct output, use that as the primary response.
+        if computer_outputs:
+            final_output = "\n".join(computer_outputs)
+        else:
+            # If there's no direct computer output, fall back to the assistant's
+            # final summary message. This handles cases where the model summarizes
+            # its actions without direct code output.
+            assistant_summaries = [m['content'] for m in response_messages if m.get('role') == 'assistant' and m.get('type') == 'message']
+            if assistant_summaries:
+                final_output = "\n".join(assistant_summaries)
+            else:
+                # As a last resort, join all assistant content. This was the previous behavior.
+                assistant_content = [m['content'] for m in response_messages if m.get('role') == 'assistant']
+                final_output = "\n".join(assistant_content) if assistant_content else "Task completed with no user-facing output."
+
+        logger.info(f"Open Interpreter finished execution. Parsed Output: {final_output[:200]}...")
         ai_message = AIMessage(content=final_output, name=self.specialist_name)
         return {"messages": [ai_message]}

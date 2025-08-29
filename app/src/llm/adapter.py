@@ -18,6 +18,18 @@ class BaseAdapter(ABC):
         self.config = model_config
         self.model_name: Optional[str] = model_config.get("api_identifier")
 
+    @property
+    @abstractmethod
+    def api_base(self) -> Optional[str]:
+        """The base URL for the API, if applicable."""
+        pass
+
+    @property
+    @abstractmethod
+    def api_key(self) -> Optional[str]:
+        """The API key for the provider, if applicable."""
+        pass
+
     @abstractmethod
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         pass

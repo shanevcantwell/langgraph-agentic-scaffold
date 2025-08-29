@@ -70,42 +70,30 @@ class ChiefOfStaff:
                     )
                     continue
 
-                # If the specialist needs an external LLM, inject that provider's config
-                # BEFORE setting the main specialist_config, as the latter may trigger configuration logic.
-                if binding_key := config.get("external_llm_provider_binding"):
-                    provider_config = self.config.get("llm_providers", {}).get(binding_key)
-                    if not provider_config:
-                        # Fail fast if the binding is specified but not found.
-                        raise ValueError(f"LLM provider '{binding_key}' for specialist '{name}' not found in config.")
-                    
-                    # Use hasattr for loose coupling, allowing specialists to opt-in to this injection.
-                    if hasattr(instance, "external_provider_config"):
-                        instance.external_provider_config = provider_config
-                    else:
-                        logger.warning(
-                            f"Specialist '{name}' has 'external_llm_provider_binding' but no "
-                            f"'external_provider_config' property. The binding will be ignored."
-                        )
-
                 # Inject the main configuration via property setter. This decouples specialists
                 # from ConfigLoader and may trigger initialization logic within the specialist.
                 instance.specialist_config = config
                 if not instance.is_enabled:
                     logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")
                     continue
-
-                # The ChiefOfStaff is now responsible for creating and assigning the adapter.
-                if config.get("type") == "llm":
-                    # Defer adapter creation for special cases to their dedicated methods.
+                
+                # --- Adapter Creation ---
+                # Any specialist that needs an LLM, regardless of type, gets an adapter.
+                # The presence of a binding key is the trigger.
+                binding_key = config.get("llm_config") or config.get("external_llm_provider_binding")
+                if binding_key:
+                    # Defer adapter creation for router/triage as they have complex, dynamic prompt construction.
                     if name in [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value]:
                         logger.info(f"Deferring adapter creation for '{name}' to its specialized configuration method.")
                     else:
-                        prompt_file = config.get("prompt_file")
-                        system_prompt = load_prompt(prompt_file) if prompt_file else ""
-                        instance.llm_adapter = self.adapter_factory.create_adapter(
-                            specialist_name=name,
-                            system_prompt=system_prompt
-                        )
+                        system_prompt = ""
+                        if prompt_file := config.get("prompt_file"):
+                            system_prompt = load_prompt(prompt_file)
+                        # Allow procedural specialists to define their own hardcoded prompt via a class attribute.
+                        elif hasattr(instance, 'SYSTEM_PROMPT'):
+                            system_prompt = getattr(instance, 'SYSTEM_PROMPT', "")
+                        
+                        instance.llm_adapter = self.adapter_factory.create_adapter(binding_key, system_prompt)
 
                 loaded_specialists[name] = instance
                 logger.info(f"Successfully instantiated specialist: {name}")
@@ -160,8 +148,9 @@ class ChiefOfStaff:
         
         # Create the adapter from scratch with the final, complete prompt.
         # This ensures the router gets the correct configuration and prompt in one step.
+        binding_key = router_config.get("llm_config")
         router_instance.llm_adapter = self.adapter_factory.create_adapter(
-            specialist_name=CoreSpecialist.ROUTER.value,
+            binding_key=binding_key,
             system_prompt=dynamic_system_prompt
         )
         logger.info("RouterSpecialist adapter created with dynamic, context-aware prompt.")
@@ -188,7 +177,7 @@ class ChiefOfStaff:
         
         dynamic_system_prompt = f"{base_prompt}\n\n--- AVAILABLE SPECIALISTS ---\nYou MUST choose one or more of the following specialists:\n{available_specialists_prompt}"
         triage_instance.llm_adapter = self.adapter_factory.create_adapter(
-            specialist_name=CoreSpecialist.TRIAGE.value,
+            binding_key=triage_config.get("llm_config"),
             system_prompt=dynamic_system_prompt
         )
         logger.info("Triage specialist adapter created with dynamic, context-aware prompt.")

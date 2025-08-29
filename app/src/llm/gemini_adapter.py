@@ -1,7 +1,7 @@
 # app/src/llm/gemini_adapter.py
 import logging
 import json
-from typing import Dict, Any
+from typing import Dict, Optional, Any
 
 import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class GeminiAdapter(BaseAdapter):
     def __init__(self, model_config: Dict[str, Any], api_key: str, system_prompt: str):
         super().__init__(model_config)
+        self._api_key = api_key
         genai.configure(api_key=api_key)
         # Initialize model WITHOUT system_instruction here, as we'll inject it into messages
         self.model = genai.GenerativeModel(
@@ -22,6 +23,15 @@ class GeminiAdapter(BaseAdapter):
         )
         self.static_system_prompt = system_prompt # Store the static system prompt
         logger.info(f"INITIALIZED GeminiAdapter (Model: {self.model_name})")
+
+    @property
+    def api_base(self) -> Optional[str]:
+        """Gemini does not use a custom base URL in this configuration."""
+        return None
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return self._api_key
 
     @retry(
         stop=stop_after_attempt(3),

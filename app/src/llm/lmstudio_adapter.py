@@ -30,7 +30,9 @@ class LMStudioAdapter(BaseAdapter):
                 "LMStudioAdapter requires a 'base_url'. "
                 "Please set the LMSTUDIO_BASE_URL environment variable in your .env file."
             )
-        self.client = OpenAI(base_url=base_url, api_key=os.getenv("LMSTUDIO_API_KEY", "not-needed"))
+        self._base_url = base_url
+        self._api_key = os.getenv("LMSTUDIO_API_KEY", "not-needed")
+        self.client = OpenAI(base_url=self._base_url, api_key=self._api_key)
         self.system_prompt = system_prompt
         if '/' in self.model_name or '\\' in self.model_name:
             logger.warning(
@@ -48,6 +50,14 @@ class LMStudioAdapter(BaseAdapter):
                     f"and context_window={self.context_window}. "
                     "Ensure this matches your LM Studio server setup."
                    )
+
+    @property
+    def api_base(self) -> Optional[str]:
+        return self._base_url
+
+    @property
+    def api_key(self) -> Optional[str]:
+        return self._api_key
 
     def _extract_json_from_response(self, text: str) -> Optional[Dict[str, Any]]:
         """
