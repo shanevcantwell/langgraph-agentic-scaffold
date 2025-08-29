@@ -207,11 +207,12 @@ This guide focuses on the second, more advanced use case.
 
 ### How it Works
 
-The key is a clean separation of concerns. The specialist class itself contains the integration logic, while the `config.yaml` file provides all the necessary configuration.
+The key is a clean separation of concerns. The specialist class itself contains the integration logic, while the configuration files define how it's wired into the system.
 
 1.  **Install the Library:** The external tool is installed as a standard Python dependency via `pip-tools`.
-2.  **Configure in `config.yaml`:** You register the specialist with `type: "procedural"`. If the specialist needs to call an LLM (as `open-interpreter` does), you add an `llm_config` key to bind it to a provider.
-3.  **Create the Specialist Class:** The specialist inherits from `BaseSpecialist`. The `ChiefOfStaff` will see the binding in the config and automatically create and inject a configured `llm_adapter` instance into the specialist.
+2.  **Define in `config.yaml`:** You register the specialist in the system blueprint with `type: "procedural"`.
+3.  **Bind in `user_settings.yaml` (If Needed):** If the procedural specialist needs an LLM (like `open-interpreter`), you bind it to a provider in your `user_settings.yaml`. This follows the system's 3-tier configuration philosophy, separating developer blueprints from user-level choices.
+4.  **Create the Specialist Class:** The specialist inherits from `BaseSpecialist`. The `ChiefOfStaff` will see the binding from the merged configuration and automatically create and inject a configured `llm_adapter` instance.
 4.  **Implement the Logic:** The specialist's `_execute_logic` method calls the external library directly.
 
 ### Example: Integrating `open-interpreter`

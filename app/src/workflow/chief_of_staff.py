@@ -80,7 +80,7 @@ class ChiefOfStaff:
                 # --- Adapter Creation ---
                 # Any specialist that needs an LLM, regardless of type, gets an adapter.
                 # The presence of a binding key is the trigger.
-                binding_key = config.get("llm_config") or config.get("external_llm_provider_binding")
+                binding_key = config.get("llm_config")
                 if binding_key:
                     # Defer adapter creation for router/triage as they have complex, dynamic prompt construction.
                     if name in [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value]:

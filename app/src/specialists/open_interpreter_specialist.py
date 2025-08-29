@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 class OpenInterpreterSpecialist(BaseSpecialist):
     """
     A procedural specialist that uses the open-interpreter library to execute code.
-    It is configured via the `external_llm_provider_binding` in config.yaml.
     """
 
     SYSTEM_PROMPT = (
@@ -49,7 +48,7 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         if not self.llm_adapter:
             raise RuntimeError(
                 "OpenInterpreterSpecialist requires an LLM adapter. "
-                "Ensure 'external_llm_provider_binding' is set in config.yaml."
+                "Ensure it is bound to an LLM provider in user_settings.yaml."
             )
 
         # Find the last human message to use as the prompt. This is more robust

@@ -149,9 +149,6 @@ specialists:
   open_interpreter_specialist:
     type: "procedural"
     description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
-    # This key tells the ChiefOfStaff to create an adapter for the 'lmstudio_router'
-    # provider and inject it into this specialist.
-    llm_config: "lmstudio_router"
 
   archiver_specialist:
     type: "procedural"

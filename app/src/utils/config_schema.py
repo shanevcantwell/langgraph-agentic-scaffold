@@ -57,10 +57,6 @@ class ProceduralSpecialistConfig(BaseSpecialistConfig):
     """Configuration for a specialist that executes deterministic Python code without an LLM."""
 
     type: Literal["procedural"]
-    external_llm_provider_binding: Optional[str] = Field(
-        None,
-        description="For procedural specialists that wrap an external library which requires its own LLM, this key binds it to an llm_provider from config.yaml."
-    )
 
 
 # A discriminated union to handle the different types of specialists.
