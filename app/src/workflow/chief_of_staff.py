@@ -87,9 +87,11 @@ class ChiefOfStaff:
                         if prompt_file := config.get("prompt_file"):
                             system_prompt = load_prompt(prompt_file)
                         # Allow procedural specialists to define their own hardcoded prompt via a class attribute.
-                        elif hasattr(instance, 'SYSTEM_PROMPT'):
-                            system_prompt = getattr(instance, 'SYSTEM_PROMPT', "")
-                        
+                        # This was the bug: it was an elif, but it should be a separate if.
+                        # A procedural specialist can have an llm_config binding AND a SYSTEM_PROMPT.
+                        if hasattr(instance, 'SYSTEM_PROMPT'):
+                            system_prompt = getattr(instance, 'SYSTEM_PROMPT', system_prompt)
+
                         instance.llm_adapter = self.adapter_factory.create_adapter(binding_key, system_prompt)
 
                 loaded_specialists[name] = instance
@@ -206,8 +208,9 @@ class ChiefOfStaff:
                         # Generate a standardized response to inform the router.
                         return create_missing_artifact_response(
                             specialist_name=specialist_name,
-                            missing_artifact=artifact,
-                            recommended_specialist=recommended_specialist,
+                            missing_artifacts=[artifact],
+                            # recommended_specialist=recommended_specialist,  # does not work
+                            recommended_specialists=[recommended_specialist] if recommended_specialist else [],
                         )
 
             try:

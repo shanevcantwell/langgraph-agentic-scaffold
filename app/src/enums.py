@@ -22,3 +22,5 @@ class CoreSpecialist(str, Enum):
     TRIAGE = "prompt_triage_specialist"
     ARCHIVER = "archiver_specialist"
     PROMPT = "prompt_specialist"
+    WEB_BUILDER = "web_builder"
+    SYSTEMS_ARCHITECT = "systems_architect"

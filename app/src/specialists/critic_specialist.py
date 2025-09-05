@@ -5,6 +5,7 @@ from typing import Dict, Any, List
 import jmespath
 from .base import BaseSpecialist
 from .helpers import create_llm_message
+from ..enums import CoreSpecialist
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import Critique
 from langchain_core.messages import BaseMessage, HumanMessage
@@ -92,15 +93,27 @@ class CriticSpecialist(BaseSpecialist):
                 critique_text_parts.append(f"**What Went Well:**\n{positive_points}")
             critique_text = "\n".join(critique_text_parts)
 
-        logger.info("Critique generated. Recommending WebBuilder for refinement.")
-
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content=f"Critique complete. Returning to the Web Builder for refinement.",
+            content="Critique complete. The plan will now be re-evaluated based on this feedback.",
         )
+
+        # --- Iteration Loop Logic ---
+        # If we are in a web builder refinement cycle, recommend returning to the
+        # Systems Architect to re-evaluate the plan based on the critique.
+        # This fulfills the user's request for an iterative planning loop.
+        if state.get("web_builder_iteration", 0) > 0:
+            logger.info("Critique is part of a refinement cycle. Recommending return to Systems Architect.")
+            return {
+                "messages": [ai_message],
+                "critique_artifact": critique_text,
+                "recommended_specialists": [CoreSpecialist.SYSTEMS_ARCHITECT.value],
+            }
+
+        logger.info("Critique generated. Recommending WebBuilder for refinement (default behavior).")
         return {
             "messages": [ai_message],
             "critique_artifact": critique_text,
-            "recommended_specialists": ["web_builder"]
+            "recommended_specialists": [CoreSpecialist.WEB_BUILDER.value],
         }
