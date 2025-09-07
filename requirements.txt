@@ -62,29 +62,31 @@ dnspython==2.7.0
     # via email-validator
 editor==1.6.6
     # via inquirer
-email-validator==2.2.0
+email-validator==2.3.0
     # via
     #   fastapi
     #   pydantic
 evdev==1.9.2
     # via pynput
-executing==2.2.0
+executing==2.2.1
     # via stack-data
 fastapi[all]==0.116.1
     # via langgraph-agentic-scaffold (pyproject.toml)
-fastapi-cli[standard]==0.0.8
+fastapi-cli[standard]==0.0.10
     # via fastapi
 fastapi-cloud-cli==0.1.5
     # via fastapi-cli
+fastuuid==0.12.0
+    # via litellm
 filelock==3.19.1
     # via huggingface-hub
-fonttools==4.59.1
+fonttools==4.59.2
     # via matplotlib
 frozenlist==1.7.0
     # via
     #   aiohttp
     #   aiosignal
-fsspec==2025.7.0
+fsspec==2025.9.0
     # via huggingface-hub
 git-python==1.0.3
     # via open-interpreter
@@ -99,7 +101,7 @@ google-api-core[grpc]==2.25.1
     #   google-ai-generativelanguage
     #   google-api-python-client
     #   google-generativeai
-google-api-python-client==2.179.0
+google-api-python-client==2.181.0
     # via google-generativeai
 google-auth==2.40.3
     # via
@@ -130,13 +132,13 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-hf-xet==1.1.8
+hf-xet==1.1.9
     # via huggingface-hub
 html2image==2.0.7
     # via open-interpreter
 httpcore==1.0.9
     # via httpx
-httplib2==0.22.0
+httplib2==0.30.0
     # via
     #   google-api-python-client
     #   google-auth-httplib2
@@ -167,7 +169,7 @@ inquirer==3.4.1
     # via open-interpreter
 ipykernel==6.30.1
     # via open-interpreter
-ipython==9.4.0
+ipython==9.5.0
     # via ipykernel
 ipython-pygments-lexers==1.1.1
     # via ipython
@@ -183,7 +185,7 @@ jiter==0.10.0
     # via openai
 jmespath==1.0.1
     # via langgraph-agentic-scaffold (pyproject.toml)
-joblib==1.5.1
+joblib==1.5.2
     # via nltk
 jsonpatch==1.33
     # via langchain-core
@@ -205,7 +207,7 @@ kiwisolver==1.4.9
     # via matplotlib
 langchain==0.3.27
     # via langgraph-agentic-scaffold (pyproject.toml)
-langchain-core==0.3.74
+langchain-core==0.3.75
     # via
     #   langchain
     #   langchain-openai
@@ -214,9 +216,9 @@ langchain-core==0.3.74
     #   langgraph-agentic-scaffold (pyproject.toml)
     #   langgraph-checkpoint
     #   langgraph-prebuilt
-langchain-openai==0.3.31
+langchain-openai==0.3.32
     # via langgraph-agentic-scaffold (pyproject.toml)
-langchain-text-splitters==0.3.9
+langchain-text-splitters==0.3.11
     # via langchain
 langgraph==0.6.6
     # via langgraph-agentic-scaffold (pyproject.toml)
@@ -226,19 +228,19 @@ langgraph-checkpoint==2.1.1
     #   langgraph-prebuilt
 langgraph-prebuilt==0.6.4
     # via langgraph
-langgraph-sdk==0.2.3
+langgraph-sdk==0.2.6
     # via langgraph
-langsmith==0.4.17
+langsmith==0.4.25
     # via
     #   langchain
     #   langchain-core
-litellm==1.76.0
+litellm==1.76.2
     # via open-interpreter
 markdown-it-py==4.0.0
     # via rich
 markupsafe==3.0.2
     # via jinja2
-matplotlib==3.10.5
+matplotlib==3.10.6
     # via open-interpreter
 matplotlib-inline==0.1.7
     # via
@@ -260,11 +262,11 @@ numpy==2.3.2
     #   matplotlib
 open-interpreter==0.3.7
     # via langgraph-agentic-scaffold (pyproject.toml)
-openai==1.101.0
+openai==1.106.1
     # via
     #   langchain-openai
     #   litellm
-orjson==3.11.2
+orjson==3.11.3
     # via
     #   fastapi
     #   langgraph-sdk
@@ -284,11 +286,11 @@ pexpect==4.9.0
     # via ipython
 pillow==11.3.0
     # via matplotlib
-platformdirs==4.3.8
+platformdirs==4.4.0
     # via
     #   jupyter-core
     #   open-interpreter
-prompt-toolkit==3.0.51
+prompt-toolkit==3.0.52
     # via ipython
 propcache==0.3.2
     # via
@@ -310,6 +312,8 @@ psutil==5.9.8
     # via
     #   ipykernel
     #   open-interpreter
+psycopg2-binary==2.9.10
+    # via langgraph-agentic-scaffold (pyproject.toml)
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
@@ -387,7 +391,7 @@ referencing==0.36.2
     # via
     #   jsonschema
     #   jsonschema-specifications
-regex==2025.7.34
+regex==2025.9.1
     # via
     #   nltk
     #   tiktoken
@@ -407,13 +411,13 @@ rich==13.9.4
     #   open-interpreter
     #   rich-toolkit
     #   typer
-rich-toolkit==0.15.0
+rich-toolkit==0.15.1
     # via
     #   fastapi-cli
     #   fastapi-cloud-cli
 rignore==0.6.4
     # via fastapi-cloud-cli
-rpds-py==0.27.0
+rpds-py==0.27.1
     # via
     #   jsonschema
     #   referencing
@@ -423,7 +427,7 @@ runs==1.2.2
     # via editor
 send2trash==1.8.3
     # via open-interpreter
-sentry-sdk==2.35.0
+sentry-sdk==2.37.0
     # via fastapi-cloud-cli
 shellingham==1.5.4
     # via typer
@@ -459,7 +463,7 @@ tiktoken==0.7.0
     #   litellm
     #   open-interpreter
     #   tokentrim
-tokenizers==0.21.4
+tokenizers==0.22.0
     # via litellm
 tokentrim==0.1.13
     # via open-interpreter
@@ -482,7 +486,7 @@ traitlets==5.14.3
     #   jupyter-client
     #   jupyter-core
     #   matplotlib-inline
-typer==0.16.1
+typer==0.17.4
     # via
     #   fastapi-cli
     #   fastapi-cloud-cli

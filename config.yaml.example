@@ -48,13 +48,13 @@ llm_providers:
   ollama:
     # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
     # Example: OLLAMA_BASE_URL=http://localhost:11434
-    type: "ollama"
+    type: "ollama"  # TODO: implement adapter
     api_identifier: "gemma3:27b" # The model name registered with Ollama.
     # Ollama uses different parameter names than OpenAI-compatible servers.
     parameters:
       # num_predict is Ollama's equivalent of max_tokens. It controls the
       # maximum number of tokens to generate in the response.
-      num_predict: 8192
+      num_predict: 4096
 
   # A configuration for a powerful, general-purpose Gemini model
   gemini_pro:

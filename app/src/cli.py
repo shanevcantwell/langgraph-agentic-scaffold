@@ -1,8 +1,10 @@
+# app/src/cli.py
 import typer
 import requests
 import json
 import sys
 from typing_extensions import Annotated
+from typing import Optional
 
 # The base URL for the running FastAPI application
 API_BASE_URL = "http://127.0.0.1:8000"
@@ -14,9 +16,9 @@ app = typer.Typer(
 
 @app.command()
 def invoke(
-    prompt: Annotated[str, typer.Argument(
-        help="The initial prompt to send to the agentic system."
-    )],
+    prompt: Annotated[Optional[str], typer.Argument(
+        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
+    )] = None,
     json_only: Annotated[bool, typer.Option(
         "--json-only",
         "-j",
@@ -25,10 +27,28 @@ def invoke(
 ):
     """
     Sends a prompt to the langgraph-agentic-scaffold API /v1/graph/invoke endpoint and prints the final response.
+    If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
     """
+    # --- MODIFICATION START ---
+    # If no prompt is passed as a command-line argument, read from standard input.
+    if prompt is None:
+        if not json_only:
+            print("▶️  Enter your multi-line prompt below. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter (Windows) when finished.")
+            print("---")
+        prompt = sys.stdin.read().strip()
+
+    if not prompt:
+        if not json_only:
+            print("❌ Error: Prompt is empty. No request sent.", file=sys.stderr)
+        sys.exit(1)
+    # --- MODIFICATION END ---
+
     invoke_url = f"{API_BASE_URL}/v1/graph/invoke"
     if not json_only:
-        print(f"▶️  Invoking agent via {invoke_url} with prompt: '{prompt}'")
+        # Truncate long prompts for cleaner display
+        display_prompt = (prompt[:150] + '...') if len(prompt) > 150 else prompt
+        print(f"▶️  Invoking agent via {invoke_url} with prompt: '{display_prompt}'")
+
 
     # The API expects a JSON payload matching the InvokeRequest Pydantic model.
     payload = {"input_prompt": prompt}
