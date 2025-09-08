@@ -4,6 +4,8 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from ..utils.errors import LLMInvocationError, SafetyFilterError, RateLimitError
 
+MAX_TOOL_CALLS = 10 # A reasonable upper limit for a single turn
+
 class StandardizedLLMRequest(BaseModel):
     """A provider-agnostic request object that captures the specialist's runtime intent."""
     messages: List[BaseMessage]

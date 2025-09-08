@@ -4,6 +4,36 @@ from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import Dict, Any
 from .workflow.runner import WorkflowRunner
+import atexit
+
+# --- ARCHITECTURAL MODIFICATION: LangSmith Graceful Shutdown ---
+# This hook is registered when the Uvicorn server process starts because it is at
+# the top level of this module. It ensures that any buffered traces are sent to
+# the LangSmith backend before the application process exits. This is the correct
+# location for this hook, as it needs to live within the same process as the
+# LangGraph application itself.
+try:
+    from langsmith import get_run_tree_context
+    
+    def flush_traces():
+        # This check is important. If no run is active, we don't need to do anything.
+        run_tree = get_run_tree_context()
+        if run_tree is not None:
+            # Using logger for consistency with application logging
+            logger.info("--- Flushing LangSmith traces before exit ---")
+            run_tree.post()
+            logger.info("--- LangSmith trace flush complete ---")
+
+    atexit.register(flush_traces)
+    # Use a print statement here because the logger might not be configured yet
+    # during the initial module import.
+    print("✅ LangSmith graceful shutdown hook registered.")
+
+except ImportError:
+    print("⚠️ LangSmith SDK not found. Skipping graceful shutdown hook registration.")
+    pass
+# --- End of Shutdown Hook ---
+
 
 # --- Application Bootstrap ---
 # Environment variables are now loaded by the startup script (e.g., server.py)

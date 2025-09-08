@@ -27,9 +27,11 @@ llm_providers:
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
     api_identifier: "router-gpt-oss-20b" # The model identifier for the server.
+    # api_identifier: "lfm2-vl-1.6b" # The model identifier for the server.
+
     # The model's total context window (input + output). This value is used by the llm
     # adapter to proactively prune the conversation history to prevent context overflow errors.
-    context_window: 8192
+    context_window: 32768
 
   lmstudio_specialist:
     # Uses the LMSTUDIO_BASE_URL from your .env file
