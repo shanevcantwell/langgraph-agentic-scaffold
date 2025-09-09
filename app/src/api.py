@@ -1,5 +1,6 @@
 # app/src/api.py
 import logging
+import time  # ADD: Import the time module
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
@@ -41,18 +42,22 @@ def startup_event_handler():
 @app.on_event("shutdown")
 def shutdown_event_handler():
     """
-    Handles graceful shutdown by explicitly calling the LangSmith client's
-    shutdown method. This is a blocking call that ensures all buffered traces
-    are sent before the application exits.
+    Handles graceful shutdown by introducing a small delay. This allows the
+    LangSmith client's background thread sufficient time to send any buffered
+    traces before the application process exits.
     """
     global langsmith_client
     if langsmith_client:
         try:
-            logger.info("--- FastAPI shutdown: Flushing LangSmith traces ---")
-            langsmith_client.shutdown()
-            logger.info("--- LangSmith trace flush complete ---")
+            # REMOVE: The erroneous call to a non-existent method.
+            # langsmith_client.shutdown()
+
+            # ADD: A pragmatic delay to allow background I/O to complete.
+            logger.info("--- FastAPI shutdown: Allowing time for LangSmith trace flush... ---")
+            time.sleep(2) # A 2-second delay is generally sufficient.
+            logger.info("--- LangSmith grace period complete. ---")
         except Exception as e:
-            logger.error(f"Error during LangSmith trace flush on shutdown: {e}", exc_info=True)
+            logger.error(f"Error during LangSmith grace period on shutdown: {e}", exc_info=True)
 # --- MODIFICATION END ---
 
 
