@@ -1,4 +1,4 @@
-# src/workflow/chief_of_staff.py
+# app/src/workflow/chief_of_staff.py
 import logging
 import traceback
 from typing import Dict, Any
@@ -271,10 +271,12 @@ class ChiefOfStaff:
         for name in self.specialists:
             if name == router_name:
                 continue  # Don't add an edge from the router to itself.
-            if name == CoreSpecialist.ARCHIVER.value:
-                workflow.add_edge(name, END)  # The archiver is a terminal node.
-            else:
-                workflow.add_edge(name, router_name)  # All other specialists loop back to the router.
+            # --- MODIFICATION START: Centralized, Explicit Control ---
+            # The Archiver is no longer a terminal node. It must return to the router
+            # so the router can see the 'archive_report' and make the final decision to END.
+            # This implements the "Centralized, Explicit Control" principle.
+            workflow.add_edge(name, router_name)
+            # --- MODIFICATION END ---
 
     def _build_graph(self) -> StateGraph:
         """

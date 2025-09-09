@@ -1,4 +1,4 @@
-# src/specialists/router_specialist.py
+# app/src/specialists/router_specialist.py
 import logging
 from typing import Dict, Any, List, Optional
 from langgraph.graph import END
@@ -73,10 +73,6 @@ class RouterSpecialist(BaseSpecialist):
             logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options + [END]}. Routing to END.")
             next_specialist_from_llm = END
         
-        if next_specialist_from_llm == END and CoreSpecialist.ARCHIVER.value in self.specialist_map:
-            logger.info("Router LLM chose to end. Rerouting to ArchiverSpecialist for final report.")
-            next_specialist_from_llm = CoreSpecialist.ARCHIVER.value
-        
         content = f"Routing to specialist: {next_specialist_from_llm}"
         return {"next_specialist": next_specialist_from_llm, "tool_calls": tool_calls, "content": content}
 
@@ -88,20 +84,29 @@ class RouterSpecialist(BaseSpecialist):
         routing_type = ""
         content = ""
         tool_calls = []
-        update = {}
+        
+        # --- MODIFICATION START: Two-Stage Termination Pattern ---
+        # This is the new, prioritized decision tree for routing.
+        
+        # Priority 1: A detailed error report means the workflow has failed catastrophically. Terminate immediately.
+        if state.get("error_report"):
+            routing_type = "fatal_error_signal"
+            content = "A critical error occurred. See error_report for details. Terminating workflow."
+            next_specialist_name = END
 
-        # The router's decision logic is now a clear, prioritized if/elif/else block.
-        # This makes the flow of control much easier to follow and maintain.
-        if error_message := state.get("error"):
-            routing_type = "error_signal"
-            content = f"An error occurred: {error_message}. Routing to ArchiverSpecialist for final report."
+        # Priority 2: The presence of an 'archive_report' is the definitive signal that the workflow is complete.
+        elif state.get("archive_report"):
+            routing_type = "final_report_signal"
+            content = "Archive report generated. Workflow complete."
+            next_specialist_name = END
+
+        # Priority 3: A simple error or a task completion flag triggers the archival process (Stage 1).
+        elif state.get("error") or state.get("task_is_complete", False):
+            routing_type = "completion_signal" if state.get("task_is_complete") else "error_signal"
+            content = "Task is complete or an error occurred. Routing to ArchiverSpecialist for final report."
             next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
 
-        elif state.get("task_is_complete", False):
-            routing_type = "completion_signal"
-            content = "Task is complete. Routing to ArchiverSpecialist for final report."
-            next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
-
+        # Priority 4: A recommendation from Triage or another specialist is a strong hint.
         elif recommended := state.get("recommended_specialists"):
             if len(recommended) == 1 and recommended[0] in self.specialist_map:
                 routing_type = "recommendation"
@@ -114,13 +119,15 @@ class RouterSpecialist(BaseSpecialist):
                 next_specialist_name = llm_decision["next_specialist"]
                 content = llm_decision["content"]
                 tool_calls = llm_decision.get("tool_calls", [])
+        
+        # Priority 5: Default to LLM-based routing if no other signals are present.
         else:
-            # Default to LLM-based routing if no other signals are present.
             llm_decision = self._get_llm_choice(state)
             routing_type = "llm_decision"
             next_specialist_name = llm_decision["next_specialist"]
             content = llm_decision["content"]
             tool_calls = llm_decision.get("tool_calls", [])
+        # --- MODIFICATION END ---
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
@@ -133,14 +140,13 @@ class RouterSpecialist(BaseSpecialist):
             },
         )
 
-        logger.info(f"Router decision: Routing to {next_specialist_name}")
+        logger.info(f"Router decision: Routing to {next_specialist_name} (Type: {routing_type})")
 
         # By centralizing the state update here, we ensure consistency across all routing paths.
-        update.update({
+        return {
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
             "recommended_specialists": None, # Always consume recommendations after the router has run.
             "routing_history": [next_specialist_name]
-        })
-        return update
+        }

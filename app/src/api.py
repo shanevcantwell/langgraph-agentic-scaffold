@@ -2,50 +2,78 @@
 import logging
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .workflow.runner import WorkflowRunner
+
+# --- MODIFICATION START: Framework-Native Lifecycle Management ---
+# Import the LangSmith client and create a global handle for it.
+# This handle will be initialized during the FastAPI startup event.
+from langsmith import Client
+langsmith_client: Optional[Client] = None
+# --- MODIFICATION END ---
 
 # --- Application Bootstrap ---
 logger = logging.getLogger(__name__)
 
-# --- ARCHITECTURAL MODIFICATION: Explicit Client Lifecycle Management ---
-_langsmith_client = None
-try:
-    from langsmith import Client
-    _langsmith_client = Client()
-    print("✅ LangSmith client initialized for graceful shutdown.")
-except ImportError:
-    print("⚠️ LangSmith SDK not found. Graceful shutdown hook is disabled.")
-# --- End of Modification ---
-
-
 # --- FastAPI Application ---
-app = FastAPI(...)
+app = FastAPI(
+    title="Agentic System API",
+    description="An API for interacting with the LangGraph-based multi-agent system.",
+    version="1.0.0"
+)
+
+# --- MODIFICATION START: Framework-Native Lifecycle Management ---
+@app.on_event("startup")
+def startup_event_handler():
+    """
+    Initializes the LangSmith client at application startup.
+    This ensures a single client instance is used throughout the application's lifecycle.
+    """
+    global langsmith_client
+    try:
+        # This will respect the environment variables (LANGCHAIN_TRACING_V2, etc.)
+        langsmith_client = Client()
+        logger.info("--- FastAPI startup: LangSmith client initialized successfully. ---")
+    except Exception as e:
+        logger.error(f"Failed to initialize LangSmith client on startup: {e}", exc_info=True)
+        langsmith_client = None
 
 @app.on_event("shutdown")
 def shutdown_event_handler():
-    logger.info("--- FastAPI shutdown event triggered. ---")
-    if _langsmith_client:
+    """
+    Handles graceful shutdown by explicitly calling the LangSmith client's
+    shutdown method. This is a blocking call that ensures all buffered traces
+    are sent before the application exits.
+    """
+    global langsmith_client
+    if langsmith_client:
         try:
-            logger.info("Attempting to shut down LangSmith client...")
-            # The shutdown method is designed to block until the background
-            # thread has finished uploading all buffered traces.
-            _langsmith_client.shutdown()
-            logger.info("LangSmith client shutdown complete.")
+            logger.info("--- FastAPI shutdown: Flushing LangSmith traces ---")
+            langsmith_client.shutdown()
+            logger.info("--- LangSmith trace flush complete ---")
         except Exception as e:
-            logger.error(f"Error during LangSmith client shutdown: {e}", exc_info=True)
-    else:
-        logger.info("No LangSmith client found. Skipping shutdown.")
+            logger.error(f"Error during LangSmith trace flush on shutdown: {e}", exc_info=True)
+# --- MODIFICATION END ---
 
-# --- Data Contracts & Workflow ---
+
+# --- Data Contracts ---
 class InvokeRequest(BaseModel):
-    input_prompt: str = Field(...)
+    input_prompt: str = Field(
+        ...,
+        description="The initial user prompt to send to the agentic graph.",
+        examples=["What is the capital of France?"]
+    )
 
 class InvokeResponse(BaseModel):
-    final_output: Dict[str, Any] = Field(...)
+    final_output: Dict[str, Any] = Field(
+        ...,
+        description="The final output from the graph's END state."
+    )
 
 workflow_runner = WorkflowRunner()
 
+
+# --- API Endpoints ---
 @app.get("/")
 def read_root():
     return {"status": "SpecialistHub API is running"}
