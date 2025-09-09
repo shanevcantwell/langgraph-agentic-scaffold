@@ -1,4 +1,5 @@
 # langgraph-agentic-scaffold: An Open Core Scaffold for Agentic Systems
+<img width="3407" height="2072" alt="{7A7E1E82-D24D-4B02-B03D-502688DD7B49}" src="https://github.com/user-attachments/assets/a54e5b79-281f-470b-a0e8-a446b1f205b1" />
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python Version](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
