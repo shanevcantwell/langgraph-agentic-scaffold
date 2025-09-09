@@ -97,6 +97,12 @@ class CodeWriterSpecialist(BaseSpecialist):
 To ensure your specialist integrates smoothly and reliably into the system, please follow these best practices:
 
 *   **Return Only Deltas:** Your specialist should only return the *new* state changes (the "delta"). For example, only return the new `AIMessage` you created, not the entire message history. The graph is configured to append new messages automatically.
+*   **Future-Proof Your State Management:** The system is moving towards a generic state management model. New specialists should be designed to use this new, preferred pattern:
+    *   **For significant data outputs:** Write to the `artifacts` dictionary.
+        *   `return {"artifacts": {"my_report.txt": "This is the content..."}}`
+    *   **For private, transient state (e.g., counters):** Write to the `scratchpad` dictionary.
+        *   `return {"scratchpad": {"my_specialist_counter": 1}}`
+    *   This practice will ensure your specialist is compatible with future versions of the architecture without needing a refactor.
 *   **Do Not Modify Global State Counters:** The `turn_count` is managed exclusively by the `RouterSpecialist`. Do not attempt to change this value from within your specialist, as it will break the workflow in unpredictable ways.
 *   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (`recommended_specialists`) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows. See the `DEVELOPERS_GUIDE.md` for more details.
 
