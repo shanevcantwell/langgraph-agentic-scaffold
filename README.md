@@ -41,7 +41,7 @@ This scaffold is designed for architectural exploration and grants significant p
 ### Prerequisites
 
 *   Python 3.10+
-*   Access to an LLM (e.g., Google AI Studio, OpenAI, or a local server like LM Studio or Ollama).
+*   Access to an LLM (e.g., Google Gemini API, LM Studio open weights models. Coming soon: OpenAI, Ollama).
 
 ### Installation & Setup
 
