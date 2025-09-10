@@ -56,7 +56,9 @@ class RouterSpecialist(BaseSpecialist):
         response_data = self.llm_adapter.invoke(request)
         tool_calls = response_data.get("tool_calls", [])
 
-        if not tool_calls or not tool_calls[0].get('args'):
+        next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist') if tool_calls and tool_calls[0].get('args') else None
+
+        if not next_specialist_from_llm:
             logger.error("Router LLM failed to produce a valid tool call. Attempting to route to Archiver for a final report.")
             if CoreSpecialist.ARCHIVER.value in self.specialist_map:
                 next_specialist = CoreSpecialist.ARCHIVER.value
@@ -65,8 +67,6 @@ class RouterSpecialist(BaseSpecialist):
                 next_specialist = END
                 content = "Router failed to select a valid next specialist and Archiver is not available. Ending workflow."
             return {"next_specialist": next_specialist, "tool_calls": [], "content": content}
-        
-        next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist', END)
         
         valid_options = list(current_specialists.keys())
         if next_specialist_from_llm not in valid_options and next_specialist_from_llm != END:

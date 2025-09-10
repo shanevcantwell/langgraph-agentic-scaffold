@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 
 from ..llm.adapter import BaseAdapter
+from ..utils.errors import SpecialistError
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,10 @@ class BaseSpecialist(ABC):
         """Public method to execute the specialist's task."""
         logger.info(f"--- Executing specialist: {self.specialist_name} ---")
         try:
-            result = self._execute_logic(state)
+            result = self._execute_logic(state) or {}
         except Exception as e:
-            logger.error(f"An unhandled exception occurred in {self.specialist_name}: {e}", exc_info=True)
-            return {"error": f"'{self.specialist_name}' encountered a critical error: {e}"}
+            logger.error(f"Specialist '{self.specialist_name}' raised an exception: {e}", exc_info=True)
+            raise SpecialistError(f"Execution failed in '{self.specialist_name}': {e}") from e
         logger.info(f"--- Finished specialist: {self.specialist_name} ---")
         return result
 

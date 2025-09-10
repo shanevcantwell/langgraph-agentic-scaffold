@@ -7,6 +7,7 @@ from langgraph.graph import StateGraph, END
 from ..utils.config_loader import ConfigLoader
 from ..utils.prompt_loader import load_prompt
 from ..utils import state_pruner
+from ..utils.errors import SpecialistError
 from ..utils.report_schema import ErrorReport
 from ..specialists import get_specialist_class, BaseSpecialist
 from ..graph.state import GraphState
@@ -222,7 +223,7 @@ class ChiefOfStaff:
                     )
                     del update["turn_count"]
                 return update
-            except Exception as e:
+            except (SpecialistError, Exception) as e:
                 logger.error(
                     f"Caught unhandled exception from specialist '{specialist_instance.specialist_name}': {e}",
                     exc_info=True
