@@ -52,7 +52,7 @@ class RouterSpecialist(BaseSpecialist):
         
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
-        request = StandardizedLLMRequest(messages=final_messages, tools=[Route])
+        request = StandardizedLLMRequest(messages=final_messages, tools=[Route], force_tool_call=True)
         response_data = self.llm_adapter.invoke(request)
         tool_calls = response_data.get("tool_calls", [])
 
@@ -113,7 +113,9 @@ class RouterSpecialist(BaseSpecialist):
                 next_specialist_name = recommended[0]
                 content = f"Proceeding with recommended specialist: {next_specialist_name}"
             else:
-                # If the recommendation is invalid or ambiguous, fall back to the LLM.
+                # If the recommendation is a list or ambiguous, let the LLM choose from the recommended subset.
+                # If the recommendation is a list of specialists, let the LLM choose from that subset.
+                # If the recommendation is a list of specialists, let the LLM choose from that subset.
                 llm_decision = self._get_llm_choice(state)
                 routing_type = "llm_decision"
                 next_specialist_name = llm_decision["next_specialist"]

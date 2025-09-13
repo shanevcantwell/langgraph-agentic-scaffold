@@ -1,6 +1,7 @@
 # src/workflow/runner.py
 import logging
 import os
+from ..utils.errors import ConfigError
 from typing import Dict, Any
 import json
 
@@ -22,9 +23,43 @@ class WorkflowRunner:
         and compiling the LangGraph application.
         """
         chief_of_staff = ChiefOfStaff()
-        self.recursion_limit = chief_of_staff.config.get("workflow", {}).get("recursion_limit", 25)
+        self.config = chief_of_staff.config
+        self._perform_pre_flight_checks()
+        self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
         self.app = chief_of_staff.get_graph()
         logger.info("WorkflowRunner initialized with compiled graph.")
+
+    def _perform_pre_flight_checks(self):
+        """
+        Performs critical environment checks before the application is fully wired.
+        This ensures the system fails fast if essential configurations are missing.
+        """
+        logger.info("Performing pre-flight environment checks...")
+        llm_providers = self.config.get("llm_providers", {})
+        
+        # Determine which providers are actually in use by enabled specialists
+        used_provider_bindings = set()
+        for spec_config in self.config.get("specialists", {}).values():
+            if binding := spec_config.get("llm_config"):
+                used_provider_bindings.add(binding)
+
+        for binding_key, provider_config in llm_providers.items():
+            # Only check providers that are actually being used
+            if binding_key not in used_provider_bindings:
+                continue
+
+            provider_type = provider_config.get("type")
+            if provider_type == "gemini" and not provider_config.get("api_key"):
+                raise ConfigError(
+                    f"Pre-flight check failed: Provider '{binding_key}' is type 'gemini' but "
+                    "the GOOGLE_API_KEY environment variable is not set."
+                )
+            elif provider_type == "lmstudio" and not provider_config.get("base_url"):
+                raise ConfigError(
+                    f"Pre-flight check failed: Provider '{binding_key}' is type 'lmstudio' but "
+                    "the LMSTUDIO_BASE_URL environment variable is not set."
+                )
+        logger.info("Pre-flight environment checks passed successfully.")
 
     def run(self, goal: str) -> Dict[str, Any]:
         """

@@ -32,6 +32,9 @@ class AdapterFactory:
         if not provider_config:
             # This should also be unreachable if ConfigLoader is correct.
             raise ValueError(f"Provider configuration '{binding_key}' not found in 'llm_providers'.")
+        
+        # Add the binding key to the config for better error messages within the adapter.
+        provider_config['binding_key'] = binding_key
 
         # This is the actual provider type, e.g., "gemini" or "lmstudio"
         base_provider_type = provider_config.get('type')
@@ -41,28 +44,5 @@ class AdapterFactory:
         if not AdapterClass:
             raise ValueError(f"Unknown base provider type '{base_provider_type}' specified in '{binding_key}'. Supported types are: {list(ADAPTER_REGISTRY.keys())}")
 
-        # The model_config now comes directly from the llm_providers section,
-        # creating a much cleaner separation of concerns.
-        model_config = {
-            "api_identifier": provider_config.get("api_identifier"),
-            "parameters": provider_config.get("parameters", {}),
-            "context_window": provider_config.get("context_window")
-        }
-
-        # Instantiate the correct adapter based on the provider name.
-        if base_provider_type == 'gemini':
-            return AdapterClass(
-                model_config=model_config,
-                api_key=provider_config.get("api_key"),
-                system_prompt=system_prompt
-            )
-        elif base_provider_type == 'lmstudio':
-            return AdapterClass(
-                model_config=model_config,
-                base_url=provider_config.get("base_url"),
-                system_prompt=system_prompt
-            )
-
-        # This line should be unreachable if the registry and the logic are in sync,
-        # but it's a good safeguard against future development errors.
-        raise NotImplementedError(f"Provider type '{base_provider_type}' is registered but not implemented in the AdapterFactory.")
+        # Use the adapter's own factory method to create the instance.
+        return AdapterClass.from_config(provider_config, system_prompt)

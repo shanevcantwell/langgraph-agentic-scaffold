@@ -33,6 +33,23 @@ class GeminiAdapter(BaseAdapter):
     def api_key(self) -> Optional[str]:
         return self._api_key
 
+    @classmethod
+    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> "GeminiAdapter":
+        """Creates a GeminiAdapter instance from the provider configuration."""
+        if not provider_config.get("api_key"):
+            raise ValueError(
+                f"Cannot create GeminiAdapter for provider binding '{provider_config.get('binding_key')}': "
+                "Missing 'api_key'. Please ensure the GOOGLE_API_KEY environment variable is set."
+            )
+        model_config = {
+            "api_identifier": provider_config.get("api_identifier"),
+            "parameters": provider_config.get("parameters", {}),
+            "context_window": provider_config.get("context_window")
+        }
+        return cls(model_config=model_config,
+                   api_key=provider_config["api_key"],
+                   system_prompt=system_prompt)
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
@@ -58,19 +75,13 @@ class GeminiAdapter(BaseAdapter):
             logger.info("GeminiAdapter: Invoking in Tool-calling mode.")
             tools_to_pass = request.tools
             # Force the model to call a tool. This is critical for the router,
-            # which should never return a text response. This is the Gemini
-            # equivalent of OpenAI's `tool_choice="required"`.
-            tool_config = {"function_calling_config": {"mode": "ANY"}}
-
-            # --- Add special handling for the Router ---
-            # If the only tool is 'Route', we can be more specific to ensure
-            # the model makes a routing decision. This is a more robust way to
-            # force a tool call than just using mode: "ANY".
-            if len(request.tools) == 1 and hasattr(request.tools[0], '__name__') and request.tools[0].__name__ == 'Route':
-                logger.info("GeminiAdapter: Forcing a 'Route' tool call for the RouterSpecialist by specifying allowed_function_names.")
-                tool_config["function_calling_config"]["allowed_function_names"] = ["Route"]
+            # which should never return a text response.
+            if request.force_tool_call:
+                logger.info("GeminiAdapter: Forcing a tool call using mode: ANY.")
+                tool_config = {"function_calling_config": {"mode": "ANY"}}
             else:
-                logger.info("GeminiAdapter: Forcing a tool call using generic tool_config.")
+                logger.info("GeminiAdapter: Allowing model to choose between tool call and text response.")
+                tool_config = None
         else:
             logger.info("GeminiAdapter: Invoking in Text mode.")
 

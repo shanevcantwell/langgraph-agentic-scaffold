@@ -11,6 +11,7 @@ class StandardizedLLMRequest(BaseModel):
     messages: List[BaseMessage]
     output_model_class: Optional[Type[BaseModel]] = Field(default=None)
     tools: Optional[List[Any]] = Field(default=None)
+    force_tool_call: bool = Field(default=False, description="If True, forces the LLM to use a tool. Critical for routing.")
 
 class BaseAdapter(ABC):
     """
@@ -30,6 +31,19 @@ class BaseAdapter(ABC):
     @abstractmethod
     def api_key(self) -> Optional[str]:
         """The API key for the provider, if applicable."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> "BaseAdapter":
+        """
+        A factory class method to create an instance of the adapter from a
+        configuration dictionary. Each concrete adapter must implement this.
+
+        Args:
+            provider_config: The specific configuration block for this provider from `llm_providers`.
+            system_prompt: The system prompt to be used by the adapter instance.
+        """
         pass
 
     @abstractmethod

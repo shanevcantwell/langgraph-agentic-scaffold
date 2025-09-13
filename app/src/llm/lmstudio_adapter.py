@@ -59,6 +59,23 @@ class LMStudioAdapter(BaseAdapter):
     def api_key(self) -> Optional[str]:
         return self._api_key
 
+    @classmethod
+    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> "LMStudioAdapter":
+        """Creates an LMStudioAdapter instance from the provider configuration."""
+        if not provider_config.get("base_url"):
+            raise ValueError(
+                f"Cannot create LMStudioAdapter for provider binding '{provider_config.get('binding_key')}': "
+                "Missing 'base_url'. Please ensure the LMSTUDIO_BASE_URL environment variable is set."
+            )
+        model_config = {
+            "api_identifier": provider_config.get("api_identifier"),
+            "parameters": provider_config.get("parameters", {}),
+            "context_window": provider_config.get("context_window")
+        }
+        return cls(model_config=model_config,
+                   base_url=provider_config["base_url"],
+                   system_prompt=system_prompt)
+
     def _extract_json_from_response(self, text: str) -> Optional[Dict[str, Any]]:
         """
         Tries to extract a JSON object from a string that might contain extraneous text
@@ -190,16 +207,11 @@ class LMStudioAdapter(BaseAdapter):
                     })
             if tools_to_pass:
                 api_kwargs["tools"] = tools_to_pass
-                # The RouterSpecialist's only job is to route. It should always be
-                # forced to use its 'Route' tool. This prevents it from generating
-                # conversational text, which it is not designed to handle.
-                if len(tool_names) == 1 and tool_names[0] == 'Route':
-                    logger.info("Forcing a tool call for the RouterSpecialist using tool_choice='required'.")
-                    # While the OpenAI API allows forcing a specific tool by passing an object,
-                    # many local model servers (like older versions of LM Studio) only support
-                    # the string values "none", "auto", or "required". Using "required" is a
-                    # more compatible way to ensure the router performs a tool call instead of
-                    # generating conversational text.
+                # If the request explicitly asks to force a tool call (e.g., for the router),
+                # set the tool_choice to 'required'. This is a more robust and compatible
+                # way to ensure a tool call than specifying a function name.
+                if request.force_tool_call:
+                    logger.info("Request has 'force_tool_call=True'. Setting tool_choice to 'required'.")
                     api_kwargs["tool_choice"] = "required"
                 else:
                     api_kwargs["tool_choice"] = "auto"
