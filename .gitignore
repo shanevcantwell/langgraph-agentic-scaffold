@@ -5,6 +5,7 @@
 .env
 .run
 user_settings.yaml
+config.yaml
 
 # --- Python ---
 # Ignore cache files, compiled files, and virtual environments.
