@@ -4,7 +4,6 @@ import html
 import json
 import os
 import tiktoken
-import re
 from typing import Dict, Any, List, Optional, Type
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError
 from langchain_core.messages import BaseMessage
@@ -75,35 +74,6 @@ class LMStudioAdapter(BaseAdapter):
         return cls(model_config=model_config,
                    base_url=provider_config["base_url"],
                    system_prompt=system_prompt)
-
-    def _extract_json_from_response(self, text: str) -> Optional[Dict[str, Any]]:
-        """
-        Tries to extract a JSON object from a string that might contain extraneous text
-        or be wrapped in markdown code blocks.
-        """
-        if not isinstance(text, str):
-            return None
-
-        # Pattern to find JSON within markdown code blocks (```json ... ```)
-        match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(1))
-            except json.JSONDecodeError:
-                logger.warning("Found a JSON code block, but failed to parse it.")
-                pass
-
-        # Fallback to finding the first '{' and last '}'
-        try:
-            start_index = text.find('{')
-            end_index = text.rfind('}')
-            if start_index != -1 and end_index != -1 and end_index > start_index:
-                json_str = text[start_index:end_index+1]
-                return json.loads(json_str)
-        except (json.JSONDecodeError, IndexError):
-            pass
-
-        return None
 
     def _prune_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
         """
@@ -270,7 +240,7 @@ class LMStudioAdapter(BaseAdapter):
                     logger.warning(
                         f"LMStudioAdapter received non-JSON text when JSON was expected. Attempting to extract JSON. Content: {content[:500]}..."
                     )
-                    json_response = self._extract_json_from_response(content)
+                    json_response = self._robustly_parse_json_from_text(content)
 
                 if json_response:
                     return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}

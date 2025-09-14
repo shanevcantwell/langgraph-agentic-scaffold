@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Type, Any, Optional
+import json
+import re
+from typing import List, Dict, Type, Any, Optional, cast
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from ..utils.errors import LLMInvocationError, SafetyFilterError, RateLimitError
@@ -49,6 +51,16 @@ class BaseAdapter(ABC):
     @abstractmethod
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         pass
+    
+    def _robustly_parse_json_from_text(self, text: str) -> Optional[Dict[str, Any]]:
+        """A concrete helper to robustly extract a JSON object from a string."""
+        if not isinstance(text, str):
+            return None
+        
+        # Pattern to find JSON within markdown code blocks (```json ... ```)
+        match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
+        if match:
+            text = match.group(1)
 
     def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
         """
@@ -57,3 +69,30 @@ class BaseAdapter(ABC):
         Subclasses can override this for specific schema transformations.
         """
         return json_response
+
+    def _robustly_parse_json_from_text(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        A concrete helper to robustly extract a JSON object from a string that might
+        contain extraneous text or be wrapped in markdown code blocks.
+        """
+        if not isinstance(text, str):
+            return None
+
+        # Pattern to find JSON within markdown code blocks (```json ... ```)
+        match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
+        if match:
+            text = match.group(1)
+
+        try:
+            return cast(Dict[str, Any], json.loads(text))
+        except json.JSONDecodeError:
+            # Fallback to finding the first '{' and last '}'
+            try:
+                start_index = text.find('{')
+                end_index = text.rfind('}')
+                if start_index != -1 and end_index != -1 and end_index > start_index:
+                    json_str = text[start_index:end_index+1]
+                    return cast(Dict[str, Any], json.loads(json_str))
+            except (json.JSONDecodeError, IndexError):
+                return None
+        return None
