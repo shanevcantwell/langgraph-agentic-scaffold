@@ -28,13 +28,17 @@ This is the main Python package for the application.
     -   `app/src/api.py`: The FastAPI application entry point. It defines the API endpoints (e.g., `/invoke`) and handles web requests.
     -   `app/src/cli.py`: The command-line interface for interacting with the running API server.
     -   `app/src/specialists/`: The heart of the agentic system. Each `.py` file defines a `BaseSpecialist` subclass that encapsulates a specific skill (e.g., `file_specialist.py`, `web_builder.py`).
-        -   `app/src/specialists/base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from.
-        -   `app/src/specialists/helpers.py`: Provides helper functions to reduce boilerplate in specialists, such as creating standardized "self-correction" responses.
+        -   `base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from.
+        -   `helpers.py`: Provides helper functions to reduce boilerplate in specialists, such as creating standardized "self-correction" responses.
+        -   `schemas/`: A Python package containing all Pydantic models that define the data contracts for specialist inputs and outputs.
+            -   `__init__.py`: Exposes all schemas for clean, unified imports.
+            -   `_base.py`: Defines the `SpecialistOutput` envelope and other base schema components.
+            -   `_*.py`: Domain-specific schema files (e.g., `_file_ops.py`, `_orchestration.py`).
     -   `app/src/workflow/`: Contains the high-level orchestration logic.
         -   `app/src/workflow/chief_of_staff.py`: Responsible for reading the configuration, instantiating all specialists, and compiling the final `LangGraph` object.
     -   `app/src/llm/`: Manages all interactions with Large Language Models.
         -   `app/src/llm/adapter.py`: Defines the `BaseAdapter` interface, ensuring all LLM providers have a consistent API within the system.
-        -   `app/src/llm/adapters.py`: Contains the concrete implementations for each LLM provider (e.g., `GeminiAdapter`, `LMStudioAdapter`).
+        -   `app/src/llm/*_adapter.py`: Concrete implementations for each LLM provider are in their own files (e.g., `gemini_adapter.py`, `lmstudio_adapter.py`).
         -   `app/src/llm/factory.py`: The `AdapterFactory` reads the merged configuration and instantiates the correct adapter for a specialist.
     -   `app/src/graph/`: Defines the shared state of the LangGraph.
         -   `app/src/graph/state.py`: Defines the `GraphState` `TypedDict`, which is the central data structure passed between all nodes in the graph.

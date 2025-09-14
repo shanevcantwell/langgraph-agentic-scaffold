@@ -87,6 +87,14 @@ The process is as follows:
 
 This pattern, combined with the Hub-and-Spoke model, guarantees that the `router_specialist` is the sole component responsible for managing the graph's lifecycle, which significantly enhances the system's predictability and robustness.
 
+### 4.4 The Adapter Robust Parsing Contract
+
+**Principle:** The LLM Adapter layer is solely responsible for abstracting provider-specific idiosyncrasies. This includes inconsistent formatting of structured data responses.
+
+**Policy:** All concrete implementations of `BaseAdapter` MUST adhere to the Robust Parsing Contract. When a specialist requests structured data (e.g., via `output_model_class`), the adapter is responsible for returning a valid, parsed JSON object if one can be reasonably extracted from the provider's raw response.
+
+**Implementation:** To ensure consistency and prevent code duplication, all adapters MUST utilize the `_robustly_parse_json_from_text()` helper method provided by the `BaseAdapter` class as a fallback mechanism. An adapter should only return an empty `json_response` if both a direct parse and the robust fallback parse fail. This contract is non-negotiable and is verified by the system's contract tests (`app/tests/llm/test_adapter_contracts.py`).
+
 ## 5.0 How to Extend the System: Creating Specialists
 
 The primary way to extend the system's capabilities is by adding new specialists. This section provides a detailed, step-by-step walkthrough.
