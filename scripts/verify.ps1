@@ -71,7 +71,18 @@ try {
     
     # Run the CLI script with --json-only flag and capture its output
     Write-Host "--- Running CLI verification test ---"
-    $cliOutput = & $CliScript --json-only $TestPrompt
+    # Use the 'stream' command with '--json-only' to test the streaming endpoint.
+    # The command will output live logs (which we ignore here) and then the final
+    # JSON state object on the last line, which is what we capture.
+    $cliOutputLines = & $CliScript stream --json-only $TestPrompt
+
+    # The output might be an array of strings (if there were logs) or a single string.
+    # We are interested in the last line, which should be the final JSON state.
+    if ($cliOutputLines -is [array]) {
+        $cliOutput = $cliOutputLines[-1]
+    } else {
+        $cliOutput = $cliOutputLines
+    }
 
     # Check if JSON_RESPONSE is empty or not valid JSON
     if ([string]::IsNullOrEmpty($cliOutput)) {

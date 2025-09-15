@@ -47,14 +47,23 @@ for i in {1..30}; do
     if curl -s --fail "$HEALTH_CHECK_URL" > /dev/null;
     then
         echo "Server is up and running."
-        # Run the CLI script with --json-only flag and capture its output
         echo "--- Running CLI verification test ---"
-      JSON_RESPONSE=$(./scripts/cli.sh --json-only "$TEST_PROMPT")
+        # Use the 'stream' command with '--json-only' to test the streaming endpoint.
+        # The command will output live logs (which we ignore here) and then the final
+        # JSON state object on the last line, which is what we capture.
+        CLI_OUTPUT=$(./scripts/cli.sh stream --json-only "$TEST_PROMPT")
+
+        # Extract the last line of the output, which should be our JSON object.
+        JSON_RESPONSE=$(echo "$CLI_OUTPUT" | tail -n 1)
 
         # Check if JSON_RESPONSE is empty or not valid JSON
         if [ -z "$JSON_RESPONSE" ]; then
             echo "---"
             echo "❌ Verification test FAILED: No JSON response received from CLI."
+            echo "Full CLI Output:"
+            echo "---"
+            echo "$CLI_OUTPUT"
+            echo "---"
             exit 1
         fi
 
