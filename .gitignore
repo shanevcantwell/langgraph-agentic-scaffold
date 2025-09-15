@@ -34,7 +34,7 @@ build/
 logs/
 *.bak
 docs/adr/private/*
-app/src/ui/*
+app/src/ui/*.html
 
 # --- External Code ---
 # Ignore contents of the external directory, but keep the directory itself.

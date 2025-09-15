@@ -13,8 +13,10 @@ echo "--- Setting up Python virtual environment ---"
 python3 -m venv .venv_agents
 source ./.venv_agents/bin/activate
 
-echo "--- Installing Python dependencies ---"
-pip install -r requirements-dev.txt
+echo "--- Installing Python dependencies from pyproject.toml ---"
+# This command installs the project itself in editable mode (-e)
+# and includes the optional dependencies listed under 'dev' in pyproject.toml.
+pip install -e '.[dev]'
 
 echo "--- Checking for jq dependency ---"
 if ! command -v jq &> /dev/null

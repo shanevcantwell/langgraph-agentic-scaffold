@@ -35,6 +35,7 @@ dependencies = [
     "inflection",
     "open-interpreter",
     "psycopg2-binary",
+    "gradio",
     # Add specific LLM provider packages here as needed
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
