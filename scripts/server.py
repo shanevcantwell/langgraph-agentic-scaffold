@@ -22,6 +22,7 @@ load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 SERVER_PID_FILE = os.path.join(RUN_DIR, "server.pid")
 SERVER_LOG_FILE = os.path.join(LOGS_DIR, "agentic_server.log")
 LOG_CONFIG_FILE = os.path.join(PROJECT_ROOT, "log_config.yaml")
+GRADIO_APP_FILE = os.path.join(PROJECT_ROOT, "app", "src", "ui", "gradio_app.py")
 PORT = 8000
 
 # --- Setup Logging ---
@@ -184,6 +185,41 @@ def status():
         logging.info(f"  - Memory: {proc.memory_info().rss / 1024 / 1024:.2f} MB")
     else:
         logging.info("Server is STOPPED.")
+
+@app.command()
+def ui(
+    port: Annotated[int, typer.Option(
+        "--port",
+        "-p",
+        help="Port to run the Gradio UI on."
+    )] = 7860
+):
+    """
+    Starts the full application: the API server (in the background) and the Gradio UI.
+    """
+    logging.info("--- Launching Agentic System with UI ---")
+
+    # 1. Ensure the API server is running in the background
+    if not _is_server_running():
+        logging.info("API server is not running. Starting it in the background...")
+        start(foreground=False)
+        time.sleep(3) # Give it a moment to initialize
+        if not _is_server_running():
+            logging.error("Failed to start the API server. Aborting UI launch.")
+            return
+    else:
+        logging.info("API server is already running.")
+
+    # 2. Launch the Gradio UI in the foreground
+    logging.info(f"Starting Gradio UI on port {port}...")
+    gradio_command = [sys.executable, GRADIO_APP_FILE, "--port", str(port)]
+    try:
+        subprocess.run(gradio_command, cwd=PROJECT_ROOT)
+    except KeyboardInterrupt:
+        logging.info("\nUI stopped by user.")
+    finally:
+        logging.info("--- Shutting down background API server ---")
+        stop()
 
 if __name__ == "__main__":
     setup_logging()

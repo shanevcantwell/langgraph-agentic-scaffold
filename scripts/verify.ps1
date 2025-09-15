@@ -16,7 +16,7 @@ $ServerScript = Join-Path $ProjectRoot "scripts\server.bat"
 $CliScript = Join-Path $ProjectRoot "scripts\cli.bat"
 $Port = 8000
 $HealthCheckUrl = "http://127.0.0.1:$Port/"
-$TestPrompt = "Read the README.md file and list its main sections."
+$TestPrompt = "From the installation steps described in README.md, make me a 1970s wood and brushed aluminum themed animated web page with active checklist boxes. Iterate on the page at least twice, checking with the systems architect between iterations."
 $TimeoutSeconds = 30
 
 # --- Check for jq dependency ---
@@ -88,7 +88,7 @@ try {
     # Validate the JSON response
     # A successful multi-step workflow will have a turn_count greater than 1,
     # which is a more reliable check than looking for a non-null next_specialist.
-    if ($jsonResponse.turn_count -gt 1 -and `
+    if ($jsonResponse.turn_count -gt 5 -and `
         $jsonResponse.messages.Count -gt 1 -and `
         $jsonResponse.messages[-1].type -eq "ai" -and `
         -not [string]::IsNullOrEmpty($jsonResponse.messages[-1].content)) {

@@ -11,7 +11,9 @@ python -m venv .venv_agents_windows
 call .venv_agents_windows\Scripts\activate.bat
 
 echo --- Installing Python dependencies ---
-pip install -r requirements-dev.txt
+rem This command installs the project itself in editable mode (-e)
+rem and includes the optional dependencies listed under 'dev' in pyproject.toml.
+pip install -e .[dev]
 
 echo --- Checking for jq dependency ---
 where jq >nul 2>nul
