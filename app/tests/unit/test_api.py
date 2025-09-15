@@ -27,7 +27,7 @@ def test_read_root(client):
     """Tests the root health check endpoint."""
     response = client.get("/")
     assert response.status_code == 200
-    assert response.json() == {"status": "SpecialistHub API is running"}
+    assert response.json() == {"status": "API is running"}
 
 def test_invoke_graph_sync(client):
     """Tests the synchronous /v1/graph/invoke endpoint."""

@@ -82,7 +82,7 @@ workflow_runner = WorkflowRunner()
 # --- API Endpoints ---
 @app.get("/")
 def read_root():
-    return {"status": "SpecialistHub API is running"}
+    return {"status": "API is running"}
 
 @app.post("/v1/graph/stream")
 async def stream_graph(request: InvokeRequest):

@@ -1,6 +1,6 @@
 # How to Create a New Specialist
 
-This guide provides a detailed, step-by-step walkthrough for creating a new "Specialist" agent within the SpecialistHub framework. It is intended for entry-level Python developers who are new to the system.
+This guide provides a detailed, step-by-step walkthrough for creating a new "Specialist" agent within the framework. It is intended for entry-level Python developers who are new to the system.
 
 ## Introduction: What is a Specialist?
 
