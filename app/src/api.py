@@ -2,7 +2,7 @@
 import logging
 import time  # ADD: Import the time module
 from fastapi import FastAPI
-from pydantic import BaseModel, Field
+from fastapi.responses import StreamingResponse
 from typing import Dict, Any, Optional
 from .workflow.runner import WorkflowRunner
 
@@ -62,6 +62,7 @@ def shutdown_event_handler():
 
 
 # --- Data Contracts ---
+from pydantic import BaseModel, Field
 class InvokeRequest(BaseModel):
     input_prompt: str = Field(
         ...,
@@ -82,6 +83,16 @@ workflow_runner = WorkflowRunner()
 @app.get("/")
 def read_root():
     return {"status": "SpecialistHub API is running"}
+
+@app.post("/v1/graph/stream")
+async def stream_graph(request: InvokeRequest):
+    """Streams the workflow execution step by step."""
+    logger.info(f"Received request to stream graph with prompt: '{request.input_prompt}'")
+    
+    async def event_generator():
+        async for event in workflow_runner.run_streaming(goal=request.input_prompt):
+            yield event
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/v1/graph/invoke", response_model=InvokeResponse)
 def invoke_graph(request: InvokeRequest):

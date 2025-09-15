@@ -1,0 +1,59 @@
+# app/tests/unit/test_api.py
+import pytest
+from unittest.mock import MagicMock, patch
+from fastapi.testclient import TestClient
+
+# We patch the runner before importing the app to inject our mock
+mock_runner = MagicMock()
+
+async def mock_streaming_gen():
+    yield "Entering node: router_specialist\n"
+    yield "Finished node: router_specialist\n"
+    yield "FINAL_STATE::{\"status\": \"complete\"}\n"
+
+mock_runner.run.return_value = {"final_output": "success"}
+mock_runner.run_streaming.return_value = mock_streaming_gen()
+
+with patch('app.src.api.WorkflowRunner', return_value=mock_runner):
+    from app.src.api import app
+
+@pytest.fixture
+def client():
+    """Provides a FastAPI TestClient for making requests to the app."""
+    with TestClient(app) as c:
+        yield c
+
+def test_read_root(client):
+    """Tests the root health check endpoint."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"status": "SpecialistHub API is running"}
+
+def test_invoke_graph_sync(client):
+    """Tests the synchronous /v1/graph/invoke endpoint."""
+    # Arrange
+    payload = {"input_prompt": "test prompt"}
+
+    # Act
+    response = client.post("/v1/graph/invoke", json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    assert response.json() == {"final_output": {"final_output": "success"}}
+    mock_runner.run.assert_called_with(goal="test prompt")
+
+def test_stream_graph_async(client):
+    """Tests the asynchronous /v1/graph/stream endpoint."""
+    # Arrange
+    payload = {"input_prompt": "test stream prompt"}
+
+    # Act
+    response = client.post("/v1/graph/stream", json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    # The TestClient automatically consumes the stream content
+    content = response.text
+    assert "Entering node: router_specialist" in content
+    assert "FINAL_STATE::{\"status\": \"complete\"}" in content
+    mock_runner.run_streaming.assert_called_with(goal="test stream prompt")

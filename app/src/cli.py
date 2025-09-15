@@ -119,6 +119,66 @@ def invoke(
             print(f"Details: {e}", file=sys.stderr)
         sys.exit(1)
 
+@app.command()
+def stream(
+    prompt: Annotated[Optional[str], typer.Argument(
+        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
+    )] = None,
+    json_only: Annotated[bool, typer.Option(
+        "--json-only",
+        "-j",
+        help="Output only the final JSON state, suppressing live logs."
+    )] = False
+):
+    """
+    Connects to the streaming endpoint (/v1/graph/stream) to get real-time logs from the agent.
+    If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
+    """
+    if prompt is None:
+        if not json_only:
+            print("▶️  Enter your multi-line prompt for streaming. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter (Windows) when finished.")
+            print("---")
+        prompt = sys.stdin.read().strip()
+
+    if not prompt:
+        if not json_only:
+            print("❌ Error: Prompt is empty. No request sent.", file=sys.stderr)
+        sys.exit(1)
+
+    stream_url = f"{API_BASE_URL}/v1/graph/stream"
+    if not json_only:
+        display_prompt = (prompt[:150] + '...') if len(prompt) > 150 else prompt
+        print(f"▶️  Streaming agent via {stream_url} with prompt: '{display_prompt}'")
+        print("--- Agent Log Stream ---")
+
+    payload = {"input_prompt": prompt}
+
+    try:
+        with requests.post(stream_url, json=payload, stream=True, timeout=300) as response:
+            response.raise_for_status()
+            final_state_json = None
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8').strip()
+                    if decoded_line.startswith("FINAL_STATE::"):
+                        final_state_json = decoded_line.replace("FINAL_STATE::", "", 1)
+                        break  # Final state received, stop processing stream
+                    else:
+                        if not json_only:
+                            print(decoded_line)
+            
+            if not json_only:
+                print("--- End of Stream ---")
+            
+            if final_state_json:
+                # Always print the final state for scripting purposes
+                print(final_state_json)
+
+    except requests.exceptions.RequestException as e:
+        if not json_only:
+            print(f"\n❌ Error: Could not connect to the API server at {stream_url}.", file=sys.stderr)
+            print(f"Details: {e}", file=sys.stderr)
+        sys.exit(1)
 
 if __name__ == "__main__":
     app()

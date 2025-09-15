@@ -3,7 +3,7 @@ import logging
 import os
 from ..utils.errors import ConfigError
 from typing import Dict, Any
-import json
+from typing import AsyncGenerator
 
 from langchain_core.messages import HumanMessage
 
@@ -105,3 +105,37 @@ class WorkflowRunner:
                 "messages": [HumanMessage(content=goal)],
                 "turn_count": 0, # Ensure a consistent return shape on catastrophic failure
             }
+
+    async def run_streaming(self, goal: str) -> AsyncGenerator[str, None]:
+        """
+        Executes the workflow with a given goal and streams back real-time updates.
+
+        Args:
+            goal: The high-level goal for the agentic system to accomplish.
+
+        Yields:
+            A stream of strings, representing log messages or the final state.
+        """
+        logger.info(f"--- Starting streaming workflow for goal: '{goal}' ---")
+        
+        initial_state: GraphState = {
+            "messages": [HumanMessage(content=goal, name="user")],
+            "next_specialist": None,
+            "recommended_specialists": None,
+            "text_to_process": None,
+            "extracted_data": None,
+            "error": None,
+            "json_artifact": None,
+            "html_artifact": None,
+            "system_plan": None,
+            "turn_count": 0,
+            "routing_history": [],
+            "archive_report": None,
+            "web_builder_iteration": None,
+            "triage_recommendations": None,
+            "task_is_complete": False,
+        }
+        final_state = None
+        async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
+            for node_name, node_state in event.items():
+                yield f"Finished node: {node_name}\n"
