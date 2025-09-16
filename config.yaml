@@ -26,7 +26,10 @@ llm_providers:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "router-gpt-oss-20b" # The model identifier for the server.
+    api_identifier: "openai/gpt-oss-120b" # The model identifier for the server.
+    # api_identifier: "llama_3.x_70b_l3.3-nemotron_abliterated_fusion-i1" # The model identifier for the server.
+    # api_identifier: "qwen3-42b-a3b-2507-thinking-abliterated-uncensored-total-recall-v2-medium-master-coder" # The model identifier for the server.
+    # api_identifier: "openai/gpt-oss-20b-gguf/router-gpt-oss-20b-mxfp4.gguf" # The model identifier for the server.
     # api_identifier: "lfm2-vl-1.6b" # The model identifier for the server.
 
     # The model's total context window (input + output). This value is used by the llm
@@ -37,7 +40,10 @@ llm_providers:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "gpt-oss-20b" # The model identifier for the server.
+    api_identifier: "openai/gpt-oss-120b" # The model identifier for the server.
+    # api_identifier: "llama_3.x_70b_l3.3-nemotron_abliterated_fusion-i1" # The model identifier for the server.
+    # api_identifier: "qwen3-42b-a3b-2507-thinking-abliterated-uncensored-total-recall-v2-medium-master-coder" # The model identifier for the server.
+    # api_identifier: "gemma-3-27b-it-abliterated@q8_0" # The model identifier for the server.
     # The model's total context window (input + output).
     context_window: 8192
     # Parameters to pass to the model's API.
@@ -164,9 +170,11 @@ specialists:
     description: "A general-purpose specialist for direct Q&A and instruction following. Use this as a fallback when no other specialist seems appropriate for the user's request."
 
   # --- Procedural Specialists with External Dependencies ---
-  open_interpreter_specialist:
-    type: "procedural"
-    description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
+
+  # Needs more work
+  # open_interpreter_specialist:
+  #   type: "procedural"
+  #   description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
 
   archiver_specialist:
     type: "procedural"

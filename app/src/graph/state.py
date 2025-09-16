@@ -14,6 +14,7 @@ class GraphState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     routing_history: Annotated[List[str], operator.add]
     turn_count: int
+    user_response: Annotated[list[str], operator.add]
     task_is_complete: bool
     next_specialist: Optional[str]
     recommended_specialists: Optional[List[str]]

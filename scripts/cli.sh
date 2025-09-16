@@ -12,8 +12,16 @@ cd "$SCRIPT_DIR/.."
 
 # Activate virtual environment if it exists
 if [ -d ".venv_agents" ]; then
-    source ./.venv_agents/bin/activate
+    . ./.venv_agents/bin/activate
 fi
 
-# Run the CLI module, passing all script arguments
-python -m app.src.cli "$@"
+# Create an array to hold the arguments for the python script
+args=()
+# Iterate over all arguments passed to this shell script
+for arg in "$@"; do
+    # Add each argument to the array, preserving quotes
+    args+=("$arg")
+done
+
+# Execute the python script, passing the arguments correctly
+python -m app.src.cli "${args[@]}"

@@ -122,7 +122,7 @@ def main():
         )
     
     print(f"Launching Gradio UI on port {args.port}...")
-    demo.launch(server_port=args.port)
+    demo.launch(server_port=args.port, prevent_thread_lock=True)
 
 # --- Standard Python entry point ---
 if __name__ == "__main__":

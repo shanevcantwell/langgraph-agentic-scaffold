@@ -48,13 +48,9 @@ for i in {1..30}; do
     then
         echo "Server is up and running."
         echo "--- Running CLI verification test ---"
-        # Use the 'stream' command with '--json-only' to test the streaming endpoint.
-        # The command will output live logs (which we ignore here) and then the final
-        # JSON state object on the last line, which is what we capture.
-        CLI_OUTPUT=$(./scripts/cli.sh stream --json-only "$TEST_PROMPT")
-
-        # Extract the last line of the output, which should be our JSON object.
-        JSON_RESPONSE=$(echo "$CLI_OUTPUT" | tail -n 1)
+        # Use the 'invoke' command with '--json-only'. This command is simpler
+        # for verification as it directly outputs the final JSON state without logs.
+        JSON_RESPONSE=$(./scripts/cli.sh invoke --json-only "$TEST_PROMPT")
 
         # Check if JSON_RESPONSE is empty or not valid JSON
         if [ -z "$JSON_RESPONSE" ]; then
@@ -62,7 +58,6 @@ for i in {1..30}; do
             echo "❌ Verification test FAILED: No JSON response received from CLI."
             echo "Full CLI Output:"
             echo "---"
-            echo "$CLI_OUTPUT"
             echo "---"
             exit 1
         fi

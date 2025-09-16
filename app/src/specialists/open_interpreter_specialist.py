@@ -37,10 +37,11 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         try:
             from interpreter import interpreter
             # Configure the interpreter instance just-in-time.
+            # By setting the context_window to 0, we effectively disable the
+            # interpreter's internal LLM, preventing it from making unwanted
+            # litellm calls. This forces it to act as a pure code executor.
             interpreter.auto_run = True
-            interpreter.llm.model = ""
-            interpreter.llm.api_key = "none"
-            interpreter.llm.api_base = "none"
+            interpreter.llm.context_window = 0
         except ImportError:
             logger.error(
                 "The 'open-interpreter' package is not installed. "
@@ -93,13 +94,18 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         # --- Phase 2: Execute the Code ---
         logger.info(f"Phase 2: Executing code...\n---\n{code_params.code}\n---")
         
-        interpreter.messages = []
-        interpreter.run(code_params.code, language=code_params.language)
+        # The `interpreter.run()` method is deprecated. The new `chat()` method
+        # can be used to execute code directly by passing it in a specific format.
+        # This preserves our two-phase "plan then execute" model.
+        interpreter.messages = [] # Clear previous messages
+        response_chunks = interpreter.chat(f"Please execute this {code_params.language} code:\n```{code_params.language}\n{code_params.code}\n```", display=False, stream=True)
         
-        outputs = [
-            msg.get('content', '') for msg in interpreter.messages 
-            if msg.get('role') == 'computer' and msg.get('type') == 'output'
-        ]
+        # The `chat` method returns a generator. We need to consume it to get the results.
+        # The final output is now stored in the `interpreter.messages` list.
+        for _ in response_chunks:
+            pass
+        
+        outputs = [msg.get('content', '') for msg in interpreter.messages if msg.get('role') == 'computer' and msg.get('type') == 'output']
         final_output = "\n".join(outputs) if outputs else "Code executed with no output."
         
         logger.info(f"Phase 2 Complete. Execution output: {final_output[:500]}...")

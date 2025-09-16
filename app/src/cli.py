@@ -32,7 +32,7 @@ def invoke(
     # --- MODIFICATION START ---
     # If no prompt is passed as a command-line argument, read from standard input.
     if prompt is None:
-        if not json_only:
+        if not json_only and sys.stdin.isatty():
             print("▶️  Enter your multi-line prompt below. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter (Windows) when finished.")
             print("---")
         prompt = sys.stdin.read().strip()
@@ -135,7 +135,7 @@ def stream(
     If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
     """
     if prompt is None:
-        if not json_only:
+        if not json_only and sys.stdin.isatty():
             print("▶️  Enter your multi-line prompt for streaming. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter (Windows) when finished.")
             print("---")
         prompt = sys.stdin.read().strip()
