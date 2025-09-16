@@ -74,10 +74,18 @@ def invoke(
             sys.exit(1) # Exit with an error code
 
         if json_only:
+            # When --json-only is used, always print the full JSON object for scripting.
             print(json.dumps(final_output, indent=2))
         else:
-            print("\n✅ --- Agent Final Response ---")
-            print(json.dumps(final_output, indent=2))
+            # For human-readable output, prioritize the synthesized user_response.
+            if user_response := final_output.get("user_response"):
+                print("\n✅ --- Agent Final Response ---")
+                print(user_response)
+            else:
+                # Fallback to printing the full JSON if no synthesized response exists.
+                print("\n✅ --- Agent Final Response (Full State) ---")
+                print(json.dumps(final_output, indent=2))
+
             print("--- End of Response ---")
 
         # --- Verification Logic ---

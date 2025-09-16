@@ -26,7 +26,7 @@ This is the main Python package for the application.
 -   `app/prompts/`: Contains all the `.md` prompt templates used by the LLM specialists. Separating prompts from code allows for easy editing and tuning without changing Python logic.
 -   `app/src/`: The core source code of the application.
     -   `app/src/api.py`: The FastAPI application entry point. It defines the API endpoints (e.g., `/invoke`) and handles web requests.
-    -   `app/src/cli.py`: The command-line interface for interacting with the running API server.
+    -   `app/src/cli.py`: The command-line interface for interacting with the agent.
     -   `app/src/specialists/`: The heart of the agentic system. Each `.py` file defines a `BaseSpecialist` subclass that encapsulates a specific skill (e.g., `file_specialist.py`, `web_builder.py`).
         -   `base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from.
         -   `helpers.py`: Provides helper functions to reduce boilerplate in specialists, such as creating standardized "self-correction" responses.

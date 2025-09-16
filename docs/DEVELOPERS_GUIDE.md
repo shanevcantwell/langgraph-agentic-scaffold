@@ -68,24 +68,29 @@ Off-by-one errors in agentic loops can be common. Ensure that loop termination l
 
 ### 4.3 Enforce Centralized Control with Two-Stage Termination
 
-To ensure system stability and prevent non-deterministic behavior, this architecture employs a mandatory **Two-Stage Termination Pattern**. Functional specialists are forbidden from terminating the graph directly. Only the `router_specialist` holds the authority to route to the `__end__` state.
+To ensure system stability and prevent non-deterministic behavior, this architecture employs a mandatory **Three-Stage Termination Pattern**. Functional specialists are forbidden from terminating the graph directly. Only the `router_specialist` holds the authority to route to the `__end__` state.
 
-This pattern is critical for ensuring that final housekeeping tasks, such as generating an archive report, are always executed and that the termination of the workflow is a deliberate, centralized, and observable event.
+This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event enshrined in the graph's structure.
 
 The process is as follows:
 
-1.  **Stage 1: Signal Completion & Route to Archiver**
+1.  **Stage 1: Signal Completion & Route to Synthesizer**
     *   A functional specialist (e.g., `web_builder`) completes its primary task.
     *   It signals this completion by including `task_is_complete: True` in its return state.
-    *   The `router_specialist` observes this flag in its prioritized decision tree and deterministically routes control to the `archiver_specialist`.
+    *   Optionally, it contributes a human-readable summary of its action to the `user_response` list in the state.
+    *   The `router_specialist` observes the `task_is_complete` flag and routes control to the `response_synthesizer_specialist`.
 
-2.  **Stage 2: Archive, Verify, and Terminate**
-    *   The `archiver_specialist` runs, generating the final `archive_report` and adding it to the graph's state.
-    *   Crucially, the `archiver_specialist` does **not** end the graph. It returns control to the `router_specialist`.
+2.  **Stage 2: Synthesize, Archive, and Verify**
+    *   The `response_synthesizer_specialist` runs, taking the snippets from the `user_response` list and generating a single, polished summary for the end-user.
+    *   The graph's structure then explicitly routes control from the synthesizer to the `archiver_specialist`.
+    *   The `archiver_specialist` runs, generating the final `archive_report`.
+    *   Crucially, the `archiver_specialist` does **not** end the graph. It returns control back to the `router_specialist`.
+
+3.  **Stage 3: Final Review and Termination**
     *   The `router_specialist` now observes the presence of the `archive_report` artifact in the state. This is the definitive signal that the workflow is complete.
     *   The router then makes the final, authoritative decision to route to `__end__`, formally terminating the graph.
 
-This pattern, combined with the Hub-and-Spoke model, guarantees that the `router_specialist` is the sole component responsible for managing the graph's lifecycle, which significantly enhances the system's predictability and robustness.
+This explicit `... -> Router -> Synthesizer -> Archiver -> Router -> END` sequence is defined in the `ChiefOfStaff` and guarantees that the `router_specialist` is the sole component responsible for managing the graph's lifecycle, which significantly enhances the system's predictability and robustness.
 
 ### 4.4 The Adapter Robust Parsing Contract
 

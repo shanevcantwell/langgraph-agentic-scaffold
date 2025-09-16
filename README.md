@@ -6,6 +6,8 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 A foundational scaffold for building robust, modular, and scalable multi-agent systems using LangGraph. This project provides a production-ready architecture that moves beyond simple scripts to a fully-fledged, API-driven application. It is designed to be the best possible starting point for any LangGraph-based agentic system.
+ 
+> **[Watch the 5-Minute Video Briefing](https://reflectiveattention.ai/scaffold-briefing)** (External Link)
 
 ### 🎥 Video Briefings
 

@@ -100,11 +100,17 @@ class RouterSpecialist(BaseSpecialist):
             content = "Archive report generated. Workflow complete."
             next_specialist_name = END
 
-        # Priority 3: A simple error or a task completion flag triggers the archival process (Stage 1).
+        # Priority 3: A simple error or a task completion flag triggers the synthesis/archival process.
         elif state.get("error") or state.get("task_is_complete", False):
             routing_type = "completion_signal" if state.get("task_is_complete") else "error_signal"
-            content = "Task is complete or an error occurred. Routing to ArchiverSpecialist for final report."
-            next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
+            # Per the explicit graph structure, if a task is complete, we route to the synthesizer if it exists.
+            # The graph itself will handle the subsequent step (routing to the archiver).
+            if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map and state.get("user_response"):
+                content = "Task is complete. Routing to ResponseSynthesizerSpecialist to generate final summary."
+                next_specialist_name = CoreSpecialist.RESPONSE_SYNTHESIZER.value
+            else:
+                content = "Task is complete or an error occurred. Routing to ArchiverSpecialist for final report."
+                next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
 
         # Priority 4: A recommendation from Triage or another specialist is a strong hint.
         elif recommended := state.get("recommended_specialists"):
@@ -113,9 +119,6 @@ class RouterSpecialist(BaseSpecialist):
                 next_specialist_name = recommended[0]
                 content = f"Proceeding with recommended specialist: {next_specialist_name}"
             else:
-                # If the recommendation is a list or ambiguous, let the LLM choose from the recommended subset.
-                # If the recommendation is a list of specialists, let the LLM choose from that subset.
-                # If the recommendation is a list of specialists, let the LLM choose from that subset.
                 llm_decision = self._get_llm_choice(state)
                 routing_type = "llm_decision"
                 next_specialist_name = llm_decision["next_specialist"]
@@ -129,7 +132,6 @@ class RouterSpecialist(BaseSpecialist):
             next_specialist_name = llm_decision["next_specialist"]
             content = llm_decision["content"]
             tool_calls = llm_decision.get("tool_calls", [])
-        # --- MODIFICATION END ---
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,

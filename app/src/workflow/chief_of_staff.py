@@ -270,14 +270,30 @@ class ChiefOfStaff:
         # 2. After any other specialist runs, control must return to the router for the next decision.
         #    This creates the "hub-and-spoke" architecture.
         for name in self.specialists:
-            if name == router_name:
-                continue  # Don't add an edge from the router to itself.
-            # --- MODIFICATION START: Centralized, Explicit Control ---
-            # The Archiver is no longer a terminal node. It must return to the router
-            # so the router can see the 'archive_report' and make the final decision to END.
-            # This implements the "Centralized, Explicit Control" principle.
+            # The router is the hub, and the synthesizer has its own explicit edge.
+            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value, CoreSpecialist.ARCHIVER.value]:
+                continue
             workflow.add_edge(name, router_name)
-            # --- MODIFICATION END ---
+
+        # 3. Enshrine the finalization sequence directly in the graph structure.
+        #    This makes the flow explicit and removes the implicit loop from the router's logic.
+        if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialists:
+            # After synthesis, always go to the archiver.
+            workflow.add_conditional_edges(
+                CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+                self.after_synthesis_decider,
+                {
+                    CoreSpecialist.ARCHIVER.value: CoreSpecialist.ARCHIVER.value,
+                    END: END
+                }
+            )
+            logger.info("Graph Edge: Added explicit edge from ResponseSynthesizer to Archiver.")
+
+        # 4. After the archiver runs, it must return to the router so the router can see the
+        #    'archive_report' and make the final decision to END, completing the Two-Stage Termination pattern.
+        if CoreSpecialist.ARCHIVER.value in self.specialists:
+            workflow.add_edge(CoreSpecialist.ARCHIVER.value, router_name)
+            logger.info("Graph Edge: Added explicit edge from Archiver back to Router.")
 
     def _build_graph(self) -> StateGraph:
         """
@@ -291,6 +307,17 @@ class ChiefOfStaff:
         # Set the validated entry point for the graph.
         workflow.set_entry_point(self.entry_point)
         return workflow.compile()
+
+    def after_synthesis_decider(self, state: GraphState) -> str:
+        """
+        Decision function that runs after the ResponseSynthesizer.
+        It explicitly routes to the Archiver, enshrining the finalization sequence.
+        """
+        logger.info("--- ChiefOfStaff: After Synthesis. Routing to Archiver. ---")
+        if CoreSpecialist.ARCHIVER.value in self.specialists:
+            return CoreSpecialist.ARCHIVER.value
+        else:
+            return END
 
     def decide_next_specialist(self, state: GraphState) -> str:
         """
