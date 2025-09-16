@@ -164,9 +164,11 @@ specialists:
     description: "A general-purpose specialist for direct Q&A and instruction following. Use this as a fallback when no other specialist seems appropriate for the user's request."
 
   # --- Procedural Specialists with External Dependencies ---
-  open_interpreter_specialist:
-    type: "procedural"
-    description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
+  
+  # Needs a little more work
+  #  open_interpreter_specialist:
+  #  type: "procedural"
+  #  description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
 
   archiver_specialist:
     type: "procedural"
