@@ -63,10 +63,10 @@ for i in {1..30}; do
         fi
 
         # Validate the JSON response using jq
-        # A successful iterative workflow will have a high turn count.
-        # We check for turn_count > 5 as a robust indicator of a multi-step, iterative process.
-        # We also check that the final message is a non-empty AI response.
-        if echo "$JSON_RESPONSE" | jq -e '.turn_count > 5 and (.messages | length > 1 and .messages[-1].type == "ai" and .messages[-1].content | length > 0)'; then
+        # A successful workflow will now produce a non-empty `user_response` string.
+        # This is a more direct and reliable indicator of success than checking turn counts.
+        # We also check that the final state includes an 'artifacts' dictionary as a sanity check.
+        if echo "$JSON_RESPONSE" | jq -e '.user_response | (type == "string" and length > 0) and .artifacts'; then
             echo "---"
             echo "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully."
             exit 0

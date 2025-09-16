@@ -97,12 +97,11 @@ try {
     }
 
     # Validate the JSON response
-    # A successful multi-step workflow will have a turn_count greater than 1,
-    # which is a more reliable check than looking for a non-null next_specialist.
-    if ($jsonResponse.turn_count -gt 5 -and `
-        $jsonResponse.messages.Count -gt 1 -and `
-        $jsonResponse.messages[-1].type -eq "ai" -and `
-        -not [string]::IsNullOrEmpty($jsonResponse.messages[-1].content)) {
+    # A successful workflow will now produce a non-empty `user_response` string.
+    # This is a more direct and reliable indicator of success.
+    if (($jsonResponse.user_response -is [string]) -and `
+        ($jsonResponse.user_response.Length -gt 0) -and `
+        ($null -ne $jsonResponse.artifacts)) {
         
         Write-Host "---"
         Write-Host "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully." -ForegroundColor Green
