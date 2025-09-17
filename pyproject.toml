@@ -20,7 +20,7 @@ classifiers = [
 # These are the core dependencies required to run the application
 # This section is the single source of truth for dependencies.
 dependencies = [
-    "fastapi[all]",
+    "fastapi",
     "uvicorn[standard]",
     "pydantic",
     "langchain-core>=0.1.52",
@@ -30,10 +30,7 @@ dependencies = [
     "python-dotenv",
     "PyYAML",
     "jmespath",
-    "google-generativeai",
     "tenacity",
-    "inflection",
-    "open-interpreter",
     "psycopg2-binary",
     "gradio",
     # Add specific LLM provider packages here as needed
@@ -49,11 +46,15 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-mock",
-    "black", # A popular code formatter
-    "ruff",  # A fast linter
+    "black",
+    "ruff",
     "pip-tools", # For compiling requirements.txt from pyproject.toml
     "typer[all]", # For the command-line interface
     "requests",   # For making HTTP requests from the CLI to the API
+    "python-multipart", # For FastAPI file uploads
+    "google-generativeai",
+    "inflection",
+    "open-interpreter",
 ]
 
 [tool.setuptools.packages.find]
