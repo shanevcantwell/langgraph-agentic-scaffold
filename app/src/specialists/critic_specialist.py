@@ -6,9 +6,9 @@ import jmespath
 from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..enums import CoreSpecialist
-from ..llm.adapter import AIMessage, StandardizedLLMRequest
+from ..llm.adapter import StandardizedLLMRequest
 from .schemas import Critique
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 logger = logging.getLogger(__name__)
 

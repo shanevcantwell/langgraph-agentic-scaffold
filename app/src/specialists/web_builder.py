@@ -86,8 +86,7 @@ class WebBuilder(BaseSpecialist):
         if next_iteration >= refinement_cycles:
             logger.info(f"WebBuilder has completed all {refinement_cycles} refinement cycles. Signaling task completion.")
             updated_state["task_is_complete"] = True
-            # Clean up state fields used during the loop
-        
+
         logger.info(f"WebBuilder recommending 'critic_specialist' to begin next refinement cycle.")
         updated_state["recommended_specialists"] = ["critic_specialist"]
 

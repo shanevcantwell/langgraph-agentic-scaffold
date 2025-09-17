@@ -54,15 +54,6 @@ class SystemsArchitect(BaseSpecialist):
 
         plan = SystemPlan(**json_response)
 
-        # --- Robustness Check for Refinement Cycles ---
-        # Some models fail to set refinement_cycles despite the prompt.
-        # We can add a check to enforce it based on the user's original request.
-        user_prompt = state["messages"][0].content.lower()
-        if plan.refinement_cycles <= 1:
-            if "iterate" in user_prompt or "refine" in user_prompt or "twice" in user_prompt or "three times" in user_prompt:
-                logger.warning("SystemsArchitect LLM did not set refinement_cycles. Overriding to 2 based on user prompt analysis.")
-                plan.refinement_cycles = 2
-
         # Add a summary message for the router and a structured artifact for other specialists/API response
         new_message = create_llm_message(
             specialist_name=self.specialist_name,
