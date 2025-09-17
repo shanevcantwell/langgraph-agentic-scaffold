@@ -26,13 +26,13 @@ class WebBuilder(BaseSpecialist):
         refinement_cycles = system_plan.get("refinement_cycles", 1)
         # Coalesce None to 0 to handle initial state and cleanup from previous runs.
         current_iteration = state.get("web_builder_iteration") or 0
-        critique = state.get("critique_artifact")
+        critique = state.get("artifacts", {}).get("critique.md")
         
         logger.info(f"Executing WebBuilder iteration {current_iteration + 1} of {refinement_cycles}.")
 
         # --- Contextual Prompting ---
         messages: List[BaseMessage] = state["messages"]
-        current_html = state.get("html_artifact")
+        current_html = state.get("artifacts", {}).get("html_document.html")
         
         contextual_messages = messages[:] # Make a copy
 
@@ -77,7 +77,9 @@ class WebBuilder(BaseSpecialist):
         )
         updated_state = {
             "messages": [ai_message],
-            "html_artifact": web_content.html_document,
+            "artifacts": {
+                "html_document.html": web_content.html_document
+            },
             "web_builder_iteration": next_iteration
         }
 
@@ -85,10 +87,8 @@ class WebBuilder(BaseSpecialist):
             logger.info(f"WebBuilder has completed all {refinement_cycles} refinement cycles. Signaling task completion.")
             updated_state["task_is_complete"] = True
             # Clean up state fields used during the loop
-            updated_state["web_builder_iteration"] = None
-            updated_state["critique_artifact"] = None
-        else:
-            logger.info(f"WebBuilder recommending 'critic_specialist' to begin next refinement cycle.")
-            updated_state["recommended_specialists"] = ["critic_specialist"]
+        
+        logger.info(f"WebBuilder recommending 'critic_specialist' to begin next refinement cycle.")
+        updated_state["recommended_specialists"] = ["critic_specialist"]
 
         return updated_state

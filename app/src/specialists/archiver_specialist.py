@@ -7,6 +7,7 @@ import codecs
 import html
 from datetime import datetime
 from langchain_core.messages import AIMessage, BaseMessage
+from ..utils.path_utils import PROJECT_ROOT
 from .base import BaseSpecialist
 
 logger = logging.getLogger(__name__)
@@ -25,10 +26,12 @@ class ArchiverSpecialist(BaseSpecialist):
         # 1. Environment variable (AGENTIC_SCAFFOLD_ARCHIVE_PATH) for user-level overrides.
         # 2. Specialist configuration in config.yaml (archive_path) for project-level settings.
         # 3. A hardcoded default ('./archives') as a fallback.
-        env_path = os.environ.get("AGENTIC_SCAFFOLD_ARCHIVE_PATH")
-        config_path = self.specialist_config.get("archive_path")
-        default_path = "./archives"
-        self.archive_dir_path = env_path or config_path or default_path
+        relative_archive_dir = (
+            os.environ.get("AGENTIC_SCAFFOLD_ARCHIVE_PATH")
+            or self.specialist_config.get("archive_path")
+            or "./archives"
+        )
+        self.archive_dir_path = str(PROJECT_ROOT / relative_archive_dir)
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -64,36 +67,26 @@ class ArchiverSpecialist(BaseSpecialist):
             report_parts.append("---")
 
         # --- Artifacts ---
-        artifacts = {
-            "HTML": ("html_artifact", "html"),
-            "JSON": ("json_artifact", "json"),
-            "Text": ("text_to_process", "text"),
-        }
+        artifacts = state.get("artifacts", {})
         has_artifacts = False
-        artifact_section = ["## artifacts"]
-        for title, (key, lang) in artifacts.items():
-            if content := state.get(key):
-                has_artifacts = True
-
-                # For structured data, pretty-print it as JSON. For others, just use string representation.
+        artifact_section = ["##  artifacts"]
+        if artifacts:
+            has_artifacts = True
+            for filename, content in artifacts.items():
+                lang = filename.split('.')[-1]
+                if lang not in ['html', 'json', 'md', 'py', 'js', 'css', 'txt']:
+                    lang = 'text' # Default language for syntax highlighting
+                
+                content_str = ""
                 if isinstance(content, (dict, list)):
                     content_str = json.dumps(content, indent=2)
+                elif isinstance(content, str):
+                    content_str = content
                 else:
                     content_str = str(content)
-
-                # Process content for readability in the final report.
-                if key == "html_artifact":
-                    # Un-escape HTML entities to make the raw HTML readable in the report.
-                    final_content = html.unescape(content_str)
-                else:
-                    try:
-                        final_content = codecs.decode(content_str, 'unicode_escape')
-                    except (UnicodeDecodeError, TypeError):
-                        logger.warning(f"Could not unicode-decode artifact '{key}'. Using raw string representation.")
-                        final_content = content_str
-
-                artifact_section.append(f"### 📄 {title} Output")
-                artifact_section.append(f"```{lang}\n{final_content}\n```")
+                
+                artifact_section.append(f"### 📄 `{filename}`")
+                artifact_section.append(f"```{lang}\n{content_str}\n```")
         
         if has_artifacts:
             report_parts.extend(artifact_section)

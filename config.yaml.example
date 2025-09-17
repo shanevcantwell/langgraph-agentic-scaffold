@@ -26,18 +26,15 @@ llm_providers:
     # Uses the LMSTUDIO_BASE_URL from your .env file
     # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "router-gpt-oss-20b" # The model identifier for the server.
-    # api_identifier: "lfm2-vl-1.6b" # The model identifier for the server.
-
+    # The 'api_identifier' (the specific model) is now defined in user_settings.yaml.
     # The model's total context window (input + output). This value is used by the llm
     # adapter to proactively prune the conversation history to prevent context overflow errors.
     context_window: 8192
 
   lmstudio_specialist:
-    # Uses the LMSTUDIO_BASE_URL from your .env file
-    # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "gpt-oss-20b" # The model identifier for the server.
+    # The 'api_identifier' (the specific model) is now defined in user_settings.yaml.
+
     # The model's total context window (input + output).
     context_window: 8192
     # Parameters to pass to the model's API.
@@ -51,7 +48,8 @@ llm_providers:
     # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
     # Example: OLLAMA_BASE_URL=http://localhost:11434
     type: "ollama"
-    api_identifier: "gemma3:27b" # The model name registered with Ollama.
+    # The 'api_identifier' (the specific model tag) is now defined in user_settings.yaml.
+
     # Ollama uses different parameter names than OpenAI-compatible servers.
     parameters:
       # num_predict is Ollama's equivalent of max_tokens. It controls the
@@ -62,14 +60,14 @@ llm_providers:
   gemini_pro:
     # Uses GOOGLE_API_KEY from your .env file
     type: "gemini"
-    api_identifier: "gemini-2.5-pro"
+    # The 'api_identifier' (e.g., "gemini-1.5-pro") is now defined in user_settings.yaml.
     # Future parameters could go here, e.g., temperature: 0.5
 
   # A configuration for a fast, cheaper Gemini model
   gemini_flash:
     # Uses GOOGLE_API_KEY from your .env file
     type: "gemini"
-    api_identifier: "gemini-2.5-flash"
+    # The 'api_identifier' (e.g., "gemini-1.5-flash") is now defined in user_settings.yaml.
 
 # ==============================================================================
 # WORKFLOW CONFIGURATION

@@ -6,7 +6,7 @@ import jmespath
 from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..enums import CoreSpecialist
-from ..llm.adapter import StandardizedLLMRequest
+from ..llm.adapter import AIMessage, StandardizedLLMRequest
 from .schemas import Critique
 from langchain_core.messages import BaseMessage, HumanMessage
 
@@ -24,14 +24,19 @@ class CriticSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         logger.info("Executing CriticSpecialist logic.")
-        html_artifact = state.get("html_artifact")
+        html_artifact = state.get("artifacts", {}).get("html_document.html")
 
         messages: List[BaseMessage] = state["messages"]
         contextual_messages = messages[:]
 
-        contextual_messages.append(HumanMessage(
-            content=f"Here is the HTML document to critique:\n\n```html\n{html_artifact}\n```"
-        ))
+        if html_artifact:
+            contextual_messages.append(HumanMessage(
+                content=f"Here is the HTML document to critique:\n\n```html\n{html_artifact}\n```"
+            ))
+        else:
+            # This is a critical failure. The critic cannot operate without the HTML.
+            error_message = f"I, {self.specialist_name}, cannot execute because the following required artifacts are missing from the current state: 'html_document.html'. I recommend running the following specialist(s) first: web_builder."
+            return {"messages": [AIMessage(content=error_message, name=self.specialist_name)], "recommended_specialists": ["web_builder"]}
 
         # Use the new schema for structured output
         request = StandardizedLLMRequest(
@@ -104,16 +109,18 @@ class CriticSpecialist(BaseSpecialist):
         # Systems Architect to re-evaluate the plan based on the critique.
         # This fulfills the user's request for an iterative planning loop.
         if state.get("web_builder_iteration", 0) > 0:
-            logger.info("Critique is part of a refinement cycle. Recommending return to Systems Architect.")
+            logger.info("Critique is part of a refinement cycle. Recommending return to WebBuilder.")
             return {
                 "messages": [ai_message],
-                "critique_artifact": critique_text,
-                "recommended_specialists": [CoreSpecialist.SYSTEMS_ARCHITECT.value],
+                "artifacts": {
+                    "critique.md": critique_text
+                },
+                "recommended_specialists": [CoreSpecialist.WEB_BUILDER.value],
             }
 
         logger.info("Critique generated. Recommending WebBuilder for refinement (default behavior).")
         return {
             "messages": [ai_message],
-            "critique_artifact": critique_text,
+            "artifacts": { "critique.md": critique_text },
             "recommended_specialists": [CoreSpecialist.WEB_BUILDER.value],
         }

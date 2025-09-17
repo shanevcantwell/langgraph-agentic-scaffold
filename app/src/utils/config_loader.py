@@ -104,6 +104,17 @@ class ConfigLoader:
         merged = copy.deepcopy(blueprint)
         self._resolve_provider_env_vars(merged.get("llm_providers"))
 
+        # --- ADR-Compliant Merge Logic ---
+        # Inject api_identifier from user_settings into the provider configs.
+        provider_models = user_settings.get("provider_models") or {}
+        llm_providers = merged.get("llm_providers", {})
+
+        for provider_name, model_settings in provider_models.items():
+            if provider_name in llm_providers:
+                llm_providers[provider_name]["api_identifier"] = model_settings.get("api_identifier")
+            else:
+                logger.warning(f"Provider '{provider_name}' defined in user_settings.yaml 'provider_models' not found in config.yaml 'llm_providers'. Ignoring.")
+
         # Robustly get bindings, defaulting to an empty dict if the key is missing or its value is None.
         bindings = user_settings.get("specialist_model_bindings") or {}
         default_binding = user_settings.get("default_llm_config")
@@ -143,6 +154,11 @@ class ConfigLoader:
             # If no binding was found AND it's a required LLM specialist, disable it.
             elif spec_config.get("type") == "llm":
                 logger.warning(f"LLM specialist '{name}' has no model binding and will be disabled. Provide a binding in {USER_SETTINGS_FILE}.")
+                continue
+
+            # Validate that LLM specialists have a fully defined provider after merging.
+            if spec_config.get("type") == "llm" and final_binding and not merged["llm_providers"][final_binding].get("api_identifier"):
+                logger.warning(f"LLM specialist '{name}' is bound to provider '{final_binding}', but no 'api_identifier' was specified in {USER_SETTINGS_FILE}. The specialist will be disabled.")
                 continue
 
             # Add the configured specialist to the final list.

@@ -1,27 +1,46 @@
 # ==============================================================================
 # USER-LEVEL SETTINGS
-# This file is for you, the user, to make choices from the options defined
-# in the main `config.yaml` blueprint.
+# This file is for your local environment. It defines WHICH concrete models to
+# use and HOW to assign them to the specialists from `config.yaml`.
 #
 # It is safe to edit and is not tracked by Git.
 # ==============================================================================
 
-# (Optional) Set a default model configuration for any LLM specialist that isn't
-# explicitly assigned a model below. This key must exist in the `llm_providers`
-# section of `config.yaml`.
-default_llm_config: "gemini_flash"
+# --- 1. Define Your Concrete Models ---
+# This section maps the abstract provider configurations from config.yaml
+# to the specific, concrete model identifiers you want to use.
+provider_models:
+  # For cloud providers, this is the API model name.
+  gemini_flash:
+    api_identifier: "gemini-2.5-flash-latest"
+  gemini_pro:
+    api_identifier: "gemini-2.5-pro-latest"
 
-# Assign a specific, pre-defined model configuration to a specialist.
-# The key on the left must be a specialist name from `config.yaml`.
-# The value on the right must be a provider key from `llm_providers` in `config.yaml`.
+  # For local providers (like LM Studio), this is typically the model file path/name
+  # that the server is loading.
+  lmstudio_router:
+    api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
+  lmstudio_specialist:
+    api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
+  ollama:
+    api_identifier: "llama3:8b"
+
+# --- 2. Assign Models to Specialists ---
+# This section binds the abstract specialists (from config.yaml) to one of the
+# fully-defined provider configurations from above.
 specialist_model_bindings:
   systems_architect: "gemini_pro"
   prompt_specialist: "gemini_pro"
 
   # --- Orchestration Bindings ---
-  # It's good practice to bind the core orchestrators explicitly.
+  # It's critical to bind the core orchestrators explicitly.
   router_specialist: "lmstudio_router"
   prompt_triage_specialist: "lmstudio_router"
+
+# --- 3. Set the Default ---
+# The default LLM configuration to use for any specialist that is not
+# explicitly bound above. This must match a key from the providers defined above.
+default_llm_config: "gemini_flash"
 
   # --- Procedural Specialist Bindings ---
   # The Open Interpreter specialist is procedural, but it requires an LLM to function.
