@@ -20,12 +20,12 @@ def prune_state(state: GraphState) -> Dict[str, Any]:
             f"{msg.type}: {msg.content[:100]}..." for msg in messages[-3:]
         ]
 
-    # Prune large artifacts
-    if html := state.get("html_artifact"):
-        pruned["html_artifact_preview"] = f"{html[:250]}..."
+    # Include key metadata
+    for key in ["turn_count", "next_specialist", "task_is_complete", "routing_history", "scratchpad", "artifacts"]:
+        if value := state.get(key):
+            pruned[key] = value
 
-    if text := state.get("text_to_process"):
-        pruned["text_to_process_preview"] = f"{text[:250]}..."
+    # --- Deprecated Fields ---
 
     # Include smaller, valuable artifacts as-is
     for key in ["system_plan", "critique_artifact", "extracted_data", "json_artifact"]:
@@ -33,10 +33,6 @@ def prune_state(state: GraphState) -> Dict[str, Any]:
             pruned[key] = value
 
     # Include key metadata
-    for key in ["turn_count", "next_specialist", "task_is_complete"]:
-        if value := state.get(key):
-            pruned[key] = value
-
     return pruned
 
 def generate_report(report_data: ErrorReport) -> str:

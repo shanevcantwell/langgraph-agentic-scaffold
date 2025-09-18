@@ -104,7 +104,7 @@ class RouterSpecialist(BaseSpecialist):
             routing_type = "completion_signal" if state.get("task_is_complete") else "error_signal"
             # Per the explicit graph structure, if a task is complete, we route to the synthesizer if it exists.
             # The graph itself will handle the subsequent step (routing to the archiver).
-            user_response_snippets = state.get("scratchpad", {}).get("user_response_snippets", [])
+            user_response_snippets = state.get("scratchpad", {}).get("user_response_snippets")
             if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map and user_response_snippets:
                 content = "Task is complete. Routing to ResponseSynthesizerSpecialist to generate final summary."
                 next_specialist_name = CoreSpecialist.RESPONSE_SYNTHESIZER.value

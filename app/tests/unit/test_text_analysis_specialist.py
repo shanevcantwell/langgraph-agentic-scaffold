@@ -23,8 +23,8 @@ def test_text_analysis_with_text():
 
     # Assert
     specialist.llm_adapter.invoke.assert_called_once()
-    assert "json_artifact" in result_state
-    assert result_state["json_artifact"] == mock_response
+    assert "artifacts" in result_state
+    assert result_state["artifacts"]["text_analysis"] == mock_response
     assert result_state["text_to_process"] is None # Should be consumed
     assert isinstance(result_state["messages"][0], AIMessage)
     assert "Test summary" in result_state["messages"][0].content

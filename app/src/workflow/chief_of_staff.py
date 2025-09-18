@@ -327,11 +327,7 @@ class ChiefOfStaff:
         approx_steps = (turn_count * 2) + 1
         logger.info(f"--- ChiefOfStaff: Deciding next specialist (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
         
-        # --- Intentional Loop Check ---
-        # If a specialist is managing its own iterative loop (like WebBuilder),
-        # we should bypass the ChiefOfStaff's generic loop detection to avoid
-        # prematurely halting a productive, intentional process.
-        if (state.get("web_builder_iteration") or 0) > 0:
+        if (state.get("scratchpad", {}).get("web_builder_iteration", 0)) > 0:
             logger.info("Intentional refinement loop detected (web_builder_iteration > 0). Bypassing generic loop detection for this turn.")
         else:
             # Check for unproductive loops to prevent the system from getting stuck.

@@ -61,6 +61,14 @@ The `router_specialist` is the most critical reasoning component in the architec
 
 **Recommendation:** The `router_specialist` should be run by a capable, instruction-tuned model known for reliable tool use (e.g., Gemini Flash, GPT-3.5-Turbo, or larger). Reserve smaller, more efficient models for more constrained, less critical specialist tasks.
 
+### 4.1.1 Intentional vs. Unproductive Loops
+
+The `ChiefOfStaff` includes a generic loop detection mechanism to halt unproductive cycles (e.g., `Router -> Specialist A -> Router -> Specialist A ...`). However, some specialists, like `WebBuilder`, need to run in an *intentional* loop to refine their work.
+
+To prevent the generic loop detector from prematurely halting these intentional processes, such specialists should manage their own iteration counters within the `scratchpad` (e.g., `scratchpad['web_builder_iteration']`). The `ChiefOfStaff` is configured to recognize this key and will bypass its own loop detection for that turn, deferring to the specialist's internal logic.
+
+**Policy:** Any specialist designed to loop intentionally **must** use a unique key in the `scratchpad` to signal its state to the `ChiefOfStaff`.
+
 ### 4.2 Implement Robust Loop Control
 
 Off-by-one errors in agentic loops can be common. Ensure that loop termination logic in stateful specialists uses strict inequality (`<`) rather than (`<=`) to compare the current iteration count against the maximum number of cycles.

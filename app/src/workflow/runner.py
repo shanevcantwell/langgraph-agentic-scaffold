@@ -112,7 +112,14 @@ class WorkflowRunner:
         try:
             final_state = self.app.invoke(initial_state, config={"recursion_limit": self.recursion_limit})
             logger.info("--- Workflow completed successfully ---")
-            return final_state
+
+            final_artifacts = final_state.get("artifacts", {})
+            final_response = final_artifacts.get("final_user_response.md", "Workflow completed, but no final user response was generated.")
+            
+            return {
+                "final_user_response": final_response
+            }
+
         except Exception as e:
             logger.error(f"--- Workflow failed with an unhandled exception: {e} ---", exc_info=True)
             return {

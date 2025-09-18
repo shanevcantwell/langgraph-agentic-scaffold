@@ -208,7 +208,9 @@ def test_decide_next_specialist_bypasses_loop_detection_for_intentional_loops(mo
     state = {
         "routing_history": ["C", "A", "B", "A", "B"],
         "next_specialist": "some_specialist",
-        "web_builder_iteration": 1  # This signals an intentional loop
+        "scratchpad": {
+            "web_builder_iteration": 1  # This signals an intentional loop
+        }
     }
 
     # Act

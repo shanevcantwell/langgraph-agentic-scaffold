@@ -28,4 +28,4 @@ def test_sentiment_classifier_specialist_execute():
     assert isinstance(new_message, AIMessage)
     assert mock_sentiment in new_message.content
     assert new_message.name == "sentiment_classifier_specialist"
-    assert result_state["json_artifact"]["sentiment"] == mock_sentiment
+    assert result_state["artifacts"]["sentiment_analysis"]["sentiment"] == mock_sentiment
