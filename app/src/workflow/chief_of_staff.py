@@ -270,10 +270,10 @@ class ChiefOfStaff:
         # 2. After any other specialist runs, control must return to the router for the next decision.
         #    This creates the "hub-and-spoke" architecture.
         for name in self.specialists:
-            # The router is the hub, and the synthesizer has its own explicit edge.
-            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value, CoreSpecialist.ARCHIVER.value]:
+            # The router is the hub, and the synthesizer has its own explicit conditional edge.
+            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value]:
                 continue
-            workflow.add_edge(name, router_name)
+            workflow.add_edge(name, router_name) # This ensures archiver is a known node.
 
         # 3. Enshrine the finalization sequence directly in the graph structure.
         #    This makes the flow explicit and removes the implicit loop from the router's logic.
@@ -291,9 +291,6 @@ class ChiefOfStaff:
 
         # 4. After the archiver runs, it must return to the router so the router can see the
         #    'archive_report' and make the final decision to END, completing the Two-Stage Termination pattern.
-        if CoreSpecialist.ARCHIVER.value in self.specialists:
-            workflow.add_edge(CoreSpecialist.ARCHIVER.value, router_name)
-            logger.info("Graph Edge: Added explicit edge from Archiver back to Router.")
 
     def _build_graph(self) -> StateGraph:
         """

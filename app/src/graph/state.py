@@ -20,9 +20,9 @@ class GraphState(TypedDict):
 
     # --- Generic State Management ---
     # Use `artifacts` for significant data outputs such as complete files or image base64,
-    # and `scratchpad` for transient state. 
-    artifacts: Dict[str, Any]
-    scratchpad: Dict[str, Any]
+    # and `scratchpad` for transient state.
+    artifacts: Annotated[Dict[str, Any], operator.ior]
+    scratchpad: Annotated[Dict[str, Any], operator.ior]
 
     # --- Specialist-Specific State ---
     # These fields are used by specific specialists and are candidates for
@@ -34,4 +34,3 @@ class GraphState(TypedDict):
     error_report: Optional[str]
     system_plan: Optional[Dict[str, Any]]
     web_builder_iteration: Optional[int]
-    user_response: Optional[str] # The final, synthesized response for the user.

@@ -85,34 +85,34 @@ class RouterSpecialist(BaseSpecialist):
         content = ""
         tool_calls = []
         
-        # --- MODIFICATION START: Two-Stage Termination Pattern ---
-        # This is the new, prioritized decision tree for routing.
+        # --- Three-Stage Termination Pattern ---
         
-        # Priority 1: A detailed error report means the workflow has failed catastrophically. Terminate immediately.
+        # Stage 3, Condition A: A detailed error report means the workflow has failed catastrophically. Terminate immediately.
         if state.get("error_report"):
             routing_type = "fatal_error_signal"
             content = "A critical error occurred. See error_report for details. Terminating workflow."
             next_specialist_name = END
 
-        # Priority 2: The presence of an 'archive_report' is the definitive signal that the workflow is complete.
-        elif state.get("archive_report"):
+        # Stage 3, Condition B: The presence of an 'archive_report.md' artifact is the definitive signal that the workflow is complete.
+        elif state.get("artifacts", {}).get("archive_report.md"):
             routing_type = "final_report_signal"
             content = "Archive report generated. Workflow complete."
             next_specialist_name = END
 
-        # Priority 3: A simple error or a task completion flag triggers the synthesis/archival process.
+        # Stage 1: A simple error or a task completion flag from another specialist triggers the finalization sequence.
         elif state.get("error") or state.get("task_is_complete", False):
             routing_type = "completion_signal" if state.get("task_is_complete") else "error_signal"
             # Per the explicit graph structure, if a task is complete, we route to the synthesizer if it exists.
             # The graph itself will handle the subsequent step (routing to the archiver).
-            if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map and state.get("user_response"):
+            user_response_snippets = state.get("scratchpad", {}).get("user_response_snippets", [])
+            if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map and user_response_snippets:
                 content = "Task is complete. Routing to ResponseSynthesizerSpecialist to generate final summary."
                 next_specialist_name = CoreSpecialist.RESPONSE_SYNTHESIZER.value
             else:
                 content = "Task is complete or an error occurred. Routing to ArchiverSpecialist for final report."
                 next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
 
-        # Priority 4: A recommendation from Triage or another specialist is a strong hint.
+        # Default Routing Logic: A recommendation from Triage or another specialist is a strong hint.
         elif recommended := state.get("recommended_specialists"):
             if len(recommended) == 1 and recommended[0] in self.specialist_map:
                 routing_type = "recommendation"
@@ -125,7 +125,7 @@ class RouterSpecialist(BaseSpecialist):
                 content = llm_decision["content"]
                 tool_calls = llm_decision.get("tool_calls", [])
         
-        # Priority 5: Default to LLM-based routing if no other signals are present.
+        # Default Routing Logic: Fallback to LLM-based routing if no other signals are present.
         else:
             llm_decision = self._get_llm_choice(state)
             routing_type = "llm_decision"

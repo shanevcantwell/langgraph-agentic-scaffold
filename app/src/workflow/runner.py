@@ -23,7 +23,8 @@ class WorkflowRunner:
         and compiling the LangGraph application.
         """
         chief_of_staff = ChiefOfStaff()
-        self.config = chief_of_staff.config
+        self.chief_of_staff = chief_of_staff
+        self.config = self.chief_of_staff.config
         self._perform_pre_flight_checks()
         self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
         self.app = chief_of_staff.get_graph()
@@ -59,7 +60,21 @@ class WorkflowRunner:
                     f"Pre-flight check failed: Provider '{binding_key}' is type 'lmstudio' but "
                     "the LMSTUDIO_BASE_URL environment variable is not set."
                 )
-        logger.info("Pre-flight environment checks passed successfully.")
+
+        # --- ADR-010: Fail-Fast Startup Validation ---
+        workflow_config = self.config.get("workflow", {})
+        critical_specialists = workflow_config.get("critical_specialists", [])
+        if critical_specialists:
+            loaded_specialist_names = self.chief_of_staff.specialists.keys()
+            missing_critical = [name for name in critical_specialists if name not in loaded_specialist_names]
+            if missing_critical:
+                raise ConfigError(
+                    f"Pre-flight check failed: The following critical specialists failed to load: {missing_critical}. "
+                    "The application cannot start in this state. Please check the logs for errors related to these specialists."
+                )
+            logger.info(f"Successfully validated that all critical specialists are loaded: {critical_specialists}")
+
+        logger.info("All pre-flight checks passed successfully.")
 
     def run(self, goal: str) -> Dict[str, Any]:
         """

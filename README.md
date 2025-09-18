@@ -68,7 +68,7 @@ Use the provided scripts to start the API server.
 *   On **Linux/macOS**: `./scripts/server.sh start`
 *   On **Windows**: `.\scripts\server.bat start`
 
-Once running, you can access the interactive API documentation at **`http://12.0.0.1:8000/docs`**.
+Once running, you can access the interactive API documentation at **`http://127.0.0.1:8000/docs`**.
 
 ### Interact with the Agent via CLI
 

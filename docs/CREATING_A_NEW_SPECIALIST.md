@@ -90,8 +90,6 @@ class CodeWriterSpecialist(BaseSpecialist):
         # 4. Return the updated state.
         #    Only return the *new* messages you want to add to the history. The
         #    graph will automatically append them.
-        #    Optionally, you can add a human-readable summary of your action
-        #    to the `user_response` list for the final synthesis step.
         return {"messages": [ai_message]}
 ```
 

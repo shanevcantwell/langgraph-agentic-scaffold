@@ -16,12 +16,11 @@ The system is composed of several agent types with a clear separation of concern
 3.  **Structural Orchestrator (`ChiefOfStaff`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
 
 ### 2.1 Proposed Architectural Evolution: Generic State Management
-
-**Note:** The architecture is evolving towards a more robust state management model. A formal proposal (ADR-001) has been made to replace specialist-specific state fields (e.g., `html_artifact`) with two generic dictionaries in the `GraphState`:
+**Status: Implemented.** The architecture has adopted a robust state management model. Specialist-specific state fields (e.g., `html_artifact`) have been deprecated in favor of two generic dictionaries in the `GraphState`:
 *   `artifacts`: A "heap" for significant data outputs.
 *   `scratchpad`: A "register" for specialists' private, transient state (e.g., loop counters).
 
-New specialists should be designed with this future state in mind.
+All new specialists **must** be designed using this pattern to ensure forward compatibility and system stability.
 
 ## 3.0 Observability with LangSmith (Essential for Development)
 
@@ -77,17 +76,17 @@ The process is as follows:
 1.  **Stage 1: Signal Completion & Route to Synthesizer**
     *   A functional specialist (e.g., `web_builder`) completes its primary task.
     *   It signals this completion by including `task_is_complete: True` in its return state.
-    *   Optionally, it contributes a human-readable summary of its action to the `user_response` list in the state.
+    *   Optionally, it contributes a human-readable summary of its action to the `user_response_snippets` list within the `scratchpad`.
     *   The `router_specialist` observes the `task_is_complete` flag and routes control to the `response_synthesizer_specialist`.
 
 2.  **Stage 2: Synthesize, Archive, and Verify**
-    *   The `response_synthesizer_specialist` runs, taking the snippets from the `user_response` list and generating a single, polished summary for the end-user.
+    *   The `response_synthesizer_specialist` runs, taking the snippets from `scratchpad['user_response_snippets']` and generating a `final_user_response.md` artifact.
     *   The graph's structure then explicitly routes control from the synthesizer to the `archiver_specialist`.
-    *   The `archiver_specialist` runs, generating the final `archive_report`.
+    *   The `archiver_specialist` runs, consuming the `final_user_response.md` artifact and generating the final `archive_report.md` artifact.
     *   Crucially, the `archiver_specialist` does **not** end the graph. It returns control back to the `router_specialist`.
 
 3.  **Stage 3: Final Review and Termination**
-    *   The `router_specialist` now observes the presence of the `archive_report` artifact in the state. This is the definitive signal that the workflow is complete.
+    *   The `router_specialist` now observes the presence of the `artifacts['archive_report.md']` in the state. This is the definitive signal that the workflow is complete.
     *   The router then makes the final, authoritative decision to route to `__end__`, formally terminating the graph.
 
 This explicit `... -> Router -> Synthesizer -> Archiver -> Router -> END` sequence is defined in the `ChiefOfStaff` and guarantees that the `router_specialist` is the sole component responsible for managing the graph's lifecycle, which significantly enhances the system's predictability and robustness.

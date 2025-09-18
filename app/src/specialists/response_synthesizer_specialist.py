@@ -1,64 +1,77 @@
 # app/src/specialists/response_synthesizer_specialist.py
-from typing import Dict, Any
 import logging
+from typing import Dict, Any
+
+from langchain_core.messages import AIMessage, HumanMessage
+
 from .base import BaseSpecialist
-from ..llm.adapter import StandardizedLLMRequest
 from .helpers import create_llm_message
+from ..llm.adapter import StandardizedLLMRequest
 
 logger = logging.getLogger(__name__)
 
+
 class ResponseSynthesizerSpecialist(BaseSpecialist):
     """
-    A specialist that synthesizes a final, user-facing response from a
-    collection of text snippets accumulated during the workflow.
+    An LLM-driven specialist that synthesizes a final, coherent, user-facing
+    response from a collection of text snippets accumulated in the scratchpad.
+    This is the second stage of the Three-Stage
+    Termination Pattern.
     """
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
+        logger.info(f"---INITIALIZED {self.specialist_name}---")
 
-    def _execute_logic(self, state: dict) -> dict:
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Takes the list of strings from state['user_response'], combines them,
-        and uses an LLM to generate a polished, final summary.
+        Synthesizes a final response from snippets in the scratchpad and stores
+        the result as an artifact.
         """
-        user_response_snippets = state.get("user_response", [])
+        logger.info(f"--- {self.specialist_name}: Synthesizing final response. ---")
 
-        # If there are no snippets to synthesize, perform no action.
-        if not user_response_snippets or not isinstance(user_response_snippets, list):
-            logger.info("No user response snippets to synthesize. Skipping.")
-            return {}
+        scratchpad = state.get("scratchpad", {})
+        user_response_snippets = scratchpad.get("user_response_snippets", [])
 
-        # Combine the snippets into a single block of text for the LLM.
-        combined_snippets = "\n\n".join(f"- {snippet}" for snippet in user_response_snippets)
+        if not user_response_snippets:
+            logger.warning(f"No 'user_response_snippets' found in scratchpad for {self.specialist_name} to synthesize. Skipping.")
+            # If nothing to synthesize, just pass through to the next stage (Archiver)
+            return {
+                "artifacts": {
+                    "final_user_response.md": "No specific user-facing response was synthesized."
+                }
+            }
 
-        # The system prompt for this specialist will instruct it to synthesize.
-        # We just need to provide the raw data.
-        synthesis_prompt = f"""
-Here are the key findings and actions taken during the process:
+        # Concatenate all snippets into a single string for the LLM to process.
+        # The prompt for this specialist should instruct the LLM on how to combine these.
+        combined_snippets = "\n\n---\n\n".join(map(str, user_response_snippets))
 
-{combined_snippets}
+        # Create a message for the LLM. The system prompt (loaded via config)
+        # will guide the LLM on how to synthesize these.
+        messages = state["messages"] + [
+            HumanMessage(content=f"Please synthesize the following information into a single, coherent response for the user:\n\n{combined_snippets}")
+        ]
 
-Please synthesize these points into a single, clear, and friendly response for the end-user.
-"""
+        request = StandardizedLLMRequest(messages=messages)
+        response_data = self.llm_adapter.invoke(request)
 
-        request = StandardizedLLMRequest(
-            messages=[("human", synthesis_prompt)]
+        synthesized_response = response_data.get(
+            "text_response", "I was unable to synthesize a coherent response."
         )
 
-        response_data = self.llm_adapter.invoke(request)
-        synthesized_content = response_data.get("text_response", "I have completed the task.")
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
+            content=synthesized_response,
+            additional_kwargs={"synthesized_from_snippets": True}
+        )
 
-        # Create a final AI message for the history to maintain full traceability.
-        final_message = create_llm_message(self.specialist_name, self.llm_adapter, synthesized_content)
-
-        # Per ADR-004, this specialist signals completion.
-        # It overwrites the `user_response` field with the final string (not a list)
-        # for easier consumption by clients. It also places the final response in
-        # the `artifacts` dictionary, adhering to the "Future-Proof Your State
-        # Management" best practice from CREATING_A_NEW_SPECIALIST.md.
+        # Store the synthesized response as an artifact for the Archiver.
+        # Clear the snippets from the scratchpad as they have been processed.
         return {
-            "messages": [final_message],
-            "user_response": synthesized_content,
-            "artifacts": {"final_user_response.md": synthesized_content},
-            "task_is_complete": True
+            "messages": [ai_message],
+            "artifacts": {"final_user_response.md": synthesized_response},
+            "scratchpad": {
+                "user_response_snippets": [] # Clear the snippets after synthesis
+            }
         }
