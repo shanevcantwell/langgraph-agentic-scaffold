@@ -1,11 +1,13 @@
-# In: app/src/strategies/critique/llm_strategy.py
-
+import logging
 from app.src.graph.state import GraphState
 from app.src.llm.adapter import BaseAdapter, StandardizedLLMRequest
 from app.src.specialists.schemas import Critique
 from app.src.utils.prompt_loader import load_prompt
 from langchain_core.messages import SystemMessage, HumanMessage
+from pydantic import ValidationError
 from .base import BaseCritiqueStrategy
+
+logger = logging.getLogger(__name__)
 
 class LLMCritiqueStrategy(BaseCritiqueStrategy):
     def __init__(self, llm_adapter: BaseAdapter, prompt_file: str):
@@ -27,15 +29,14 @@ class LLMCritiqueStrategy(BaseCritiqueStrategy):
         html_artifact = state.get("artifacts", {}).get("html_document.html")
 
         if not html_artifact:
-            # This is the corrected, robust error-handling path.
             return Critique(
                 decision="REVISE",
                 overall_assessment="Cannot perform critique: html_document.html is missing.",
                 points_for_improvement=["The required 'html_document.html' artifact was not found in the state."],
-                positive_feedback=[]
+                positive_feedback=[],
+                is_parse_error=True # A missing artifact is a condition for retry/reroute
             )
 
-        # Use the payload (state) to build a rich context for the LLM
         contextual_messages = [
             SystemMessage(content=self.system_prompt),
             HumanMessage(content=f"Original User Goal: {state['messages'][0].content}"),
@@ -50,13 +51,41 @@ class LLMCritiqueStrategy(BaseCritiqueStrategy):
         response_data = self.llm_adapter.invoke(request)
         json_response = response_data.get("json_response")
 
-        if not json_response:
-            # Handle the case where the LLM fails to return valid JSON
+        # --- MODIFICATION: Add explicit type validation ---
+        # This check enforces the contract that the strategy requires a dictionary (mapping)
+        # to instantiate the Pydantic model. It protects against the LLM returning a
+        # JSON array, which the adapter would parse into a list or tuple.
+        if not isinstance(json_response, dict):
+            logger.warning(f"LLM adapter returned a non-dictionary type: {type(json_response).__name__}. Expected a dict.")
             return Critique(
                 decision="REVISE",
-                overall_assessment="LLM failed to provide a structured critique.",
-                points_for_improvement=[f"The LLM response could not be parsed into the required format. Raw response: {response_data.get('text_response')}"],
-                positive_feedback=[]
+                overall_assessment="LLM returned an invalid data structure.",
+                points_for_improvement=[
+                    f"The LLM was expected to return a JSON object (a dictionary), but it returned a different structure (e.g., a list or tuple).",
+                    f"Data received: {json_response}"
+                ],
+                positive_feedback=[],
+                is_parse_error=True
             )
+        # --- END MODIFICATION ---
 
-        return Critique(**json_response)
+        if len(json_response) == 1:
+            first_key = next(iter(json_response))
+            if isinstance(json_response[first_key], dict):
+                logger.warning(f"LLM returned a nested dictionary under key '{first_key}'. Unwrapping to use the inner dictionary.")
+                json_response = json_response[first_key]
+
+        try:
+            return Critique(**json_response)
+        except ValidationError as e:
+            logger.warning(f"LLM returned data that failed Pydantic validation: {e}. Raw JSON: {json_response}")
+            return Critique(
+                decision="REVISE",
+                overall_assessment="LLM returned malformed data that failed validation.",
+                points_for_improvement=[
+                    f"The LLM's structured response was missing required fields or had incorrect data types. Validation Error: {e}",
+                    f"Problematic JSON received from LLM: {json_response}"
+                ],
+                positive_feedback=[],
+                is_parse_error=True
+            )

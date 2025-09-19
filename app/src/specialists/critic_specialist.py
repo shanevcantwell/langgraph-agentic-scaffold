@@ -1,126 +1,61 @@
 # app/src/specialists/critic_specialist.py
 import logging
-from typing import Dict, Any, List
+from typing import Any, Dict
 
-import jmespath
 from .base import BaseSpecialist
 from .helpers import create_llm_message
-from ..enums import CoreSpecialist
-from ..llm.adapter import StandardizedLLMRequest
-from .schemas import Critique
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
+from ..strategies.critique.base import BaseCritiqueStrategy
 
 logger = logging.getLogger(__name__)
 
 class CriticSpecialist(BaseSpecialist):
     """
-    A specialist that analyzes an HTML artifact and provides a critique for
-    improvement. It is a key part of the refinement loop.
+    A specialist that acts as a gatekeeper for quality control. It uses a
+    pluggable "Critique Strategy" to analyze an artifact and then makes a
+    routing decision based on the outcome.
     """
 
-    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any], critique_strategy: BaseCritiqueStrategy):
         super().__init__(specialist_name, specialist_config)
-        logger.info("---INITIALIZED CriticSpecialist---")
+        self.strategy = critique_strategy
+        self.revision_target = self.specialist_config.get("revision_target")
+        logger.info(f"---INITIALIZED CriticSpecialist with strategy: {critique_strategy.__class__.__name__}---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        logger.info("Executing CriticSpecialist logic.")
-        html_artifact = state.get("artifacts", {}).get("html_document.html")
+        logger.info(f"Executing CriticSpecialist logic using {self.strategy.__class__.__name__}.")
 
-        messages: List[BaseMessage] = state["messages"]
-        contextual_messages = messages[:]
+        # 1. Delegate the core task to the injected strategy
+        critique = self.strategy.critique(state)
 
-        if html_artifact:
-            contextual_messages.append(HumanMessage(
-                content=f"Here is the HTML document to critique:\n\n```html\n{html_artifact}\n```"
-            ))
-        else:
-            # This is a critical failure. The critic cannot operate without the HTML.
-            error_message = f"I, {self.specialist_name}, cannot execute because the following required artifacts are missing from the current state: 'html_document.html'. I recommend running the following specialist(s) first: web_builder."
-            return {"messages": [AIMessage(content=error_message, name=self.specialist_name)], "recommended_specialists": ["web_builder"]}
+        # 2. Format the critique into a text artifact for the next specialist
+        critique_text_parts = [f"**Overall Assessment:**\n{critique.overall_assessment}\n"]
+        if critique.points_for_improvement:
+            improvement_points = "\n".join([f"- {point}" for point in critique.points_for_improvement])
+            critique_text_parts.append(f"**Points for Improvement:**\n{improvement_points}\n")
+        if critique.positive_feedback:
+            positive_points = "\n".join([f"- {point}" for point in critique.positive_feedback])
+            critique_text_parts.append(f"**What Went Well:**\n{positive_points}")
+        critique_text = "\n".join(critique_text_parts)
 
-        # Use the new schema for structured output
-        request = StandardizedLLMRequest(
-            messages=contextual_messages,
-            output_model_class=Critique
-        )
-        response_data = self.llm_adapter.invoke(request)
-        json_response = response_data.get("json_response")
-
-        if not json_response:
-            # Fallback for when the LLM fails to produce structured output
-            logger.warning("Critic LLM failed to return a valid structured response. Falling back to text.")
-            critique_text = response_data.get("text_response", "The critic LLM failed to provide a response.")
-        else:
-            # Use JMESPath to robustly extract data, regardless of nesting.
-            # Check for keys at the top level, or nested one level under a 'critique' key.
-            assessment_str = jmespath.search('overall_assessment || assessment || critique.overall_assessment || critique.assessment', json_response)
-            improvements_list = jmespath.search('points_for_improvement || improvements || critique.points_for_improvement || critique.improvements', json_response) or []
-            positives_list = jmespath.search('positive_feedback || critique.positive_feedback', json_response) or []
-
-            final_assessment = str(assessment_str) if assessment_str else "No assessment provided."
-            
-            final_improvements = []
-            if isinstance(improvements_list, list):
-                for item in improvements_list:
-                    if isinstance(item, dict):
-                        # If the item is a dict, join its values into a string.
-                        final_improvements.append(": ".join(str(v) for v in item.values()))
-                    elif isinstance(item, str):
-                        final_improvements.append(item)
-
-            final_positives = []
-            if isinstance(positives_list, list):
-                for item in positives_list:
-                    if isinstance(item, dict):
-                        final_positives.append(": ".join(str(v) for v in item.values()))
-                    elif isinstance(item, str):
-                        final_positives.append(item)
-
-            critique_data = {
-                "overall_assessment": final_assessment,
-                "points_for_improvement": final_improvements,
-                "positive_feedback": final_positives,
-            }
-
-            try:
-                # Format the structured critique into a readable markdown string for the artifact
-                critique = Critique(**critique_data)
-            except Exception as e:
-                logger.error(f"Pydantic validation failed for critic even after JMESPath extraction: {e}", exc_info=True)
-                raise e # Re-raise to be caught by the base specialist's error handler
-
-            critique_text_parts = [f"**Overall Assessment:**\n{critique.overall_assessment}\n"]
-            if critique.points_for_improvement:
-                improvement_points = "\n".join([f"- {point}" for point in critique.points_for_improvement])
-                critique_text_parts.append(f"**Points for Improvement:**\n{improvement_points}\n")
-            if critique.positive_feedback:
-                positive_points = "\n".join([f"- {point}" for point in critique.positive_feedback])
-                critique_text_parts.append(f"**What Went Well:**\n{positive_points}")
-            critique_text = "\n".join(critique_text_parts)
-
+        # 3. Prepare the state update based on the strategy's decision
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content="Critique complete. The plan will now be re-evaluated based on this feedback.",
+            content=f"Critique complete. Decision: {critique.decision}",
         )
 
-        # --- Iteration Loop Logic ---
-        # If we are in a web builder refinement cycle, recommend returning to the
-        # Systems Architect to re-evaluate the plan based on the critique.
-        # This fulfills the user's request for an iterative planning loop.
-        if state.get("web_builder_iteration", 0) > 0:
-            logger.info("Critique is part of a refinement cycle. Recommending return to WebBuilder.")
-            return {
-                "messages": [ai_message],
-                "artifacts": {
-                    "critique.md": critique_text
-                },
-                "recommended_specialists": [CoreSpecialist.WEB_BUILDER.value],
-            }
-
-        logger.info("Critique generated. Recommending WebBuilder for refinement (default behavior).")
-        return {
+        updated_state = {
             "messages": [ai_message],
-            "artifacts": { "critique.md": critique_text },
-            "recommended_specialists": [CoreSpecialist.WEB_BUILDER.value],
+            "artifacts": {"critique.md": critique_text},
+            "scratchpad": {"critique_decision": critique.decision}
         }
+
+        # 4. If the decision is to revise, recommend the configured target
+        if critique.decision == "REVISE" and self.revision_target:
+            logger.info(f"Critique decision is REVISE. Recommending return to '{self.revision_target}'.")
+            updated_state["recommended_specialists"] = [self.revision_target]
+        else:
+            logger.info(f"Critique decision is ACCEPT. Signaling task completion.")
+            updated_state["task_is_complete"] = True
+
+        return updated_state

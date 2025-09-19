@@ -21,7 +21,9 @@ class ArchiverSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        self.archive_path = self.specialist_config.get("archive_path", "./archives")
+        # Get the path from config and expand the user's home directory if `~` is used.
+        raw_path = self.specialist_config.get("archive_path", "./archives")
+        self.archive_path = os.path.expanduser(raw_path)
         self.pruning_strategy = self.specialist_config.get("pruning_strategy", "none")
         self.pruning_max_count = self.specialist_config.get("pruning_max_count", 50)
         os.makedirs(self.archive_path, exist_ok=True)

@@ -105,16 +105,30 @@ specialists:
     description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
 
   critic_specialist:
+    # The specialist's own config. It still needs an LLM binding for its AI message.
     type: "llm"
-    prompt_file: "critic_prompt.md"
-    description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
+    llm_config: "gemini_flash"
+    prompt_file: "critic_wrapper_prompt.md"
+    description: "A gatekeeper node that runs a configured critique strategy to ensure quality."
     # This specialist still has a simple, non-conditional dependency.
     # We will support both formats for backward compatibility and simplicity.
     requires_artifacts: ["html_document.html"]
     artifact_providers:
       html_document.html: "web_builder"
+    
+    # Config for its role in conditional routing
     conditional_routing: true
     revision_target: "web_builder"
+
+    # --- NEW STRATEGY CONFIGURATION ---
+    # This nested block defines which critique behavior to use.
+    critique_strategy:
+      type: "llm" # The type of strategy to load.
+      # Strategy-specific parameters are nested here.
+      prompt_file: "critic_prompt.md"
+      # The strategy needs its own LLM binding, which can be different
+      # from the specialist's binding for its wrapper message.
+      llm_config: "gemini_pro"
   # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
   # When a functional specialist signals `task_is_complete: True`, the router should
   # route to this specialist. It synthesizes a final, user-facing response from the
@@ -191,7 +205,7 @@ specialists:
 
   archiver_specialist:
     type: "procedural"
-    archive_path: "./archives" # The directory to save final run reports.
+    archive_path: "${ARCHIVE_PATH:./archives}" # The directory to save final run reports.
     # Pruning strategy for the archive directory to prevent it from growing indefinitely.
     # Options: "none", "count", "size".
     pruning_strategy: "count"

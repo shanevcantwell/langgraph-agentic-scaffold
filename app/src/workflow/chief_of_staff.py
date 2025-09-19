@@ -15,6 +15,9 @@ from ..graph.state import GraphState
 from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
 from ..specialists.helpers import create_missing_artifact_response
+# Import the new strategy components
+from ..strategies.critique.base import BaseCritiqueStrategy
+from ..strategies.critique.llm_strategy import LLMCritiqueStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +62,35 @@ class ChiefOfStaff:
         for name, config in specialists_config.items():
             try:
                 SpecialistClass = get_specialist_class(name, config)
-                if not issubclass(SpecialistClass, BaseSpecialist):
-                    logger.warning(f"Skipping '{name}': Class '{SpecialistClass.__name__}' does not inherit from BaseSpecialist.")
-                    continue
-                # Instantiate the specialist, injecting its name and its specific configuration block.
-                # This completes the decoupling of specialists from a global config loader.
-                instance = SpecialistClass(specialist_name=name, specialist_config=config)
+                
+                # --- NEW LOGIC FOR CRITIC SPECIALIST ---
+                if name == "critic_specialist":
+                    strategy_config = config.get("critique_strategy")
+                    if not strategy_config:
+                        raise ValueError("CriticSpecialist config is missing required 'critique_strategy' section.")
+                    
+                    strategy_type = strategy_config.get("type")
+                    critique_strategy_instance: BaseCritiqueStrategy
+
+                    if strategy_type == "llm":
+                        # Instantiate the strategy's dependencies
+                        strategy_llm_binding = strategy_config.get("llm_config")
+                        strategy_prompt_file = strategy_config.get("prompt_file")
+                        if not (strategy_llm_binding and strategy_prompt_file):
+                            raise ValueError("LLM critique_strategy requires 'llm_config' and 'prompt_file'.")
+                        
+                        # The strategy gets its own dedicated LLM adapter
+                        strategy_llm_adapter = self.adapter_factory.create_adapter(strategy_llm_binding, "")
+                        critique_strategy_instance = LLMCritiqueStrategy(llm_adapter=strategy_llm_adapter, prompt_file=strategy_prompt_file)
+                    else:
+                        raise NotImplementedError(f"Critique strategy type '{strategy_type}' is not supported.")
+
+                    # Inject the strategy instance into the specialist's constructor
+                    instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
+                else:
+                    # Original logic for all other specialists
+                    instance = SpecialistClass(specialist_name=name, specialist_config=config)
+                # --- END NEW LOGIC ---
 
                 # --- Pre-flight Check ---
                 # Immediately after instantiation, check if the specialist's dependencies are met.
