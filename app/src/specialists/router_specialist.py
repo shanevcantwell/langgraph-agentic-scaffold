@@ -1,4 +1,5 @@
 # app/src/specialists/router_specialist.py
+
 import logging
 from typing import Dict, Any, List, Optional
 from langgraph.graph import END
@@ -104,8 +105,9 @@ class RouterSpecialist(BaseSpecialist):
             routing_type = "completion_signal" if state.get("task_is_complete") else "error_signal"
             # Per the explicit graph structure, if a task is complete, we route to the synthesizer if it exists.
             # The graph itself will handle the subsequent step (routing to the archiver).
-            user_response_snippets = state.get("scratchpad", {}).get("user_response_snippets")
-            if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map and user_response_snippets:
+            # MODIFICATION: Removed the `and user_response_snippets` condition to comply with the
+            # Three-Stage Termination Pattern, where snippets are optional.
+            if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map:
                 content = "Task is complete. Routing to ResponseSynthesizerSpecialist to generate final summary."
                 next_specialist_name = CoreSpecialist.RESPONSE_SYNTHESIZER.value
             else:

@@ -1,4 +1,5 @@
 # app/src/workflow/chief_of_staff.py
+
 import logging
 import traceback
 from typing import Dict, Any
@@ -197,8 +198,9 @@ class ChiefOfStaff:
             # --- Declarative State Artifact Check (Runtime) ---
             if required_artifacts:
                 for artifact in required_artifacts:
-                    # Check for presence and non-empty value. Handles None, empty strings, empty lists etc.
-                    if not state.get(artifact):
+                    # MODIFICATION: Check for the artifact within the 'artifacts' dictionary,
+                    # which is the new architectural standard.
+                    if not state.get("artifacts", {}).get(artifact):
                         logger.warning(
                             f"Specialist '{specialist_name}' cannot execute. "
                             f"Missing required artifact: '{artifact}'. Bypassing execution."

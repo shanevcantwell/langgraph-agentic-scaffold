@@ -4,7 +4,13 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 from langchain_core.messages import BaseMessage
 
-
+class Dossier(TypedDict):
+    recipient: str
+    # The key of the artifact in the `artifacts` dictionary
+    payload_key: str 
+    # Optional: A message or instruction for the recipient
+    message: Optional[str] 
+    
 class GraphState(TypedDict):
     """
     Defines the shared state that is passed between all nodes in the graph.

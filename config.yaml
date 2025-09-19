@@ -108,9 +108,9 @@ specialists:
     type: "llm"
     prompt_file: "critic_prompt.md"
     description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
-    requires_artifacts: ["html_artifact"]
+    requires_artifacts: ["html_artifact.html"]
     artifact_providers:
-      html_artifact: "web_builder"
+      html_artifact.hmtl: "web_builder"
 
   # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
   # When a functional specialist signals `task_is_complete: True`, the router should
