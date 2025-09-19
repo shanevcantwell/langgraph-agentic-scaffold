@@ -1,8 +1,10 @@
+# app/src/specialists/systems_architect.py
+
 import logging
 from typing import Dict, Any, List
 
 from .base import BaseSpecialist
-from .helpers import create_llm_message, create_missing_artifact_response
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import SystemPlan
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
@@ -20,27 +22,9 @@ class SystemsArchitect(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         messages: List[BaseMessage] = state.get("messages", [])
-        text_to_process = state.get("text_to_process")
-        user_prompt = messages[0].content.lower()
-
-        contextual_messages = messages[:] # Make a copy
-
-        # If the prompt mentions a file like README.md and we don't have its content,
-        # we need to inform the LLM about the potential accessibility issue due to sandboxing.
-        # This is more robust than making a hard-coded recommendation for a file that
-        # may not be in the accessible workspace.
-        if "readme.md" in user_prompt and not text_to_process:
-            logger.warning("SystemsArchitect identified a dependency on 'README.md'. Adding a note to the LLM context about file access restrictions.")
-            contextual_messages.append(
-                HumanMessage(content="SYSTEM NOTE: The user's request requires information from 'README.md'. This file is part of the project's core documentation and is likely outside the sandboxed 'workspace' directory accessible to file system tools. Your plan should account for this. You can either proceed using general knowledge of a README's installation steps, or create a plan that first asks the user for the necessary text via the 'prompt_specialist'.")
-            )
-
-        # If there's text in the state from another specialist (e.g., file_specialist),
-        # add it to the context for the architect to create a more informed plan.
-        if text_to_process:
-            contextual_messages.append(HumanMessage(
-                content=f"Please use the following text as critical context for creating your plan:\n\n---\n{text_to_process}\n---"
-            ))
+        
+        # This specialist should operate on the primary messages, not transient text.
+        contextual_messages = messages[:] 
 
         request = StandardizedLLMRequest(
             messages=contextual_messages,
@@ -54,16 +38,17 @@ class SystemsArchitect(BaseSpecialist):
 
         plan = SystemPlan(**json_response)
 
-        # Add a summary message for the router and a structured artifact for other specialists/API response
         new_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
             content=f"I have created a system plan: {plan.plan_summary}",
         )
-        # Return only the delta (the new changes) to the state, per the "Atomic State Updates" pattern.
+        
+        # MODIFICATION: The System Plan is a durable output and MUST be placed
+        # in the 'artifacts' dictionary, not the 'scratchpad'.
         updated_state = {
             "messages": [new_message],
-            "system_plan": plan.dict(),
+            "artifacts": {"system_plan": plan.dict()},
             "recommended_specialists": ["web_builder"]
         }
         return updated_state

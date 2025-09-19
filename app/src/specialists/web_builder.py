@@ -1,3 +1,5 @@
+# app/src/specialists/web_builder.py
+
 import logging
 from typing import Dict, Any, List
 
@@ -11,50 +13,35 @@ logger = logging.getLogger(__name__)
 
 class WebBuilder(BaseSpecialist):
     """
-    A specialist that generates a self-contained HTML document based on a
-    system_plan artifact in the state.
+    A specialist that generates or refines a self-contained HTML document based
+    on a system_plan or a critique.
     """
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
         logger.info(f"---INITIALIZED {self.specialist_name}---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        system_plan = state.get("system_plan")
-        text_to_process = state.get("text_to_process")
-
-        # --- Refinement Loop Control ---
-        refinement_cycles = system_plan.get("refinement_cycles", 1)
-        # Coalesce None to 0 to handle initial state and cleanup from previous runs.
-        current_iteration = state.get("web_builder_iteration") or 0
-        critique = state.get("artifacts", {}).get("critique.md")
+        # MODIFICATION: Remove all logic related to 'refinement_cycles' and 'iteration'.
+        # The specialist's job is to build or revise, not to manage loops.
         
-        logger.info(f"Executing WebBuilder iteration {current_iteration + 1} of {refinement_cycles}.")
-
-        # --- Contextual Prompting ---
-        messages: List[BaseMessage] = state["messages"]
+        critique = state.get("artifacts", {}).get("critique.md")
         current_html = state.get("artifacts", {}).get("html_document.html")
         
-        contextual_messages = messages[:] # Make a copy
+        logger.info("Executing WebBuilder logic.")
 
-        # If there's text in the state, add it as primary context for building the page.
-        # This ensures the generated HTML uses the content from the file.
-        if text_to_process:
-            contextual_messages.append(HumanMessage(
-                content=(
-                    "The following text has been provided as a resource. Use it to find the information "
-                    "needed to execute the system plan. Do not simply copy the entire text into the webpage. "
-                    f"Extract only the relevant information as guided by the plan.\n\n---\n{text_to_process}\n---"
-                )
-            ))
+        contextual_messages: List[BaseMessage] = state["messages"][:]
 
-        # If we have existing HTML and a critique, this is a refinement cycle. Add them to the context.
+        # If we have existing HTML and a critique, this is a refinement cycle.
         if current_html and critique:
+            logger.info("Refining existing HTML based on critique.")
             refinement_prompt = HumanMessage(content=(
-                f"This is refinement cycle {current_iteration + 1} of {refinement_cycles}. Please improve the following HTML based on the critique provided in the conversation history.\n\n"
+                "This is a refinement cycle. Please improve the following HTML based on the critique provided in the conversation history.\n\n"
                 f"Here is the previous HTML to improve:\n```html\n{current_html}\n```\n\n"
                 f"And here is the critique to address:\n```\n{critique}\n```"
             ))
             contextual_messages.append(refinement_prompt)
+        else:
+            logger.info("Performing initial HTML build from system plan.")
 
         request = StandardizedLLMRequest(
             messages=contextual_messages,
@@ -67,27 +54,22 @@ class WebBuilder(BaseSpecialist):
             raise ValueError("WebBuilder failed to get a valid JSON response from the LLM.")
 
         web_content = WebContent(**json_response)
-        next_iteration = current_iteration + 1
 
-        # --- Prepare state update ---
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content=f"Completed HTML generation/refinement cycle {next_iteration}.",
+            content="Completed HTML generation/refinement. The document is now ready for critique.",
         )
+        
+        # MODIFICATION: The specialist no longer signals 'task_is_complete'.
+        # It simply builds the artifact and recommends the critic. The critic's
+        # 'ACCEPT' decision is the new signal for task completion.
         updated_state = {
             "messages": [ai_message],
             "artifacts": {
                 "html_document.html": web_content.html_document
             },
-            "web_builder_iteration": next_iteration
+            "recommended_specialists": ["critic_specialist"]
         }
-
-        if next_iteration >= refinement_cycles:
-            logger.info(f"WebBuilder has completed all {refinement_cycles} refinement cycles. Signaling task completion.")
-            updated_state["task_is_complete"] = True
-
-        logger.info(f"WebBuilder recommending 'critic_specialist' to begin next refinement cycle.")
-        updated_state["recommended_specialists"] = ["critic_specialist"]
 
         return updated_state

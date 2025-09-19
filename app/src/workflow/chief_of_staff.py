@@ -195,27 +195,45 @@ class ChiefOfStaff:
         artifact_providers = specialist_config.get("artifact_providers", {})
 
         def safe_executor(state: GraphState) -> Dict[str, Any]:
-            # --- Declarative State Artifact Check (Runtime) ---
             if required_artifacts:
-                for artifact in required_artifacts:
-                    # MODIFICATION: Check for the artifact within the 'artifacts' dictionary,
-                    # which is the new architectural standard.
-                    if not state.get("artifacts", {}).get(artifact):
-                        logger.warning(
-                            f"Specialist '{specialist_name}' cannot execute. "
-                            f"Missing required artifact: '{artifact}'. Bypassing execution."
-                        )
-                        # Look up the recommended specialist to fix this.
-                        recommended_specialist = artifact_providers.get(artifact)
-
-                        # Generate a standardized response to inform the router.
+                # Check if we are using the new "Conditional Dependency Sets" format (list of lists).
+                is_conditional = isinstance(required_artifacts[0], list)
+                
+                if is_conditional:
+                    satisfied_sets = 0
+                    for dependency_set in required_artifacts:
+                        # Check if all artifacts in the current set are present.
+                        if all(state.get("artifacts", {}).get(artifact) for artifact in dependency_set):
+                            satisfied_sets += 1
+                            break # Found a valid set, no need to check others.
+                    
+                    if satisfied_sets == 0:
+                        # No dependency sets were satisfied. The check fails.
+                        error_msg = f"Specialist '{specialist_name}' cannot execute. No dependency sets were satisfied. Required sets: {required_artifacts}"
+                        logger.warning(error_msg)
+                        # For simplicity, we recommend the provider of the first artifact in the first set as a fallback.
+                        first_artifact = required_artifacts[0][0]
+                        recommended_specialist = artifact_providers.get(first_artifact)
                         return create_missing_artifact_response(
                             specialist_name=specialist_name,
-                            missing_artifacts=[artifact],
-                            # recommended_specialist=recommended_specialist,  # does not work
-                            recommended_specialists=[recommended_specialist] if recommended_specialist else [],
+                            missing_artifacts=[f"At least one of {required_artifacts}"],
+                            recommended_specialists=[recommended_specialist] if recommended_specialist else []
                         )
+                else: # Fallback to the original flat list check for simple dependencies.
+                    for artifact in required_artifacts:
+                        if not state.get("artifacts", {}).get(artifact):
+                            logger.warning(
+                                f"Specialist '{specialist_name}' cannot execute. "
+                                f"Missing required artifact: '{artifact}'. Bypassing execution."
+                            )
+                            recommended_specialist = artifact_providers.get(artifact)
+                            return create_missing_artifact_response(
+                                specialist_name=specialist_name,
+                                missing_artifacts=[artifact],
+                                recommended_specialists=[recommended_specialist] if recommended_specialist else []
+                            )
 
+            # --- Original execution logic remains the same ---
             try:
                 update = specialist_instance.execute(state)
                 if "turn_count" in update:

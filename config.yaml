@@ -108,10 +108,13 @@ specialists:
     type: "llm"
     prompt_file: "critic_prompt.md"
     description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
-    requires_artifacts: ["html_artifact.html"]
+    # This specialist still has a simple, non-conditional dependency.
+    # We will support both formats for backward compatibility and simplicity.
+    requires_artifacts: ["html_document.html"]
     artifact_providers:
-      html_artifact.hmtl: "web_builder"
-
+      html_document.html: "web_builder"
+    conditional_routing: true
+    revision_target: "web_builder"
   # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
   # When a functional specialist signals `task_is_complete: True`, the router should
   # route to this specialist. It synthesizes a final, user-facing response from the
@@ -127,11 +130,17 @@ specialists:
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
-    description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
-    requires_artifacts: ["system_plan"]
+    description: "Generates or refines a complete HTML document."
+    # MODIFICATION: Change from a flat list to a list of dependency sets.
+    # The specialist can run if EITHER Set 1 OR Set 2 is satisfied.
+    requires_artifacts:
+      - ["system_plan"] # Set 1: For the initial build.
+      - ["html_document.html", "critique.md"] # Set 2: For a refinement cycle.
+    # The provider map remains flat, as it's a simple lookup.
     artifact_providers:
       system_plan: "systems_architect"
-
+      html_document.html: "web_builder"
+      critique.md: "critic_specialist"
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"

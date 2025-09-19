@@ -1,8 +1,10 @@
+# app/src/specialists/file_specialist.py
+
 import logging
 import os
 from typing import Optional, Dict, Any
 
-from langchain_core.messages import AIMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
 
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.utils.errors import SpecialistError
@@ -24,14 +26,11 @@ class FileSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        # Resolve root_dir relative to the project root for robustness.
-        # This prevents issues where the script is run from a different directory.
         relative_root_dir = self.specialist_config.get("root_dir", "./workspace")
         self.root_dir = str(PROJECT_ROOT / relative_root_dir)
-        os.makedirs(self.root_dir, exist_ok=True) # Ensure the workspace exists
+        os.makedirs(self.root_dir, exist_ok=True)
         logger.info(f"Initialized {self.__class__.__name__} with workspace directory: {self.root_dir}")
         
-        # Dead man's switch: Check for a lock file to enable write operations.
         self.safety_lock_file = ".agent_safety_off.lock"
         self.is_safety_on = not os.path.exists(self.safety_lock_file)
         if self.is_safety_on:
@@ -52,10 +51,7 @@ class FileSpecialist(BaseSpecialist):
         return full_path
 
     def _read_file(self, params: ReadFileParams) -> tuple[Optional[str], str]:
-        """
-        Implementation for reading a file.
-        Returns a tuple of (file_content, status_message).
-        """
+        """Implementation for reading a file."""
         try:
             full_path = self._get_full_path(params.file_path)
             with open(full_path, 'r', encoding='utf-8') as f:
@@ -93,10 +89,16 @@ class FileSpecialist(BaseSpecialist):
         """Executes the file operation based on the LLM's structured output."""
         messages = state["messages"]
         
-        # Instead of asking for one complex JSON object, we provide a list of tools
-        # and let the LLM choose which one to call. This is more robust.
+        # MODIFICATION: To make the specialist more robust, we inject a clarifying
+        # instruction into the context. This helps the LLM focus on its primary
+        # task of tool-calling, even if the input is a high-level goal.
+        contextual_messages = messages[:]
+        contextual_messages.append(HumanMessage(
+            content="Based on the conversation history, determine which file system operation is required and call the appropriate tool. If the request is ambiguous, state what information you need."
+        ))
+
         request = StandardizedLLMRequest(
-            messages=messages,
+            messages=contextual_messages,
             tools=[ReadFileParams, WriteFileParams, ListDirectoryParams]
         )
         response_data = self.llm_adapter.invoke(request)
@@ -106,45 +108,32 @@ class FileSpecialist(BaseSpecialist):
             error_message = "File Specialist Error: The model did not request a valid tool call. Please rephrase your request."
             return {"messages": [AIMessage(content=error_message, name=self.specialist_name)]}
 
-        # This specialist is designed to handle one tool call at a time for simplicity.
         tool_call = tool_calls[0]
         tool_name = tool_call.get("name")
         tool_args = tool_call.get("args", {})
         
         updated_state: Dict[str, Any] = {}
         result_content = ""
-        action_name_for_report = tool_name # Keep original for logging
+        action_name_for_report = tool_name
 
         try:
-            # --- Tool Name Normalization ---
-            # Create a mapping from various possible LLM-hallucinated names to the
-            # canonical Pydantic class. This makes the system more robust.
             tool_map = {
-                ReadFileParams.__name__: ReadFileParams,
-                "read_file": ReadFileParams,
-                "ReadFile": ReadFileParams,
-                WriteFileParams.__name__: WriteFileParams,
-                "write_file": WriteFileParams,
-                "WriteFile": WriteFileParams,
-                ListDirectoryParams.__name__: ListDirectoryParams,
-                "list_directory": ListDirectoryParams,
-                "ListDirectory": ListDirectoryParams,
+                ReadFileParams.__name__: ReadFileParams, "read_file": ReadFileParams, "ReadFile": ReadFileParams,
+                WriteFileParams.__name__: WriteFileParams, "write_file": WriteFileParams, "WriteFile": WriteFileParams,
+                ListDirectoryParams.__name__: ListDirectoryParams, "list_directory": ListDirectoryParams, "ListDirectory": ListDirectoryParams,
             }
-
             TargetToolClass = tool_map.get(tool_name)
 
             if TargetToolClass == ReadFileParams:
                 action_name_for_report = "ReadFile"
                 file_content, result_content = self._read_file(TargetToolClass(**tool_args))
                 if file_content is not None:
-                    updated_state["text_to_process"] = file_content
-                    # By not making a recommendation, we return control to the router
-                    # to make an intelligent decision based on the new context.
+                    # Use the scratchpad for transient data, per architectural standard.
+                    updated_state["scratchpad"] = {"text_for_analysis": file_content}
             elif TargetToolClass == ListDirectoryParams:
                 action_name_for_report = "ListDirectory"
                 result_content = self._list_directory(TargetToolClass(**tool_args))
-                # The list of files is also content that might be processed
-                updated_state["text_to_process"] = result_content
+                updated_state["scratchpad"] = {"text_for_analysis": result_content}
             elif TargetToolClass == WriteFileParams:
                 action_name_for_report = "WriteFile"
                 result_content = self._write_file(TargetToolClass(**tool_args))
