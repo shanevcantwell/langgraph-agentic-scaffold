@@ -91,7 +91,13 @@ async def stream_graph(request: InvokeRequest):
     
     async def event_generator():
         async for event in workflow_runner.run_streaming(goal=request.input_prompt):
-            yield event
+            # Check if the event is the final state dictionary
+            if isinstance(event, dict):
+                # If it is, serialize it to JSON and prefix it for the client
+                yield f"FINAL_STATE::{json.dumps(event)}\n"
+            else:
+                # Otherwise, it's a log string, so yield it directly
+                yield f"{event}\n"
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.post("/v1/graph/invoke", response_model=InvokeResponse)

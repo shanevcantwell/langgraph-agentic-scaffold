@@ -1,6 +1,6 @@
 # **UX/UI & API Integration Guide**
 
-# **Version: 1.0**
+# **Version: 2.0**
 
 # **Status: ACTIVE**
 
@@ -44,48 +44,33 @@ Allows the user to make choices from a pre-approved list of options, as defined 
 
 ## **3.0 API Endpoints**
 
-### **3.1 `POST /v1/invoke`**
+### **3.1 `POST /v1/graph/stream`**
 
 *   **Description:** The primary endpoint to initiate an agentic workflow. This is a blocking call that returns when the agent has finished its task or encountered a terminal error.
 *   **Request Body:**
     ```json
     {
-      "prompt": "Your detailed request for the agent goes here."
+      "input_prompt": "Your detailed request for the agent goes here.",
+      "text_to_process": "(Optional) The content of an uploaded text file.",
+      "image_to_process": "(Optional) A base64-encoded string of an uploaded image."
     }
     ```
-*   **Success Response (200 OK):** Returns the final state of the graph, containing the artifact and message history.
-    ```json
-    {
-      "final_artifact": {
-        "type": "html" | "json" | "text" | "markdown",
-        "content": "...",
-        "source_specialist": "web_builder"
-      },
-      "message_history": [
-        {"type": "human", "content": "...", "name": "user"},
-        {"type": "ai", "content": "...", "name": "router_specialist"}
-      ],
-      "turn_count": 5,
-      "error": null
-    }
-    ```
+*   **Success Response (200 OK):** A `StreamingResponse` with `media_type="text/event-stream"`.
+    *   The stream consists of newline-delimited strings.
+    *   The final message is a JSON string of the complete `GraphState`, prefixed with `FINAL_STATE::`.
 
 ### **3.2 `GET /v1/settings`**
 
 *   **Description:** Retrieves the user-configurable settings as defined by the system's configuration files.
 *   **Request Body:** None.
 *   **Success Response (200 OK):** Returns a `SettingsConfiguration` object.
-
-### **3.3 `WS /v1/ws/agent_monitor`**
-
-*   **Description:** A WebSocket endpoint for receiving real-time updates from the agent as it works. This is the recommended way to power a live "Agent Log".
-*   **Messages:** The server will push `TurnUpdate` objects to the client for each significant event in the graph.
+*   **Note:** This endpoint is defined in the guide but not yet implemented in `api.py`.
 
 ## **4.0 Data Contracts**
 
-### **4.1 `TurnUpdate` (for WebSocket)**
+### **4.1 `Stream Event` (for `/v1/graph/stream`)**
 
-This object provides a rich, real-time view into the agent's turn-by-turn progress.
+The stream is composed of simple text lines, making it easy to consume.
 
 ```json
 {

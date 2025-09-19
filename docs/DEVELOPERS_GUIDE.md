@@ -1,5 +1,5 @@
 # System Architecture & Developer's Guide
-# Version: 3.1
+# Version: 3.2
 # Status: ACTIVE
 
 This document provides all the necessary information to understand, run, test, and extend the agentic system.
@@ -14,13 +14,6 @@ The system is composed of several agent types with a clear separation of concern
 1.  **Specialists (`BaseSpecialist`):** Functional, LLM-driven components that perform a single, well-defined task.
 2.  **Runtime Orchestrator (`RouterSpecialist`):** A specialized agent that makes the turn-by-turn routing decisions *within* the running graph.
 3.  **Structural Orchestrator (`ChiefOfStaff`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
-
-### 2.1 Proposed Architectural Evolution: Generic State Management
-**Status: Implemented.** The architecture has adopted a robust state management model. Specialist-specific state fields (e.g., `html_artifact`) have been deprecated in favor of two generic dictionaries in the `GraphState`:
-*   `artifacts`: A "heap" for significant data outputs.
-*   `scratchpad`: A "register" for specialists' private, transient state (e.g., loop counters).
-
-All new specialists **must** be designed using this pattern to ensure forward compatibility and system stability.
 
 ## 3.0 Observability with LangSmith (Essential for Development)
 
@@ -75,29 +68,28 @@ Off-by-one errors in agentic loops can be common. Ensure that loop termination l
 
 ### 4.3 Enforce Centralized Control with Three-Stage Termination
 
-To ensure system stability and prevent non-deterministic behavior, this architecture employs a mandatory **Three-Stage Termination Pattern**. Functional specialists are forbidden from terminating the graph directly. Only the `router_specialist` holds the authority to route to the `__end__` state.
+To ensure system stability and predictable behavior, this architecture employs a mandatory **Three-Stage Termination Pattern**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion, which triggers a standardized, sequential shutdown process managed by the graph's structure itself.
 
 This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event enshrined in the graph's structure.
 
 The process is as follows:
 
-1.  **Stage 1: Signal Completion & Route to Synthesizer**
+1.  **Stage 1: Signal Completion**
     *   A functional specialist (e.g., `web_builder`) completes its primary task.
     *   It signals this completion by including `task_is_complete: True` in its return state.
     *   Optionally, it contributes a human-readable summary of its action to the `user_response_snippets` list within the `scratchpad`.
-    *   The `router_specialist` observes the `task_is_complete` flag and routes control to the `response_synthesizer_specialist`.
+    *   The `ChiefOfStaff` configures a conditional edge in the graph that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `response_synthesizer_specialist` instead of back to the main `router_specialist`.
 
-2.  **Stage 2: Synthesize, Archive, and Verify**
+2.  **Stage 2: Synthesize & Archive**
     *   The `response_synthesizer_specialist` runs, taking the snippets from `scratchpad['user_response_snippets']` and generating a `final_user_response.md` artifact.
-    *   The graph's structure then explicitly routes control from the synthesizer to the `archiver_specialist`.
-    *   The `archiver_specialist` runs, consuming the `final_user_response.md` artifact and generating the final `archive_report.md` artifact.
-    *   Crucially, the `archiver_specialist` does **not** end the graph. It returns control back to the `router_specialist`.
+    *   The `ChiefOfStaff` wires a direct, non-conditional edge from the `response_synthesizer_specialist` to the `archiver_specialist`.
+    *   The `archiver_specialist` runs, consuming the state (including the new `final_user_response.md`) and generating the final `archive_report.md`.
 
-3.  **Stage 3: Final Review and Termination**
-    *   The `router_specialist` now observes the presence of the `artifacts['archive_report.md']` in the state. This is the definitive signal that the workflow is complete.
-    *   The router then makes the final, authoritative decision to route to `__end__`, formally terminating the graph.
+3.  **Stage 3: Terminate**
+    *   The `ChiefOfStaff` wires the `archiver_specialist` directly to the special `END` node.
+    *   After the `archiver_specialist` completes its run, the graph execution halts cleanly.
 
-This explicit `... -> Router -> Synthesizer -> Archiver -> Router -> END` sequence is defined in the `ChiefOfStaff` and guarantees that the `router_specialist` is the sole component responsible for managing the graph's lifecycle, which significantly enhances the system's predictability and robustness.
+This explicit `... -> (task_is_complete?) -> Response Synthesizer -> Archiver -> END` sequence is defined in the `ChiefOfStaff` when the graph is compiled. This structural guarantee ensures that termination is always handled in a consistent, predictable manner, which significantly enhances the system's robustness.
 
 ### 4.4 The Adapter Robust Parsing Contract
 
@@ -114,22 +106,53 @@ The system's configuration is not a single file but a three-tiered hierarchy. Un
 **Tier 1: Secrets (`.env`)**
 This file provides the raw secrets and connection details (API keys, URLs). It is never committed to source control.
 
-**Tier 2: Architectural Blueprint (`config.yaml`)**
-This is the system's source of truth. It defines all possible components (specialists, providers) and sets the *default* working configuration. For example, it might default the `CriticSpecialist` to use the `gemini_pro` provider.
+**Tier 2: Architectural Blueprint (`config.yaml`)**  
+This is the system's architectural source of truth, managed by the developer. It defines all possible components (specialists, LLM provider configurations) that can be used in the system.
 
-**Tier 3: User Overrides (`user_settings.yaml`)**
-This optional file allows you to override the defaults from `config.yaml` without editing the core architecture. For example, by adding `critic_specialist: "lmstudio_specialist"` to this file, you instruct the system to ignore the Tier 2 default and use your local model instead.
+**Tier 3: User Overrides (`user_settings.yaml`)**  
+This optional file allows an end-user to customize the system's behavior without modifying the core architecture. It is used to bind specific specialists to the LLM provider configurations defined in `config.yaml`.
 
 At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (Tier 2) and then applies any overrides from your user settings (Tier 3). The application components then use this final configuration to function, pulling in the necessary secrets from the environment (Tier 1) as needed.
 
+**Example of Merging Logic:**
+
+1.  **Developer defines the architecture in `config.yaml`:**
+    ```yaml
+    # config.yaml
+    llm_providers:
+      powerful_model:
+        type: "gemini"
+        api_identifier: "gemini-1.5-pro"
+      fast_model:
+        type: "gemini"
+        api_identifier: "gemini-1.5-flash"
+    
+    specialists:
+      router_specialist:
+        type: "llm"
+        # ...
+    ```
+
+2.  **User chooses a model in `user_settings.yaml`:**
+    ```yaml
+    # user_settings.yaml
+    specialist_model_bindings:
+      router_specialist: "fast_model" # User wants speed over power for routing.
+    ```
+
+3.  **Result:** At runtime, the `ChiefOfStaff` will instantiate the `router_specialist` and configure it to use the `fast_model` provider configuration (`gemini-1.5-flash`).
+
 ## 5.0 How to Extend the System: Creating Specialists
 
-The primary way to extend the system's capabilities is by adding new specialists. This section provides a detailed, step-by-step walkthrough.
-For a detailed, step-by-step tutorial on creating a new specialist, please see `CREATING_A_NEW_SPECIALIST.md`.
+The primary way to extend the system's capabilities is by adding new specialists. The `CREATING_A_NEW_SPECIALIST.md` document provides a comprehensive, step-by-step tutorial for this process.
 
-### 5.3 Specialist Best Practices
+Please refer to it for:
+*   Creating a standard, LLM-based specialist.
+*   Creating an advanced, procedural specialist.
+*   Best practices for state management and agentic robustness patterns.
 
-For guidance on best practices, including state management and agentic robustness patterns, please refer to the `CREATING_A_NEW_SPECIALIST.md` document.
+```markdown
+# docs/CREATING_A_NEW_SPECIALIST.md
 
 ### 5.4 Advanced: Creating a Procedural Specialist
 
@@ -150,3 +173,5 @@ This is the system's source of truth. It defines all possible components (specia
 This optional file allows you to override the defaults from `config.yaml` without editing the core architecture. For example, by adding `critic_specialist: "lmstudio_specialist"` to this file, you instruct the system to ignore the Tier 2 default and use your local model instead.
 
 At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (Tier 2) and then applies any overrides from your user settings (Tier 3). The application components then use this final configuration to function, pulling in the necessary secrets from the environment (Tier 1) as needed.
+...
+```
