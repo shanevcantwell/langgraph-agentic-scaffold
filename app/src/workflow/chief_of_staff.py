@@ -1,23 +1,19 @@
-# app/src/workflow/chief_of_staff.py
-
 import logging
-import traceback
 from typing import Dict, Any
 from langgraph.graph import StateGraph, END
 
 from ..utils.config_loader import ConfigLoader
 from ..utils.prompt_loader import load_prompt
 from ..utils import state_pruner
-from ..utils.errors import SpecialistError
 from ..utils.report_schema import ErrorReport
 from ..specialists import get_specialist_class, BaseSpecialist
 from ..graph.state import GraphState
 from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
-from ..specialists.helpers import create_missing_artifact_response
 # Import the new strategy components
 from ..strategies.critique.base import BaseCritiqueStrategy
 from ..strategies.critique.llm_strategy import LLMCritiqueStrategy
+from .workflow_helpers import create_safe_executor
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +59,6 @@ class ChiefOfStaff:
             try:
                 SpecialistClass = get_specialist_class(name, config)
                 
-                # --- NEW LOGIC FOR CRITIC SPECIALIST ---
                 if name == "critic_specialist":
                     strategy_config = config.get("critique_strategy")
                     if not strategy_config:
@@ -73,27 +68,20 @@ class ChiefOfStaff:
                     critique_strategy_instance: BaseCritiqueStrategy
 
                     if strategy_type == "llm":
-                        # Instantiate the strategy's dependencies
                         strategy_llm_binding = strategy_config.get("llm_config")
                         strategy_prompt_file = strategy_config.get("prompt_file")
                         if not (strategy_llm_binding and strategy_prompt_file):
                             raise ValueError("LLM critique_strategy requires 'llm_config' and 'prompt_file'.")
                         
-                        # The strategy gets its own dedicated LLM adapter
                         strategy_llm_adapter = self.adapter_factory.create_adapter(strategy_llm_binding, "")
                         critique_strategy_instance = LLMCritiqueStrategy(llm_adapter=strategy_llm_adapter, prompt_file=strategy_prompt_file)
                     else:
                         raise NotImplementedError(f"Critique strategy type '{strategy_type}' is not supported.")
 
-                    # Inject the strategy instance into the specialist's constructor
                     instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
                 else:
-                    # Original logic for all other specialists
                     instance = SpecialistClass(specialist_name=name, specialist_config=config)
-                # --- END NEW LOGIC ---
 
-                # --- Pre-flight Check ---
-                # Immediately after instantiation, check if the specialist's dependencies are met.
                 if not instance._perform_pre_flight_checks():
                     logger.error(f"Specialist '{name}' failed pre-flight checks. It will be disabled.")
                     continue
@@ -102,21 +90,14 @@ class ChiefOfStaff:
                     logger.warning(f"Specialist '{name}' initialized but is disabled. It will not be added to the graph.")
                     continue
                 
-                # --- Adapter Creation ---
-                # Any specialist that needs an LLM, regardless of type, gets an adapter.
-                # The presence of the 'llm_config' key, added by the ConfigLoader, is the trigger.
                 binding_key = config.get("llm_config")
                 if binding_key:
-                    # Defer adapter creation for router/triage as they have complex, dynamic prompt construction.
                     if name in [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value]:
                         logger.info(f"Deferring adapter creation for '{name}' to its specialized configuration method.")
                     else:
                         system_prompt = ""
                         if prompt_file := config.get("prompt_file"):
                             system_prompt = load_prompt(prompt_file)
-                        # Allow procedural specialists to define their own hardcoded prompt via a class attribute.
-                        # This was the bug: it was an elif, but it should be a separate if.
-                        # A procedural specialist can have an llm_config binding AND a SYSTEM_PROMPT.
                         if hasattr(instance, 'SYSTEM_PROMPT'):
                             system_prompt = getattr(instance, 'SYSTEM_PROMPT', system_prompt)
 
@@ -126,18 +107,14 @@ class ChiefOfStaff:
                 logger.info(f"Successfully instantiated specialist: {name}")
             except Exception as e:
                 logger.error(f"Failed to load specialist '{name}', it will be disabled. Error: {e}", exc_info=True)
-                continue # Allow the app to start with the specialists that did load correctly.
+                continue
 
-        # This is the key change: only provide the orchestration specialists (Router, Triage)
-        # with a list of specialists that were *successfully* loaded. This prevents them
-        # from trying to route to a specialist that is configured but failed to start.
         all_configs = self.config.get("specialists", {})
         available_configs = {name: all_configs[name] for name in loaded_specialists.keys() if name in all_configs}
 
         if CoreSpecialist.ROUTER.value in loaded_specialists:
             self._configure_router(loaded_specialists, available_configs)
         
-        # If the Triage specialist exists, configure it with the full map of other specialists.
         if CoreSpecialist.TRIAGE.value in loaded_specialists:
             self._configure_triage(loaded_specialists, available_configs)
 
@@ -146,23 +123,14 @@ class ChiefOfStaff:
     def _configure_router(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         logger.info("Conducting 'morning standup' to configure the router...")
         router_instance = specialists[CoreSpecialist.ROUTER.value]
-
-        # Provide the router with the full map of specialist configurations.
-        # It will use this map at runtime to filter specialists based on the routing channel.
         router_instance.set_specialist_map(configs)
-
-        # The static part of the router's prompt, including the full list of specialists.
-        # A dynamic, filtered list may be added at runtime by the router itself.
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
         base_prompt_file = router_config.get("prompt_file")
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
-
-        # The router needs to know about all other specialists for its prompt.
         available_specialists = {name: conf for name, conf in configs.items() if name != CoreSpecialist.ROUTER.value}
         standup_report = "\n\n--- AVAILABLE SPECIALISTS (Morning Standup) ---\n"
         specialist_descs = [f"- {name}: {conf.get('description', 'No description available.')}" for name, conf in available_specialists.items()]
         standup_report += "\n".join(specialist_descs)
-
         feedback_instruction = (
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
             "1. **Task Completion**: If the last message is a report or summary that appears to fully satisfy the user's request, your job is done. You MUST route to `__end__`.\n"
@@ -172,9 +140,6 @@ class ChiefOfStaff:
             "5. **Use Provided Tools**: You MUST choose from the list of specialists provided to you."
         )
         dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"        
-        
-        # Create the adapter from scratch with the final, complete prompt.
-        # This ensures the router gets the correct configuration and prompt in one step.
         binding_key = router_config.get("llm_config")
         router_instance.llm_adapter = self.adapter_factory.create_adapter(
             binding_key=binding_key,
@@ -187,21 +152,26 @@ class ChiefOfStaff:
         logger.info("Configuring the Triage specialist with a dynamic prompt of system capabilities...")
         triage_instance = specialists[CoreSpecialist.TRIAGE.value]
 
-        # The Triage specialist needs to know about all other functional specialists for its prompt.
-        # Exclude orchestration specialists to prevent loops or nonsensical recommendations.
-        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value]
+        # --- MODIFICATION: Create a complete exclusion list ---
+        # The Triage specialist should only recommend specialists that can be a valid
+        # *first step* in a workflow. This excludes not only other orchestrators but
+        # also specialists that require a pre-existing artifact (like the critic)
+        # or are part of the terminal sequence (like the synthesizer).
+        excluded = [
+            CoreSpecialist.ROUTER.value,
+            CoreSpecialist.TRIAGE.value,
+            CoreSpecialist.ARCHIVER.value,
+            CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+            "critic_specialist", # Cannot be the first step; requires an artifact to critique.
+        ]
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded}
         
-        # This call is still useful for the specialist's internal logic.
         triage_instance.set_specialist_map(available_specialists)
-
         triage_config = configs.get(CoreSpecialist.TRIAGE.value, {})
         base_prompt_file = triage_config.get("prompt_file")
         base_prompt = load_prompt(base_prompt_file) if base_prompt_file else ""
-
         specialist_descs = [f"- {name}: {conf.get('description', 'No description available.')}" for name, conf in available_specialists.items()]
         available_specialists_prompt = "\n".join(specialist_descs)
-        
         dynamic_system_prompt = f"{base_prompt}\n\n--- AVAILABLE SPECIALISTS ---\nYou MUST choose one or more of the following specialists:\n{available_specialists_prompt}"
         triage_instance.llm_adapter = self.adapter_factory.create_adapter(
             binding_key=triage_config.get("llm_config"),
@@ -209,122 +179,27 @@ class ChiefOfStaff:
         )
         logger.info("Triage specialist adapter created with dynamic, context-aware prompt.")
 
-    def _create_safe_executor(self, specialist_instance: BaseSpecialist):
-        """
-        Creates a wrapper around a specialist's execute method to enforce global rules
-        like turn count modification, declarative preconditions, and to provide
-        centralized exception handling and reporting.
-        """
-        specialist_name = specialist_instance.specialist_name
-        specialist_config = specialist_instance.specialist_config
-        required_artifacts = specialist_config.get("requires_artifacts", [])
-        artifact_providers = specialist_config.get("artifact_providers", {})
-
-        def safe_executor(state: GraphState) -> Dict[str, Any]:
-            if required_artifacts:
-                # Check if we are using the new "Conditional Dependency Sets" format (list of lists).
-                is_conditional = isinstance(required_artifacts[0], list)
-                
-                if is_conditional:
-                    satisfied_sets = 0
-                    for dependency_set in required_artifacts:
-                        # Check if all artifacts in the current set are present.
-                        if all(state.get("artifacts", {}).get(artifact) for artifact in dependency_set):
-                            satisfied_sets += 1
-                            break # Found a valid set, no need to check others.
-                    
-                    if satisfied_sets == 0:
-                        # No dependency sets were satisfied. The check fails.
-                        error_msg = f"Specialist '{specialist_name}' cannot execute. No dependency sets were satisfied. Required sets: {required_artifacts}"
-                        logger.warning(error_msg)
-                        # For simplicity, we recommend the provider of the first artifact in the first set as a fallback.
-                        first_artifact = required_artifacts[0][0]
-                        recommended_specialist = artifact_providers.get(first_artifact)
-                        return create_missing_artifact_response(
-                            specialist_name=specialist_name,
-                            missing_artifacts=[f"At least one of {required_artifacts}"],
-                            recommended_specialists=[recommended_specialist] if recommended_specialist else []
-                        )
-                else: # Fallback to the original flat list check for simple dependencies.
-                    for artifact in required_artifacts:
-                        if not state.get("artifacts", {}).get(artifact):
-                            logger.warning(
-                                f"Specialist '{specialist_name}' cannot execute. "
-                                f"Missing required artifact: '{artifact}'. Bypassing execution."
-                            )
-                            recommended_specialist = artifact_providers.get(artifact)
-                            return create_missing_artifact_response(
-                                specialist_name=specialist_name,
-                                missing_artifacts=[artifact],
-                                recommended_specialists=[recommended_specialist] if recommended_specialist else []
-                            )
-
-            # --- Original execution logic remains the same ---
-            try:
-                update = specialist_instance.execute(state)
-                if "turn_count" in update:
-                    logger.warning(
-                        f"Specialist '{specialist_instance.specialist_name}' returned a 'turn_count'. "
-                        "This is not allowed and will be ignored to preserve the global count."
-                    )
-                    del update["turn_count"]
-                return update
-            except (SpecialistError, Exception) as e:
-                logger.error(
-                    f"Caught unhandled exception from specialist '{specialist_instance.specialist_name}': {e}",
-                    exc_info=True
-                )
-                # Generate a detailed error report for debugging and user feedback.
-                tb_str = traceback.format_exc()
-                pruned_state = state_pruner.prune_state(state)
-                routing_history = state.get("routing_history", [])
-
-                report_data = ErrorReport(
-                    error_message=str(e),
-                    traceback=tb_str,
-                    routing_history=routing_history,
-                    pruned_state=pruned_state
-                )
-                markdown_report = state_pruner.generate_report(report_data)
-
-                # Return an update that halts the graph and provides the report.
-                return {
-                    "error": f"Specialist '{specialist_instance.specialist_name}' failed. See report for details.",
-                    "error_report": markdown_report
-                }
-        return safe_executor
-
     def _add_nodes_to_graph(self, workflow: StateGraph):
         """Adds all loaded specialists as nodes to the graph."""
         for name, instance in self.specialists.items():
             if name == CoreSpecialist.ROUTER.value:
-                # The router is special; it manages turn count and doesn't need the safe wrapper.
                 workflow.add_node(name, instance.execute)
             else:
-                # All other specialists are wrapped to prevent them from modifying the turn count.
-                workflow.add_node(name, self._create_safe_executor(instance))
+                workflow.add_node(name, create_safe_executor(instance))
 
     def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
         """Defines the 'hub-and-spoke' architecture for the graph."""
         router_name = CoreSpecialist.ROUTER.value
-
-        # 1. The router is the central hub. All decisions on where to go next flow from it.
         destinations = {name: name for name in self.specialists if name != router_name}
         destinations[END] = END
         workflow.add_conditional_edges(router_name, self.decide_next_specialist, destinations)
 
-        # 2. After any other specialist runs, control must return to the router for the next decision.
-        #    This creates the "hub-and-spoke" architecture.
         for name in self.specialists:
-            # The router is the hub, and the synthesizer has its own explicit conditional edge.
             if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value]:
                 continue
-            workflow.add_edge(name, router_name) # This ensures archiver is a known node.
+            workflow.add_edge(name, router_name)
 
-        # 3. Enshrine the finalization sequence directly in the graph structure.
-        #    This makes the flow explicit and removes the implicit loop from the router's logic.
         if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialists:
-            # After synthesis, always go to the archiver.
             workflow.add_conditional_edges(
                 CoreSpecialist.RESPONSE_SYNTHESIZER.value,
                 self.after_synthesis_decider,
@@ -335,9 +210,6 @@ class ChiefOfStaff:
             )
             logger.info("Graph Edge: Added explicit edge from ResponseSynthesizer to Archiver.")
 
-        # 4. After the archiver runs, it must return to the router so the router can see the
-        #    'archive_report' and make the final decision to END, completing the Two-Stage Termination pattern.
-
     def _build_graph(self) -> StateGraph:
         """
         Builds the LangGraph StateGraph by adding nodes and defining the "hub-and-spoke"
@@ -346,8 +218,6 @@ class ChiefOfStaff:
         workflow = StateGraph(GraphState)
         self._add_nodes_to_graph(workflow)
         self._wire_hub_and_spoke_edges(workflow)
-
-        # Set the validated entry point for the graph.
         workflow.set_entry_point(self.entry_point)
         return workflow.compile()
 
@@ -368,24 +238,17 @@ class ChiefOfStaff:
         the next node's name. It does not and cannot modify the state.
         """
         turn_count = state.get("turn_count", 0)
-        # The number of graph steps is roughly 2 * turn_count because of the hub-and-spoke model (Specialist -> Router).
-        # This log helps clarify why a recursion limit might be reached.
         approx_steps = (turn_count * 2) + 1
         logger.info(f"--- ChiefOfStaff: Deciding next specialist (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
         
         if (state.get("scratchpad", {}).get("web_builder_iteration", 0)) > 0:
             logger.info("Intentional refinement loop detected (web_builder_iteration > 0). Bypassing generic loop detection for this turn.")
         else:
-            # Check for unproductive loops to prevent the system from getting stuck.
-            # This is a more intelligent safeguard than a simple max turn count.
             routing_history = state.get("routing_history", [])
             if len(routing_history) >= self.min_loop_len * self.max_loop_cycles:
-                # Iterate through possible loop lengths
                 for loop_len in range(self.min_loop_len, (len(routing_history) // self.max_loop_cycles) + 1):
-                    # Extract the most recent block, which is our reference pattern
                     last_block = tuple(routing_history[-loop_len:])
                     is_loop = True
-                    # Compare it with the preceding blocks
                     for i in range(1, self.max_loop_cycles):
                         start_index = -(i + 1) * loop_len
                         end_index = -i * loop_len

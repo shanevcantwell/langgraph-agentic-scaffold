@@ -73,7 +73,7 @@ To prevent the generic loop detector from prematurely halting these intentional 
 
 Off-by-one errors in agentic loops can be common. Ensure that loop termination logic in stateful specialists uses strict inequality (`<`) rather than (`<=`) to compare the current iteration count against the maximum number of cycles.
 
-### 4.3 Enforce Centralized Control with Two-Stage Termination
+### 4.3 Enforce Centralized Control with Three-Stage Termination
 
 To ensure system stability and prevent non-deterministic behavior, this architecture employs a mandatory **Three-Stage Termination Pattern**. Functional specialists are forbidden from terminating the graph directly. Only the `router_specialist` holds the authority to route to the `__end__` state.
 
@@ -107,6 +107,21 @@ This explicit `... -> Router -> Synthesizer -> Archiver -> Router -> END` sequen
 
 **Implementation:** To ensure consistency and prevent code duplication, all adapters MUST utilize the `_robustly_parse_json_from_text()` helper method provided by the `BaseAdapter` class as a fallback mechanism. An adapter should only return an empty `json_response` if both a direct parse and the robust fallback parse fail. This contract is non-negotiable and is verified by the system's contract tests (`app/tests/llm/test_adapter_contracts.py`).
 
+### 4.5 Understanding the 3-Tiered Configuration System
+
+The system's configuration is not a single file but a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved from bottom to top:
+
+**Tier 1: Secrets (`.env`)**
+This file provides the raw secrets and connection details (API keys, URLs). It is never committed to source control.
+
+**Tier 2: Architectural Blueprint (`config.yaml`)**
+This is the system's source of truth. It defines all possible components (specialists, providers) and sets the *default* working configuration. For example, it might default the `CriticSpecialist` to use the `gemini_pro` provider.
+
+**Tier 3: User Overrides (`user_settings.yaml`)**
+This optional file allows you to override the defaults from `config.yaml` without editing the core architecture. For example, by adding `critic_specialist: "lmstudio_specialist"` to this file, you instruct the system to ignore the Tier 2 default and use your local model instead.
+
+At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (Tier 2) and then applies any overrides from your user settings (Tier 3). The application components then use this final configuration to function, pulling in the necessary secrets from the environment (Tier 1) as needed.
+
 ## 5.0 How to Extend the System: Creating Specialists
 
 The primary way to extend the system's capabilities is by adding new specialists. This section provides a detailed, step-by-step walkthrough.
@@ -120,3 +135,18 @@ For guidance on best practices, including state management and agentic robustnes
 
 A "procedural" specialist is one that executes deterministic code, rather than making a conversational request to an LLM. This pattern is ideal for deterministic tasks or for safely integrating external tools using the "Plan and Execute" pattern. For a detailed example of integrating a tool like `open-interpreter`, please refer to the source code of the `OpenInterpreterSpecialist`.
 See the tutorial in `CREATING_A_NEW_SPECIALIST.md` for a complete implementation guide.
+
+### 4.5 Understanding the 3-Tiered Configuration System
+
+The system's configuration is not a single file but a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved from bottom to top:
+
+**Tier 1: Secrets (`.env`)**
+This file provides the raw secrets and connection details (API keys, URLs). It is never committed to source control.
+
+**Tier 2: Architectural Blueprint (`config.yaml`)**
+This is the system's source of truth. It defines all possible components (specialists, providers) and sets the *default* working configuration. For example, it might default the `CriticSpecialist` to use the `gemini_pro` provider.
+
+**Tier 3: User Overrides (`user_settings.yaml`)**
+This optional file allows you to override the defaults from `config.yaml` without editing the core architecture. For example, by adding `critic_specialist: "lmstudio_specialist"` to this file, you instruct the system to ignore the Tier 2 default and use your local model instead.
+
+At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (Tier 2) and then applies any overrides from your user settings (Tier 3). The application components then use this final configuration to function, pulling in the necessary secrets from the environment (Tier 1) as needed.

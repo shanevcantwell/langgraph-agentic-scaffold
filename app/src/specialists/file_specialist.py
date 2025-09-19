@@ -1,5 +1,3 @@
-# app/src/specialists/file_specialist.py
-
 import logging
 import os
 from typing import Optional, Dict, Any
@@ -89,9 +87,6 @@ class FileSpecialist(BaseSpecialist):
         """Executes the file operation based on the LLM's structured output."""
         messages = state["messages"]
         
-        # MODIFICATION: To make the specialist more robust, we inject a clarifying
-        # instruction into the context. This helps the LLM focus on its primary
-        # task of tool-calling, even if the input is a high-level goal.
         contextual_messages = messages[:]
         contextual_messages.append(HumanMessage(
             content="Based on the conversation history, determine which file system operation is required and call the appropriate tool. If the request is ambiguous, state what information you need."
@@ -128,12 +123,11 @@ class FileSpecialist(BaseSpecialist):
                 action_name_for_report = "ReadFile"
                 file_content, result_content = self._read_file(TargetToolClass(**tool_args))
                 if file_content is not None:
-                    # Use the scratchpad for transient data, per architectural standard.
-                    updated_state["scratchpad"] = {"text_for_analysis": file_content}
+                    updated_state["artifacts"] = {"text_to_process": file_content}
             elif TargetToolClass == ListDirectoryParams:
                 action_name_for_report = "ListDirectory"
                 result_content = self._list_directory(TargetToolClass(**tool_args))
-                updated_state["scratchpad"] = {"text_for_analysis": result_content}
+                updated_state["artifacts"] = {"text_to_process": result_content}
             elif TargetToolClass == WriteFileParams:
                 action_name_for_report = "WriteFile"
                 result_content = self._write_file(TargetToolClass(**tool_args))
