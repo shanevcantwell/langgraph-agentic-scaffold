@@ -100,19 +100,22 @@ class RouterSpecialist(BaseSpecialist):
             content = "Archive report generated. Workflow complete."
             next_specialist_name = END
 
-        # Stage 1: A simple error or a task completion flag from another specialist triggers the finalization sequence.
-        elif state.get("error") or state.get("task_is_complete", False):
-            routing_type = "completion_signal" if state.get("task_is_complete") else "error_signal"
-            # Per the explicit graph structure, if a task is complete, we route to the synthesizer if it exists.
-            # The graph itself will handle the subsequent step (routing to the archiver).
-            # MODIFICATION: Removed the `and user_response_snippets` condition to comply with the
-            # Three-Stage Termination Pattern, where snippets are optional.
+        # Stage 1: A `task_is_complete` flag from another specialist triggers the finalization sequence.
+        # This is a high-priority signal that should be checked before any other routing logic.
+        elif state.get("task_is_complete", False):
+            routing_type = "completion_signal"
             if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map:
                 content = "Task is complete. Routing to ResponseSynthesizerSpecialist to generate final summary."
                 next_specialist_name = CoreSpecialist.RESPONSE_SYNTHESIZER.value
             else:
-                content = "Task is complete or an error occurred. Routing to ArchiverSpecialist for final report."
+                content = "Task is complete. ResponseSynthesizer not available. Routing to ArchiverSpecialist for final report."
                 next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
+
+        # A simple, non-critical error also triggers the finalization sequence.
+        elif state.get("error"):
+            routing_type = "error_signal"
+            content = "A non-critical error occurred. Routing to ArchiverSpecialist for final report."
+            next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
 
         # Default Routing Logic: A recommendation from Triage or another specialist is a strong hint.
         elif recommended := state.get("recommended_specialists"):

@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Any, List
 from langchain_core.messages import AIMessage, BaseMessage
 from .base import BaseSpecialist
+from ..enums import CoreSpecialist
 from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas import TriageRecommendations
@@ -44,11 +45,17 @@ class PromptTriageSpecialist(BaseSpecialist):
 
         if not tool_calls or not tool_calls[0].get('args'):
             logger.warning("Triage LLM did not return a valid tool call. No recommendations will be made.")
-            recommendations = []
+            # If Triage fails to make a specific recommendation, explicitly fall back to the
+            # general-purpose default_responder_specialist. This prevents the router from having to
+            # make a redundant LLM call to arrive at the same conclusion.
+            recommendations = [CoreSpecialist.DEFAULT_RESPONDER.value]
         else:
             # The tool call ensures the output is a list of strings. We still validate
             # that the LLM didn't hallucinate a name despite the prompt.
             raw_recommendations = tool_calls[0]['args'].get('recommended_specialists', [])
+            if not raw_recommendations:
+                logger.warning("Triage LLM returned an empty list of recommendations. Defaulting to default_responder_specialist.")
+                raw_recommendations = [CoreSpecialist.DEFAULT_RESPONDER.value]
             recommendations = [rec for rec in raw_recommendations if rec in self.specialist_map]
 
         logger.info(f"Triage complete. Recommending specialists: {recommendations}")

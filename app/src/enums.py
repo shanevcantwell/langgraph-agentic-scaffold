@@ -26,3 +26,4 @@ class CoreSpecialist(str, Enum):
     WEB_BUILDER = "web_builder"
     SYSTEMS_ARCHITECT = "systems_architect"
     CRITIC = "critic_specialist"
+    DEFAULT_RESPONDER = "default_responder_specialist"

@@ -210,15 +210,18 @@ class ChiefOfStaff:
                 CoreSpecialist.CRITIC.value # Critic has its own conditional wiring
             ]:
                 continue
-            
+
+            # For all other standard specialists, add a conditional edge that first checks
+            # for task completion. This is the core of the Three-Stage Termination pattern.
+            # If the task is not complete, it routes back to the router.
             workflow.add_conditional_edges(
                 name,
                 self.check_task_completion,
                 {
                     CoreSpecialist.RESPONSE_SYNTHESIZER.value: CoreSpecialist.RESPONSE_SYNTHESIZER.value,
                     router_name: router_name,
-                    # Add END as a valid destination in case of a loop detection halt.
-                    END: END
+                    # Add END as a valid destination in case of a loop detection halt inside the decider.
+                    END: END,
                 },
             )
 

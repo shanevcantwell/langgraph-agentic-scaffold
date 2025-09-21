@@ -13,13 +13,8 @@ logger = logging.getLogger(__name__)
 class PromptSpecialist(BaseSpecialist):
     """
     A specialist that generates a direct, conversational response to the user's prompt.
-    It is intended for simple, single-turn interactions where no other specialist's
-    tools are required. It signals task completion after it runs.
     """
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Generates a text response and signals that the task is complete.
-        """
         messages = state["messages"]
         request = StandardizedLLMRequest(messages=messages)
         response_data = self.llm_adapter.invoke(request)
