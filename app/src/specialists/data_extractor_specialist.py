@@ -45,13 +45,7 @@ class DataExtractorSpecialist(BaseSpecialist):
             content=f"I have successfully extracted the following data: {extracted_data}",
         )
 
-        # The task is only complete if this specialist was not part of a larger plan.
-        # The presence of a 'system_plan' artifact is the key indicator.
-        is_part_of_larger_plan = state.get("system_plan") is not None
-        task_is_complete = not is_part_of_larger_plan
-
         return {
             "messages": [ai_message],
             "extracted_data": extracted_data,
-            "task_is_complete": task_is_complete
         }

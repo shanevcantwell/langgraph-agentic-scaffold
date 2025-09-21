@@ -27,6 +27,6 @@ class DataProcessorSpecialist(BaseSpecialist):
 
         new_message = AIMessage(content="I have processed the data artifact.")
         return {
-            "messages": state["messages"] + [new_message],
+            "messages": [new_message],
             "processed_data": data
         }

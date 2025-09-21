@@ -68,26 +68,44 @@ class ArchiverSpecialist(BaseSpecialist):
         # concrete signal that the finalization step is complete, allowing it
         # to correctly route to __end__.
         return {
-            "messages": [ai_message],
+            "messages": state.get("messages", []) + [ai_message],
             "artifacts": {"archive_report.md": markdown_report},
         }
 
     def _summarize_conversation(self, messages: List[Dict[str, Any]]) -> str:
-        """Creates a concise summary of the conversation history for the report."""
+        """Creates a concise, human-readable summary of the agentic workflow for the report."""
         summary_lines = []
-        for msg in messages:
+        for i, msg in enumerate(messages):
             role = msg.get("role", "unknown")
             name = msg.get("name", "unknown")
             content = str(msg.get("content", "")).strip()
-            if len(content) > 150:
-                content = content[:150] + "..."
-            
+            kwargs = msg.get("additional_kwargs", {})
+
+            # Shorten long content for display
+            if len(content) > 120:
+                content = content[:120] + "..."
+
             if role == "user":
-                summary_lines.append(f"-> User: {content}")
+                summary_lines.append(f"{i+1}. **User:** *{content}*")
+
             elif role == "tool":
-                 summary_lines.append(f"<- Tool ({name}): {content}")
-            else: # AIMessage
-                summary_lines.append(f"<- AI ({name}): {content}")
+                summary_lines.append(f"{i+1}. **{name}:** *Tool execution result: {content}*")
+
+            elif role == "ai":
+                # For the Router, the decision is the most important part.
+                if name == CoreSpecialist.ROUTER.value and "routing_decision" in kwargs:
+                    decision = kwargs['routing_decision']
+                    if decision == END:
+                        summary_lines.append(f"{i+1}. **Router Specialist:** *Task is complete. Terminating workflow.*")
+                    else:
+                        summary_lines.append(f"{i+1}. **Router Specialist:** *Routing to specialist: {decision}...*")
+                # For other specialists, use their conversational content.
+                else:
+                    summary_lines.append(f"{i+1}. **{name}:** *{content}*")
+
+            else:
+                summary_lines.append(f"{i+1}. **{name} ({role}):** *{content}*")
+
         return "\n".join(summary_lines)
 
     def _save_report(self, report_content: str):

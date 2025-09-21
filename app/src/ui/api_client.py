@@ -40,19 +40,41 @@ class ApiClient:
             with requests.post(STREAM_URL, json=payload, stream=True, timeout=300) as response:
                 response.raise_for_status()
 
-                final_state_json = None
+                final_state_json_parts = []
+                is_capturing_final_state = False
+
                 for line in response.iter_lines():
                     if line:
                         decoded_line = line.decode('utf-8').strip()
-                        if decoded_line.startswith("FINAL_STATE::"):
-                            final_state_json = decoded_line.replace("FINAL_STATE::", "", 1)
-                            break
+                        if is_capturing_final_state:
+                            final_state_json_parts.append(decoded_line)
+                        elif decoded_line.startswith("FINAL_STATE::"):
+                            is_capturing_final_state = True
+                            # Add the first part of the JSON, stripping the prefix
+                            final_state_json_parts.append(decoded_line.replace("FINAL_STATE::", "", 1))
                         else:
                             log_history += decoded_line + "\n"
                             yield {"logs": log_history}
+                final_state_json = "".join(final_state_json_parts)
 
             if final_state_json:
-                final_state = json.loads(final_state_json)
+                # --- MODIFICATION: Add robust JSON parsing ---
+                try:
+                    final_state = json.loads(final_state_json)
+                except json.JSONDecodeError as e:
+                    # If parsing fails, show the raw string and error in the UI.
+                    error_report = {
+                        "JSON Parsing Error": str(e),
+                        "Received Malformed String": final_state_json
+                    }
+                    yield {
+                        "status": "Error: Received invalid JSON from backend.",
+                        "final_state": error_report,
+                        "logs": log_history + "\nERROR: Failed to parse final state JSON."
+                    }
+                    return
+                # --- END MODIFICATION ---
+
                 artifacts = final_state.get("artifacts", {})
                 archive_report = artifacts.get("archive_report.md", "No archive report was generated.")
                 html_content = artifacts.get("html_document.html", "")

@@ -148,11 +148,13 @@ class RouterSpecialist(BaseSpecialist):
 
         logger.info(f"Router decision: Routing to {next_specialist_name} (Type: {routing_type})")
 
+        current_messages = state.get("messages", [])
+        current_routing_history = state.get("routing_history", [])
         # By centralizing the state update here, we ensure consistency across all routing paths.
         return {
-            "messages": [ai_message],
+            "messages": current_messages + [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
             "recommended_specialists": None, # Always consume recommendations after the router has run.
-            "routing_history": [next_specialist_name]
+            "routing_history": current_routing_history + [next_specialist_name]
         }

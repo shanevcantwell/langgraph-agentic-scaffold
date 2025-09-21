@@ -117,4 +117,4 @@ class OpenInterpreterSpecialist(BaseSpecialist):
             content=f"I have executed the following {code_params.language} code:\n\n```\n{code_params.code}\n```\n\n**Result:**\n{final_output}",
         )
         
-        return {"messages": [ai_message], "task_is_complete": True}
+        return {"messages": [ai_message]}

@@ -30,4 +30,4 @@ class PromptSpecialist(BaseSpecialist):
             llm_adapter=self.llm_adapter,
             content=text_response,
         )
-        return {"messages": [ai_message], "task_is_complete": True}
+        return {"messages": [ai_message]}

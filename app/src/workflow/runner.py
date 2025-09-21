@@ -1,16 +1,41 @@
 # src/workflow/runner.py
 import logging
-import os
+import json
+from datetime import datetime
+from typing import Dict, Any, AsyncGenerator
+
+from langchain_core.messages import HumanMessage, BaseMessage
+from langchain_core.messages import messages_to_dict
+from pydantic import BaseModel
+
 from ..utils.errors import ConfigError
-from typing import Dict, Any
-from typing import AsyncGenerator
-
-from langchain_core.messages import HumanMessage
-
 from ..graph.state import GraphState
 from .chief_of_staff import ChiefOfStaff
 
 logger = logging.getLogger(__name__)
+
+# --- SERIALIZATION HELPER FUNCTION ---
+def _make_state_serializable(state: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Recursively traverses a state dictionary and converts non-serializable
+    objects (like LangChain messages, Pydantic models, and datetimes)
+    into JSON-compatible formats.
+    """
+    if isinstance(state, dict):
+        new_dict = {}
+        for k, v in state.items():
+            new_dict[k] = _make_state_serializable(v)
+        return new_dict
+    elif isinstance(state, list):
+        if state and isinstance(state[0], BaseMessage):
+            return messages_to_dict(state)
+        return [_make_state_serializable(item) for item in state]
+    elif isinstance(state, BaseModel):
+        return state.model_dump()
+    elif isinstance(state, datetime):
+        return state.isoformat()
+    return state
+
 
 class WorkflowRunner:
     """
@@ -38,14 +63,12 @@ class WorkflowRunner:
         logger.info("Performing pre-flight environment checks...")
         llm_providers = self.config.get("llm_providers", {})
         
-        # Determine which providers are actually in use by enabled specialists
         used_provider_bindings = set()
         for spec_config in self.config.get("specialists", {}).values():
             if binding := spec_config.get("llm_config"):
                 used_provider_bindings.add(binding)
 
         for binding_key, provider_config in llm_providers.items():
-            # Only check providers that are actually being used
             if binding_key not in used_provider_bindings:
                 continue
 
@@ -61,7 +84,6 @@ class WorkflowRunner:
                     "the LMSTUDIO_BASE_URL environment variable is not set."
                 )
 
-        # --- ADR-010: Fail-Fast Startup Validation ---
         workflow_config = self.config.get("workflow", {})
         critical_specialists = workflow_config.get("critical_specialists", [])
         if critical_specialists:
@@ -79,33 +101,16 @@ class WorkflowRunner:
     def run(self, goal: str) -> Dict[str, Any]:
         """
         Executes the workflow with a given goal.
-
-        Args:
-            goal: The high-level goal for the agentic system to accomplish.
-
-        Returns:
-            The final state of the graph after the workflow has completed.
         """
         logger.info(f"--- Starting workflow for goal: '{goal}' ---")
         
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
-            "next_specialist": None,
-            "recommended_specialists": None,
-            "text_to_process": None,
-            "extracted_data": None,
-            "error": None,
-            "json_artifact": None,
-            "html_artifact": None,
-            "system_plan": None,
-            "turn_count": 0,
-            "routing_history": [],
-            "archive_report": None,
-            # Add the new field for preserving triage recommendations.
-            "triage_recommendations": None,
-            # Initialize the completion flag. This is critical for the router's
-            # programmatic completion check to function correctly.
-            "task_is_complete": False,
+            "routing_history": [], "turn_count": 0, "task_is_complete": False,
+            "next_specialist": None, "artifacts": {}, "scratchpad": {},
+            "recommended_specialists": None, "triage_recommendations": None, 
+            "text_to_process": None, "extracted_data": None, "error_report": None, 
+            "system_plan": None, "web_builder_iteration": None
         }
 
         try:
@@ -115,47 +120,51 @@ class WorkflowRunner:
             final_artifacts = final_state.get("artifacts", {})
             final_response = final_artifacts.get("final_user_response.md", "Workflow completed, but no final user response was generated.")
             
-            return {
-                "final_user_response": final_response
-            }
+            return {"final_user_response": final_response}
 
         except Exception as e:
             logger.error(f"--- Workflow failed with an unhandled exception: {e} ---", exc_info=True)
             return {
                 "error": f"Workflow failed catastrophically: {e}",
-                "messages": [HumanMessage(content=goal)],
-                "turn_count": 0, # Ensure a consistent return shape on catastrophic failure
+                "messages": [HumanMessage(content=goal)], "turn_count": 0,
             }
 
-    async def run_streaming(self, goal: str) -> AsyncGenerator[str, None]:
+    async def run_streaming(self, goal: str, text_content: str = None, image_b64: str = None) -> AsyncGenerator[str, None]:
         """
         Executes the workflow with a given goal and streams back real-time updates.
-
-        Args:
-            goal: The high-level goal for the agentic system to accomplish.
-
-        Yields:
-            A stream of strings, representing log messages or the final state.
         """
         logger.info(f"--- Starting streaming workflow for goal: '{goal}' ---")
         
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
-            "next_specialist": None,
-            "recommended_specialists": None,
-            "text_to_process": None,
-            "extracted_data": None,
-            "error": None,
-            "json_artifact": None,
-            "html_artifact": None,
-            "system_plan": None,
-            "turn_count": 0,
-            "routing_history": [],
-            "archive_report": None,
-            "triage_recommendations": None,
-            "task_is_complete": False,
+            "routing_history": [], "turn_count": 0, "task_is_complete": False,
+            "next_specialist": None, "artifacts": {}, "scratchpad": {},
+            "recommended_specialists": None, "triage_recommendations": None, 
+            "text_to_process": text_content, "extracted_data": None, "error_report": None, 
+            "system_plan": None, "web_builder_iteration": None
         }
+        if image_b64:
+             initial_state["artifacts"]["uploaded_image.png"] = image_b64
+        
         final_state = None
-        async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
-            for node_name, node_state in event.items():
-                yield f"Finished node: {node_name}\n"
+        try:
+            async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
+                for node_name, node_state in event.items():
+                    final_state = node_state
+                    yield f"Finished node: {node_name}\n"
+
+            if final_state:
+                # --- MODIFICATION: Sanitize the state before serialization ---
+                serializable_state = _make_state_serializable(final_state)
+                final_state_json = json.dumps(serializable_state, indent=2)
+                yield f"FINAL_STATE::{final_state_json}"
+                logger.info("--- Streaming workflow complete. Sent final state to client. ---")
+            else:
+                logger.error("--- Streaming workflow finished but no final state was captured. ---")
+        
+        except Exception as e:
+            logger.error(f"--- Streaming workflow failed with an unhandled exception: {e} ---", exc_info=True)
+            # Create a serializable error message
+            error_message_dict = {"error": f"Workflow failed catastrophically: {str(e)}"}
+            error_message_json = json.dumps(error_message_dict)
+            yield f"FINAL_STATE::{error_message_json}"

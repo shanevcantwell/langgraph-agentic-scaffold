@@ -25,3 +25,4 @@ class CoreSpecialist(str, Enum):
     PROMPT = "prompt_specialist"
     WEB_BUILDER = "web_builder"
     SYSTEMS_ARCHITECT = "systems_architect"
+    CRITIC = "critic_specialist"

@@ -52,6 +52,7 @@ class CriticSpecialist(BaseSpecialist):
         updated_state = {
             "messages": [ai_message],
             "artifacts": {"critique.md": critique_text},
+            "scratchpad": {"critique_decision": critique.decision}
         }
 
         if critique.decision == "REVISE" and self.revision_target:

@@ -92,6 +92,8 @@ workflow:
 # must match the specialist's Python module name (router_specialist.py) and the
 # name passed to super().__init__() in its constructor.
 # ==============================================================================
+# config.yaml
+
 specialists:
   # --- Orchestration & Planning ---
   router_specialist:
@@ -105,51 +107,31 @@ specialists:
     description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
 
   critic_specialist:
-    # The specialist's own config. It still needs an LLM binding for its AI message.
     type: "llm"
     prompt_file: "critic_wrapper_prompt.md"
     description: "A gatekeeper node that runs a configured critique strategy to ensure quality."
-    # This specialist still has a simple, non-conditional dependency.
-    # We will support both formats for backward compatibility and simplicity.
     requires_artifacts: ["html_document.html"]
     artifact_providers:
       html_document.html: "web_builder"
-    
-    # Config for its role in conditional routing
     conditional_routing: true
     revision_target: "web_builder"
-
-    # --- NEW STRATEGY CONFIGURATION ---
-    # This nested block defines which critique behavior to use.
     critique_strategy:
-      type: "llm" # The type of strategy to load.
-      # Strategy-specific parameters are nested here.
-      # The LLM binding is now inherited from the parent specialist's 'llm_config'.
+      type: "llm"
       prompt_file: "critic_prompt.md"
-    # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
 
   # --- Core Capabilities ---
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
     description: "Generates or refines a complete HTML document."
-    # MODIFICATION: Change from a flat list to a list of dependency sets.
-    # The specialist can run if EITHER Set 1 OR Set 2 is satisfied.
     requires_artifacts:
-      - ["system_plan"] # Set 1: For the initial build.
-      - ["html_document.html", "critique.md"] # Set 2: For a refinement cycle.
-    # The provider map remains flat, as it's a simple lookup.
+      - ["system_plan"]
+      - ["html_document.html", "critique.md"]
     artifact_providers:
       system_plan: "systems_architect"
       html_document.html: "web_builder"
       critique.md: "critic_specialist"
 
-  # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
-  # When a functional specialist signals `task_is_complete: True`, the graph routes
-  # to this specialist. It synthesizes a final, user-facing response from the
-  # `user_response_snippets` collected during the workflow.
-  # After it runs, the ChiefOfStaff's graph wiring explicitly routes to the `archiver_specialist`
-  # to complete the termination sequence.
   response_synthesizer_specialist:
     type: "llm"
     prompt_file: "response_synthesizer_prompt.md"
@@ -158,14 +140,14 @@ specialists:
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
-    description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
-    root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
+    description: "Performs file system operations like read, write, and list directories. Use this when the user asks to read or save a file."
+    root_dir: "./workspace"
 
   # --- Data & Analysis ---
   data_extractor_specialist:
     type: "llm"
-    prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
-    description: "Extracts structured data from unstructured text based on a Pydantic schema. Requires 'text_to_process' in the state."
+    prompt_file: "data_extractor_prompt.md"
+    description: "Extracts structured, machine-readable data from text into a predefined JSON schema. Use ONLY when the desired output is a specific, rigid format (e.g., a list of names, dates, and locations). Requires a 'text_to_process' artifact."
     requires_artifacts: ["text_to_process"]
     artifact_providers:
       text_to_process: "file_specialist"
@@ -173,7 +155,7 @@ specialists:
   sentiment_classifier_specialist:
     type: "llm"
     prompt_file: "sentiment_classifier_prompt.md"
-    description: "Classifies the sentiment of a given text as positive, negative, or neutral."
+    description: "Classifies the sentiment of a given text as positive, negative, or neutral. Provides analytical metadata, not a final user response."
 
   data_processor_specialist:
     type: "procedural"
@@ -185,7 +167,7 @@ specialists:
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
-    description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
+    description: "Performs qualitative analysis on unstructured text. Use for tasks like summarizing, finding themes, or extracting key takeaways that do not fit a rigid schema. Ideal for generating human-readable reports from a provided text artifact."
     requires_artifacts: ["text_to_process"]
     artifact_providers:
       text_to_process: "file_specialist"
@@ -194,23 +176,16 @@ specialists:
   prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
-    description: "A general-purpose specialist for direct Q&A and instruction following. Use this as a fallback when no other specialist seems appropriate for the user's request."
+    description: "Handles direct, conversational Q&A and simple instructions that do not require file I/O or complex text analysis. This is the default specialist for general conversation or when no specific tool seems necessary. Acts as a fallback."
 
   # --- Procedural Specialists with External Dependencies ---
-
-  # Needs more work
-  # open_interpreter_specialist:
-  #   type: "procedural"
-  #   description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
+  # open_interpreter_specialist: ...
 
   archiver_specialist:
     type: "procedural"
-    archive_path: "${ARCHIVE_PATH:./archives}" # The directory to save final run reports.
-    # Pruning strategy for the archive directory to prevent it from growing indefinitely.
-    # Options: "none", "count", "size".
+    archive_path: "./logs/archive}"
     pruning_strategy: "count"
-    pruning_max_count: 50      # Max number of reports to keep if strategy is "count".
-    # pruning_max_size_mb: 100 # Max total size in MB if strategy is "size".
+    pruning_max_count: 50
     description: "Summarizes the conversation and prepares the final report. This is the final step."
 
   prompt_triage_specialist:

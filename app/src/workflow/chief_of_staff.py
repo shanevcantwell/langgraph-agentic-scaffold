@@ -68,11 +68,14 @@ class ChiefOfStaff:
                     critique_strategy_instance: BaseCritiqueStrategy
 
                     if strategy_type == "llm":
-                        strategy_llm_binding = strategy_config.get("llm_config")
+                        # The strategy uses the same LLM binding as the parent specialist.
+                        # This was the missing link causing the load failure.
+                        strategy_llm_binding = config.get("llm_config")
                         strategy_prompt_file = strategy_config.get("prompt_file")
                         if not (strategy_llm_binding and strategy_prompt_file):
                             raise ValueError("LLM critique_strategy requires 'llm_config' and 'prompt_file'.")
                         
+                        # Create a dedicated adapter for the critique strategy.
                         strategy_llm_adapter = self.adapter_factory.create_adapter(strategy_llm_binding, "")
                         critique_strategy_instance = LLMCritiqueStrategy(llm_adapter=strategy_llm_adapter, prompt_file=strategy_prompt_file)
                     else:
@@ -190,28 +193,56 @@ class ChiefOfStaff:
     def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
         """Defines the 'hub-and-spoke' architecture for the graph."""
         router_name = CoreSpecialist.ROUTER.value
+        # The router can decide to go to any other specialist.
         destinations = {name: name for name in self.specialists if name != router_name}
+        # CRITICAL FIX: The router is also allowed to terminate the graph.
+        # This adds the END node as a valid destination from the router's conditional edge.
         destinations[END] = END
-        workflow.add_conditional_edges(router_name, self.decide_next_specialist, destinations)
+        workflow.add_conditional_edges(router_name, self.route_to_next_specialist, destinations)
 
         for name in self.specialists:
             # Exclude all core orchestration/termination specialists from this generic wiring.
-            # Their paths are handled explicitly.
-            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value, CoreSpecialist.ARCHIVER.value]:
+            # Their paths are handled explicitly below.
+            if name in [
+                router_name, 
+                CoreSpecialist.RESPONSE_SYNTHESIZER.value, 
+                CoreSpecialist.ARCHIVER.value,
+                CoreSpecialist.CRITIC.value # Critic has its own conditional wiring
+            ]:
                 continue
             
-            # This is the correct pattern for conditional routing after a node.
-            # The node (specialist) is wired to a decider function. That function
-            # then returns the name of one of the keys in the provided dictionary
-            # to determine the next step.
             workflow.add_conditional_edges(
                 name,
-                self.after_specialist_decider,
+                self.check_task_completion,
                 {
                     CoreSpecialist.RESPONSE_SYNTHESIZER.value: CoreSpecialist.RESPONSE_SYNTHESIZER.value,
-                    router_name: router_name
+                    router_name: router_name,
+                    # Add END as a valid destination in case of a loop detection halt.
+                    END: END
                 },
             )
+
+        # --- Explicit Wiring for Core & Conditional Specialists ---
+
+        # This is the conditional edge for the Critic specialist, a core part of the
+        # "Generate-and-Critique" pattern, as defined in ADR-004.
+        if CoreSpecialist.CRITIC.value in self.specialists:
+            critic_config = self.config.get("specialists", {}).get(CoreSpecialist.CRITIC.value, {})
+            # The target for the 'REVISE' branch. Defaults back to the router if not specified.
+            revision_target = critic_config.get("revision_target", router_name)
+            workflow.add_conditional_edges(
+                CoreSpecialist.CRITIC.value,
+                self.after_critique_decider,
+                {
+                    # On REVISE, go to the specified target (e.g., 'web_builder').
+                    revision_target: revision_target,
+                    # On ACCEPT, proceed to the standard completion sequence.
+                    CoreSpecialist.RESPONSE_SYNTHESIZER.value: CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+                    # Fallback to router if something unexpected happens.
+                    router_name: router_name
+                }
+            )
+            logger.info(f"Graph Edge: Added conditional routing for '{CoreSpecialist.CRITIC.value}' to targets '{revision_target}' and '{CoreSpecialist.RESPONSE_SYNTHESIZER.value}'.")
 
         if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialists:
             workflow.add_conditional_edges(
@@ -223,6 +254,12 @@ class ChiefOfStaff:
                 }
             )
             logger.info("Graph Edge: Added explicit edge from ResponseSynthesizer to Archiver.")
+        
+        # The Archiver is the final step. It should lead directly to the end.
+        # This removes the unnecessary final hop back to the router.
+        if CoreSpecialist.ARCHIVER.value in self.specialists:
+            workflow.add_edge(CoreSpecialist.ARCHIVER.value, END)
+            logger.info("Graph Edge: Added explicit edge from Archiver to END.")
 
     def _build_graph(self) -> StateGraph:
         """
@@ -235,7 +272,27 @@ class ChiefOfStaff:
         workflow.set_entry_point(self.entry_point)
         return workflow.compile()
 
-    def after_specialist_decider(self, state: GraphState) -> str:
+    def after_critique_decider(self, state: GraphState) -> str:
+        """
+        Reads the critic's decision from the scratchpad and routes accordingly.
+        This is the implementation of the conditional routing logic from ADR-004.
+        """
+        decision = state.get("scratchpad", {}).get("critique_decision")
+        logger.info(f"--- ChiefOfStaff: After Critique. Decision: {decision} ---")
+
+        critic_config = self.config.get("specialists", {}).get(CoreSpecialist.CRITIC.value, {})
+        revision_target = critic_config.get("revision_target", CoreSpecialist.ROUTER.value)
+
+        if decision == "REVISE":
+            logger.info(f"Routing to configured revision target: {revision_target}")
+            return revision_target
+        elif decision == "ACCEPT":
+            # If accepted, we trigger the standard completion sequence.
+            return self.check_task_completion(state)
+        else: # Fallback for unexpected decisions
+            return CoreSpecialist.ROUTER.value
+
+    def check_task_completion(self, state: GraphState) -> str:
         """
         Checks if a specialist has signaled task completion. This function is the
         cornerstone of the Three-Stage Termination pattern.
@@ -243,6 +300,11 @@ class ChiefOfStaff:
         if state.get("task_is_complete"):
             logger.info("--- ChiefOfStaff: Task completion signal received. Routing to Response Synthesizer. ---")
             return CoreSpecialist.RESPONSE_SYNTHESIZER.value
+        
+        # Check for loops after a specialist runs, but before returning to the router.
+        if self._is_unproductive_loop(state):
+            return END
+
         else:
             logger.info("--- ChiefOfStaff: Task not complete. Returning to Router. ---")
             return CoreSpecialist.ROUTER.value
@@ -258,15 +320,8 @@ class ChiefOfStaff:
         else:
             return END
 
-    def decide_next_specialist(self, state: GraphState) -> str:
-        """
-        This is now a pure decision function. It reads the state and returns
-        the next node's name. It does not and cannot modify the state.
-        """
-        turn_count = state.get("turn_count", 0)
-        approx_steps = (turn_count * 2) + 1
-        logger.info(f"--- ChiefOfStaff: Deciding next specialist (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
-        
+    def _is_unproductive_loop(self, state: GraphState) -> bool:
+        """Checks for repeating sequences in the routing history."""
         # Generic loop detection to prevent unproductive cycles. This is a temporary
         # safeguard that will be replaced by the InvariantMonitor (see ADR).
         # Intentional loops (like generate-and-critique) are handled by conditional
@@ -289,7 +344,21 @@ class ChiefOfStaff:
                         f"Unproductive loop detected. The specialist sequence '{list(last_block)}' "
                         f"has repeated {self.max_loop_cycles} times. Halting workflow."
                     )
-                    return END
+                    return True
+        return False
+
+    def route_to_next_specialist(self, state: GraphState) -> str:
+        """
+        This is the primary routing decision function called after the Router specialist.
+        It reads the 'next_specialist' key from the state and returns it.
+        It also contains the loop detection logic as a final safeguard.
+        """
+        turn_count = state.get("turn_count", 0)
+        approx_steps = (turn_count * 2) + 1
+        logger.info(f"--- ChiefOfStaff: Routing from Router (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
+
+        if self._is_unproductive_loop(state):
+            return END
         
         next_specialist = state.get("next_specialist")
         logger.info(f"Router has selected next specialist: {next_specialist}")

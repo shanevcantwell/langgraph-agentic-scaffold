@@ -20,10 +20,7 @@ class TextAnalysisSpecialist(BaseSpecialist):
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         messages: List[BaseMessage] = state["messages"]
         text_to_process = state.get("text_to_process")
-
-        # The specialist's system prompt (loaded at init) should already instruct it
-        # to analyze text provided in the user message. We will construct a new
-        # message list that includes the text to be processed as a new user turn.
+        
         contextual_messages = messages + [HumanMessage(content=f"Please perform the requested analysis on the following text:\n\n---\n{text_to_process}\n---")]
 
         request = StandardizedLLMRequest(
@@ -35,8 +32,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
         if not json_response:
             raise ValueError("TextAnalysisSpecialist failed to get a valid JSON response from the LLM.")
 
+        # Build the human-readable report from the structured JSON response
         report = f"I have analyzed the text as requested.\n\n**Summary:**\n{json_response.get('summary', 'N/A')}\n\n**Main Points:**\n"
-        for point in json_response.get("main_points", []):
+        main_points = json_response.get("main_points", [])
+        for point in main_points:
             report += f"- {point}\n"
 
         ai_message = create_llm_message(
@@ -44,9 +43,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
             llm_adapter=self.llm_adapter,
             content=report,
         )
-        return {
+
+        updated_state = {
             "messages": [ai_message],
-            "json_artifact": json_response,
-            # This specialist should NOT decide if the task is complete.
-            # It provides its analysis and returns control to the router.
+            "artifacts": { "text_analysis_report.md": report },
         }
+
+        return updated_state
