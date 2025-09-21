@@ -55,9 +55,12 @@ class ResponseSynthesizerSpecialist(BaseSpecialist):
         request = StandardizedLLMRequest(messages=messages)
         response_data = self.llm_adapter.invoke(request)
 
-        synthesized_response = response_data.get(
-            "text_response", "I was unable to synthesize a coherent response."
-        )
+        synthesized_response = response_data.get("text_response")
+        if not synthesized_response:
+            # If the LLM fails to provide a text response, provide a more informative fallback.
+            raw_response_content = response_data.get("raw_response_content", "No raw response available.")
+            error_message = f"I was unable to synthesize a coherent response. The LLM returned an empty text response. Raw output: {raw_response_content}"
+            synthesized_response = error_message
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,

@@ -60,13 +60,10 @@ class PromptTriageSpecialist(BaseSpecialist):
 
         logger.info(f"Triage complete. Recommending specialists: {recommendations}")
 
-        ai_message = create_llm_message(
-            specialist_name=self.specialist_name,
-            llm_adapter=self.llm_adapter,
-            content="Initial prompt analysis complete. Passing recommendations to the router.",
-        )
+        # Triage is a silent orchestration step. It should not add a conversational
+        # message to the history, as this can confuse downstream specialists.
+        # It only updates the state with its recommendations.
         return {
-            "messages": [ai_message],
             "recommended_specialists": recommendations,
             "triage_recommendations": recommendations,  # Persist for final report
         }

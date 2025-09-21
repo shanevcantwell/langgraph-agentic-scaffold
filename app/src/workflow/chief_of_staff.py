@@ -250,7 +250,7 @@ class ChiefOfStaff:
         if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialists:
             workflow.add_conditional_edges(
                 CoreSpecialist.RESPONSE_SYNTHESIZER.value,
-                self.after_synthesis_decider,
+                self.route_to_archiver,
                 {
                     CoreSpecialist.ARCHIVER.value: CoreSpecialist.ARCHIVER.value,
                     END: END
@@ -312,12 +312,12 @@ class ChiefOfStaff:
             logger.info("--- ChiefOfStaff: Task not complete. Returning to Router. ---")
             return CoreSpecialist.ROUTER.value
 
-    def after_synthesis_decider(self, state: GraphState) -> str:
+    def route_to_archiver(self, state: GraphState) -> str:
         """
-        Decision function that runs after the ResponseSynthesizer.
+        Routing function that runs after the ResponseSynthesizer.
         It explicitly routes to the Archiver, enshrining the finalization sequence.
         """
-        logger.info("--- ChiefOfStaff: After Synthesis. Routing to Archiver. ---")
+        logger.info("--- ChiefOfStaff: After Synthesis. Proceeding to Archiver. ---")
         if CoreSpecialist.ARCHIVER.value in self.specialists:
             return CoreSpecialist.ARCHIVER.value
         else:
