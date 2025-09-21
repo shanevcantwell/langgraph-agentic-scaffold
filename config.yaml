@@ -29,7 +29,7 @@ llm_providers:
     api_identifier: "openai/gpt-oss-20b" # The model identifier for the server.
     # The model's total context window (input + output). This value is used by the llm
     # adapter to proactively prune the conversation history to prevent context overflow errors.
-    context_window: 8192
+    context_window: 4096
 
   lmstudio_specialist:
     # Uses the LMSTUDIO_BASE_URL from your .env file
@@ -127,15 +127,6 @@ specialists:
       # The LLM binding is now inherited from the parent specialist's 'llm_config'.
       prompt_file: "critic_prompt.md"
     # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
-    # When a functional specialist signals `task_is_complete: True`, the router should
-    # route to this specialist. It synthesizes a final, user-facing response from the
-    # `user_response` snippets collected during the workflow.
-    # After it runs, the ChiefOfStaff's graph wiring explicitly routes to the `archiver_specialist`
-    # to complete the termination sequence.
-    response_synthesizer_specialist:
-      type: "llm"
-      prompt_file: "response_synthesizer_prompt.md"
-      description: "Synthesizes a final, user-facing response from a collection of text snippets accumulated during the workflow."
 
   # --- Core Capabilities ---
   web_builder:
@@ -152,6 +143,17 @@ specialists:
       system_plan: "systems_architect"
       html_document.html: "web_builder"
       critique.md: "critic_specialist"
+
+  # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
+  # When a functional specialist signals `task_is_complete: True`, the graph routes
+  # to this specialist. It synthesizes a final, user-facing response from the
+  # `user_response_snippets` collected during the workflow.
+  # After it runs, the ChiefOfStaff's graph wiring explicitly routes to the `archiver_specialist`
+  # to complete the termination sequence.
+  response_synthesizer_specialist:
+    type: "llm"
+    prompt_file: "response_synthesizer_prompt.md"
+    description: "Synthesizes a final, user-facing response from a collection of text snippets accumulated during the workflow."
 
   file_specialist:
     type: "llm"

@@ -111,67 +111,66 @@ class GeminiAdapter(BaseAdapter):
         handling safety filtering, JSON, tool calls, and text responses.
         """
         # Robustness check for safety filtering
-        if not response.candidates:
-            # First, check for a documented safety block. This is the most likely reason for an empty response.
-            if hasattr(response, 'prompt_feedback') and getattr(response.prompt_feedback, 'block_reason', None):
-                block_reason = response.prompt_feedback.block_reason
-                ratings = response.prompt_feedback.safety_ratings
-                error_message = (f"Gemini response blocked due to safety filters. "
-                                 f"Reason: {block_reason}. Ratings: {ratings}")
-                logger.error(error_message)
-                raise SafetyFilterError(error_message)
-            else:
-                # If there are no candidates and no documented block reason, it's a different, more generic API issue.
-                error_message = "Gemini API returned an empty response with no candidates and no specific safety block reason. This could be a transient API issue."
-                logger.error(f"{error_message} Full response object: {response}")
-                raise LLMInvocationError(error_message)
+        try:
+            candidate = response.candidates[0]
+        except (IndexError, AttributeError):
+             # First, check for a documented safety block. This is the most likely reason for an empty response.
+             if hasattr(response, 'prompt_feedback') and getattr(response.prompt_feedback, 'block_reason', None):
+                 block_reason = response.prompt_feedback.block_reason
+                 ratings = response.prompt_feedback.safety_ratings
+                 error_message = (f"Gemini response blocked due to safety filters. "
+                                  f"Reason: {block_reason}. Ratings: {ratings}")
+                 logger.error(error_message)
+                 raise SafetyFilterError(error_message)
+             else:
+                 # If there are no candidates and no documented block reason, it's a different, more generic API issue.
+                 error_message = "Gemini API returned an empty response with no candidates and no specific safety block reason. This could be a transient API issue."
+                 logger.error(f"{error_message} Full response object: {response}")
+                 raise LLMInvocationError(error_message)
 
-        # Helper to safely access response.text, which can fail if the model
-        # returns a tool call or other non-text part.
-        def _get_safe_text(response_obj: Any) -> str:
-            try:
-                return response_obj.text
-            except ValueError:
-                logger.warning(
-                    "response.text accessor failed. This can happen if the model returns a tool call "
-                    "or empty content. Returning empty string."
-                )
-                return ""
+        # --- Response Parsing Logic ---
+        # The order of checks is important: Tool Call -> JSON -> Text
 
-        # If we requested JSON, we expect JSON.
+        # 1. Check for a tool call response.
+        if candidate.content.parts and hasattr(candidate.content.parts[0], 'function_call'):
+            part = candidate.content.parts[0]
+            function_call = part.function_call
+
+            if not function_call.name:
+                logger.warning("GeminiAdapter received a tool call with an empty name. Treating as a failed tool call.")
+                return {"tool_calls": []}
+
+            args = {key: value for key, value in function_call.args.items()} if function_call.args else {}
+            tool_call_id = f"call_{function_call.name}"
+            tool_call_response = {
+                "tool_calls": [{"name": function_call.name, "args": args, "id": tool_call_id}]
+            }
+            logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
+            return tool_call_response
+
+        # If tools were requested but not returned, it's a failure for components like the router.
+        if request.tools:
+            logger.warning("GeminiAdapter was given tools but returned a text response instead of a tool call.")
+            return {"tool_calls": []}
+
+        # 2. Check for a JSON response.
         if request.output_model_class:
             logger.info("GeminiAdapter returned JSON response.")
-            content = _get_safe_text(response) or "{}"
+            content = response.text or "{}"
             try:
                 json_response = json.loads(content)
                 return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as e:
                 logger.warning(
-                    f"GeminiAdapter was asked for JSON but received non-JSON text. Content: {content}"
+                    f"GeminiAdapter direct JSON parse failed: {e}. Attempting robust extraction. Content: {content[:500]}..."
                 )
-                return {"text_response": content, "json_response": {}}
+                json_response = self._robustly_parse_json_from_text(content)
+                if json_response:
+                    return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+                else:
+                    logger.error("Failed to parse or extract JSON from the Gemini model's response.")
+                    return {"text_response": content, "json_response": {}}
 
-        # If we passed tools, check for a tool call.
-        if request.tools:
-            if response.candidates and response.candidates[0].content.parts and hasattr(response.candidates[0].content.parts[0], 'function_call'):
-                part = response.candidates[0].content.parts[0]
-                function_call = part.function_call
-
-                if not function_call.name:
-                    logger.warning("GeminiAdapter received a tool call with an empty name. Treating as a failed tool call.")
-                    return {"tool_calls": []}
-
-                args = {key: value for key, value in function_call.args.items()} if function_call.args else {}
-                tool_call_id = f"call_{function_call.name}"
-                tool_call_response = {
-                    "tool_calls": [{"name": function_call.name, "args": args, "id": tool_call_id}]
-                }
-                logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
-                return tool_call_response
-            else:
-                logger.warning("GeminiAdapter was given tools but returned a text response instead of a tool call.")
-                return {"tool_calls": []}
-
-        # Otherwise, it's a standard text response.
+        # 3. Fallback to a standard text response.
         logger.info("GeminiAdapter returned text response.")
-        return {"text_response": _get_safe_text(response)}
+        return {"text_response": response.text}

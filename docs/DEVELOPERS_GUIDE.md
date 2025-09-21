@@ -56,11 +56,9 @@ The `router_specialist` is the most critical reasoning component in the architec
 
 ### 4.1.1 Intentional vs. Unproductive Loops
 
-The `ChiefOfStaff` includes a generic loop detection mechanism to halt unproductive cycles (e.g., `Router -> Specialist A -> Router -> Specialist A ...`). However, some specialists, like `WebBuilder`, need to run in an *intentional* loop to refine their work.
+The `ChiefOfStaff` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck.
 
-To prevent the generic loop detector from prematurely halting these intentional processes, such specialists should manage their own iteration counters within the `scratchpad` (e.g., `scratchpad['web_builder_iteration']`). The `ChiefOfStaff` is configured to recognize this key and will bypass its own loop detection for that turn, deferring to the specialist's internal logic.
-
-**Policy:** Any specialist designed to loop intentionally **must** use a unique key in the `scratchpad` to signal its state to the `ChiefOfStaff`.
+Intentional loops, such as the "Generate-and-Critique" cycle, are architected differently. They are implemented using conditional edges in the graph that create a direct `Specialist A -> Specialist B -> Specialist A` sub-graph. Because this sub-loop does not repeatedly pass through the main `RouterSpecialist`, it is not flagged by the generic unproductive loop detector. This is the preferred pattern for creating controlled, stateful cycles.
 
 ### 4.2 Implement Robust Loop Control
 

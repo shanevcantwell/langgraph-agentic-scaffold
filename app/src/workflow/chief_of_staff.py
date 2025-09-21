@@ -195,9 +195,23 @@ class ChiefOfStaff:
         workflow.add_conditional_edges(router_name, self.decide_next_specialist, destinations)
 
         for name in self.specialists:
-            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value]:
+            # Exclude all core orchestration/termination specialists from this generic wiring.
+            # Their paths are handled explicitly.
+            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value, CoreSpecialist.ARCHIVER.value]:
                 continue
-            workflow.add_edge(name, router_name)
+            
+            # This is the correct pattern for conditional routing after a node.
+            # The node (specialist) is wired to a decider function. That function
+            # then returns the name of one of the keys in the provided dictionary
+            # to determine the next step.
+            workflow.add_conditional_edges(
+                name,
+                self.after_specialist_decider,
+                {
+                    CoreSpecialist.RESPONSE_SYNTHESIZER.value: CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+                    router_name: router_name
+                },
+            )
 
         if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialists:
             workflow.add_conditional_edges(
@@ -221,6 +235,18 @@ class ChiefOfStaff:
         workflow.set_entry_point(self.entry_point)
         return workflow.compile()
 
+    def after_specialist_decider(self, state: GraphState) -> str:
+        """
+        Checks if a specialist has signaled task completion. This function is the
+        cornerstone of the Three-Stage Termination pattern.
+        """
+        if state.get("task_is_complete"):
+            logger.info("--- ChiefOfStaff: Task completion signal received. Routing to Response Synthesizer. ---")
+            return CoreSpecialist.RESPONSE_SYNTHESIZER.value
+        else:
+            logger.info("--- ChiefOfStaff: Task not complete. Returning to Router. ---")
+            return CoreSpecialist.ROUTER.value
+
     def after_synthesis_decider(self, state: GraphState) -> str:
         """
         Decision function that runs after the ResponseSynthesizer.
@@ -241,27 +267,29 @@ class ChiefOfStaff:
         approx_steps = (turn_count * 2) + 1
         logger.info(f"--- ChiefOfStaff: Deciding next specialist (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
         
-        if (state.get("scratchpad", {}).get("web_builder_iteration", 0)) > 0:
-            logger.info("Intentional refinement loop detected (web_builder_iteration > 0). Bypassing generic loop detection for this turn.")
-        else:
-            routing_history = state.get("routing_history", [])
-            if len(routing_history) >= self.min_loop_len * self.max_loop_cycles:
-                for loop_len in range(self.min_loop_len, (len(routing_history) // self.max_loop_cycles) + 1):
-                    last_block = tuple(routing_history[-loop_len:])
-                    is_loop = True
-                    for i in range(1, self.max_loop_cycles):
-                        start_index = -(i + 1) * loop_len
-                        end_index = -i * loop_len
-                        preceding_block = tuple(routing_history[start_index:end_index])
-                        if last_block != preceding_block:
-                            is_loop = False
-                            break
-                    if is_loop:
-                        logger.error(
-                            f"Unproductive loop detected. The specialist sequence '{list(last_block)}' "
-                            f"has repeated {self.max_loop_cycles} times. Halting workflow."
-                        )
-                        return END
+        # Generic loop detection to prevent unproductive cycles. This is a temporary
+        # safeguard that will be replaced by the InvariantMonitor (see ADR).
+        # Intentional loops (like generate-and-critique) are handled by conditional
+        # graph edges and are not subject to this check as they don't repeatedly
+        # pass through the main router in the same sequence.
+        routing_history = state.get("routing_history", [])
+        if len(routing_history) >= self.min_loop_len * self.max_loop_cycles:
+            for loop_len in range(self.min_loop_len, (len(routing_history) // self.max_loop_cycles) + 1):
+                last_block = tuple(routing_history[-loop_len:])
+                is_loop = True
+                for i in range(1, self.max_loop_cycles):
+                    start_index = -(i + 1) * loop_len
+                    end_index = -i * loop_len
+                    preceding_block = tuple(routing_history[start_index:end_index])
+                    if last_block != preceding_block:
+                        is_loop = False
+                        break
+                if is_loop:
+                    logger.error(
+                        f"Unproductive loop detected. The specialist sequence '{list(last_block)}' "
+                        f"has repeated {self.max_loop_cycles} times. Halting workflow."
+                    )
+                    return END
         
         next_specialist = state.get("next_specialist")
         logger.info(f"Router has selected next specialist: {next_specialist}")
