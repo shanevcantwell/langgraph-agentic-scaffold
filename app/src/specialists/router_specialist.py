@@ -18,7 +18,7 @@ class Route(BaseModel):
     # engine, which can be sensitive to complex schemas with enum constraints.
     next_specialist: str = Field(
         ...,
-        description=f"The specialist to route to next. Must be one of the AVAILABLE SPECIALISTS listed in the prompt, or '{END}' if the task is complete."
+        description="The specialist to route to next. Must be one of the AVAILABLE SPECIALISTS listed in the prompt."
     )
 
 class RouterSpecialist(BaseSpecialist):
@@ -69,14 +69,14 @@ class RouterSpecialist(BaseSpecialist):
                 next_specialist = CoreSpecialist.ARCHIVER.value
                 content = "Router failed to select a valid next specialist. Routing to ArchiverSpecialist for a final report."
             else:
-                next_specialist = END
-                content = "Router failed to select a valid next specialist and no fallback handlers (DefaultResponder, Archiver) are available. Ending workflow."
+                next_specialist = CoreSpecialist.END.value
+                content = "Router failed to select a valid next specialist and no fallback handlers are available. Routing to EndSpecialist."
             return {"next_specialist": next_specialist, "tool_calls": [], "content": content}
         
         valid_options = list(current_specialists.keys())
-        if next_specialist_from_llm not in valid_options and next_specialist_from_llm != END:
-            logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options + [END]}. Routing to END.")
-            next_specialist_from_llm = END
+        if next_specialist_from_llm not in valid_options:
+            logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options}. Falling back to DefaultResponder.")
+            next_specialist_from_llm = CoreSpecialist.DEFAULT_RESPONDER.value
         
         content = f"Routing to specialist: {next_specialist_from_llm}"
         return {"next_specialist": next_specialist_from_llm, "tool_calls": tool_calls, "content": content}
@@ -90,39 +90,8 @@ class RouterSpecialist(BaseSpecialist):
         content = ""
         tool_calls = []
         
-        # --- Three-Stage Termination Pattern ---
-        
-        # Stage 3, Condition A: A detailed error report means the workflow has failed catastrophically. Terminate immediately.
-        if state.get("error_report"):
-            routing_type = "fatal_error_signal"
-            content = "A critical error occurred. See error_report for details. Terminating workflow."
-            next_specialist_name = END
-
-        # Stage 3, Condition B: The presence of an 'archive_report.md' artifact is the definitive signal that the workflow is complete.
-        elif state.get("artifacts", {}).get("archive_report.md"):
-            routing_type = "final_report_signal"
-            content = "Archive report generated. Workflow complete."
-            next_specialist_name = END
-
-        # Stage 1: A `task_is_complete` flag from another specialist triggers the finalization sequence.
-        # This is a high-priority signal that should be checked before any other routing logic.
-        elif state.get("task_is_complete", False):
-            routing_type = "completion_signal"
-            if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialist_map:
-                content = "Task is complete. Routing to ResponseSynthesizerSpecialist to generate final summary."
-                next_specialist_name = CoreSpecialist.RESPONSE_SYNTHESIZER.value
-            else:
-                content = "Task is complete. ResponseSynthesizer not available. Routing to ArchiverSpecialist for final report."
-                next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
-
-        # A simple, non-critical error also triggers the finalization sequence.
-        elif state.get("error"):
-            routing_type = "error_signal"
-            content = "A non-critical error occurred. Routing to ArchiverSpecialist for final report."
-            next_specialist_name = CoreSpecialist.ARCHIVER.value if CoreSpecialist.ARCHIVER.value in self.specialist_map else END
-
         # Default Routing Logic: A recommendation from Triage or another specialist is a strong hint.
-        elif recommended := state.get("recommended_specialists"):
+        if recommended := state.get("recommended_specialists"):
             if len(recommended) == 1 and recommended[0] in self.specialist_map:
                 routing_type = "recommendation"
                 next_specialist_name = recommended[0]

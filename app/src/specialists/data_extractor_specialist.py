@@ -1,6 +1,6 @@
 # app/src/specialists/data_extractor_specialist.py
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
@@ -17,8 +17,17 @@ class DataExtractorSpecialist(BaseSpecialist):
     """
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        messages: List[BaseMessage] = state["messages"][:]
-        text_to_process = state.get("text_to_process")
+        messages = state.get("messages", [])
+        text_to_process = state.get("artifacts", {}).get("text_to_process")
+
+        if not text_to_process:
+            logger.warning("DataExtractorSpecialist cannot execute: 'text_to_process' artifact is missing.")
+            ai_message = create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content="I cannot extract data because no text was provided. The 'file_specialist' should probably run first to load a file into the 'text_to_process' artifact."
+            )
+            return {"messages": [ai_message]}
 
         # The specialist's system prompt (loaded at init) should already instruct it
         # to extract data from text provided in the user message. We will construct a new
@@ -36,7 +45,7 @@ class DataExtractorSpecialist(BaseSpecialist):
         if not json_response or "extracted_json" not in json_response:
             raise ValueError("DataExtractorSpecialist failed to get a valid JSON response from the LLM.")
 
-        extracted_data = json_response["extracted_json"]
+        extracted_data = ExtractedData(**json_response).extracted_json
         logger.info(f"Successfully extracted data: {extracted_data}")
 
         ai_message = create_llm_message(
@@ -47,5 +56,6 @@ class DataExtractorSpecialist(BaseSpecialist):
 
         return {
             "messages": [ai_message],
-            "extracted_data": extracted_data,
+            "artifacts": {"extracted_data": extracted_data},
+            "task_is_complete": True,
         }

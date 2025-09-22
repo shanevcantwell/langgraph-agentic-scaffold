@@ -3,8 +3,6 @@ import logging
 from typing import Dict, Any
 
 from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
-
-from ..graph.state import ScratchpadUpdate
 from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
@@ -50,20 +48,14 @@ class DefaultResponderSpecialist(BaseSpecialist):
             error_message = f"I was unable to provide a response. The LLM returned an empty text response. Raw output: {raw_response_content}"
             text_response = error_message
 
-        logger.info(f"DefaultResponderSpecialist generated response snippet: '{text_response}'")
+        logger.info(f"DefaultResponderSpecialist generated response: '{text_response}'")
 
-        # Get the current snippets and append the new one. This ensures we don't
-        # overwrite snippets from previous specialists. The `operator.ior` on the
-        # GraphState's scratchpad will merge this update correctly.
-        current_snippets = state.get("scratchpad", {}).get("user_response_snippets", [])
-        new_snippets = current_snippets + [text_response]
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
+            content=text_response,
+        )
 
-        # Per the Three-Stage Termination pattern, this specialist signals completion
-        # and provides its output as a snippet for the ResponseSynthesizer.
-        # It does NOT add a message to the main history, as the synthesizer is
-        # responsible for the final, consolidated user-facing message.
-        return {
-            "task_is_complete": True,
-            "scratchpad": ScratchpadUpdate(user_response_snippets=[text_response]),
-            "scratchpad": {"user_response_snippets": new_snippets},
-        }
+        # Per the termination sequence, this specialist signals completion
+        # by adding its final message and setting the `task_is_complete` flag.
+        return {"messages": [ai_message], "task_is_complete": True}

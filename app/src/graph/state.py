@@ -2,15 +2,41 @@
 import operator
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
+from pydantic import BaseModel
 from langchain_core.messages import BaseMessage
 
 class Dossier(TypedDict):
     recipient: str
-    # The key of the artifact in the `artifacts` dictionary
     payload_key: str 
-    # Optional: A message or instruction for the recipient
     message: Optional[str] 
-    
+
+class Artifacts(BaseModel):
+    """A Pydantic model for all possible artifacts generated during a workflow."""
+    final_user_response_md: Optional[str] = None
+    archive_report_md: Optional[str] = None
+    system_plan: Optional[Dict[str, Any]] = None
+    critique_md: Optional[str] = None
+    html_document_html: Optional[str] = None
+    text_to_process: Optional[str] = None
+    text_analysis_report_md: Optional[str] = None
+    json_artifact: Optional[Dict[str, Any]] = None
+    uploaded_image_png: Optional[str] = None
+
+    class Config:
+        extra = 'allow' # Allow other keys for flexibility
+
+class Scratchpad(BaseModel):
+    """A Pydantic model for all transient data used during a workflow."""
+    user_response_snippets: List[str] = []
+    critique_decision: Optional[str] = None
+    extraction_schema: Optional[Any] = None
+    target_artifact_name: Optional[str] = None
+    web_builder_iteration: Optional[int] = None
+
+    class Config:
+        extra = 'allow'
+        arbitrary_types_allowed = True
+
 class GraphState(TypedDict):
     """
     Defines the shared state that is passed between all nodes in the graph.
@@ -34,9 +60,4 @@ class GraphState(TypedDict):
     # These fields are used by specific specialists and are candidates for
     # migration to the `artifacts` or `scratchpad` dictionaries in the future.
     recommended_specialists: Optional[List[str]]
-    triage_recommendations: Optional[List[str]] 
-    text_to_process: Optional[str]
-    extracted_data: Optional[Dict[str, Any]]
     error_report: Optional[str]
-    system_plan: Optional[Dict[str, Any]]
-    web_builder_iteration: Optional[int]

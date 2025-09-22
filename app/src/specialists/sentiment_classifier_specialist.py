@@ -39,4 +39,4 @@ class SentimentClassifierSpecialist(BaseSpecialist):
 
         # Return only the new message and artifact. The graph will append them to the state.
         # This follows the "atomic state updates" pattern.
-        return {"messages": [ai_message], "json_artifact": classification.model_dump()}
+        return {"messages": [ai_message], "artifacts": {"json_artifact": classification.model_dump()}}

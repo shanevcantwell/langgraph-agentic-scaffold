@@ -14,9 +14,8 @@ logger = logging.getLogger(__name__)
 class ResponseSynthesizerSpecialist(BaseSpecialist):
     """
     An LLM-driven specialist that synthesizes a final, coherent, user-facing
-    response from a collection of text snippets accumulated in the scratchpad.
-    This is the second stage of the Three-Stage
-    Termination Pattern.
+    response from a collection of text snippets. This is a core part of the
+    standard termination sequence.
     """
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):

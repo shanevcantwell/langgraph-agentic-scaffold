@@ -132,11 +132,6 @@ specialists:
       html_document.html: "web_builder"
       critique.md: "critic_specialist"
 
-  response_synthesizer_specialist:
-    type: "llm"
-    prompt_file: "response_synthesizer_prompt.md"
-    description: "Synthesizes a final, user-facing response from a collection of text snippets accumulated during the workflow."
-
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
@@ -185,6 +180,14 @@ specialists:
 
   # --- Procedural Specialists with External Dependencies ---
   # open_interpreter_specialist: ...
+  end_specialist:
+    type: "procedural"
+    description: "A procedural coordinator that executes the final, deterministic termination sequence (e.g., synthesis and archiving)."
+
+  response_synthesizer_specialist:
+    type: "llm"
+    prompt_file: "response_synthesizer_prompt.md"
+    description: "Synthesizes a final, user-facing response from a collection of text snippets accumulated during the workflow."
 
   archiver_specialist:
     type: "procedural"

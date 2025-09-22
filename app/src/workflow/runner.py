@@ -106,11 +106,8 @@ class WorkflowRunner:
         
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
-            "routing_history": [], "turn_count": 0, "task_is_complete": False,
-            "next_specialist": None, "artifacts": {}, "scratchpad": {},
-            "recommended_specialists": None, "triage_recommendations": None, 
-            "text_to_process": None, "extracted_data": None, "error_report": None, 
-            "system_plan": None, "web_builder_iteration": None
+            "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
+            "artifacts": {}, "scratchpad": {}, "recommended_specialists": None, "error_report": None
         }
 
         try:
@@ -137,14 +134,13 @@ class WorkflowRunner:
         
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
-            "routing_history": [], "turn_count": 0, "task_is_complete": False,
-            "next_specialist": None, "artifacts": {}, "scratchpad": {},
-            "recommended_specialists": None, "triage_recommendations": None, 
-            "text_to_process": text_content, "extracted_data": None, "error_report": None, 
-            "system_plan": None, "web_builder_iteration": None
+            "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
+            "artifacts": {}, "scratchpad": {}, "recommended_specialists": None, "error_report": None
         }
         if image_b64:
              initial_state["artifacts"]["uploaded_image.png"] = image_b64
+        if text_content:
+            initial_state["artifacts"]["text_to_process"] = text_content
         
         final_state = None
         try:

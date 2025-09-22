@@ -82,6 +82,13 @@ class ChiefOfStaff:
                         raise NotImplementedError(f"Critique strategy type '{strategy_type}' is not supported.")
 
                     instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
+                elif name == "end_specialist":
+                    # The EndSpecialist needs the configs for the specialists it coordinates.
+                    end_specialist_deps = {
+                        "response_synthesizer_specialist": specialists_config.get("response_synthesizer_specialist", {}),
+                        "archiver_specialist": specialists_config.get("archiver_specialist", {}),
+                    }
+                    instance = SpecialistClass(specialist_name=name, specialist_config=end_specialist_deps, adapter_factory=self.adapter_factory)
                 else:
                     instance = SpecialistClass(specialist_name=name, specialist_config=config)
 
@@ -136,11 +143,10 @@ class ChiefOfStaff:
         standup_report += "\n".join(specialist_descs)
         feedback_instruction = (
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
-            "1. **Task Completion**: If the last message is a report or summary that appears to fully satisfy the user's request, your job is done. You MUST route to `__end__`.\n"
-            "2. **Precondition Fulfillment**: Review the conversation history. If a specialist (e.g., 'systems_architect') previously stated it was blocked waiting for an artifact, and the most recent specialist (e.g., 'file_specialist') just provided that artifact, your next step is to route back to the original, blocked specialist.\n"
-            "3. **Error Correction**: If a specialist reports an error or that it cannot perform a task, you MUST use that feedback to select a different, more appropriate specialist to resolve the issue. Do not give up.\n"
-            "4. **Follow the Plan**: If a `system_plan` has just been added to the state, you MUST route to the specialist best suited to execute the next step (e.g., 'web_builder').\n"
-            "5. **Use Provided Tools**: You MUST choose from the list of specialists provided to you."
+            "1. **Precondition Fulfillment**: Review the conversation history. If a specialist (e.g., 'systems_architect') previously stated it was blocked waiting for an artifact, and the most recent specialist (e.g., 'file_specialist') just provided that artifact, your next step is to route back to the original, blocked specialist.\n"
+            "2. **Error Correction**: If a specialist reports an error or that it cannot perform a task, you MUST use that feedback to select a different, more appropriate specialist to resolve the issue. Do not give up.\n"
+            "3. **Follow the Plan**: If a `system_plan` has just been added to the state, you MUST route to the specialist best suited to execute the next step (e.g., 'web_builder').\n"
+            "4. **Use Provided Tools**: You MUST choose from the list of specialists provided to you."
         )
         dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"        
         binding_key = router_config.get("llm_config")
@@ -165,6 +171,7 @@ class ChiefOfStaff:
             CoreSpecialist.TRIAGE.value,
             CoreSpecialist.ARCHIVER.value,
             CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+            CoreSpecialist.END.value,
             "critic_specialist", # Cannot be the first step; requires an artifact to critique.
         ]
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded}
@@ -193,11 +200,8 @@ class ChiefOfStaff:
     def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
         """Defines the 'hub-and-spoke' architecture for the graph."""
         router_name = CoreSpecialist.ROUTER.value
-        # The router can decide to go to any other specialist.
+        # The router can decide to go to any other specialist, but it CANNOT end the graph.
         destinations = {name: name for name in self.specialists if name != router_name}
-        # CRITICAL FIX: The router is also allowed to terminate the graph.
-        # This adds the END node as a valid destination from the router's conditional edge.
-        destinations[END] = END
         workflow.add_conditional_edges(router_name, self.route_to_next_specialist, destinations)
 
         for name in self.specialists:
@@ -207,21 +211,20 @@ class ChiefOfStaff:
                 router_name, 
                 CoreSpecialist.RESPONSE_SYNTHESIZER.value, 
                 CoreSpecialist.ARCHIVER.value,
+                CoreSpecialist.END.value,
                 CoreSpecialist.CRITIC.value # Critic has its own conditional wiring
             ]:
                 continue
 
             # For all other standard specialists, add a conditional edge that first checks
-            # for task completion. This is the core of the Three-Stage Termination pattern.
+            # for task completion. This is the core of the standard termination sequence.
             # If the task is not complete, it routes back to the router.
             workflow.add_conditional_edges(
                 name,
                 self.check_task_completion,
                 {
-                    CoreSpecialist.RESPONSE_SYNTHESIZER.value: CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+                    CoreSpecialist.END.value: CoreSpecialist.END.value,
                     router_name: router_name,
-                    # Add END as a valid destination in case of a loop detection halt inside the decider.
-                    END: END,
                 },
             )
 
@@ -240,29 +243,17 @@ class ChiefOfStaff:
                     # On REVISE, go to the specified target (e.g., 'web_builder').
                     revision_target: revision_target,
                     # On ACCEPT, proceed to the standard completion sequence.
-                    CoreSpecialist.RESPONSE_SYNTHESIZER.value: CoreSpecialist.RESPONSE_SYNTHESIZER.value,
+                    CoreSpecialist.END.value: CoreSpecialist.END.value,
                     # Fallback to router if something unexpected happens.
                     router_name: router_name
                 }
             )
-            logger.info(f"Graph Edge: Added conditional routing for '{CoreSpecialist.CRITIC.value}' to targets '{revision_target}' and '{CoreSpecialist.RESPONSE_SYNTHESIZER.value}'.")
+            logger.info(f"Graph Edge: Added conditional routing for '{CoreSpecialist.CRITIC.value}' to targets '{revision_target}' and '{CoreSpecialist.END.value}'.")
 
-        if CoreSpecialist.RESPONSE_SYNTHESIZER.value in self.specialists:
-            workflow.add_conditional_edges(
-                CoreSpecialist.RESPONSE_SYNTHESIZER.value,
-                self.route_to_archiver,
-                {
-                    CoreSpecialist.ARCHIVER.value: CoreSpecialist.ARCHIVER.value,
-                    END: END
-                }
-            )
-            logger.info("Graph Edge: Added explicit edge from ResponseSynthesizer to Archiver.")
-        
-        # The Archiver is the final step. It should lead directly to the end.
-        # This removes the unnecessary final hop back to the router.
-        if CoreSpecialist.ARCHIVER.value in self.specialists:
-            workflow.add_edge(CoreSpecialist.ARCHIVER.value, END)
-            logger.info("Graph Edge: Added explicit edge from Archiver to END.")
+        # The EndSpecialist is the final node in our system. It leads directly to the graph's true END.
+        if CoreSpecialist.END.value in self.specialists:
+            workflow.add_edge(CoreSpecialist.END.value, END)
+            logger.info(f"Graph Edge: Added final edge from {CoreSpecialist.END.value} to END.")
 
     def _build_graph(self) -> StateGraph:
         """
@@ -297,31 +288,20 @@ class ChiefOfStaff:
 
     def check_task_completion(self, state: GraphState) -> str:
         """
-        Checks if a specialist has signaled task completion. This function is the
-        cornerstone of the Three-Stage Termination pattern.
+        Checks if a specialist has signaled task completion. This function is the cornerstone
+        of the standard termination sequence.
         """
         if state.get("task_is_complete"):
-            logger.info("--- ChiefOfStaff: Task completion signal received. Routing to Response Synthesizer. ---")
-            return CoreSpecialist.RESPONSE_SYNTHESIZER.value
+            logger.info(f"--- ChiefOfStaff: Task completion signal received. Routing to {CoreSpecialist.END.value}. ---")
+            return CoreSpecialist.END.value
         
         # Check for loops after a specialist runs, but before returning to the router.
         if self._is_unproductive_loop(state):
-            return END
+            return CoreSpecialist.END.value
 
         else:
             logger.info("--- ChiefOfStaff: Task not complete. Returning to Router. ---")
             return CoreSpecialist.ROUTER.value
-
-    def route_to_archiver(self, state: GraphState) -> str:
-        """
-        Routing function that runs after the ResponseSynthesizer.
-        It explicitly routes to the Archiver, enshrining the finalization sequence.
-        """
-        logger.info("--- ChiefOfStaff: After Synthesis. Proceeding to Archiver. ---")
-        if CoreSpecialist.ARCHIVER.value in self.specialists:
-            return CoreSpecialist.ARCHIVER.value
-        else:
-            return END
 
     def _is_unproductive_loop(self, state: GraphState) -> bool:
         """Checks for repeating sequences in the routing history."""
@@ -361,14 +341,14 @@ class ChiefOfStaff:
         logger.info(f"--- ChiefOfStaff: Routing from Router (Turn: {turn_count}, Approx. Graph Steps: {approx_steps}) ---")
 
         if self._is_unproductive_loop(state):
-            return END
+            return CoreSpecialist.END.value
         
         next_specialist = state.get("next_specialist")
         logger.info(f"Router has selected next specialist: {next_specialist}")
 
         if next_specialist is None:
             logger.error("Routing Error: The router failed to select a next step. Halting workflow.")
-            return END
+            return CoreSpecialist.END.value
         
         return next_specialist
 

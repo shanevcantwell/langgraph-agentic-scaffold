@@ -66,7 +66,7 @@ Off-by-one errors in agentic loops can be common. Ensure that loop termination l
 
 ### 4.3 Enforce Centralized Control with Three-Stage Termination
 
-To ensure system stability and predictable behavior, this architecture employs a mandatory **Three-Stage Termination Pattern**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion, which triggers a standardized, sequential shutdown process managed by the graph's structure itself.
+To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion, which triggers a standardized, sequential shutdown process managed by the graph's structure itself.
 
 This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event enshrined in the graph's structure.
 
@@ -77,7 +77,6 @@ The process is as follows:
     *   It signals this completion by including `task_is_complete: True` in its return state.
     *   Optionally, it contributes a human-readable summary of its action to the `user_response_snippets` list within the `scratchpad`.
     *   The `ChiefOfStaff` configures a conditional edge in the graph that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `response_synthesizer_specialist` instead of back to the main `router_specialist`.
-    *   **Implementation Note:** The `RouterSpecialist`'s logic gives the `task_is_complete` flag high priority, ensuring it is handled before any other default routing logic.
 
 2.  **Stage 2: Synthesize & Archive**
     *   The `response_synthesizer_specialist` runs, taking the snippets from `scratchpad['user_response_snippets']` and generating a `final_user_response.md` artifact.
