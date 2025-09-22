@@ -23,18 +23,14 @@ class DefaultResponderSpecialist(BaseSpecialist):
         """
         Generates a text response and signals that the task is complete.
         """
-        # The DefaultResponder's role is purely conversational. It should not be
-        # influenced by tool calls from previous orchestration steps (like Triage).
-        # We create a "clean" message history by removing tool_calls from any
-        # previous AI messages to ensure the LLM operates in a conversational mode.
-        messages: list[BaseMessage] = []
-        for msg in state.get("messages", []):
-            if isinstance(msg, AIMessage) and msg.tool_calls:
-                # Create a new AIMessage without the tool_calls
-                cleaned_msg = AIMessage(content=msg.content, name=msg.name)
-                messages.append(cleaned_msg)
-            else:
-                messages.append(msg)
+        # The DefaultResponder's role is purely conversational. It should only
+        # consider the user's messages and its own previous responses to create a
+        # clean conversational context, ignoring orchestration messages from other
+        # specialists.
+        messages: list[BaseMessage] = [
+            msg for msg in state.get("messages", [])
+            if isinstance(msg, HumanMessage) or (isinstance(msg, AIMessage) and msg.name == self.specialist_name)
+        ]
         
         # The specialist should act on the full, current state of the conversation.
         # Its system prompt guides it to focus on the most recent message.
@@ -58,4 +54,4 @@ class DefaultResponderSpecialist(BaseSpecialist):
 
         # Per the termination sequence, this specialist signals completion
         # by adding its final message and setting the `task_is_complete` flag.
-        return {"messages": [ai_message], "task_is_complete": True}
+        return {"messages": [ai_message]}

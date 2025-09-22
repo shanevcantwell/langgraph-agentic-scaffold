@@ -32,23 +32,15 @@ class ResponseSynthesizerSpecialist(BaseSpecialist):
         scratchpad = state.get("scratchpad", {})
         user_response_snippets = scratchpad.get("user_response_snippets", [])
 
-        if not user_response_snippets:
-            logger.warning(f"No 'user_response_snippets' found in scratchpad for {self.specialist_name} to synthesize. Skipping.")
-            # If nothing to synthesize, just pass through to the next stage (Archiver)
-            return {
-                "artifacts": {
-                    "final_user_response.md": "No specific user-facing response was synthesized."
-                }
-            }
-
         # Concatenate all snippets into a single string for the LLM to process.
         # The prompt for this specialist should instruct the LLM on how to combine these.
-        combined_snippets = "\n\n---\n\n".join(map(str, user_response_snippets))
+        combined_snippets = "\n\n---\n\n".join(str(s) for s in user_response_snippets)
 
-        # Create a message for the LLM. The system prompt (loaded via config)
-        # will guide the LLM on how to synthesize these.
-        messages = state["messages"] + [
-            HumanMessage(content=f"Please synthesize the following information into a single, coherent response for the user:\n\n{combined_snippets}")
+        # Create a clean, minimal message list for the LLM. The system prompt (loaded
+        # via the adapter) will guide the LLM, and we provide only the snippets
+        # it needs to work on, avoiding the complexity of the full message history.
+        messages = [
+            HumanMessage(content=f"Please synthesize the following information into a single, coherent, user-facing response:\n\n{combined_snippets}")
         ]
 
         request = StandardizedLLMRequest(messages=messages)
@@ -56,10 +48,11 @@ class ResponseSynthesizerSpecialist(BaseSpecialist):
 
         synthesized_response = response_data.get("text_response")
         if not synthesized_response:
-            # If the LLM fails to provide a text response, provide a more informative fallback.
-            raw_response_content = response_data.get("raw_response_content", "No raw response available.")
-            error_message = f"I was unable to synthesize a coherent response. The LLM returned an empty text response. Raw output: {raw_response_content}"
-            synthesized_response = error_message
+            # If the LLM fails, log the issue and create a neutral placeholder.
+            # The archiver will still capture the state for debugging, but we avoid
+            # showing a technical error message to the end-user.
+            logger.error(f"ResponseSynthesizer LLM failed. Raw output: {response_data.get('raw_response_content', 'N/A')}")
+            synthesized_response = "I was unable to generate a final response based on the preceding actions."
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,

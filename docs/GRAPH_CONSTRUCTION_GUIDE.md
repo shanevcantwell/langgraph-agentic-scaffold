@@ -1,0 +1,105 @@
+# How the Graph is Built: A Deep Dive into `ChiefOfStaff`
+
+This document provides a definitive, step-by-step explanation of how the `ChiefOfStaff` class constructs the `LangGraph` instance. The architecture has evolved to be more robust and declarative, and this guide serves as the canonical reference for the current implementation.
+
+## Core Philosophy: Separating Build-Time and Run-Time
+
+The system's architecture is designed around a clean separation of concerns between the "build-time" construction of the graph and its "run-time" execution.
+
+*   **`GraphBuilder` (Future State):** This component is responsible for the one-time task of reading configuration, instantiating all specialists, and compiling the final, executable `StateGraph`. It is the **structural orchestrator**.
+*   **`GraphOrchestrator` (Future State):** This component contains all the logic that is executed *by* the graph at runtime, such as the decider functions for conditional edges. It is the **runtime orchestrator**.
+
+> **Note:** Currently, both of these roles are handled by the `ChiefOfStaff` class. A key architectural goal on the project roadmap is to decompose `ChiefOfStaff` into the `GraphBuilder` and `GraphOrchestrator` classes to improve modularity and maintainability.
+
+The construction process follows a clear, sequential order within the `ChiefOfStaff`'s `__init__` and `_build_graph` methods. This guide describes the current implementation.
+
+---
+
+## Step 1: Loading and Configuring Specialists (`_load_and_configure_specialists`)
+
+This is the foundational step where the system discovers and prepares all available "workers."
+
+1.  **Read Configuration:** The process begins by loading the merged configuration from `config.yaml` and `user_settings.yaml`.
+
+2.  **Dynamic Instantiation:** The code iterates through each specialist defined in the `specialists` section of the configuration.
+    *   It uses the `get_specialist_class` helper to dynamically import the specialist's Python class based on its name (e.g., `"file_specialist"` maps to `FileSpecialist`).
+    *   Each specialist is instantiated, injecting its specific configuration block and name. This decouples specialists from global configuration.
+
+3.  **Specialized Instantiation (Handling Edge Cases):**
+    *   **`CriticSpecialist`:** This specialist has a complex dependency. The `ChiefOfStaff` reads the `critique_strategy` sub-configuration, instantiates the required strategy (e.g., `LLMCritiqueStrategy`), creates a dedicated LLM adapter for it, and injects the strategy instance into the `CriticSpecialist`'s constructor.
+    *   **`EndSpecialist`:** This procedural coordinator needs the configurations for the specialists it manages (`ResponseSynthesizer` and `Archiver`). The `ChiefOfStaff` gathers these configurations and passes them, along with the `AdapterFactory`, to the `EndSpecialist`'s constructor.
+
+4.  **LLM Adapter Injection:** For any specialist that requires an LLM (indicated by the `llm_config` key), the `ChiefOfStaff` invokes the `AdapterFactory` to create and attach the appropriate `BaseAdapter` instance.
+    *   **Dynamic Prompts:** For orchestration specialists like `RouterSpecialist` and `PromptTriageSpecialist`, adapter creation is deferred. Their system prompts are dynamically constructed with a real-time list of available specialists to ensure they always have the most current information.
+
+5.  **Pre-Flight Checks & Disabling:** After instantiation, each specialist's `_perform_pre_flight_checks()` method is called. If a specialist fails its checks (e.g., a required dependency is missing) or is explicitly disabled in its config, it is logged and excluded from the final list of "loaded" specialists. This makes the system resilient to partial failures.
+
+---
+
+## Step 2: Building the Graph (`_build_graph`)
+
+Once all specialists are loaded and configured, the `_build_graph` method assembles the `StateGraph`.
+
+### 2.1. Adding Nodes (`_add_nodes_to_graph`)
+
+*   Each successfully loaded specialist is added as a node to the graph.
+*   Crucially, every specialist's `execute` method (except for the `RouterSpecialist`) is wrapped in the `create_safe_executor` decorator. This wrapper is a non-negotiable gatekeeper that:
+    1.  **Enforces Preconditions:** Checks for `requires_artifacts` at runtime before executing the specialist.
+    2.  **Handles Exceptions:** Catches any unhandled exceptions from a specialist, generates a detailed `error_report.md`, and prevents the entire graph from crashing.
+    3.  **Prevents State Corruption:** Sanitizes the specialist's output to prevent forbidden modifications (e.g., changing `turn_count`).
+
+### 2.2. Wiring Edges (`_wire_hub_and_spoke_edges`)
+
+This is where the agent's behavior and control flow are defined. The system uses a hybrid approach of conditional and direct edges.
+
+#### The Main Loop (Hub-and-Spoke)
+
+1.  **Router to Specialists:** A conditional edge is added from the `router_specialist`. The `route_to_next_specialist` function reads the `next_specialist` key from the state and directs the graph to the chosen specialist node.
+
+2.  **Specialists to Decider:** For all *standard* functional specialists, an edge is added that points to the `check_task_completion` decider function. This function is the primary mechanism for termination:
+    *   If `task_is_complete` is `True` in the state, it routes to the `end_specialist`.
+    *   Otherwise, it routes back to the `router_specialist`, completing the "hub-and-spoke" loop.
+
+#### The "Express Lanes" (Specialized Conditional Routing)
+
+The system uses explicit, high-priority conditional edges for specific, well-defined sub-workflows, bypassing the main router for efficiency.
+
+*   **The "Generate-and-Critique" Loop (ADR-004):**
+    *   An edge is added from the `critic_specialist` to the `after_critique_decider` function.
+    *   If the critic's decision is `REVISE`, the graph is routed directly to the configured `revision_target` (e.g., `web_builder`), creating a tight, efficient refinement loop.
+    *   If the decision is `ACCEPT`, it routes to the standard `check_task_completion` function to begin the termination sequence.
+
+*   **The Termination Sequence:**
+    *   The `end_specialist` is the designated finalizer. A direct, non-conditional edge is wired from the `end_specialist` node to the special `END` node of the graph. This guarantees that once the finalizer runs, the workflow terminates cleanly.
+
+### 2.3. Setting the Entry Point and Compiling
+
+1.  **Entry Point:** The graph's entry point is set to the value from `workflow.entry_point` in `config.yaml` (which defaults to `prompt_triage_specialist`). This ensures the workflow begins with a clean, pre-processing step before the main router is engaged.
+
+2.  **Compilation:** Finally, `workflow.compile()` is called. This returns the immutable, compiled `LangGraph` application, ready to process requests.
+
+---
+
+## Visual Summary
+
+```mermaid
+graph TD
+    subgraph Initialization
+        A[Load config.yaml] --> B{Instantiate Specialists};
+        B --> C{Inject LLM Adapters};
+        C --> D[Run Pre-Flight Checks];
+    end
+
+    subgraph Graph Construction
+        E[Create StateGraph] --> F[Add Nodes w/ SafeExecutor];
+        F --> G{Wire Edges};
+        G -- Hub-and-Spoke --> G1(Router --> Specialists);
+        G -- Hub-and-Spoke --> G2(Specialists --> check_task_completion);
+        G -- Express Lane --> G3(Critic --> after_critique_decider);
+        G -- Termination --> G4(EndSpecialist --> END);
+        G --> H[Set Entry Point];
+        H --> I[Compile Graph];
+    end
+
+    Initialization --> Graph Construction
+```

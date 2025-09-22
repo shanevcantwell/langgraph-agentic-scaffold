@@ -66,28 +66,28 @@ Off-by-one errors in agentic loops can be common. Ensure that loop termination l
 
 ### 4.3 Enforce Centralized Control with Three-Stage Termination
 
-To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion, which triggers a standardized, sequential shutdown process managed by the graph's structure itself.
+To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence** coordinated by a single procedural specialist. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion, which triggers a standardized shutdown process.
 
-This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event enshrined in the graph's structure.
+This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event.
 
 The process is as follows:
 
 1.  **Stage 1: Signal Completion**
     *   A functional specialist (e.g., `web_builder`) completes its primary task.
     *   It signals this completion by including `task_is_complete: True` in its return state.
-    *   Optionally, it contributes a human-readable summary of its action to the `user_response_snippets` list within the `scratchpad`.
-    *   The `ChiefOfStaff` configures a conditional edge in the graph that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `response_synthesizer_specialist` instead of back to the main `router_specialist`.
+    *   The `ChiefOfStaff` configures a conditional edge that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `end_specialist` instead of back to the main `router_specialist`.
 
-2.  **Stage 2: Synthesize & Archive**
-    *   The `response_synthesizer_specialist` runs, taking the snippets from `scratchpad['user_response_snippets']` and generating a `final_user_response.md` artifact.
-    *   The `ChiefOfStaff` wires a direct, non-conditional edge from the `response_synthesizer_specialist` to the `archiver_specialist`.
-    *   The `archiver_specialist` runs, consuming the state (including the new `final_user_response.md`) and generating the final `archive_report.md`.
+2.  **Stage 2: Coordinate Finalization (`EndSpecialist`)**
+    *   The `end_specialist`, a procedural coordinator, is invoked. It does not use an LLM for its main logic.
+    *   It internally and deterministically executes the logic of two other specialists in sequence:
+        1.  **Synthesis:** It calls the `response_synthesizer_specialist`'s logic to generate the `final_user_response.md` artifact from any accumulated `user_response_snippets`. If no snippets are found, it intelligently uses the content of the last conversational AI message as the source for the final response.
+        2.  **Archiving:** It then immediately calls the `archiver_specialist`'s logic, passing it the complete, updated state (including the newly synthesized response) to generate the final `archive_report.md`.
 
 3.  **Stage 3: Terminate**
-    *   The `ChiefOfStaff` wires the `archiver_specialist` directly to the special `END` node.
-    *   After the `archiver_specialist` completes its run, the graph execution halts cleanly.
+    *   The `ChiefOfStaff` wires the `end_specialist` directly to the special `END` node in the graph.
+    *   After the `end_specialist` completes its coordinated sequence, the graph execution halts cleanly.
 
-This explicit `... -> (task_is_complete?) -> Response Synthesizer -> Archiver -> END` sequence is defined in the `ChiefOfStaff` when the graph is compiled. This structural guarantee ensures that termination is always handled in a consistent, predictable manner, which significantly enhances the system's robustness.
+This explicit `... -> (task_is_complete?) -> EndSpecialist -> END` sequence is defined in the `ChiefOfStaff` when the graph is compiled. This structural guarantee centralizes the entire termination process into a single, reliable node, which significantly enhances the system's robustness and simplifies the graph's wiring.
 
 ### 4.4 The Adapter Robust Parsing Contract
 

@@ -58,7 +58,9 @@ class EndSpecialist(BaseSpecialist):
             last_ai_message = next((msg for msg in reversed(messages) if isinstance(msg, AIMessage) and msg.name not in ["router_specialist", "prompt_triage_specialist"]), None)
             if last_ai_message and last_ai_message.content:
                 # Place the content into the snippets for the synthesizer to find.
-                current_state.setdefault("scratchpad", {})["user_response_snippets"] = [last_ai_message.content]
+                if "scratchpad" not in current_state:
+                    current_state["scratchpad"] = {}
+                current_state["scratchpad"]["user_response_snippets"] = [last_ai_message.content]
                 logger.info(f"Found content from '{last_ai_message.name}' to use for final synthesis.")
 
         # 1. Conditional Synthesis

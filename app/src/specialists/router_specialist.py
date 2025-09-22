@@ -89,27 +89,15 @@ class RouterSpecialist(BaseSpecialist):
         routing_type = ""
         content = ""
         tool_calls = []
-        
-        # Default Routing Logic: A recommendation from Triage or another specialist is a strong hint.
-        if recommended := state.get("recommended_specialists"):
-            if len(recommended) == 1 and recommended[0] in self.specialist_map:
-                routing_type = "recommendation"
-                next_specialist_name = recommended[0]
-                content = f"Proceeding with recommended specialist: {next_specialist_name}"
-            else:
-                llm_decision = self._get_llm_choice(state)
-                routing_type = "llm_decision"
-                next_specialist_name = llm_decision["next_specialist"]
-                content = llm_decision["content"]
-                tool_calls = llm_decision.get("tool_calls", [])
-        
-        # Default Routing Logic: Fallback to LLM-based routing if no other signals are present.
-        else:
-            llm_decision = self._get_llm_choice(state)
-            routing_type = "llm_decision"
-            next_specialist_name = llm_decision["next_specialist"]
-            content = llm_decision["content"]
-            tool_calls = llm_decision.get("tool_calls", [])
+
+        # The router's primary role is to use its LLM to make a decision.
+        # It will filter its choices based on recommendations, but the final
+        # decision is always made by the LLM for consistency.
+        llm_decision = self._get_llm_choice(state)
+        routing_type = "llm_decision"
+        next_specialist_name = llm_decision["next_specialist"]
+        content = llm_decision["content"]
+        tool_calls = llm_decision.get("tool_calls", [])
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,

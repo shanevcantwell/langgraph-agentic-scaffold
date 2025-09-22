@@ -171,12 +171,14 @@ specialists:
   prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
+    task_is_complete: false # Explicitly state that this specialist does not end the turn.
     description: "A specialist for advanced prompt engineering tasks. Can be used to generate or refine prompts for other specialists or to analyze prompt structures. Does not terminate the turn."
 
   default_responder_specialist:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
     description: "Handles direct, conversational Q&A and simple instructions that do not require file I/O or complex text analysis. This is the default specialist for general conversation or when no specific tool seems necessary. Acts as a fallback."
+    task_is_complete: true
 
   # --- Procedural Specialists with External Dependencies ---
   # open_interpreter_specialist: ...
