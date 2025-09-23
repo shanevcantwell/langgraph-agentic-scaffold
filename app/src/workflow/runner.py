@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from ..utils.errors import ConfigError
 from ..graph.state import GraphState
-from .chief_of_staff import ChiefOfStaff
+from .graph_builder import GraphBuilder
 
 logger = logging.getLogger(__name__)
 
@@ -47,12 +47,12 @@ class WorkflowRunner:
         Initializes the WorkflowRunner by instantiating the ChiefOfStaff
         and compiling the LangGraph application.
         """
-        chief_of_staff = ChiefOfStaff()
-        self.chief_of_staff = chief_of_staff
-        self.config = self.chief_of_staff.config
+        self.builder = GraphBuilder()
+        self.config = self.builder.config
+        self.specialists = self.builder.specialists
         self._perform_pre_flight_checks()
         self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
-        self.app = chief_of_staff.get_graph()
+        self.app = self.builder.build()
         logger.info("WorkflowRunner initialized with compiled graph.")
 
     def _perform_pre_flight_checks(self):
@@ -87,7 +87,7 @@ class WorkflowRunner:
         workflow_config = self.config.get("workflow", {})
         critical_specialists = workflow_config.get("critical_specialists", [])
         if critical_specialists:
-            loaded_specialist_names = self.chief_of_staff.specialists.keys()
+            loaded_specialist_names = self.specialists.keys()
             missing_critical = [name for name in critical_specialists if name not in loaded_specialist_names]
             if missing_critical:
                 raise ConfigError(

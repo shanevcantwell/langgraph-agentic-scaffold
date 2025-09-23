@@ -68,7 +68,7 @@ class ArchiverSpecialist(BaseSpecialist):
         # concrete signal that the finalization step is complete, allowing it
         # to correctly route to __end__.
         return {
-            "messages": state.get("messages", []) + [ai_message],
+            "messages": [ai_message],
             "artifacts": {"archive_report.md": markdown_report},
         }
 
