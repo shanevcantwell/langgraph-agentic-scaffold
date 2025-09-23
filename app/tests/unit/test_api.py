@@ -1,9 +1,10 @@
 # app/tests/unit/test_api.py
 import pytest
 from unittest.mock import MagicMock, patch
-from fastapi.testclient import TestClient
 
 # We patch the runner before importing the app to inject our mock
+# This is CRITICAL to prevent the app from trying to initialize a real
+# WorkflowRunner, which would load configs and require API keys.
 mock_runner = MagicMock()
 
 async def mock_streaming_gen():
@@ -14,8 +15,9 @@ async def mock_streaming_gen():
 mock_runner.run.return_value = {"final_output": "success"}
 mock_runner.run_streaming.return_value = mock_streaming_gen()
 
-with patch('app.src.api.WorkflowRunner', return_value=mock_runner):
+with patch('app.src.workflow.runner.WorkflowRunner', return_value=mock_runner):
     from app.src.api import app
+    from fastapi.testclient import TestClient
 
 @pytest.fixture
 def client():
