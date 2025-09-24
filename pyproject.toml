@@ -33,6 +33,7 @@ dependencies = [
     "tenacity",
     "psycopg2-binary",
     "gradio",
+    "open-interpreter",
     # Add specific LLM provider packages here as needed
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
@@ -54,7 +55,6 @@ dev = [
     "python-multipart", # For FastAPI file uploads
     "google-generativeai",
     "inflection",
-    "open-interpreter",
 ]
 
 [tool.setuptools.packages.find]

@@ -34,7 +34,7 @@ class PromptTriageSpecialist(BaseSpecialist):
             return {"recommended_specialists": []}
 
         # Use a tool call to enforce structured output based on the dynamic prompt
-        # configured by the ChiefOfStaff.
+        # configured by the GraphBuilder.
         request = StandardizedLLMRequest(
             messages=messages,
             tools=[TriageRecommendations]

@@ -21,7 +21,7 @@ class EndSpecialist(BaseSpecialist):
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any], adapter_factory: AdapterFactory):
         super().__init__(specialist_name, specialist_config)
         # We need instances of the specialists whose logic we are coordinating.
-        # The config for these is passed in from the ChiefOfStaff during setup.
+        # The config for these is passed in from the GraphBuilder during setup.
         synthesizer_config = specialist_config.get("response_synthesizer_specialist", {})
         archiver_config = specialist_config.get("archiver_specialist", {})
 

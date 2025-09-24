@@ -119,7 +119,7 @@ specialists:
   # When a functional specialist signals `task_is_complete: True`, the router should
   # route to this specialist. It synthesizes a final, user-facing response from the
   # `user_response` snippets collected during the workflow.
-  # After it runs, the ChiefOfStaff's graph wiring explicitly routes to the `archiver_specialist`
+  # After it runs, the GraphBuilder's graph wiring explicitly routes to the `archiver_specialist`
   # to complete the termination sequence.
   response_synthesizer_specialist:
     type: "llm"

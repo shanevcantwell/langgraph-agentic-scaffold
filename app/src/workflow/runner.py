@@ -44,7 +44,7 @@ class WorkflowRunner:
     """
     def __init__(self):
         """
-        Initializes the WorkflowRunner by instantiating the ChiefOfStaff
+        Initializes the WorkflowRunner by instantiating the GraphBuilder
         and compiling the LangGraph application.
         """
         self.builder = GraphBuilder()

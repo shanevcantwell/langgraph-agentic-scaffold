@@ -25,7 +25,7 @@ class RouterSpecialist(BaseSpecialist):
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
         self.specialist_map: Dict[str, Dict] = {}
-        logger.info("Initialized RouterSpecialist (awaiting contextual configuration from ChiefOfStaff).")
+        logger.info("Initialized RouterSpecialist (awaiting contextual configuration from GraphBuilder).")
 
     def set_specialist_map(self, specialist_configs: Dict[str, Dict]):
         """Receives the full map of specialist configurations from the orchestrator."""
