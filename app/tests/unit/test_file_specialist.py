@@ -32,7 +32,7 @@ def mock_adapter_factory():
 @pytest.fixture
 def mock_load_prompt():
     """Mocks the prompt loader."""
-    with patch('app.src.specialists.base.load_prompt') as mock_load:
+    with patch('app.src.utils.prompt_loader.load_prompt') as mock_load:
         mock_load.return_value = "Fake system prompt"
         yield mock_load
 
