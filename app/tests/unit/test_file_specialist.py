@@ -42,13 +42,18 @@ def file_specialist(tmp_path, mock_config_loader, mock_adapter_factory, mock_loa
     workspace = tmp_path / "test_workspace"
     workspace.mkdir()
     
-    # Patch PROJECT_ROOT to point to the temporary workspace
-    with patch('app.src.utils.path_utils.PROJECT_ROOT', new=workspace):
-        mock_config_loader.return_value.get_specialist_config.return_value['root_dir'] = str(workspace)
-        
-        specialist = FileSpecialist(specialist_name="file_specialist", specialist_config={})
-        assert specialist.root_dir == str(workspace)
-        return specialist
+    # Create a mock LLM adapter
+    mock_llm_adapter = MagicMock()
+    mock_adapter_factory.return_value.create_adapter.return_value = mock_llm_adapter
+
+    # Pass the mocked root_dir directly to specialist_config
+    specialist_config = {"root_dir": str(workspace)}
+    mock_config_loader.return_value.get_specialist_config.return_value.update(specialist_config)
+    
+    specialist = FileSpecialist(specialist_name="file_specialist", specialist_config=specialist_config)
+    specialist.llm_adapter = mock_llm_adapter # Manually set the mock adapter
+    assert specialist.root_dir == str(workspace)
+    return specialist
 
 def test_get_full_path_success(file_specialist, tmp_path):
     """Tests that a valid relative path is resolved correctly."""
@@ -188,11 +193,14 @@ def test_execute_logic_reads_file(file_specialist, tmp_path):
     test_file.write_text("file content")
 
     # Mock the LLM response
-    mock_json_response = {
-        "tool_name": "read_file",
-        "tool_input": {"file_path": "test.txt"}
+    mock_llm_response = {
+        "tool_calls": [{
+            "name": "ReadFileParams",
+            "args": {"file_path": "test.txt"},
+            "id": "call_123"
+        }]
     }
-    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
 
     initial_state = {"messages": [HumanMessage(content="Read test.txt")]}
 
@@ -214,11 +222,14 @@ def test_execute_logic_writes_file_safety_on(file_specialist, tmp_path):
     workspace = tmp_path / "test_workspace"
     test_file = workspace / "test.txt"
     file_specialist.is_safety_on = True # Explicitly set for test clarity
-    mock_json_response = {
-        "tool_name": "write_file",
-        "tool_input": {"file_path": "test.txt", "content": "written content"}
+    mock_llm_response = {
+        "tool_calls": [{
+            "name": "WriteFileParams",
+            "args": {"file_path": "test.txt", "content": "written content"},
+            "id": "call_123"
+        }]
     }
-    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
     initial_state = {"messages": [HumanMessage(content="Write to test.txt")]}
 
     # Act
@@ -238,11 +249,14 @@ def test_execute_logic_writes_file_safety_off(file_specialist, tmp_path):
     workspace = tmp_path / "test_workspace"
     test_file = workspace / "test.txt"
     file_specialist.is_safety_on = False # Explicitly disable safety for this test
-    mock_json_response = {
-        "tool_name": "write_file",
-        "tool_input": {"file_path": "test.txt", "content": "written content"}
+    mock_llm_response = {
+        "tool_calls": [{
+            "name": "WriteFileParams",
+            "args": {"file_path": "test.txt", "content": "written content"},
+            "id": "call_123"
+        }]
     }
-    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
     initial_state = {"messages": [HumanMessage(content="Write to test.txt")]}
     # Act
     result_state = file_specialist._execute_logic(initial_state)
