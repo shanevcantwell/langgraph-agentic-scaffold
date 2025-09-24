@@ -2,7 +2,7 @@
 import operator
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from langchain_core.messages import BaseMessage
 
 class Dossier(TypedDict):
@@ -12,6 +12,8 @@ class Dossier(TypedDict):
 
 class Artifacts(BaseModel):
     """A Pydantic model for all possible artifacts generated during a workflow."""
+    model_config = ConfigDict(extra="allow")
+
     final_user_response_md: Optional[str] = None
     archive_report_md: Optional[str] = None
     system_plan: Optional[Dict[str, Any]] = None
@@ -22,20 +24,15 @@ class Artifacts(BaseModel):
     json_artifact: Optional[Dict[str, Any]] = None
     uploaded_image_png: Optional[str] = None
 
-    class Config:
-        extra = 'allow' # Allow other keys for flexibility
-
 class Scratchpad(BaseModel):
     """A Pydantic model for all transient data used during a workflow."""
+    model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
+
     user_response_snippets: List[str] = []
     critique_decision: Optional[str] = None
     extraction_schema: Optional[Any] = None
     target_artifact_name: Optional[str] = None
     web_builder_iteration: Optional[int] = None
-
-    class Config:
-        extra = 'allow'
-        arbitrary_types_allowed = True
 
 class GraphState(TypedDict):
     """
