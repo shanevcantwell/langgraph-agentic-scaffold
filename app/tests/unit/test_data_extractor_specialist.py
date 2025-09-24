@@ -29,7 +29,7 @@ def mock_load_prompt():
 
 @pytest.fixture
 def data_extractor_specialist(mock_config_loader, mock_adapter_factory, mock_load_prompt):
-    specialist = DataExtractorSpecialist(specialist_name="data_extractor_specialist")
+    specialist = DataExtractorSpecialist(specialist_name="data_extractor_specialist", specialist_config={})
     specialist.llm_adapter = mock_adapter_factory[1]
     return specialist
 

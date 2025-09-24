@@ -91,7 +91,7 @@ def test_router_specialist_three_stage_termination_logic():
     assert stage2_result["messages"][0].additional_kwargs["routing_decision"] == END
     logging.info("Stage 3 Test Passed: Router correctly routed to END.")
 
-@patch('app.src.specialists.router_specialist.AdapterFactory')
+@patch('app.src.llm.factory.AdapterFactory')
 def test_router_normal_llm_routing(mock_adapter_factory):
     """
     Tests the primary path where the router uses the LLM to decide the next specialist.
@@ -125,7 +125,7 @@ def test_router_normal_llm_routing(mock_adapter_factory):
     assert ai_message.additional_kwargs["routing_type"] == "llm_choice"
     assert "User wants to read a file." in ai_message.content
 
-@patch('app.src.specialists.router_specialist.AdapterFactory')
+@patch('app.src.llm.factory.AdapterFactory')
 def test_router_handles_llm_invocation_error(mock_adapter_factory):
     """
     Tests that the router propagates an LLMInvocationError if the adapter fails.
@@ -144,7 +144,7 @@ def test_router_handles_llm_invocation_error(mock_adapter_factory):
     with pytest.raises(LLMInvocationError, match="API is down"):
         router._execute_logic(initial_state)
 
-@patch('app.src.specialists.router_specialist.AdapterFactory')
+@patch('app.src.llm.factory.AdapterFactory')
 def test_router_handles_invalid_llm_response(mock_adapter_factory):
     """
     Tests that the router self-corrects if the LLM returns an invalid specialist name.

@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.text_analysis_specialist import TextAnalysisSpecialist
 from app.src.utils.errors import LLMInvocationError
+from app.src.utils.prompt_loader import load_prompt # Import load_prompt directly
 
 @pytest.fixture
 def mock_llm_adapter():
@@ -16,9 +17,11 @@ def mock_llm_adapter():
 @pytest.fixture
 def specialist(mock_llm_adapter):
     """Fixture for an initialized TextAnalysisSpecialist with a mocked adapter."""
-    s = TextAnalysisSpecialist("text_analysis_specialist", {"prompt_file": "fake.md"})
-    s.llm_adapter = mock_llm_adapter
-    return s
+    # Patch load_prompt here as it's used during specialist initialization
+    with patch('app.src.utils.prompt_loader.load_prompt', return_value="Fake system prompt"):
+        s = TextAnalysisSpecialist("text_analysis_specialist", {"prompt_file": "fake.md"})
+        s.llm_adapter = mock_llm_adapter
+        return s
 
 def test_text_analysis_with_text(specialist):
     """

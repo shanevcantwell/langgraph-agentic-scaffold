@@ -38,9 +38,9 @@ def test_load_specialists_and_configure_router(mock_config_loader, mock_get_spec
     mock_specialist2_class = MagicMock()
     mock_get_specialist_class.side_effect = [mock_router_class, mock_specialist1_class, mock_specialist2_class]
 
-    mock_router_instance = MagicMock(spec=BaseSpecialist)
-    mock_specialist1_instance = MagicMock(spec=BaseSpecialist)
-    mock_specialist2_instance = MagicMock(spec=BaseSpecialist)
+    mock_router_instance = MagicMock(spec=BaseSpecialist, specialist_name="router_specialist")
+    mock_specialist1_instance = MagicMock(spec=BaseSpecialist, specialist_name="specialist1")
+    mock_specialist2_instance = MagicMock(spec=BaseSpecialist, specialist_name="specialist2")
     
     # Set the 'is_enabled' property to True for the mock instances
     type(mock_router_instance).is_enabled = PropertyMock(return_value=True)

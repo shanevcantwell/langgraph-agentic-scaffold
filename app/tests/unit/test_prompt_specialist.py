@@ -12,7 +12,7 @@ def default_state():
     """Provides a default state for tests."""
     return GraphState(messages=[HumanMessage(content="What should I do next?")])
 
-@patch('src.specialists.base.AdapterFactory.create_adapter')
+@patch('app.src.llm.factory.AdapterFactory.create_adapter')
 def test_prompt_specialist_success(mock_create_adapter, default_state):
     """Tests that the specialist correctly processes a response and updates the state."""
     mock_adapter = MagicMock()
@@ -20,7 +20,7 @@ def test_prompt_specialist_success(mock_create_adapter, default_state):
     mock_adapter.invoke.return_value = expected_response
     mock_create_adapter.return_value = mock_adapter
 
-    specialist = PromptSpecialist()
+    specialist = PromptSpecialist(specialist_name="prompt_specialist", specialist_config={})
     result = specialist.execute(default_state)
 
     # The specialist should add the LLM's response to the message history
@@ -28,7 +28,7 @@ def test_prompt_specialist_success(mock_create_adapter, default_state):
     assert result["messages"][-1] == expected_response
     assert "error" not in result
 
-@patch('src.specialists.base.AdapterFactory.create_adapter')
+@patch('app.src.llm.factory.AdapterFactory.create_adapter')
 def test_prompt_specialist_handles_adapter_failure(mock_create_adapter, default_state):
     """
     Tests that the specialist gracefully handles a connection or invocation error
@@ -39,14 +39,14 @@ def test_prompt_specialist_handles_adapter_failure(mock_create_adapter, default_
     mock_adapter.invoke.side_effect = LLMInvocationError(error_message)
     mock_create_adapter.return_value = mock_adapter
 
-    specialist = PromptSpecialist()
+    specialist = PromptSpecialist(specialist_name="prompt_specialist", specialist_config={})
     result = specialist.execute(default_state)
 
     assert "error" in result
     assert error_message in result["error"]
     assert "Failed to get a response from the LLM" in result["error"]
 
-@patch('src.specialists.base.AdapterFactory.create_adapter')
+@patch('app.src.llm.factory.AdapterFactory.create_adapter')
 def test_prompt_specialist_handles_empty_messages(mock_create_adapter):
     """Tests that the specialist does not call the LLM if there are no messages."""
     # Arrange
@@ -54,7 +54,7 @@ def test_prompt_specialist_handles_empty_messages(mock_create_adapter):
     mock_adapter = MagicMock()
     mock_create_adapter.return_value = mock_adapter
 
-    specialist = PromptSpecialist()
+    specialist = PromptSpecialist(specialist_name="prompt_specialist", specialist_config={})
 
     # Act
     result = specialist.execute(empty_state)
@@ -64,14 +64,14 @@ def test_prompt_specialist_handles_empty_messages(mock_create_adapter):
     assert "error" not in result
     assert len(result["messages"]) == 0 # No new messages should be added
 
-@patch('src.specialists.base.AdapterFactory.create_adapter')
+@patch('app.src.llm.factory.AdapterFactory.create_adapter')
 def test_prompt_specialist_handles_adapter_creation_failure(mock_create_adapter, default_state):
     """Tests that an error is handled if the AdapterFactory fails."""
     # Arrange
     error_message = "Could not create adapter for specialist."
     mock_create_adapter.side_effect = Exception(error_message)
 
-    specialist = PromptSpecialist()
+    specialist = PromptSpecialist(specialist_name="prompt_specialist", specialist_config={})
 
     # Act
     result = specialist.execute(default_state)
@@ -85,6 +85,6 @@ def test_prompt_specialist_initialization():
     """Tests that the specialist can be initialized without errors."""
     # This is a simple smoke test to ensure the constructor and its
     # dependencies (like loading prompts or configs) don't immediately fail.
-    with patch('src.specialists.base.load_prompt'), patch('src.specialists.base.ConfigLoader'):
-        specialist = PromptSpecialist()
+    with patch('app.src.utils.prompt_loader.load_prompt'), patch('app.src.utils.config_loader.ConfigLoader'):
+        specialist = PromptSpecialist(specialist_name="prompt_specialist", specialist_config={})
         assert specialist is not None

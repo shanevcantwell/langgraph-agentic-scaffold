@@ -17,7 +17,11 @@ async def mock_streaming_gen():
 mock_runner.run.return_value = {"final_output": "success"}
 mock_runner.run_streaming.return_value = mock_streaming_gen()
 
-with patch('src.api.WorkflowRunner', return_value=mock_runner):
+# We apply two patches:
+# 1. Neuter the ConfigLoader to prevent it from reading files during import.
+# 2. Replace the WorkflowRunner with our mock before the app's lifespan can call it.
+with patch('app.src.workflow.graph_builder.ConfigLoader', MagicMock()), \
+     patch('app.src.api.WorkflowRunner', return_value=mock_runner):
     from app.src.api import app
     from fastapi.testclient import TestClient
 

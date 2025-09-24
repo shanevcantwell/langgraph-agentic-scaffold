@@ -32,6 +32,7 @@ class StructuredDataExtractor(BaseSpecialist):
             error_message = "State missing 'extraction_schema' or 'target_artifact_name' in scratchpad."
             return {"messages": [create_llm_message(
                 specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
                 content=error_message
             )]}
 
@@ -49,6 +50,7 @@ class StructuredDataExtractor(BaseSpecialist):
             fallback_msg = f"I was unable to extract the required '{pydantic_schema.__name__}' data."
             return {"messages": [create_llm_message(
                 specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
                 content=fallback_msg
             )]}
 
@@ -57,6 +59,7 @@ class StructuredDataExtractor(BaseSpecialist):
 
         success_message = create_llm_message(
             specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
             content=f"Successfully extracted '{pydantic_schema.__name__}' data and saved it to the '{target_artifact_name}' artifact."
         )
         

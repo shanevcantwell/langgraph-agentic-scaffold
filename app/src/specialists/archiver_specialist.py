@@ -22,11 +22,11 @@ class ArchiverSpecialist(BaseSpecialist):
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
         # Get the path from config and expand the user's home directory if `~` is used.
-        raw_path = self.specialist_config.get("archive_path", "./archives")
-        self.archive_path = os.path.expanduser(raw_path)
+        raw_path = self.specialist_config.get("archive_dir", "./archives")
+        self.archive_dir = os.path.expanduser(raw_path)
         self.pruning_strategy = self.specialist_config.get("pruning_strategy", "none")
         self.pruning_max_count = self.specialist_config.get("pruning_max_count", 50)
-        os.makedirs(self.archive_path, exist_ok=True)
+        os.makedirs(self.archive_dir, exist_ok=True)
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -111,8 +111,8 @@ class ArchiverSpecialist(BaseSpecialist):
     def _save_report(self, report_content: str):
         """Saves the report content to a timestamped file."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"report_{timestamp}.md"
-        filepath = os.path.join(self.archive_path, filename)
+        filename = f"run_{timestamp}.md"
+        filepath = os.path.join(self.archive_dir, filename)
         try:
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(report_content)
@@ -123,7 +123,7 @@ class ArchiverSpecialist(BaseSpecialist):
     def _prune_archive(self):
         """Prunes the archive directory based on the configured strategy."""
         if self.pruning_strategy == "count":
-            files = sorted([os.path.join(self.archive_path, f) for f in os.listdir(self.archive_path)], key=os.path.getmtime)
+            files = sorted([os.path.join(self.archive_dir, f) for f in os.listdir(self.archive_dir)], key=os.path.getmtime)
             while len(files) > self.pruning_max_count:
                 os.remove(files.pop(0))
                 logger.info(f"Pruned old report file.")

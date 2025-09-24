@@ -42,11 +42,13 @@ def file_specialist(tmp_path, mock_config_loader, mock_adapter_factory, mock_loa
     workspace = tmp_path / "test_workspace"
     workspace.mkdir()
     
-    mock_config_loader.return_value.get_specialist_config.return_value['root_dir'] = str(workspace)
-    
-    specialist = FileSpecialist(specialist_name="file_specialist")
-    assert specialist.root_dir == str(workspace)
-    return specialist
+    # Patch PROJECT_ROOT to point to the temporary workspace
+    with patch('app.src.utils.path_utils.PROJECT_ROOT', new=workspace):
+        mock_config_loader.return_value.get_specialist_config.return_value['root_dir'] = str(workspace)
+        
+        specialist = FileSpecialist(specialist_name="file_specialist", specialist_config={})
+        assert specialist.root_dir == str(workspace)
+        return specialist
 
 def test_get_full_path_success(file_specialist, tmp_path):
     """Tests that a valid relative path is resolved correctly."""

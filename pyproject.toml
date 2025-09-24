@@ -35,6 +35,7 @@ dependencies = [
     "gradio",
     "open-interpreter",
     # Add specific LLM provider packages here as needed
+    "google-generativeai",
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 
@@ -53,7 +54,6 @@ dev = [
     "typer[all]", # For the command-line interface
     "requests",   # For making HTTP requests from the CLI to the API
     "python-multipart", # For FastAPI file uploads
-    "google-generativeai",
     "inflection",
     "pytest-asyncio",
     "pytest-dotenv",
