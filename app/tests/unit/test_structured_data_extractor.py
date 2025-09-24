@@ -1,9 +1,11 @@
+# Audit Date: Sept 23, 2025
 import pytest
 from unittest.mock import MagicMock, ANY
 from pydantic import BaseModel, Field
 
 from app.src.specialists.structured_data_extractor import StructuredDataExtractor
 from langchain_core.messages import HumanMessage, AIMessage
+from app.src.specialists.helpers import create_llm_message
 
 # Define a simple Pydantic schema for testing purposes
 class MockUserInfo(BaseModel):
@@ -19,10 +21,7 @@ def structured_data_extractor():
         specialist_config={}
     )
     specialist.llm_adapter = MagicMock()
-    # Mock the create_llm_message helper to return a simple AIMessage
-    specialist.create_llm_message = lambda **kwargs: AIMessage(content=kwargs.get("content", ""), name=specialist.specialist_name)
     return specialist
-
 
 # Test cases
 def test_structured_data_extractor_success(structured_data_extractor):

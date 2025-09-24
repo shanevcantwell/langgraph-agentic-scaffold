@@ -1,3 +1,4 @@
+# Audit Date: Sept 23, 2025
 import pytest
 import os
 from unittest.mock import patch, MagicMock
@@ -14,7 +15,7 @@ from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
 @pytest.fixture
 def mock_config_loader():
     """Mocks the ConfigLoader to prevent file system access during tests."""
-    with patch('src.specialists.base.ConfigLoader') as mock_loader:
+    with patch('app.src.utils.config_loader.ConfigLoader') as mock_loader:
         mock_loader.return_value.get_specialist_config.return_value = {
             "root_dir": "./test_workspace",
             "prompt_file": "fake_prompt.md"
@@ -25,7 +26,7 @@ def mock_config_loader():
 @pytest.fixture
 def mock_adapter_factory():
     """Mocks the AdapterFactory to prevent LLM client instantiation."""
-    with patch('src.specialists.base.AdapterFactory') as mock_factory:
+    with patch('app.src.llm.factory.AdapterFactory') as mock_factory:
         yield mock_factory
 
 @pytest.fixture
