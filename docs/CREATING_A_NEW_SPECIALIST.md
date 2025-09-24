@@ -44,7 +44,7 @@ class CodeWriterSpecialist(BaseSpecialist):
         The most important part of this method is calling the parent class's
         __init__ method with the specialist's name and its configuration dictionary.
         """
-        # The specialist_name and specialist_config are passed in by the ChiefOfStaff.
+        # The specialist_name and specialist_config are passed in by the GraphBuilder.
         # The name must match the key in config.yaml.
         super().__init__(specialist_name, specialist_config)
 
@@ -55,7 +55,7 @@ class CodeWriterSpecialist(BaseSpecialist):
         common boilerplate like logging and error handling. You only need to
         implement the logic specific to this specialist.
         """
-        # The specialist's configuration was injected by the ChiefOfStaff via the
+        # The specialist's configuration was injected by the GraphBuilder via the
         # constructor and is available as `self.specialist_config`.
 
         # Get the full message history from the state.
@@ -116,7 +116,7 @@ For our `CodeWriterSpecialist`, we can create a file named `code_writer_prompt.m
 ```markdown
 # app/prompts/code_writer_prompt.md
 
-You are a world-class Python programmer. Your task is to write clean, efficient, and well-documented Python code based on the user's request.
+You are a world-class Python programmer. Your task is to write clean, efficient, and well-documented Python code based on a user's request.
 
 Only output the code itself. Do not add any explanations or pleasantries.
 ```
@@ -336,7 +336,7 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         # Reset interpreter state and execute
         self.interpreter.messages = []
         execution_messages = self.interpreter.chat(
-            f"Please execute this {language} code:\n```{language}\n{code_to_run}\n```",
+            f"Please execute this {language} code:\n`{language}\n{code_to_run}\n`",
             display=False,
             stream=False,
         )
@@ -358,4 +358,4 @@ class OpenInterpreterSpecialist(BaseSpecialist):
 
 ## Conclusion
 
-That's it! You have successfully created a new specialist agent. The `ChiefOfStaff` class will automatically discover and integrate your new specialist at runtime. By following these steps, you can extend the system with new capabilities. Remember to always keep your specialists focused on a single task to maintain a clean and modular architecture.
+That's it! You have successfully created a new specialist agent. The `GraphBuilder` class will automatically discover and integrate your new specialist at build time. By following these steps, you can extend the system with new capabilities. Remember to always keep your specialists focused on a single task to maintain a clean and modular architecture.

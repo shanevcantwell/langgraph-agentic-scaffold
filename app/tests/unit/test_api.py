@@ -15,7 +15,7 @@ async def mock_streaming_gen():
 mock_runner.run.return_value = {"final_output": "success"}
 mock_runner.run_streaming.return_value = mock_streaming_gen()
 
-with patch('app.src.workflow.runner.WorkflowRunner', return_value=mock_runner):
+with patch('app.src.api.WorkflowRunner', return_value=mock_runner):
     from app.src.api import app
     from fastapi.testclient import TestClient
 

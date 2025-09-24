@@ -13,7 +13,7 @@ This document provides all the necessary information to understand, run, test, a
 The system is composed of several agent types with a clear separation of concerns:
 1.  **Specialists (`BaseSpecialist`):** Functional, LLM-driven components that perform a single, well-defined task.
 2.  **Runtime Orchestrator (`RouterSpecialist`):** A specialized agent that makes the turn-by-turn routing decisions *within* the running graph.
-3.  **Structural Orchestrator (`ChiefOfStaff`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
+3.  **Structural Orchestrator (`GraphBuilder`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
 
 ## 3.0 Observability with LangSmith (Essential for Development)
 
@@ -56,7 +56,7 @@ The `router_specialist` is the most critical reasoning component in the architec
 
 ### 4.1.1 Intentional vs. Unproductive Loops
 
-The `ChiefOfStaff` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck.
+The `GraphOrchestrator` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck.
 
 Intentional loops, such as the "Generate-and-Critique" cycle, are architected differently. They are implemented using conditional edges in the graph that create a direct `Specialist A -> Specialist B -> Specialist A` sub-graph. Because this sub-loop does not repeatedly pass through the main `RouterSpecialist`, it is not flagged by the generic unproductive loop detector. This is the preferred pattern for creating controlled, stateful cycles.
 
@@ -75,7 +75,7 @@ The process is as follows:
 1.  **Stage 1: Signal Completion**
     *   A functional specialist (e.g., `web_builder`) completes its primary task.
     *   It signals this completion by including `task_is_complete: True` in its return state.
-    *   The `ChiefOfStaff` configures a conditional edge that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `end_specialist` instead of back to the main `router_specialist`.
+    *   The `GraphBuilder` configures a conditional edge that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `end_specialist` instead of back to the main `router_specialist`.
 
 2.  **Stage 2: Coordinate Finalization (`EndSpecialist`)**
     *   The `end_specialist`, a procedural coordinator, is invoked. It does not use an LLM for its main logic.
@@ -84,10 +84,10 @@ The process is as follows:
         2.  **Archiving:** It then immediately calls the `archiver_specialist`'s logic, passing it the complete, updated state (including the newly synthesized response) to generate the final `archive_report.md`.
 
 3.  **Stage 3: Terminate**
-    *   The `ChiefOfStaff` wires the `end_specialist` directly to the special `END` node in the graph.
+    *   The `GraphBuilder` wires the `end_specialist` directly to the special `END` node in the graph.
     *   After the `end_specialist` completes its coordinated sequence, the graph execution halts cleanly.
 
-This explicit `... -> (task_is_complete?) -> EndSpecialist -> END` sequence is defined in the `ChiefOfStaff` when the graph is compiled. This structural guarantee centralizes the entire termination process into a single, reliable node, which significantly enhances the system's robustness and simplifies the graph's wiring.
+This explicit `... -> (task_is_complete?) -> EndSpecialist -> END` sequence is defined in the `GraphBuilder` when the graph is compiled. This structural guarantee centralizes the entire termination process into a single, reliable node, which significantly enhances the system's robustness and simplifies the graph's wiring.
 
 ### 4.4 The Adapter Robust Parsing Contract
 
@@ -138,7 +138,7 @@ At startup, the `ConfigLoader` merges these layers. It starts with the blueprint
       router_specialist: "fast_model" # User wants speed over power for routing.
     ```
 
-3.  **Result:** At runtime, the `ChiefOfStaff` will instantiate the `router_specialist` and configure it to use the `fast_model` provider configuration (`gemini-1.5-flash`).
+3.  **Result:** At runtime, the `GraphBuilder` will instantiate the `router_specialist` and configure it to use the `fast_model` provider configuration (`gemini-1.5-flash`).
 
 ## 5.0 How to Extend the System: Creating Specialists
 
