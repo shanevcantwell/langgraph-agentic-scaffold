@@ -10,7 +10,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 @pytest.fixture
 def specialist():
     """Fixture for an initialized SentimentClassifierSpecialist."""
-    s = SentimentClassifierSpecialist("sentiment_classifier_specialist")
+    s = SentimentClassifierSpecialist(specialist_name="sentiment_classifier_specialist", specialist_config={})
     s.llm_adapter = MagicMock()
     return s
 

@@ -8,7 +8,7 @@ from app.src.utils.errors import LLMInvocationError
 @pytest.fixture
 def specialist():
     """Fixture for an initialized WebBuilder with a mocked adapter."""
-    s = WebBuilder("web_builder")
+    s = WebBuilder(specialist_name="web_builder", specialist_config={})
     s.llm_adapter = MagicMock()
     return s
 

@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from pydantic import BaseModel
-
+import json
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.llm.lmstudio_adapter import LMStudioAdapter
 from app.src.llm.gemini_adapter import GeminiAdapter
@@ -49,22 +49,35 @@ MALFORMED_RESPONSES = [
 # --- Contract Test ---
 
 @pytest.mark.parametrize("malformed_response, expected_json", MALFORMED_RESPONSES)
-def test_adapter_robust_parsing_contract(malformed_response, expected_json):
+def test_adapter_robust_parsing_contract(adapter_class, malformed_response, expected_json):
     """
     This contract test verifies that an adapter can robustly parse JSON
     from a malformed text response when a schema is requested.
     """
-    # This test uses LMStudioAdapter as the concrete implementation to test against.
-    # As other adapters are added, they can be tested here as well.
-    adapter = LMStudioAdapter(model_config={"api_identifier": "test-model"}, base_url="http://localhost:1234", system_prompt="")
+    # Arrange
+    if adapter_class == LMStudioAdapter:
+        adapter = LMStudioAdapter(model_config={"api_identifier": "test-model"}, base_url="http://localhost:1234", system_prompt="")
+        # Mock the underlying client call to return the malformed string
+        with patch.object(adapter.client.chat.completions, 'create', new_callable=MagicMock) as mock_create:
+            mock_create.return_value.choices[0].message.content = malformed_response
+            mock_create.return_value.choices[0].message.tool_calls = None
+            request = StandardizedLLMRequest(messages=[], output_model_class=MockOutputSchema)
+            
+            # Act
+            result = adapter.invoke(request)
+    elif adapter_class == GeminiAdapter:
+        adapter = GeminiAdapter(model_config={"api_identifier": "test-model"}, system_prompt="")
+        # Mock the underlying client call for Gemini
+        with patch.object(adapter.client, 'generate_content', new_callable=MagicMock) as mock_create:
+            mock_create.return_value.text = malformed_response
+            request = StandardizedLLMRequest(messages=[], output_model_class=MockOutputSchema)
 
-    # Mock the underlying client call to return the malformed string
-    with patch.object(adapter.client.chat.completions, 'create', new_callable=MagicMock) as mock_create:
-        mock_create.return_value.choices[0].message.content = malformed_response
-        mock_create.return_value.choices[0].message.tool_calls = None
+            # Act
+            result = adapter.invoke(request)
+    else:
+        pytest.fail(f"Adapter class {adapter_class.__name__} not handled in this test.")
 
-        request = StandardizedLLMRequest(messages=[], output_model_class=MockOutputSchema)
-        result = adapter.invoke(request)
-
-        assert "json_response" in result, "Adapter must return a 'json_response' key for schema requests."
-        assert result["json_response"] == expected_json, "Adapter failed to correctly parse the malformed JSON."
+    # Assert
+    assert "json_response" in result, "Adapter must return a 'json_response' key for schema requests."
+    assert result["json_response"] == expected_json, f"Adapter {adapter_class.__name__} failed to correctly parse the malformed JSON."
+    assert isinstance(result["json_response"], dict), "The parsed JSON should be a dictionary."

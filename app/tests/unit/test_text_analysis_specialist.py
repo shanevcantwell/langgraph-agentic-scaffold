@@ -7,14 +7,18 @@ from app.src.specialists.text_analysis_specialist import TextAnalysisSpecialist
 from app.src.utils.errors import LLMInvocationError
 
 @pytest.fixture
-def specialist():
-    """Fixture for an initialized TextAnalysisSpecialist with a mocked adapter."""
-    with patch('app.src.specialists.base.AdapterFactory.create_adapter') as mock_create_adapter:
+def mock_llm_adapter():
+    with patch('app.src.llm.factory.AdapterFactory.create_adapter') as mock_create_adapter:
         mock_adapter = MagicMock()
         mock_create_adapter.return_value = mock_adapter
-        s = TextAnalysisSpecialist("text_analysis_specialist", {"prompt_file": "fake.md"})
-        s.llm_adapter = mock_adapter
-        yield s
+        yield mock_adapter
+
+@pytest.fixture
+def specialist(mock_llm_adapter):
+    """Fixture for an initialized TextAnalysisSpecialist with a mocked adapter."""
+    s = TextAnalysisSpecialist("text_analysis_specialist", {"prompt_file": "fake.md"})
+    s.llm_adapter = mock_llm_adapter
+    return s
 
 def test_text_analysis_with_text(specialist):
     """
