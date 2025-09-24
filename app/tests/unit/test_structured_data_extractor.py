@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.src.specialists.structured_data_extractor import StructuredDataExtractor
 from langchain_core.messages import HumanMessage, AIMessage
+from app.src.utils.errors import LLMInvocationError
 from app.src.specialists.helpers import create_llm_message
 
 # Define a simple Pydantic schema for testing purposes
@@ -101,3 +102,65 @@ def test_structured_data_extractor_llm_fails_to_extract(structured_data_extracto
     assert "extracted_data" not in result_state
     assert isinstance(result_state["messages"][0], AIMessage)
     assert "unable to extract the required 'MockUserInfo' data" in result_state["messages"][0].content
+
+def test_structured_data_extractor_malformed_tool_call_args(structured_data_extractor):
+    """Tests that the specialist handles tool calls with arguments that don't match the schema."""
+    # Arrange
+    mock_llm_response = {
+        "tool_calls": [{
+            "name": "MockUserInfo",
+            "args": {"name": "John Doe"}, # Missing 'email' field
+            "id": "call_123"
+        }]
+    }
+    structured_data_extractor.llm_adapter.invoke.return_value = mock_llm_response
+
+    initial_state = {
+        "messages": [HumanMessage(content="My name is John Doe.")],
+        "scratchpad": {"extraction_schema": MockUserInfo, "target_artifact_name": "user_profile"}
+    }
+
+    # Act
+    result_state = structured_data_extractor._execute_logic(initial_state)
+
+    # Assert
+    assert "extracted_data" not in result_state
+    assert "LLM tool call arguments failed Pydantic validation" in result_state["messages"][0].content
+    assert "email" in result_state["messages"][0].content # Error message should mention the missing field
+
+def test_structured_data_extractor_handles_llm_invocation_error(structured_data_extractor):
+    """Tests that the specialist handles exceptions from the LLM adapter."""
+    # Arrange
+    structured_data_extractor.llm_adapter.invoke.side_effect = LLMInvocationError("API timeout")
+
+    initial_state = {
+        "messages": [HumanMessage(content="Some text.")],
+        "scratchpad": {"extraction_schema": MockUserInfo, "target_artifact_name": "user_profile"}
+    }
+
+    # Act
+    result_state = structured_data_extractor._execute_logic(initial_state)
+
+    # Assert
+    assert "extracted_data" not in result_state
+    assert "LLM invocation failed" in result_state["messages"][0].content
+    assert "API timeout" in result_state["messages"][0].content
+
+def test_structured_data_extractor_handles_invalid_schema_in_scratchpad(structured_data_extractor):
+    """Tests that the specialist handles an invalid schema object gracefully."""
+    # Arrange
+    initial_state = {
+        "messages": [HumanMessage(content="Some text.")],
+        "scratchpad": {
+            "extraction_schema": "not-a-pydantic-model",
+            "target_artifact_name": "user_profile"
+        }
+    }
+
+    # Act
+    result_state = structured_data_extractor._execute_logic(initial_state)
+
+    # Assert
+    structured_data_extractor.llm_adapter.invoke.assert_not_called()
+    assert "extracted_data" not in result_state
+    assert "is not a valid Pydantic model" in result_state["messages"][0].content

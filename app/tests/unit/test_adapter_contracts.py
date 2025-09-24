@@ -1,13 +1,13 @@
 # Audit Date: Sept 23, 2025
-# app/tests/llm/test_adapter_contracts.py
+# app/tests/unit/test_adapter_contracts.py
 import pytest
 from unittest.mock import patch, MagicMock
 from pydantic import BaseModel
 
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.llm.lmstudio_adapter import LMStudioAdapter
-# Import other concrete adapters here as they are created
-# from app.src.llm.gemini_adapter import GeminiAdapter
+from app.src.llm.gemini_adapter import GeminiAdapter
+from app.src.utils.errors import LLMInvocationError
 
 # --- Test Data ---
 
@@ -15,6 +15,13 @@ class MockOutputSchema(BaseModel):
     """A mock schema for testing structured output."""
     key: str
     value: int
+
+# --- Adapter Fixtures ---
+
+@pytest.fixture(params=[LMStudioAdapter, GeminiAdapter])
+def adapter_class(request):
+    """Fixture to provide different adapter classes to the tests."""
+    return request.param
 
 MALFORMED_RESPONSES = [
     pytest.param(

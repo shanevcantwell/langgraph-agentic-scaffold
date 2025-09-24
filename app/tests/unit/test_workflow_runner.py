@@ -2,7 +2,8 @@
 # app/tests/unit/test_workflow_runner.py
 import pytest
 from unittest.mock import MagicMock
-
+import json
+from app.src.utils.errors import WorkflowError
 from app.src.workflow.runner import WorkflowRunner
 
 @pytest.fixture
@@ -52,6 +53,41 @@ def test_workflow_runner_run_sync(mock_graph_builder):
     # Assert
     runner.app.invoke.assert_called_once()
     assert result == {"final_user_response": "Workflow complete"}
+
+def test_workflow_runner_run_sync_handles_missing_artifact(mock_graph_builder):
+    """Tests that the sync run method handles a missing final artifact gracefully."""
+    # Arrange
+    runner = WorkflowRunner()
+    # Override the mock to return a state without the expected artifact
+    runner.app.invoke.return_value = {"artifacts": {"some_other_artifact.txt": "some data"}}
+
+    # Act
+    result = runner.run("Test goal")
+
+    # Assert
+    assert result == {"final_user_response": None}
+
+def test_workflow_runner_run_sync_handles_invoke_error(mock_graph_builder):
+    """Tests that the sync run method raises a WorkflowError on graph invocation failure."""
+    # Arrange
+    runner = WorkflowRunner()
+    runner.app.invoke.side_effect = Exception("Graph failed!")
+
+    # Act & Assert
+    with pytest.raises(WorkflowError, match="Error during synchronous workflow execution: Graph failed!"):
+        runner.run("Test goal")
+
+@pytest.mark.asyncio
+async def test_workflow_runner_run_streaming_handles_astream_error(mock_graph_builder):
+    """Tests that the streaming run method yields an error on graph stream failure."""
+    # Arrange
+    runner = WorkflowRunner()
+    runner.app.astream.side_effect = Exception("Stream failed!")
+
+    # Act & Assert
+    with pytest.raises(WorkflowError, match="Error during streaming workflow execution: Stream failed!"):
+        # We need to consume the generator to trigger the exception
+        _ = [item async for item in runner.run_streaming("Test goal")]
 
 @pytest.mark.asyncio
 async def test_workflow_runner_run_streaming(mock_graph_builder):

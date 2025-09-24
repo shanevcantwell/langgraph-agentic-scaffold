@@ -20,3 +20,11 @@ class SafetyFilterError(LLMInvocationError):
 class RateLimitError(LLMInvocationError):
     """Raised when the LLM provider returns a rate limit error (e.g., 429)."""
     pass
+
+class WorkflowError(Exception):
+    """Custom exception for errors that occur within the overall workflow execution."""
+    pass
+
+class SpecialistLoadError(Exception):
+    """Custom exception for errors that occur during specialist loading."""
+    pass

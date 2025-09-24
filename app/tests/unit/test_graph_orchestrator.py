@@ -43,6 +43,43 @@ def test_safe_executor_handles_specialist_exception(orchestrator_instance):
     assert "Traceback" in result["error_report"]
     assert "Something went wrong!" in result["error_report"]
 
+def test_safe_executor_handles_generic_exception(orchestrator_instance):
+    """
+    Tests that the executor also catches generic exceptions and formats them correctly.
+    """
+    # Arrange
+    mock_specialist = MagicMock(spec=BaseSpecialist)
+    mock_specialist.specialist_name = "generic_failing_specialist"
+    mock_specialist.specialist_config = {}
+    mock_specialist.execute.side_effect = ValueError("A generic error")
+
+    safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
+    initial_state = {"messages": [], "routing_history": ["start"]}
+
+    # Act
+    result = safe_executor(initial_state)
+
+    # Assert
+    assert "error" in result
+    assert "error_report" in result
+    assert "A generic error" in result["error_report"]
+
+def test_safe_executor_success_path(orchestrator_instance):
+    """Tests the safe_executor for a successful, non-error execution."""
+    # Arrange
+    mock_specialist = MagicMock(spec=BaseSpecialist)
+    mock_specialist.execute.return_value = {"artifacts": {"new_artifact.txt": "success"}}
+
+    safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
+    initial_state = {"artifacts": {}}
+
+    # Act
+    result = safe_executor(initial_state)
+
+    # Assert
+    assert result == {"artifacts": {"new_artifact.txt": "success"}}
+    mock_specialist.execute.assert_called_once_with(initial_state)
+
 def test_safe_executor_blocks_execution_on_missing_artifact(orchestrator_instance):
     """
     Tests that the safe_executor prevents a specialist from running if a required
@@ -73,6 +110,18 @@ def test_safe_executor_blocks_execution_on_missing_artifact(orchestrator_instanc
     )
     assert result == expected_response
 
+def test_create_missing_artifact_response_format(orchestrator_instance):
+    """Tests the specific format of the missing artifact response."""
+    # Act
+    response = orchestrator_instance.create_missing_artifact_response(
+        specialist_name="test_specialist",
+        missing_artifacts=["artifact1"],
+        recommended_specialists=["provider_specialist"]
+    )
+    # Assert
+    assert response["next_specialist"] == "provider_specialist"
+    assert "Self-correction" in response["messages"][-1].content
+
 def test_route_to_next_specialist_normal_route(orchestrator_instance):
     """Tests that the function returns the correct specialist name from the state."""
     state = {"next_specialist": "file_specialist", "turn_count": 1}
@@ -92,6 +141,19 @@ def test_route_to_next_specialist_detects_loop(orchestrator_instance):
     }
     result = orchestrator_instance.route_to_next_specialist(state)
     assert result == CoreSpecialist.END.value
+
+def test_route_to_next_specialist_loop_not_long_enough(orchestrator_instance):
+    """Tests that a repeating pattern shorter than min_loop_len is not flagged as a loop."""
+    orchestrator_instance.max_loop_cycles = 2
+    orchestrator_instance.min_loop_len = 2 # A loop must be at least 2 specialists long
+
+    # This history has a repeating 'A', but the loop length is only 1.
+    state = {
+        "routing_history": ["B", "A", "A", "A"],
+        "next_specialist": "some_specialist"
+    }
+    result = orchestrator_instance.route_to_next_specialist(state)
+    assert result == "some_specialist"
 
 def test_route_to_next_specialist_allows_non_loop(orchestrator_instance):
     """Tests that the function does not halt for a non-looping history."""

@@ -3,6 +3,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from app.src.specialists.data_extractor_specialist import DataExtractorSpecialist
+from app.src.utils.errors import LLMInvocationError
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 # Common fixtures for mocking specialist dependencies
@@ -77,7 +78,7 @@ def test_data_extractor_no_text_to_process(data_extractor_specialist):
     assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
 
 def test_data_extractor_llm_fails(data_extractor_specialist):
-    """Tests that the specialist raises an error if the LLM returns no JSON."""
+    """Tests that the specialist raises an error if the LLM returns no valid JSON payload."""
     # Arrange
     initial_state = {
         "messages": [HumanMessage(content="Extract user info.")],
@@ -88,3 +89,36 @@ def test_data_extractor_llm_fails(data_extractor_specialist):
     # Act & Assert
     with pytest.raises(ValueError, match="failed to get a valid JSON response"):
         data_extractor_specialist._execute_logic(initial_state)
+
+def test_data_extractor_handles_llm_invocation_error(data_extractor_specialist):
+    """Tests that the specialist propagates LLM invocation errors."""
+    # Arrange
+    initial_state = {
+        "messages": [HumanMessage(content="Extract user info.")],
+        "text_to_process": "Some text here"
+    }
+    data_extractor_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API connection failed")
+
+    # Act & Assert
+    # The error should be propagated up to be caught by the graph's safe executor
+    with pytest.raises(LLMInvocationError, match="API connection failed"):
+        data_extractor_specialist._execute_logic(initial_state)
+
+@pytest.mark.parametrize("text_input", [
+    "",
+    "   "
+], ids=["empty_string", "whitespace_only"])
+def test_data_extractor_no_text_to_process_on_empty_string(data_extractor_specialist, text_input):
+    """
+    Tests that the specialist self-corrects if the input text is empty or just whitespace.
+    """
+    # Arrange
+    initial_state = {"messages": [], "text_to_process": text_input}
+
+    # Act
+    result_state = data_extractor_specialist._execute_logic(initial_state)
+
+    # Assert
+    data_extractor_specialist.llm_adapter.invoke.assert_not_called()
+    assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
+    assert result_state["extracted_data"] is None

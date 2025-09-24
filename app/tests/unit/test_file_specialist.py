@@ -1,11 +1,11 @@
 # Audit Date: Sept 23, 2025
 import pytest
 import os
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, mock_open
 
-from src.specialists.file_specialist import FileSpecialist, ReadFileParams, WriteFileParams, ListDirectoryParams
-from src.utils.errors import SpecialistError
-from langchain_core.messages import HumanMessage, ToolMessage, AIMessage
+from app.src.specialists.file_specialist import FileSpecialist, ReadFileParams, WriteFileParams, ListDirectoryParams
+from app.src.utils.errors import SpecialistError, LLMInvocationError
+from langchain_core.messages import HumanMessage, AIMessage
 
 # Architectural Note: The 'tmp_path' fixture is provided by pytest.
 # It creates a unique temporary directory for each test function, ensuring that
@@ -32,7 +32,7 @@ def mock_adapter_factory():
 @pytest.fixture
 def mock_load_prompt():
     """Mocks the prompt loader."""
-    with patch('src.specialists.base.load_prompt') as mock_load:
+    with patch('app.src.specialists.base.load_prompt') as mock_load:
         mock_load.return_value = "Fake system prompt"
         yield mock_load
 
@@ -85,6 +85,18 @@ def test_read_file_not_found(file_specialist):
     assert content is None
     assert "Error reading file" in status
 
+def test_read_file_empty(file_specialist, tmp_path):
+    """Tests reading a file that is empty."""
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    test_file.touch() # Create an empty file
+
+    params = ReadFileParams(file_path="test.txt")
+    content, status = file_specialist._read_file(params)
+
+    assert content == ""
+    assert "Successfully read" in status
+
 def test_write_file_safety_on(file_specialist, tmp_path):
     """Tests that file writing is mocked when safety is ON (default)."""
     workspace = tmp_path / "test_workspace"
@@ -111,6 +123,30 @@ def test_write_file_safety_off(file_specialist, tmp_path):
     assert test_file.read_text() == "new content"
     assert "Successfully wrote" in status
 
+def test_write_file_safety_off_overwrites_existing_file(file_specialist, tmp_path):
+    """Tests that writing to an existing file overwrites its content when safety is off."""
+    workspace = tmp_path / "test_workspace"
+    test_file = workspace / "test.txt"
+    test_file.write_text("initial content")
+
+    file_specialist.is_safety_on = False
+    params = WriteFileParams(file_path="test.txt", content="overwritten content")
+    status = file_specialist._write_file(params)
+
+    assert test_file.read_text() == "overwritten content"
+    assert "Successfully wrote" in status
+
+def test_write_file_permission_error(file_specialist):
+    """Tests that a permission error during writing is handled gracefully."""
+    file_specialist.is_safety_on = False
+    params = WriteFileParams(file_path="protected/file.txt", content="some content")
+
+    with patch("builtins.open", mock_open()) as mocked_open:
+        mocked_open.side_effect = PermissionError("Permission denied")
+        status = file_specialist._write_file(params)
+        assert "Error writing file" in status
+        assert "Permission denied" in status
+
 def test_list_directory_success(file_specialist, tmp_path):
     """Tests successful directory listing."""
     workspace = tmp_path / "test_workspace"
@@ -127,6 +163,20 @@ def test_list_directory_success(file_specialist, tmp_path):
     params_subdir = ListDirectoryParams(dir_path="subdir")
     result_subdir = file_specialist._list_directory(params_subdir)
     assert "file2.txt" in result_subdir
+
+def test_list_directory_non_existent(file_specialist):
+    """Tests listing a directory that does not exist."""
+    params = ListDirectoryParams(dir_path="non_existent_dir")
+    result = file_specialist._list_directory(params)
+    assert "Error listing directory" in result
+
+def test_list_directory_empty(file_specialist, tmp_path):
+    """Tests listing an empty directory."""
+    workspace = tmp_path / "test_workspace"
+    (workspace / "empty_dir").mkdir()
+    params = ListDirectoryParams(dir_path="empty_dir")
+    result = file_specialist._list_directory(params)
+    assert "Directory is empty" in result
 
 def test_execute_logic_reads_file(file_specialist, tmp_path):
     """Tests the full logic execution for a read_file operation."""
@@ -200,6 +250,30 @@ def test_execute_logic_writes_file_safety_off(file_specialist, tmp_path):
     assert "Successfully wrote" in result_state["messages"][0].content
 
 def test_execute_logic_handles_llm_failure(file_specialist):
+    """Tests that the specialist handles when the LLM adapter itself fails."""
+    # Arrange
+    file_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API Error")
+    initial_state = {"messages": [HumanMessage(content="some request")]}
+
+    # Act & Assert
+    with pytest.raises(LLMInvocationError, match="API Error"):
+        file_specialist._execute_logic(initial_state)
+
+def test_execute_logic_handles_malformed_tool_input(file_specialist):
+    """Tests handling of LLM responses where tool_input is malformed."""
+    # Arrange
+    mock_json_response = {
+        "tool_name": "read_file",
+        "tool_input": {"wrong_param": "test.txt"} # Missing 'file_path'
+    }
+    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    initial_state = {"messages": [HumanMessage(content="Read the file")]}
+    # Act
+    result_state = file_specialist._execute_logic(initial_state)
+    # Assert
+    assert "Failed to validate tool input" in result_state["messages"][0].content
+
+def test_execute_logic_handles_llm_no_json(file_specialist):
     """Tests that the specialist handles when the LLM fails to return a valid Pydantic object."""
     # Arrange
     file_specialist.llm_adapter.invoke.return_value = {"json_response": None}
@@ -213,3 +287,25 @@ def test_execute_logic_handles_llm_failure(file_specialist):
     assert isinstance(result_state["messages"][0], AIMessage)
     assert "did not return a valid, structured tool call" in result_state["messages"][0].content
     assert "text_to_process" not in result_state
+
+def test_execute_logic_lists_directory(file_specialist, tmp_path):
+    """Tests the full logic execution for a list_directory operation."""
+    # Arrange
+    workspace = tmp_path / "test_workspace"
+    (workspace / "file1.txt").touch()
+    (workspace / "subdir").mkdir()
+
+    mock_json_response = {
+        "tool_name": "list_directory",
+        "tool_input": {"dir_path": "."}
+    }
+    file_specialist.llm_adapter.invoke.return_value = {"json_response": mock_json_response}
+    initial_state = {"messages": [HumanMessage(content="List files")]}
+
+    # Act
+    result_state = file_specialist._execute_logic(initial_state)
+
+    # Assert
+    assert "FileSpecialist action 'list_directory' completed" in result_state["messages"][0].content
+    assert "file1.txt" in result_state["text_to_process"]
+    assert "subdir" in result_state["text_to_process"]

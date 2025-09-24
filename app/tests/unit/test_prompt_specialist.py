@@ -1,11 +1,11 @@
 # Audited on Sept 23, 2025
 import pytest
 from unittest.mock import patch, MagicMock
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-from src.specialists.prompt_specialist import PromptSpecialist
-from src.graph.state import GraphState
-from src.llm.adapter import LLMInvocationError
+from app.src.specialists.prompt_specialist import PromptSpecialist
+from app.src.graph.state import GraphState
+from app.src.utils.errors import LLMInvocationError
 
 @pytest.fixture
 def default_state():
@@ -13,7 +13,7 @@ def default_state():
     return GraphState(messages=[HumanMessage(content="What should I do next?")])
 
 @patch('src.specialists.base.AdapterFactory.create_adapter')
-def test_prompt_specialist_happy_path(mock_create_adapter, default_state):
+def test_prompt_specialist_success(mock_create_adapter, default_state):
     """Tests that the specialist correctly processes a response and updates the state."""
     mock_adapter = MagicMock()
     expected_response = AIMessage(content="This is the LLM response.")
@@ -45,3 +45,46 @@ def test_prompt_specialist_handles_adapter_failure(mock_create_adapter, default_
     assert "error" in result
     assert error_message in result["error"]
     assert "Failed to get a response from the LLM" in result["error"]
+
+@patch('src.specialists.base.AdapterFactory.create_adapter')
+def test_prompt_specialist_handles_empty_messages(mock_create_adapter):
+    """Tests that the specialist does not call the LLM if there are no messages."""
+    # Arrange
+    empty_state = GraphState(messages=[])
+    mock_adapter = MagicMock()
+    mock_create_adapter.return_value = mock_adapter
+
+    specialist = PromptSpecialist()
+
+    # Act
+    result = specialist.execute(empty_state)
+
+    # Assert
+    mock_adapter.invoke.assert_not_called()
+    assert "error" not in result
+    assert len(result["messages"]) == 0 # No new messages should be added
+
+@patch('src.specialists.base.AdapterFactory.create_adapter')
+def test_prompt_specialist_handles_adapter_creation_failure(mock_create_adapter, default_state):
+    """Tests that an error is handled if the AdapterFactory fails."""
+    # Arrange
+    error_message = "Could not create adapter for specialist."
+    mock_create_adapter.side_effect = Exception(error_message)
+
+    specialist = PromptSpecialist()
+
+    # Act
+    result = specialist.execute(default_state)
+
+    # Assert
+    assert "error" in result
+    assert "Failed to initialize LLM adapter" in result["error"]
+    assert error_message in result["error"]
+
+def test_prompt_specialist_initialization():
+    """Tests that the specialist can be initialized without errors."""
+    # This is a simple smoke test to ensure the constructor and its
+    # dependencies (like loading prompts or configs) don't immediately fail.
+    with patch('src.specialists.base.load_prompt'), patch('src.specialists.base.ConfigLoader'):
+        specialist = PromptSpecialist()
+        assert specialist is not None
