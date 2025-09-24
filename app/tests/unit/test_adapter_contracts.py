@@ -1,3 +1,4 @@
+# Audit Date: Sept 23, 2025
 # app/tests/llm/test_adapter_contracts.py
 import pytest
 from unittest.mock import patch, MagicMock

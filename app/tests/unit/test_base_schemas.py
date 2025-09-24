@@ -1,3 +1,4 @@
+# Audited on Sept 23, 2025
 # app/tests/specialists/schemas/test_base_schemas.py
 import pytest
 from pydantic import BaseModel, ValidationError

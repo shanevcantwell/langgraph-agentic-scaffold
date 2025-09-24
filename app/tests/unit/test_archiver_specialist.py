@@ -1,3 +1,4 @@
+# Audit Date: Sept 23, 2025
 # app/tests/unit/test_archiver_specialist.py
 import pytest
 from unittest.mock import patch, MagicMock
