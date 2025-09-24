@@ -52,7 +52,4 @@ workspace/*
 
 
 Dockerfile
-docs/ADR_ Relocate _api_identifier_ to User-Level Settings.md
 ui.sh
-docs/ADR
-${ARCHIVE_PATH:./archives}/
