@@ -55,6 +55,8 @@ dev = [
     "python-multipart", # For FastAPI file uploads
     "google-generativeai",
     "inflection",
+    "pytest-asyncio",
+    "pytest-dotenv",
 ]
 
 [tool.setuptools.packages.find]
@@ -68,3 +70,4 @@ pythonpath = [
 markers = [
     "live_llm: marks tests that require a live LLM connection and API keys"
 ]
+asyncio_mode = "auto" # Recommended for pytest-asyncio to handle async tests automatically

@@ -10,6 +10,8 @@ class StatusEnum(str, Enum):
     SUCCESS = "SUCCESS"
     PARTIAL_SUCCESS = "PARTIAL_SUCCESS"
     FAILURE = "FAILURE"
+    PENDING = "PENDING"
+    SELF_CORRECTING = "SELF_CORRECTING"
 
 class SpecialistOutput(BaseModel, Generic[T]):
     """

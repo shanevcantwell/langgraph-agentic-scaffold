@@ -30,10 +30,16 @@ else
     echo "jq is installed."
 fi
 
-echo "--- Copying example configuration files ---"
-cp .env.example .env
-cp config.yaml.example config.yaml
-cp user_settings.yaml.example user_settings.yaml
+echo "--- Copying example configuration files (if they don't already exist) ---"
+if [ ! -f .env ]; then
+    cp .env.example .env
+fi
+if [ ! -f config.yaml ]; then
+    cp config.yaml.example config.yaml
+fi
+if [ ! -f user_settings.yaml ]; then
+    cp user_settings.yaml.example user_settings.yaml
+fi
 
 echo "---"
 echo "✅ Development environment setup complete."
