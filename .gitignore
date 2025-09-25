@@ -53,3 +53,4 @@ workspace/*
 
 Dockerfile
 ui.sh
+archives/*
