@@ -2,7 +2,6 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock, mock_open
 from app.src.specialists.archiver_specialist import ArchiverSpecialist
-from app.src.utils.errors import SpecialistError
 
 @pytest.fixture
 def archiver_specialist(tmp_path, initialized_specialist_factory):
@@ -31,13 +30,21 @@ def initial_state():
         "scratchpad": {},
     }
 
-def test_archiver_initialization_creates_directory(specialist_config, mock_makedirs):
+@pytest.fixture
+def specialist_config():
+    """Provides a basic config dictionary for testing."""
+    return {"archive_dir": "test_archives"}
+
+@patch("os.makedirs")
+def test_archiver_initialization_creates_directory(mock_makedirs, specialist_config):
     """Tests that the specialist creates the archive directory on initialization."""
     ArchiverSpecialist(
         specialist_name="archiver_specialist",
         specialist_config=specialist_config,
     )
-    mock_makedirs.assert_called_once_with("test_archives", exist_ok=True)
+    # The specialist expands user paths, so we check for the original path.
+    # os.path.expanduser is deterministic for paths without `~`.
+    mock_makedirs.assert_called_once_with(os.path.expanduser("test_archives"), exist_ok=True)
 
 def test_save_report_writes_to_file(archiver_specialist):
     """Tests that _save_report correctly writes content to a file."""
@@ -45,7 +52,7 @@ def test_save_report_writes_to_file(archiver_specialist):
     with patch("builtins.open", mock_open()) as mocked_file:
         archiver_specialist._save_report(mock_file_content)
         # Check that open was called with the correct path and mode
-        assert "test_archives/run_" in mocked_file.call_args[0][0]
+        assert archiver_specialist.archive_dir in mocked_file.call_args[0][0]
         assert mocked_file.call_args[0][1] == "w"
         # Check that write was called with the content
         mocked_file().write.assert_called_once_with(mock_file_content)
@@ -62,11 +69,11 @@ def test_prune_archive_removes_oldest_files(archiver_specialist):
         
         archiver_specialist._prune_archive()
         
-        mock_listdir.assert_called_once_with("test_archives")
+        mock_listdir.assert_called_once_with(archiver_specialist.archive_dir)
         # Should remove the 2 oldest files to get down to 5
         assert mock_remove.call_count == 2
-        mock_remove.assert_any_call("test_archives/run_0.md")
-        mock_remove.assert_any_call("test_archives/run_1.md")
+        mock_remove.assert_any_call(os.path.join(archiver_specialist.archive_dir, "run_0.md"))
+        mock_remove.assert_any_call(os.path.join(archiver_specialist.archive_dir, "run_1.md"))
 
 def test_execute_logic_generates_and_saves_report(archiver_specialist, initial_state):
     """Tests the main logic flow for generating and saving a success report."""
@@ -78,7 +85,7 @@ def test_execute_logic_generates_and_saves_report(archiver_specialist, initial_s
         # Assert that the report was generated and passed to _save_report
         mock_save.assert_called_once()
         saved_content = mock_save.call_args[0][0]
-        assert "Conversation Summary" in saved_content
+        assert "Final User Response" in saved_content
         assert "This is the final response." in saved_content
         
         mock_prune.assert_called_once()

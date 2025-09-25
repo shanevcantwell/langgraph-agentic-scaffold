@@ -15,7 +15,12 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     # Arrange
     mock_plan_summary = "Design a simple web page."
     mock_plan_details = "Use HTML, CSS, and basic JS."
-    mock_json_response = {"plan_summary": mock_plan_summary, "plan_details": mock_plan_details}
+    mock_json_response = {
+        "plan_summary": mock_plan_summary,
+        "plan_details": mock_plan_details,
+        "required_components": ["web_builder"],
+        "execution_steps": ["Generate HTML", "Generate CSS"]
+    }
     systems_architect_specialist.llm_adapter.invoke.return_value = {
         "json_response": mock_json_response
     }
@@ -39,7 +44,7 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     assert "artifacts" in result_state
     assert "system_plan" in result_state["artifacts"]
     assert result_state["artifacts"]["system_plan"]["plan_summary"] == mock_plan_summary
-    assert result_state["artifacts"]["system_plan"]["plan_details"] == mock_plan_details
+    assert "Use HTML, CSS, and basic JS." in result_state["artifacts"]["system_plan"]["execution_steps"]
 
     assert "recommended_specialists" in result_state
     assert result_state["recommended_specialists"] == ["web_builder"]

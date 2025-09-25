@@ -22,3 +22,16 @@ class Critique(BaseModel):
     points_for_improvement: List[str] = Field(..., description="A list of specific, actionable points of feedback for what to change or add in the next iteration.")
     positive_feedback: List[str] = Field(..., description="Specific aspects of the artifact that were well-executed and should be kept or built upon.")
     decision: Literal["ACCEPT", "REVISE"] = Field(..., description="The final verdict. 'REVISE' if significant changes are needed, otherwise 'ACCEPT'.")
+
+class CodeExecutionParams(BaseModel):
+    """
+    The parameters for executing a block of code in a specified language.
+    """
+    language: str = Field(
+        ...,
+        description="The programming language of the code to execute (e.g., 'python', 'bash').",
+    )
+    code: str = Field(
+        ...,
+        description="The block of code to be executed.",
+    )

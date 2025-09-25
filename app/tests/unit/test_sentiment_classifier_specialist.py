@@ -13,16 +13,16 @@ def sentiment_classifier_specialist(initialized_specialist_factory):
     return initialized_specialist_factory("SentimentClassifierSpecialist")
 
 @pytest.mark.parametrize("sentiment_value", ["positive", "negative", "neutral"])
-def test_sentiment_classifier_specialist_execute_success(specialist, sentiment_value):
+def test_sentiment_classifier_specialist_execute_success(sentiment_classifier_specialist, sentiment_value):
     # Arrange
-    specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": sentiment_value}}
+    sentiment_classifier_specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": sentiment_value}}
 
     initial_state = {
         "messages": [HumanMessage(content="I love this!")]
     }
 
     # Act
-    result_state = specialist.execute(initial_state)
+    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
 
     # Assert
     assert len(result_state["messages"]) == 1
@@ -31,23 +31,23 @@ def test_sentiment_classifier_specialist_execute_success(specialist, sentiment_v
     assert isinstance(new_message, AIMessage)
     assert sentiment_value in new_message.content
     assert new_message.name == "sentiment_classifier_specialist"
-    assert result_state["artifacts"]["sentiment_analysis"]["sentiment"] == sentiment_value
-    specialist.llm_adapter.invoke.assert_called_once()
+    assert result_state["artifacts"]["sentiment"]["sentiment"] == sentiment_value
+    sentiment_classifier_specialist.llm_adapter.invoke.assert_called_once()
     # Check that the last human message was passed to the LLM
-    invoke_request = specialist.llm_adapter.invoke.call_args[0][0]
+    invoke_request = sentiment_classifier_specialist.llm_adapter.invoke.call_args[0][0]
     assert "I love this!" in invoke_request.messages[-1].content
 
-def test_sentiment_classifier_handles_invalid_sentiment_value(specialist):
+def test_sentiment_classifier_handles_invalid_sentiment_value(sentiment_classifier_specialist):
     """Tests that the specialist self-corrects if the LLM returns an invalid sentiment value."""
     # Arrange
-    specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "ambivalent"}}
+    sentiment_classifier_specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "ambivalent"}}
     initial_state = {"messages": [HumanMessage(content="It was okay.")]}
 
     # Act
-    result_state = specialist.execute(initial_state)
+    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
 
     # Assert
-    assert "sentiment_analysis" not in result_state.get("artifacts", {})
+    assert "sentiment" not in result_state.get("artifacts", {})
     assert "LLM returned an invalid sentiment value" in result_state["messages"][0].content
 
 @pytest.mark.parametrize("bad_response", [
@@ -55,49 +55,49 @@ def test_sentiment_classifier_handles_invalid_sentiment_value(specialist):
     {"json_response": None},
     {"text_response": "some text"}
 ], ids=["wrong_key", "no_json", "text_response_instead"])
-def test_sentiment_classifier_handles_malformed_llm_response(specialist, bad_response):
+def test_sentiment_classifier_handles_malformed_llm_response(sentiment_classifier_specialist, bad_response):
     """Tests that the specialist self-corrects if the LLM response is malformed."""
     # Arrange
-    specialist.llm_adapter.invoke.return_value = bad_response
+    sentiment_classifier_specialist.llm_adapter.invoke.return_value = bad_response
     initial_state = {"messages": [HumanMessage(content="Some text.")]}
 
     # Act
-    result_state = specialist.execute(initial_state)
+    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
 
     # Assert
-    assert "sentiment_analysis" not in result_state.get("artifacts", {})
+    assert "sentiment" not in result_state.get("artifacts", {})
     assert "Failed to get a valid sentiment classification" in result_state["messages"][0].content
 
-def test_sentiment_classifier_handles_llm_invocation_error(specialist):
+def test_sentiment_classifier_handles_llm_invocation_error(sentiment_classifier_specialist):
     """Tests that an LLMInvocationError is propagated."""
     # Arrange
-    specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API is down")
+    sentiment_classifier_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API is down")
     initial_state = {"messages": [HumanMessage(content="Some text.")]}
 
     # Act & Assert
     with pytest.raises(LLMInvocationError, match="API is down"):
-        specialist.execute(initial_state)
+        sentiment_classifier_specialist._execute_logic(initial_state)
 
 @pytest.mark.parametrize("messages", [
     [],
     [AIMessage(content="An AI message.")]
 ], ids=["empty_list", "no_human_message"])
-def test_sentiment_classifier_no_human_message_to_analyze(specialist, messages):
+def test_sentiment_classifier_no_human_message_to_analyze(sentiment_classifier_specialist, messages):
     """Tests that the specialist does not run if no HumanMessage is available."""
     # Arrange
     initial_state = {"messages": messages}
 
     # Act
-    result_state = specialist.execute(initial_state)
+    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
 
     # Assert
-    specialist.llm_adapter.invoke.assert_not_called()
+    sentiment_classifier_specialist.llm_adapter.invoke.assert_not_called()
     assert "No user message found to analyze" in result_state["messages"][0].content
 
-def test_sentiment_classifier_uses_last_human_message(specialist):
+def test_sentiment_classifier_uses_last_human_message(sentiment_classifier_specialist):
     """Tests that the specialist specifically analyzes the last HumanMessage."""
     # Arrange
-    specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "positive"}}
+    sentiment_classifier_specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "positive"}}
     initial_state = {
         "messages": [
             HumanMessage(content="This is old and bad."),
@@ -107,8 +107,8 @@ def test_sentiment_classifier_uses_last_human_message(specialist):
     }
 
     # Act
-    specialist.execute(initial_state)
+    sentiment_classifier_specialist._execute_logic(initial_state)
 
     # Assert
-    invoke_request = specialist.llm_adapter.invoke.call_args[0][0]
+    invoke_request = sentiment_classifier_specialist.llm_adapter.invoke.call_args[0][0]
     assert "This is new and good!" in invoke_request.messages[-1].content

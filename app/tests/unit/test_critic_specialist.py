@@ -1,24 +1,19 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage
+from pydantic import BaseModel
 from app.src.specialists.critic_specialist import CriticSpecialist
-from app.src.specialists.schemas import StatusEnum
+from app.src.specialists.schemas import StatusEnum, SpecialistOutput
 from app.src.strategies.critique.base import BaseCritiqueStrategy
 # Assuming CritiqueOutput and Critique are Pydantic models from app.src.strategies.critique.schemas
 # Since they are not provided in context, we'll create simple mocks that mimic their structure.
 
-class MockCritique:
+class MockCritique(BaseModel):
     def __init__(self, overall_assessment, decision, points_for_improvement, positive_feedback):
         self.overall_assessment = overall_assessment
         self.decision = decision
         self.points_for_improvement = points_for_improvement
         self.positive_feedback = positive_feedback
-
-class MockCritiqueOutput:
-    def __init__(self, status, payload=None, rationale=None):
-        self.status = status
-        self.payload = payload
-        self.rationale = rationale
 
 @pytest.fixture
 def mock_critique_strategy():
@@ -55,7 +50,7 @@ def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_cr
         points_for_improvement=[],
         positive_feedback=["Well done!"]
     )
-    mock_critique_output = MockCritiqueOutput(status=StatusEnum.SUCCESS, payload=mock_critique)
+    mock_critique_output = SpecialistOutput(status=StatusEnum.SUCCESS, rationale="Critique generated.", payload=mock_critique)
     mock_critique_strategy.critique.return_value = mock_critique_output
 
     initial_state = {"messages": [HumanMessage(content="Here's some work.")]}
@@ -71,7 +66,7 @@ def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_cr
     assert "Critique complete. Decision: ACCEPT" in result_state["messages"][0].content
     assert "artifacts" in result_state
     assert "critique.md" in result_state["artifacts"]
-    assert "Overall Assessment:\nLooks good." in result_state["artifacts"]["critique.md"]
+    assert "**Overall Assessment:**\nLooks good." in result_state["artifacts"]["critique.md"]
     assert "scratchpad" in result_state
     assert result_state["scratchpad"]["critique_decision"] == "ACCEPT"
     assert result_state["task_is_complete"] is True
@@ -86,7 +81,7 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock
         points_for_improvement=["Fix this.", "Fix that."],
         positive_feedback=[]
     )
-    mock_critique_output = MockCritiqueOutput(status=StatusEnum.SUCCESS, payload=mock_critique)
+    mock_critique_output = SpecialistOutput(status=StatusEnum.SUCCESS, rationale="Revisions needed.", payload=mock_critique)
     mock_critique_strategy.critique.return_value = mock_critique_output
 
     initial_state = {"messages": [HumanMessage(content="Here's some work.")]}
@@ -97,7 +92,7 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock
     # Assert
     mock_critique_strategy.critique.assert_called_once_with(initial_state)
     assert "Critique complete. Decision: REVISE" in result_state["messages"][0].content
-    assert "Points for Improvement:\n- Fix this.\n- Fix that." in result_state["artifacts"]["critique.md"]
+    assert "**Points for Improvement:**\n- Fix this.\n- Fix that." in result_state["artifacts"]["critique.md"]
     assert result_state["scratchpad"]["critique_decision"] == "REVISE"
     assert "recommended_specialists" in result_state
     assert result_state["recommended_specialists"] == ["web_builder"]
@@ -106,7 +101,7 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock
 def test_critic_specialist_handles_strategy_failure(critic_specialist, mock_critique_strategy):
     """Tests that the specialist handles unrecoverable failure from its strategy."""
     # Arrange
-    mock_critique_output = MockCritiqueOutput(status=StatusEnum.FAILURE, rationale="Strategy failed.")
+    mock_critique_output = SpecialistOutput(status=StatusEnum.FAILURE, rationale="Strategy failed.")
     mock_critique_strategy.critique.return_value = mock_critique_output
 
     initial_state = {"messages": [HumanMessage(content="Here's some work.")]}
