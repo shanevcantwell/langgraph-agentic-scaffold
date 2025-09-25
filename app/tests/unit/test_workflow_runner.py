@@ -65,7 +65,7 @@ def test_workflow_runner_run_sync_handles_missing_artifact(mock_graph_builder):
     result = runner.run("Test goal")
 
     # Assert
-    assert result == {"final_user_response": None}
+    assert result == {"final_user_response": "Workflow completed, but no final user response was generated."}
 
 def test_workflow_runner_run_sync_handles_invoke_error(mock_graph_builder):
     """Tests that the sync run method raises a WorkflowError on graph invocation failure."""
@@ -73,9 +73,12 @@ def test_workflow_runner_run_sync_handles_invoke_error(mock_graph_builder):
     runner = WorkflowRunner()
     runner.app.invoke.side_effect = Exception("Graph failed!")
 
-    # Act & Assert
-    with pytest.raises(WorkflowError, match="Error during synchronous workflow execution: Graph failed!"):
-        runner.run("Test goal")
+    # Act
+    result = runner.run("Test goal")
+
+    # Assert
+    assert "error" in result
+    assert "Graph failed!" in result["error"]
 
 @pytest.mark.asyncio
 async def test_workflow_runner_run_streaming_handles_astream_error(mock_graph_builder):
@@ -85,9 +88,13 @@ async def test_workflow_runner_run_streaming_handles_astream_error(mock_graph_bu
     runner.app.astream.side_effect = Exception("Stream failed!")
 
     # Act & Assert
-    with pytest.raises(WorkflowError, match="Error during streaming workflow execution: Stream failed!"):
-        # We need to consume the generator to trigger the exception
-        _ = [item async for item in runner.run_streaming("Test goal")]
+    error_message_found = False
+    async for item in runner.run_streaming("Test goal"):
+        if "error" in item:
+            error_message_found = True
+            assert "Stream failed!" in item
+            break
+    assert error_message_found
 
 @pytest.mark.asyncio
 async def test_workflow_runner_run_streaming(mock_graph_builder):

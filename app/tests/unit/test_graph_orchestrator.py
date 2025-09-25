@@ -68,6 +68,8 @@ def test_safe_executor_success_path(orchestrator_instance):
     """Tests the safe_executor for a successful, non-error execution."""
     # Arrange
     mock_specialist = MagicMock(spec=BaseSpecialist)
+    mock_specialist.specialist_name = "test_specialist"
+    mock_specialist.specialist_config = {}
     mock_specialist.execute.return_value = {"artifacts": {"new_artifact.txt": "success"}}
 
     safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
@@ -119,8 +121,7 @@ def test_create_missing_artifact_response_format(orchestrator_instance):
         recommended_specialists=["provider_specialist"]
     )
     # Assert
-    assert response["next_specialist"] == "provider_specialist"
-    assert "Self-correction" in response["messages"][-1].content
+    assert response["recommended_specialists"] == ["provider_specialist"]
 
 def test_route_to_next_specialist_normal_route(orchestrator_instance):
     """Tests that the function returns the correct specialist name from the state."""

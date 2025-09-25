@@ -10,6 +10,7 @@ from ..specialists import get_specialist_class, BaseSpecialist
 from ..graph.state import GraphState
 from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
+from ..utils.errors import SpecialistLoadError, WorkflowError
 from ..strategies.critique.base import BaseCritiqueStrategy
 from .graph_orchestrator import GraphOrchestrator
 
@@ -21,9 +22,10 @@ class GraphBuilder:
     This class is responsible for reading configuration, instantiating all
     specialists, and compiling the final, executable StateGraph.
     """
-    def __init__(self):
-        self.config = ConfigLoader().get_config()
-        self.adapter_factory = AdapterFactory(self.config)
+    def __init__(self, config_loader: ConfigLoader = None, adapter_factory: AdapterFactory = None):
+        self.config_loader = config_loader or ConfigLoader()
+        self.config = self.config_loader.get_config()
+        self.adapter_factory = adapter_factory or AdapterFactory(self.config)
         self.specialists = self._load_and_configure_specialists()
         self.orchestrator = GraphOrchestrator(self.config, self.specialists)
 
@@ -100,8 +102,11 @@ class GraphBuilder:
 
                 loaded_specialists[name] = instance
                 logger.info(f"Successfully instantiated specialist: {name}")
+            except (ImportError, IOError) as e:
+                # Re-raise as a specific, catchable error for testing and clarity
+                raise SpecialistLoadError(f"Could not load specialist '{name}' due to: {e}") from e
             except Exception as e:
-                logger.error(f"Failed to load specialist '{name}', it will be disabled. Error: {e}", exc_info=True)
+                logger.error(f"An unexpected error occurred while loading specialist '{name}', it will be disabled. Error: {e}", exc_info=True)
                 continue
 
         all_configs = self.config.get("specialists", {})
