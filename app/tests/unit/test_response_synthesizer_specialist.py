@@ -8,14 +8,9 @@ from app.src.specialists.response_synthesizer_specialist import ResponseSynthesi
 from app.src.utils.errors import LLMInvocationError
 
 @pytest.fixture
-def synthesizer_specialist():
+def response_synthesizer_specialist(initialized_specialist_factory):
     """Fixture for an initialized ResponseSynthesizerSpecialist."""
-    specialist = ResponseSynthesizerSpecialist(
-        specialist_name="response_synthesizer_specialist",
-        specialist_config={"type": "llm"}
-    )
-    specialist.llm_adapter = MagicMock()
-    return specialist
+    return initialized_specialist_factory("ResponseSynthesizerSpecialist")
 
 def test_synthesizer_with_snippets(synthesizer_specialist):
     """

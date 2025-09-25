@@ -8,11 +8,9 @@ from app.src.utils.errors import LLMInvocationError
 from langchain_core.messages import AIMessage, HumanMessage
 
 @pytest.fixture
-def specialist():
+def sentiment_classifier_specialist(initialized_specialist_factory):
     """Fixture for an initialized SentimentClassifierSpecialist."""
-    s = SentimentClassifierSpecialist(specialist_name="sentiment_classifier_specialist", specialist_config={})
-    s.llm_adapter = MagicMock()
-    return s
+    return initialized_specialist_factory("SentimentClassifierSpecialist")
 
 @pytest.mark.parametrize("sentiment_value", ["positive", "negative", "neutral"])
 def test_sentiment_classifier_specialist_execute_success(specialist, sentiment_value):

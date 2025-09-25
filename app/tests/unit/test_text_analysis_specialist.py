@@ -8,20 +8,9 @@ from app.src.utils.errors import LLMInvocationError
 from app.src.utils.prompt_loader import load_prompt # Import load_prompt directly
 
 @pytest.fixture
-def mock_llm_adapter():
-    with patch('app.src.llm.factory.AdapterFactory.create_adapter') as mock_create_adapter:
-        mock_adapter = MagicMock()
-        mock_create_adapter.return_value = mock_adapter
-        yield mock_adapter
-
-@pytest.fixture
-def specialist(mock_llm_adapter):
+def text_analysis_specialist(initialized_specialist_factory):
     """Fixture for an initialized TextAnalysisSpecialist with a mocked adapter."""
-    # Patch load_prompt here as it's used during specialist initialization
-    with patch('app.src.utils.prompt_loader.load_prompt', return_value="Fake system prompt"):
-        s = TextAnalysisSpecialist("text_analysis_specialist", {"prompt_file": "fake.md"})
-        s.llm_adapter = mock_llm_adapter
-        return s
+    return initialized_specialist_factory("TextAnalysisSpecialist")
 
 def test_text_analysis_with_text(specialist):
     """

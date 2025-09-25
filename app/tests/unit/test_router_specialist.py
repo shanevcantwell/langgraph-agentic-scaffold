@@ -1,15 +1,13 @@
 # Audited on Sept 23, 2025
 # app/tests/unit/test_router_specialist.py
 import logging
-from unittest.mock import MagicMock, patch
-from langgraph.graph import END
-from langchain_core.messages import AIMessage, HumanMessage
-from app.src.specialists.router_specialist import RouterSpecialist
-from app.src.utils.errors import LLMInvocationError
-from app.src.enums import CoreSpecialist
+import pytest
+@pytest.fixture
+def router_specialist(initialized_specialist_factory):
+    """Creates a RouterSpecialist instance using the factory fixture."""
+    return initialized_specialist_factory("RouterSpecialist")
 
-
-def test_router_specialist_three_stage_termination_logic():
+def test_router_specialist_three_stage_termination_logic(router_specialist):
     """
     Tests the Three-Stage Termination Pattern.
 
@@ -18,12 +16,8 @@ def test_router_specialist_three_stage_termination_logic():
     3.  On a subsequent turn, with `archive_report.md` present, Router should route to `END` (Stage 3).
     """
     # Arrange
-    specialist_name = "router_specialist"
-    specialist_config = {}
-    router = RouterSpecialist(specialist_name, specialist_config)
-
     # Mock the specialist map to include the archiver
-    router.set_specialist_map(
+    router_specialist.set_specialist_map(
         {
             CoreSpecialist.RESPONSE_SYNTHESIZER.value: {"description": "Synthesizes a response."},
             CoreSpecialist.ARCHIVER.value: {"description": "Creates a final report."},
@@ -43,7 +37,7 @@ def test_router_specialist_three_stage_termination_logic():
     }
 
     # Act - Stage 1
-    stage1_result = router._execute_logic(initial_state)
+    stage1_result = router_specialist._execute_logic(initial_state)
 
     # Assert - Stage 1
     assert stage1_result["next_specialist"] == CoreSpecialist.RESPONSE_SYNTHESIZER.value
@@ -78,7 +72,7 @@ def test_router_specialist_three_stage_termination_logic():
     }
 
     # Act - Stage 3
-    stage2_result = router._execute_logic(state_after_archiver)
+    stage2_result = router_specialist._execute_logic(state_after_archiver)
 
     # Assert - Stage 3
     assert stage2_result["next_specialist"] == END
@@ -91,20 +85,17 @@ def test_router_specialist_three_stage_termination_logic():
     assert stage2_result["messages"][0].additional_kwargs["routing_decision"] == END
     logging.info("Stage 3 Test Passed: Router correctly routed to END.")
 
-@patch('app.src.llm.factory.AdapterFactory')
-def test_router_normal_llm_routing(mock_adapter_factory):
+def test_router_normal_llm_routing(router_specialist):
     """
     Tests the primary path where the router uses the LLM to decide the next specialist.
     """
     # Arrange
-    router = RouterSpecialist("router_specialist", {})
-    router.set_specialist_map({"file_specialist": {"description": "File ops"}})
+    router_specialist.set_specialist_map({"file_specialist": {"description": "File ops"}})
 
-    mock_adapter = MagicMock()
+    mock_adapter = router_specialist.llm_adapter
     mock_adapter.invoke.return_value = {
         "json_response": {"next_specialist": "file_specialist", "rationale": "User wants to read a file."}
     }
-    mock_adapter_factory.return_value.create_adapter.return_value = mock_adapter
 
     initial_state = {
         "messages": [HumanMessage(content="Please read my_file.txt")],
@@ -114,7 +105,7 @@ def test_router_normal_llm_routing(mock_adapter_factory):
     }
 
     # Act
-    result = router._execute_logic(initial_state)
+    result = router_specialist._execute_logic(initial_state)
 
     # Assert
     mock_adapter.invoke.assert_called_once()
@@ -125,44 +116,38 @@ def test_router_normal_llm_routing(mock_adapter_factory):
     assert ai_message.additional_kwargs["routing_type"] == "llm_choice"
     assert "User wants to read a file." in ai_message.content
 
-@patch('app.src.llm.factory.AdapterFactory')
-def test_router_handles_llm_invocation_error(mock_adapter_factory):
+def test_router_handles_llm_invocation_error(router_specialist):
     """
     Tests that the router propagates an LLMInvocationError if the adapter fails.
     """
     # Arrange
-    router = RouterSpecialist("router_specialist", {})
-    router.set_specialist_map({"file_specialist": {"description": "File ops"}})
+    router_specialist.set_specialist_map({"file_specialist": {"description": "File ops"}})
 
-    mock_adapter = MagicMock()
+    mock_adapter = router_specialist.llm_adapter
     mock_adapter.invoke.side_effect = LLMInvocationError("API is down")
-    mock_adapter_factory.return_value.create_adapter.return_value = mock_adapter
 
     initial_state = {"messages": [HumanMessage(content="Read a file")]}
 
     # Act & Assert
     with pytest.raises(LLMInvocationError, match="API is down"):
-        router._execute_logic(initial_state)
+        router_specialist._execute_logic(initial_state)
 
-@patch('app.src.llm.factory.AdapterFactory')
-def test_router_handles_invalid_llm_response(mock_adapter_factory):
+def test_router_handles_invalid_llm_response(router_specialist):
     """
     Tests that the router self-corrects if the LLM returns an invalid specialist name.
     """
     # Arrange
-    router = RouterSpecialist("router_specialist", {})
-    router.set_specialist_map({"file_specialist": {"description": "File ops"}})
+    router_specialist.set_specialist_map({"file_specialist": {"description": "File ops"}})
 
-    mock_adapter = MagicMock()
+    mock_adapter = router_specialist.llm_adapter
     mock_adapter.invoke.return_value = {
         "json_response": {"next_specialist": "non_existent_specialist", "rationale": "Hallucinated."}
     }
-    mock_adapter_factory.return_value.create_adapter.return_value = mock_adapter
 
     initial_state = {"messages": [HumanMessage(content="Do something weird")]}
 
     # Act
-    result = router._execute_logic(initial_state)
+    result = router_specialist._execute_logic(initial_state)
 
     # Assert
     assert result["next_specialist"] == "router_specialist" # Should re-route to itself
@@ -170,13 +155,12 @@ def test_router_handles_invalid_llm_response(mock_adapter_factory):
     assert "Self-correction" in ai_message.content
     assert "non_existent_specialist" in ai_message.content
 
-def test_router_stage_2_routes_to_archiver():
+def test_router_stage_2_routes_to_archiver(router_specialist):
     """
     Tests Stage 2 of termination: after response synthesis, route to the archiver.
     """
     # Arrange
-    router = RouterSpecialist("router_specialist", {})
-    router.set_specialist_map({"archiver_specialist": {"description": "Archives things"}})
+    router_specialist.set_specialist_map({"archiver_specialist": {"description": "Archives things"}})
 
     # State after ResponseSynthesizer has run, but before Archiver
     state_after_synthesis = {
@@ -185,7 +169,7 @@ def test_router_stage_2_routes_to_archiver():
     }
 
     # Act
-    result = router._execute_logic(state_after_synthesis)
+    result = router_specialist._execute_logic(state_after_synthesis)
 
     # Assert
     assert result["next_specialist"] == CoreSpecialist.ARCHIVER.value

@@ -5,21 +5,20 @@ from app.src.specialists.archiver_specialist import ArchiverSpecialist
 from app.src.utils.errors import SpecialistError
 
 @pytest.fixture
-def specialist_config():
-    return {"archive_dir": "test_archives", "pruning_strategy": "count", "pruning_max_count": 5}
+def archiver_specialist(tmp_path, initialized_specialist_factory):
+    """Provides an ArchiverSpecialist instance with a temporary archive directory."""
+    archive_dir = tmp_path / "test_archives"
+    # The specialist creates this directory, so we don't need to mkdir here.
 
-@pytest.fixture
-def mock_makedirs():
-    with patch("os.makedirs") as mock_makedirs:
-        yield mock_makedirs
-
-@pytest.fixture
-def archiver_specialist(specialist_config, mock_makedirs):
-    specialist = ArchiverSpecialist(
-        specialist_name="archiver_specialist",
-        specialist_config=specialist_config,
+    specialist = initialized_specialist_factory(
+        "ArchiverSpecialist",
+        specialist_name_override="archiver_specialist",
+        config_override={
+            "archive_dir": str(archive_dir),
+            "pruning_strategy": "count",
+            "pruning_max_count": 5,
+        },
     )
-    mock_makedirs.assert_called_once_with("test_archives", exist_ok=True)
     return specialist
 
 @pytest.fixture

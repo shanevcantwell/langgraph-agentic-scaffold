@@ -80,7 +80,11 @@ def initialized_specialist_factory(
         router = initialized_specialist_factory("RouterSpecialist")
     """
 
-    def _factory(class_name: str, specialist_name_override: str = None):
+    def _factory(
+        class_name: str,
+        specialist_name_override: str = None,
+        config_override: dict = None,
+    ):
         """
         Dynamically imports and instantiates a specialist class, then binds
         its mocked dependencies.
@@ -100,14 +104,28 @@ def initialized_specialist_factory(
         module = importlib.import_module(f"app.src.specialists.{module_name_snake}")
         SpecialistClass = getattr(module, class_name)
 
-        # Step 1: Instantiate the specialist with its config loader
-        specialist_instance = SpecialistClass(config_loader=mock_config_loader)
+        # Determine the specialist's name for config lookup
+        specialist_name = specialist_name_override or "".join(
+            ["_" + i.lower() if i.isupper() else i for i in class_name]
+        ).lstrip("_")
+
+        # Get the base config and apply any overrides
+        specialist_config = (
+            mock_config_loader.get_config()
+            .get("specialists", {})
+            .get(specialist_name, {})
+        )
+        if config_override:
+            specialist_config.update(config_override)
+
+        # Step 1: Instantiate the specialist with its name and final config
+        specialist_instance = SpecialistClass(
+            specialist_name=specialist_name, specialist_config=specialist_config
+        )
 
         # Step 2: Simulate GraphBuilder's logic by creating and binding the mock adapter
-        # This is the critical missing step.
-        specialist_name = specialist_name_override or specialist_instance.specialist_name
         mock_llm_adapter = mock_adapter_factory.create_adapter(specialist_name)
-        specialist_instance.set_llm_adapter(mock_llm_adapter)
+        specialist_instance.llm_adapter = mock_llm_adapter
 
         return specialist_instance
 
