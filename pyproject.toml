@@ -36,6 +36,7 @@ dependencies = [
     "open-interpreter",
     # Add specific LLM provider packages here as needed
     "google-generativeai",
+    "inflection",
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 
