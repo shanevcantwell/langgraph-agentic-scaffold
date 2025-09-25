@@ -6,6 +6,7 @@ from ..llm.adapter import StandardizedLLMRequest
 from .schemas import Sentiment
 from langchain_core.messages import AIMessage, BaseMessage
 from typing import Dict, Any, List
+from pydantic import ValidationError
 
 class SentimentClassifierSpecialist(BaseSpecialist):
     """A specialist that classifies the sentiment of a user's message."""
@@ -30,13 +31,20 @@ class SentimentClassifierSpecialist(BaseSpecialist):
         if not json_response:
             raise ValueError("SentimentClassifier failed to get a valid JSON response from the LLM.")
 
-        classification = Sentiment(**json_response)
-        ai_message = create_llm_message(
-            specialist_name=self.specialist_name,
-            llm_adapter=self.llm_adapter,
-            content=f"The sentiment of the message is: {classification.sentiment}",
-        )
-
-        # Return only the new message and artifact. The graph will append them to the state.
-        # This follows the "atomic state updates" pattern.
-        return {"messages": [ai_message], "artifacts": {"json_artifact": classification.model_dump()}}
+        try:
+            classification = Sentiment(**json_response)
+            ai_message = create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content=f"The sentiment of the message is: {classification.sentiment}",
+            )
+            # Return only the new message and artifact. The graph will append them to the state.
+            # This follows the "atomic state updates" pattern.
+            return {"messages": [ai_message], "artifacts": {"json_artifact": classification.model_dump()}}
+        except ValidationError as e:
+            error_message = create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content=f"LLM returned an invalid sentiment value. Pydantic validation failed: {e}",
+            )
+            return {"messages": [error_message]}
