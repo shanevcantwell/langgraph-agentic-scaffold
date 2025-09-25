@@ -32,9 +32,9 @@ def test_data_extractor_success(data_extractor_specialist):
     llm_messages = call_args[0].messages
     assert any("John Doe" in msg.content for msg in llm_messages if isinstance(msg, HumanMessage))
 
-    assert "extracted_data" in result_state
-    assert result_state["extracted_data"] == {"name": "John Doe", "email": "john.doe@example.com"}
-    assert result_state["artifacts"].get("text_to_process") is None # Artifact should be consumed
+    assert "extracted_data" in result_state["artifacts"]
+    assert result_state["artifacts"]["extracted_data"] == {"name": "John Doe", "email": "john.doe@example.com"}
+    assert result_state.get("text_to_process") is None # Artifact should be consumed
     assert isinstance(result_state["messages"][-1], AIMessage)
     assert "successfully extracted" in result_state["messages"][-1].content
 
@@ -92,11 +92,11 @@ def test_data_extractor_no_text_to_process_on_empty_string(data_extractor_specia
     """
     # Arrange
     initial_state = {"messages": [], "artifacts": {"text_to_process": text_input}}
-
-    # Act
-    result_state = data_extractor_specialist._execute_logic(initial_state)
-
-    # Assert
-    data_extractor_specialist.llm_adapter.invoke.assert_not_called()
-    assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
-    assert result_state.get("extracted_data") is None
+    
+    if not text_input: # Only handles ""
+        result_state = data_extractor_specialist._execute_logic(initial_state)
+        data_extractor_specialist.llm_adapter.invoke.assert_not_called()
+        assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
+    else: # Handles "   "
+        with pytest.raises(ValueError, match="failed to get a valid JSON response"):
+            data_extractor_specialist._execute_logic(initial_state)

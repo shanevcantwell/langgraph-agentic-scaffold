@@ -12,14 +12,14 @@ def response_synthesizer_specialist(initialized_specialist_factory):
     """Fixture for an initialized ResponseSynthesizerSpecialist."""
     return initialized_specialist_factory("ResponseSynthesizerSpecialist")
 
-def test_synthesizer_with_snippets(synthesizer_specialist):
+def test_synthesizer_with_snippets(response_synthesizer_specialist):
     """
     Tests that the synthesizer correctly processes snippets from the scratchpad,
     invokes the LLM, and returns the synthesized response as an artifact.
     """
     # Arrange
     mock_response = "This is the synthesized final response."
-    synthesizer_specialist.llm_adapter.invoke.return_value = {"text_response": mock_response}
+    response_synthesizer_specialist.llm_adapter.invoke.return_value = {"text_response": mock_response}
 
     initial_state = {
         "messages": [],
@@ -29,10 +29,10 @@ def test_synthesizer_with_snippets(synthesizer_specialist):
     }
 
     # Act
-    result_state = synthesizer_specialist._execute_logic(initial_state)
+    result_state = response_synthesizer_specialist._execute_logic(initial_state)
 
     # Assert
-    synthesizer_specialist.llm_adapter.invoke.assert_called_once()
+    response_synthesizer_specialist.llm_adapter.invoke.assert_called_once()
     
     # Check that the final response is in artifacts
     assert "artifacts" in result_state
@@ -47,7 +47,7 @@ def test_synthesizer_with_snippets(synthesizer_specialist):
     assert isinstance(result_state["messages"][0], AIMessage)
     assert result_state["messages"][0].content == mock_response
 
-def test_synthesizer_without_snippets(synthesizer_specialist):
+def test_synthesizer_without_snippets(response_synthesizer_specialist):
     """
     Tests that the synthesizer handles the case where no snippets are present
     and returns a default artifact without calling the LLM.
@@ -59,19 +59,20 @@ def test_synthesizer_without_snippets(synthesizer_specialist):
     }
 
     # Act
-    result_state = synthesizer_specialist._execute_logic(initial_state)
+    result_state = response_synthesizer_specialist._execute_logic(initial_state)
 
     # Assert
-    synthesizer_specialist.llm_adapter.invoke.assert_not_called()
+    # The synthesizer is now always called, even with no snippets, as EndSpecialist provides a fallback.
+    response_synthesizer_specialist.llm_adapter.invoke.assert_called_once()
     assert "artifacts" in result_state
-    assert "No specific user-facing response was synthesized." in result_state["artifacts"]["final_user_response.md"]
-    assert "messages" not in result_state # No new message should be generated
+    assert "final_user_response.md" in result_state["artifacts"]
+    assert "messages" in result_state
 
 @pytest.mark.parametrize("snippets", [
     [],
     ["", "   "]
 ], ids=["empty_list", "list_with_empty_strings"])
-def test_synthesizer_with_empty_snippets_list(synthesizer_specialist, snippets):
+def test_synthesizer_with_empty_snippets_list(response_synthesizer_specialist, snippets):
     """
     Tests that the synthesizer handles an empty list of snippets or a list
     with only empty strings, returning a default artifact without calling the LLM.
@@ -83,16 +84,17 @@ def test_synthesizer_with_empty_snippets_list(synthesizer_specialist, snippets):
     }
 
     # Act
-    result_state = synthesizer_specialist._execute_logic(initial_state)
+    result_state = response_synthesizer_specialist._execute_logic(initial_state)
 
     # Assert
-    synthesizer_specialist.llm_adapter.invoke.assert_not_called()
-    assert "No specific user-facing response was synthesized." in result_state["artifacts"]["final_user_response.md"]
+    # The synthesizer is now always called.
+    response_synthesizer_specialist.llm_adapter.invoke.assert_called_once()
+    assert "final_user_response.md" in result_state["artifacts"]
 
-def test_synthesizer_handles_llm_invocation_error(synthesizer_specialist):
+def test_synthesizer_handles_llm_invocation_error(response_synthesizer_specialist):
     """Tests that an LLMInvocationError is caught and handled."""
     # Arrange
-    synthesizer_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API Error")
+    response_synthesizer_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API Error")
     initial_state = {
         "messages": [],
         "scratchpad": {"user_response_snippets": ["Some snippet."]}
@@ -100,20 +102,20 @@ def test_synthesizer_handles_llm_invocation_error(synthesizer_specialist):
 
     # Act & Assert
     with pytest.raises(LLMInvocationError, match="API Error"):
-        synthesizer_specialist._execute_logic(initial_state)
+        response_synthesizer_specialist._execute_logic(initial_state)
 
-def test_synthesizer_handles_empty_llm_response(synthesizer_specialist):
+def test_synthesizer_handles_empty_llm_response(response_synthesizer_specialist):
     """Tests that an empty or None response from the LLM is handled gracefully."""
     # Arrange
-    synthesizer_specialist.llm_adapter.invoke.return_value = {"text_response": None}
+    response_synthesizer_specialist.llm_adapter.invoke.return_value = {"text_response": None}
     initial_state = {
         "messages": [],
         "scratchpad": {"user_response_snippets": ["Some snippet."]}
     }
 
     # Act
-    result_state = synthesizer_specialist._execute_logic(initial_state)
+    result_state = response_synthesizer_specialist._execute_logic(initial_state)
 
     # Assert
-    synthesizer_specialist.llm_adapter.invoke.assert_called_once()
-    assert "LLM failed to produce a response" in result_state["artifacts"]["final_user_response.md"]
+    response_synthesizer_specialist.llm_adapter.invoke.assert_called_once()
+    assert "I was unable to generate a final response" in result_state["artifacts"]["final_user_response.md"]

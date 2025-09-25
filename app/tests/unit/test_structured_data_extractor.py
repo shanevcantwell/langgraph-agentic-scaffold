@@ -15,14 +15,10 @@ class MockUserInfo(BaseModel):
     email: str = Field(..., description="The user's email.")
 
 @pytest.fixture
-def structured_data_extractor():
+def structured_data_extractor(initialized_specialist_factory):
     """Fixture to create an instance of StructuredDataExtractor with a mocked LLM adapter."""
-    specialist = StructuredDataExtractor(
-        specialist_name="structured_data_extractor",
-        specialist_config={}
-    )
-    specialist.llm_adapter = MagicMock()
-    return specialist
+    return initialized_specialist_factory("StructuredDataExtractor")
+
 
 # Test cases
 def test_structured_data_extractor_success(structured_data_extractor):

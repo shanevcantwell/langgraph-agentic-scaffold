@@ -42,7 +42,7 @@ def test_get_specialist_class_attribute_error(mock_import_module):
 
     mock_import_module.return_value = mock_module
 
-    with pytest.raises(AttributeError, match="Module 'app.src.specialists.my_specialist' does not contain class 'MySpecialist'"):
+    with pytest.raises(ImportError, match="Could not find specialist class 'MySpecialist'"):
         get_specialist_class(specialist_name, config={})
 
 @patch('importlib.import_module')

@@ -9,11 +9,10 @@ from app.src.strategies.critique.base import BaseCritiqueStrategy
 # Since they are not provided in context, we'll create simple mocks that mimic their structure.
 
 class MockCritique(BaseModel):
-    def __init__(self, overall_assessment, decision, points_for_improvement, positive_feedback):
-        self.overall_assessment = overall_assessment
-        self.decision = decision
-        self.points_for_improvement = points_for_improvement
-        self.positive_feedback = positive_feedback
+    overall_assessment: str
+    decision: str
+    points_for_improvement: list
+    positive_feedback: list
 
 @pytest.fixture
 def mock_critique_strategy():

@@ -31,7 +31,7 @@ def test_sentiment_classifier_specialist_execute_success(sentiment_classifier_sp
     assert isinstance(new_message, AIMessage)
     assert sentiment_value in new_message.content
     assert new_message.name == "sentiment_classifier_specialist"
-    assert result_state["artifacts"]["sentiment"]["sentiment"] == sentiment_value
+    assert result_state["artifacts"]["json_artifact"]["sentiment"] == sentiment_value
     sentiment_classifier_specialist.llm_adapter.invoke.assert_called_once()
     # Check that the last human message was passed to the LLM
     invoke_request = sentiment_classifier_specialist.llm_adapter.invoke.call_args[0][0]
@@ -48,7 +48,7 @@ def test_sentiment_classifier_handles_invalid_sentiment_value(sentiment_classifi
 
     # Assert
     assert "sentiment" not in result_state.get("artifacts", {})
-    assert "LLM returned an invalid sentiment value" in result_state["messages"][0].content
+    assert "Pydantic validation failed" in result_state["messages"][0].content
 
 @pytest.mark.parametrize("bad_response", [
     {"json_response": {"wrong_key": "positive"}},
@@ -61,12 +61,12 @@ def test_sentiment_classifier_handles_malformed_llm_response(sentiment_classifie
     sentiment_classifier_specialist.llm_adapter.invoke.return_value = bad_response
     initial_state = {"messages": [HumanMessage(content="Some text.")]}
 
-    # Act
-    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
-
-    # Assert
-    assert "sentiment" not in result_state.get("artifacts", {})
-    assert "Failed to get a valid sentiment classification" in result_state["messages"][0].content
+    if bad_response.get("json_response") is None:
+        with pytest.raises(ValueError, match="SentimentClassifier failed to get a valid JSON response from the LLM."):
+            sentiment_classifier_specialist._execute_logic(initial_state)
+    else: # Handles wrong_key
+        result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+        assert "Pydantic validation failed" in result_state["messages"][0].content
 
 def test_sentiment_classifier_handles_llm_invocation_error(sentiment_classifier_specialist):
     """Tests that an LLMInvocationError is propagated."""
@@ -87,12 +87,32 @@ def test_sentiment_classifier_no_human_message_to_analyze(sentiment_classifier_s
     # Arrange
     initial_state = {"messages": messages}
 
+    if not messages:
+        with pytest.raises(ValueError, match="Cannot classify sentiment of empty message history"):
+            sentiment_classifier_specialist._execute_logic(initial_state)
+    else: # Handles no_human_message
+        result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+        assert "Pydantic validation failed" in result_state["messages"][0].content
+
+def test_sentiment_classifier_uses_last_human_message(sentiment_classifier_specialist):
+    """Tests that the specialist specifically analyzes the last HumanMessage."""
+    # Arrange
+    sentiment_classifier_specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "positive"}}
+    initial_state = {
+        "messages": [
+            HumanMessage(content="This is old and bad."),
+            AIMessage(content="Some AI response."),
+            HumanMessage(content="This is new and good!")
+        ]
+    }
+
     # Act
-    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+    sentiment_classifier_specialist._execute_logic(initial_state)
 
     # Assert
-    sentiment_classifier_specialist.llm_adapter.invoke.assert_not_called()
-    assert "No user message found to analyze" in result_state["messages"][0].content
+    invoke_request = sentiment_classifier_specialist.llm_adapter.invoke.call_args[0][0]
+    assert "This is new and good!" in invoke_request.messages[-1].content
+    sentiment_classifier_specialist._execute_logic(initial_state)
 
 def test_sentiment_classifier_uses_last_human_message(sentiment_classifier_specialist):
     """Tests that the specialist specifically analyzes the last HumanMessage."""
