@@ -88,7 +88,7 @@ Once the server is running, you can send prompts to the agent using the command-
 
 ### Interact with the Agent via Web UI
 
-The project includes a simple Gradio-based web interface as a minimal web UI interface. Ensure the main API server is running before you start the UI.
+The project includes a minimal Gradio-based web interface. Ensure the main API server is running before you start the UI.
 
 From the project root, run:
 ```bash
