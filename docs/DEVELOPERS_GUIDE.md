@@ -196,28 +196,3 @@ def test_my_logic(initialized_specialist_factory):
 2.  **MUST NOT implement local mocks:** New tests **must not** create their own local mocks for core components like `ConfigLoader`, `AdapterFactory`, or the LLM adapter. Rely on the centralized fixtures to provide these.
 
 Adhering to these principles is mandatory to prevent architectural drift and ensure the long-term stability and maintainability of the test suite.
-
-```markdown
-# docs/CREATING_A_NEW_SPECIALIST.md
-
-### 5.4 Advanced: Creating a Procedural Specialist
-
-A "procedural" specialist is one that executes deterministic code, rather than making a conversational request to an LLM. This pattern is ideal for deterministic tasks or for safely integrating external tools using the "Plan and Execute" pattern. For a detailed example of integrating a tool like `open-interpreter`, please refer to the source code of the `OpenInterpreterSpecialist`.
-See the tutorial in `CREATING_A_NEW_SPECIALIST.md` for a complete implementation guide.
-
-### 4.5 Understanding the 3-Tiered Configuration System
-
-The system's configuration is not a single file but a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved from bottom to top:
-
-**Tier 1: Secrets (`.env`)**
-This file provides the raw secrets and connection details (API keys, URLs). It is never committed to source control.
-
-**Tier 2: Architectural Blueprint (`config.yaml`)**
-This is the system's source of truth. It defines all possible components (specialists, providers) and sets the *default* working configuration. For example, it might default the `CriticSpecialist` to use the `gemini_pro` provider.
-
-**Tier 3: User Overrides (`user_settings.yaml`)**
-This optional file allows you to override the defaults from `config.yaml` without editing the core architecture. For example, by adding `critic_specialist: "lmstudio_specialist"` to this file, you instruct the system to ignore the Tier 2 default and use your local model instead.
-
-At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (Tier 2) and then applies any overrides from your user settings (Tier 3). The application components then use this final configuration to function, pulling in the necessary secrets from the environment (Tier 1) as needed.
-...
-```
