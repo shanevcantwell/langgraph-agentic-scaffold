@@ -29,9 +29,6 @@ class DataExtractorSpecialist(BaseSpecialist):
             )
             return {"messages": [ai_message]}
 
-        # The specialist's system prompt (loaded at init) should already instruct it
-        # to extract data from text provided in the user message. We will construct a new
-        # message list that includes the text to be processed as a new user turn.
         contextual_messages = messages + [HumanMessage(content=f"Please extract the requested data from the following text:\n\n---\n{text_to_process}\n---")]
 
         request = StandardizedLLMRequest(

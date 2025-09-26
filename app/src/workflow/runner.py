@@ -14,7 +14,7 @@ from .graph_builder import GraphBuilder
 
 logger = logging.getLogger(__name__)
 
-# --- SERIALIZATION HELPER FUNCTION ---
+
 def _make_state_serializable(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     Recursively traverses a state dictionary and converts non-serializable
@@ -150,7 +150,7 @@ class WorkflowRunner:
                     yield f"Finished node: {node_name}\n"
 
             if final_state:
-                # --- MODIFICATION: Sanitize the state before serialization ---
+                
                 serializable_state = _make_state_serializable(final_state)
                 final_state_json = json.dumps(serializable_state, indent=2)
                 yield f"FINAL_STATE::{final_state_json}"

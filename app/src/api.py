@@ -1,28 +1,18 @@
 # app/src/api.py
 import logging
-import time  # ADD: Import the time module
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import Dict, Any, Optional
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
-
-# --- MODIFICATION START: Framework-Native Lifecycle Management ---
-# Import the LangSmith client and create a global handle for it.
-# This handle will be initialized during the FastAPI startup event.
 from langsmith import Client
 langsmith_client: Optional[Client] = None
-# --- MODIFICATION END ---
-
-# --- Application Bootstrap ---
 logger = logging.getLogger(__name__)
 
-# Declare the runner at the module level, but do not instantiate it yet.
-# This makes it available as a global variable within the module.
 workflow_runner: Optional[WorkflowRunner] = None
 
-# --- MODIFICATION START: Framework-Native Lifecycle Management ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -30,7 +20,6 @@ async def lifespan(app: FastAPI):
     """
     global langsmith_client, workflow_runner
     workflow_runner = WorkflowRunner()
-    # Startup: Initialize the LangSmith client
     try:
         # This will respect the environment variables (LANGCHAIN_TRACING_V2, etc.)
         langsmith_client = Client()
@@ -39,14 +28,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize LangSmith client on startup: {e}", exc_info=True)
         langsmith_client = None
     
-    yield # The application is now running
+    yield
     
-    # Shutdown: Allow time for LangSmith to flush traces
     if langsmith_client:
         logger.info("--- FastAPI shutdown: Allowing time for LangSmith trace flush... ---")
         time.sleep(2) # A 2-second delay is generally sufficient.
         logger.info("--- LangSmith grace period complete. ---")
-# --- MODIFICATION END ---
 
 # --- FastAPI Application ---
 app = FastAPI(
@@ -91,10 +78,6 @@ async def stream_graph(request: InvokeRequest):
     """Streams the workflow execution step by step."""
     try:
         logger.info(f"Received request to stream graph with prompt: '{request.input_prompt}'")
-        
-        # The runner's streaming method is already an async generator.
-        # We can pass it directly to the StreamingResponse.
-        # This simplifies the code and ensures proper handling of the async iterator.
         return StreamingResponse(
             workflow_runner.run_streaming(
                 goal=request.input_prompt, text_to_process=request.text_to_process, image_to_process=request.image_to_process

@@ -6,7 +6,7 @@ import sys
 from typing_extensions import Annotated
 from typing import Optional
 
-# The base URL for the running FastAPI application
+
 API_BASE_URL = "http://127.0.0.1:8000"
 
 app = typer.Typer(
@@ -30,8 +30,8 @@ def invoke(
     Sends a prompt to the langgraph-agentic-scaffold API /v1/graph/invoke endpoint and prints the final response.
     If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
     """
-    # --- MODIFICATION START ---
-    # If no prompt is passed as a command-line argument, read from standard input.
+    
+    
     if prompt is None:
         if not json_only and sys.stdin.isatty():
             print("▶️  Enter your multi-line prompt below. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter "
@@ -43,32 +43,31 @@ def invoke(
         if not json_only:
             print("❌ Error: Prompt is empty. No request sent.", file=sys.stderr)
         sys.exit(1)
-    # --- MODIFICATION END ---
+    
 
     invoke_url = f"{API_BASE_URL}/v1/graph/invoke"
     if not json_only:
-        # Truncate long prompts for cleaner display
+        
         display_prompt = (prompt[:150] + '...') if len(prompt) > 150 else prompt
         print(f"▶️  Invoking agent via {invoke_url} with prompt: '{display_prompt}'")
 
 
-    # The API expects a JSON payload matching the InvokeRequest Pydantic model.
+    
     payload = {"input_prompt": prompt}
 
     try:
-        # Make the POST request to the server.
-        # Setting a long timeout as agentic workflows can take time. The payload now includes optional null values.
+        
         response = requests.post(invoke_url, json=payload, timeout=300)
         response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
 
         response_json = response.json()
         final_output = response_json.get("final_output", {})
 
-        # Check for a specific error report first. If it exists, the run failed.
+        
         if error_report := final_output.get("error_report"):
             if not json_only:
                 print("\n❌ --- Agent Workflow Failed ---")
-                # The report is already formatted as markdown, so just print it.
+                
                 print(error_report)
                 print("--- End of Error Report ---")
             else:
@@ -79,30 +78,28 @@ def invoke(
             # When --json-only is used, always print the full JSON object for scripting.
             print(json.dumps(final_output, indent=2))
         else:
-            # For human-readable output, prioritize the synthesized user_response.
+            
             if user_response := final_output.get("user_response"):
                 print("\n✅ --- Agent Final Response ---")
                 print(user_response)
             else:
-                # Fallback to printing the full JSON if no synthesized response exists.
+                
                 print("\n✅ --- Agent Final Response (Full State) ---")
                 print(json.dumps(final_output, indent=2))
 
             print("--- End of Response ---")
 
-        # --- Verification Logic ---
-        # This logic provides a general-purpose check to see if the agent
-        # produced any meaningful output. It's more robust than just checking
-        # the last message, which is often an empty-content tool call from the router.
+        
+        
         messages = final_output.get("messages", [])
         last_content_message = ""
-        # Find the last message that has actual content, ignoring tool calls.
+        
         for msg in reversed(messages):
             if isinstance(msg, dict) and msg.get("content", "").strip():
                 last_content_message = msg.get("content")
                 break
 
-        # Check for any known data artifacts in the root of the output.
+        
         has_artifact = any(
             final_output.get(key)
             for key in [
@@ -114,7 +111,7 @@ def invoke(
             ]
         )
 
-        # Success is defined as having an artifact or a non-empty content message.
+        
         is_successful = has_artifact or last_content_message
 
         if not is_successful:

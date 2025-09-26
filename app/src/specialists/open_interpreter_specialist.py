@@ -24,7 +24,6 @@ class OpenInterpreterSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        # The constructor is now clean and has no side effects.
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
@@ -32,14 +31,8 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         Generates and executes code based on the user's request.
         """
         # --- Lazy Load and Configure the Interpreter ---
-        # By importing here, we contain all side effects (network calls, etc.)
-        # to the execution phase of this specialist only.
         try:
             from interpreter import interpreter
-            # Configure the interpreter instance just-in-time.
-            # By setting the context_window to 0, we effectively disable the
-            # interpreter's internal LLM, preventing it from making unwanted
-            # litellm calls. This forces it to act as a pure code executor.
             interpreter.auto_run = True
             interpreter.llm.context_window = 0
         except ImportError:
@@ -94,14 +87,9 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         # --- Phase 2: Execute the Code ---
         logger.info(f"Phase 2: Executing code...\n---\n{code_params.code}\n---")
         
-        # The `interpreter.run()` method is deprecated. The new `chat()` method
-        # can be used to execute code directly by passing it in a specific format.
-        # This preserves our two-phase "plan then execute" model.
         interpreter.messages = [] # Clear previous messages
         response_chunks = interpreter.chat(f"Please execute this {code_params.language} code:\n```{code_params.language}\n{code_params.code}\n```", display=False, stream=True)
         
-        # The `chat` method returns a generator. We need to consume it to get the results.
-        # The final output is now stored in the `interpreter.messages` list.
         for _ in response_chunks:
             pass
         

@@ -36,7 +36,6 @@ class RouterSpecialist(BaseSpecialist):
         """Determines the list of specialists available for routing in the current turn."""
         recommended_specialists = state.get("recommended_specialists")
         if recommended_specialists:
-            # Filter the main specialist map based on recommendations
             available = {name: self.specialist_map[name] for name in recommended_specialists if name in self.specialist_map}
             logger.info(f"Filtering router choices based on Triage recommendations: {list(available.keys())}")
             return available
@@ -45,7 +44,6 @@ class RouterSpecialist(BaseSpecialist):
     def _handle_llm_failure(self) -> Dict[str, Any]:
         """Provides a robust fallback mechanism if the LLM fails to make a decision."""
         logger.error("Router LLM failed to produce a valid tool call. Attempting to fall back to a default handler.")
-        # Fallback Priority: 1. Default Responder, 2. Archiver, 3. End
         if CoreSpecialist.DEFAULT_RESPONDER.value in self.specialist_map:
             next_specialist = CoreSpecialist.DEFAULT_RESPONDER.value
             content = "Router failed to select a valid next specialist. Routing to DefaultResponderSpecialist."
@@ -95,15 +93,12 @@ class RouterSpecialist(BaseSpecialist):
         turn_count = state.get("turn_count", 0) + 1
         logger.debug(f"Executing turn {turn_count}")
 
-        # --- Pre-LLM Termination Checks ---
-        # Stage 3: If an archive report exists, the workflow must end.
         if state.get("artifacts", {}).get("archive_report.md"):
             logger.info("Router: Found 'archive_report.md'. Routing to END.")
             next_specialist_name = END
             routing_type = "deterministic_end"
             content = "Workflow complete. Archive report generated."
             tool_calls = []
-        # Stage 2: If a final user response exists, route to the archiver.
         elif state.get("artifacts", {}).get("final_user_response.md"):
             logger.info("Router: Found 'final_user_response.md'. Routing to archiver.")
             next_specialist_name = CoreSpecialist.ARCHIVER.value
@@ -111,7 +106,6 @@ class RouterSpecialist(BaseSpecialist):
             content = "Final response generated. Routing to archiver for final report."
             tool_calls = []
         else:
-            # Stage 1: Standard LLM-based routing.
             llm_decision = self._get_llm_choice(state)
             next_specialist_name = llm_decision["next_specialist"]
             routing_type = "llm_decision"
@@ -131,7 +125,6 @@ class RouterSpecialist(BaseSpecialist):
 
         logger.info(f"Router decision: Routing to {next_specialist_name} (Type: {routing_type})")
 
-        # By centralizing the state update here, we ensure consistency across all routing paths.
         return {
             "messages": [ai_message],
             "next_specialist": next_specialist_name,

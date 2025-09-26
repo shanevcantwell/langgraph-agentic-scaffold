@@ -21,10 +21,7 @@ class ArchiverSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        # Determine the archive path with layered precedence. The environment
-        # variable is the authoritative source for deployment-specific paths.
-        # 1. Environment variable (for containerized/CI/user-specific environments)
-        # 2. Hard-coded default (as a fallback for local development)
+        # Determine the archive path with layered precedence.
         raw_path = os.getenv("AGENTIC_SCAFFOLD_ARCHIVE_PATH") or "./archives"
         self.archive_dir = os.path.expanduser(raw_path)
         self.pruning_strategy = self.specialist_config.get("pruning_strategy", "none")
@@ -38,10 +35,8 @@ class ArchiverSpecialist(BaseSpecialist):
         """
         logger.info(f"--- Archiver: Preparing final report. ---")
 
-        # Prune the state to get a clean, reportable version.
         pruned_state = state_pruner.prune_state(state)
 
-        # Use the Pydantic model to structure the report data.
         final_user_response = pruned_state.get("artifacts", {}).get("final_user_response.md", "No final response was generated.")
         report_data = SuccessReport(
             final_user_response=final_user_response,
@@ -51,25 +46,17 @@ class ArchiverSpecialist(BaseSpecialist):
             conversation_summary=self._summarize_conversation(pruned_state.get("messages", [])),
         )
 
-        # Generate the markdown report using the correct function for successful runs.
         markdown_report = state_pruner.generate_success_report(report_data)
 
-        # Save the report to a file.
         self._save_report(markdown_report)
-
-        # Prune the archive directory if a strategy is set.
         self._prune_archive()
 
-        # Create a final message for the graph using the standard helper.
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter, # Will be None, but helper handles it
             content="Final report has been generated and the workflow is complete.",
         )
 
-        # By returning the report as an artifact, we give the RouterSpecialist a
-        # concrete signal that the finalization step is complete, allowing it
-        # to correctly route to __end__.
         return {
             "messages": [ai_message],
             "artifacts": {"archive_report.md": markdown_report},
