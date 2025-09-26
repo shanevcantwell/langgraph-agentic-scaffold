@@ -21,8 +21,11 @@ class ArchiverSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        # Get the path from config and expand the user's home directory if `~` is used.
-        raw_path = self.specialist_config.get("archive_dir", "./archives")
+        # Determine the archive path with layered precedence. The environment
+        # variable is the authoritative source for deployment-specific paths.
+        # 1. Environment variable (for containerized/CI/user-specific environments)
+        # 2. Hard-coded default (as a fallback for local development)
+        raw_path = os.getenv("AGENTIC_SCAFFOLD_ARCHIVE_PATH") or "./archives"
         self.archive_dir = os.path.expanduser(raw_path)
         self.pruning_strategy = self.specialist_config.get("pruning_strategy", "none")
         self.pruning_max_count = self.specialist_config.get("pruning_max_count", 50)

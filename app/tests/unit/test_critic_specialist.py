@@ -2,9 +2,8 @@ import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel
-from app.src.specialists.critic_specialist import CriticSpecialist
+from app.src.specialists.critic_specialist import CriticSpecialist, BaseCritiqueStrategy
 from app.src.specialists.schemas import StatusEnum, SpecialistOutput
-from app.src.strategies.critique.base import BaseCritiqueStrategy
 # Assuming CritiqueOutput and Critique are Pydantic models from app.src.strategies.critique.schemas
 # Since they are not provided in context, we'll create simple mocks that mimic their structure.
 
@@ -21,24 +20,17 @@ def mock_critique_strategy():
     return mock_strategy
 
 @pytest.fixture
-def critic_specialist(mock_adapter_factory, mock_critique_strategy):
-    """Fixture for an initialized CriticSpecialist.
-    
-    We manually instantiate CriticSpecialist because it requires `critique_strategy`
-    in its constructor, which `initialized_specialist_factory` does not support directly.
-    However, we still use `mock_adapter_factory` to bind the LLM adapter.
-    """
-    specialist_name = "critic_specialist"
-    specialist_config = {"revision_target": "web_builder"}
-    
-    specialist = CriticSpecialist(
-        specialist_name=specialist_name,
-        specialist_config=specialist_config,
-        critique_strategy=mock_critique_strategy
+def critic_specialist(initialized_specialist_factory, mock_critique_strategy):
+    """Fixture for an initialized CriticSpecialist."""
+    # The CriticSpecialist requires its strategy at initialization time.
+    # We bypass the factory here and instantiate it directly with the mock strategy.
+    # This is a valid exception to the "always use the factory" rule for specialists
+    # with complex, non-serializable dependencies.
+    return CriticSpecialist(
+        specialist_name="critic_specialist",
+        specialist_config={"revision_target": "web_builder"},
+        critique_strategy=mock_critique_strategy,
     )
-    # Manually bind the mocked LLM adapter created by mock_adapter_factory
-    specialist.llm_adapter = mock_adapter_factory.create_adapter(specialist_name)
-    return specialist
 
 def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_critique_strategy):
     """Tests that the specialist accepts the work and signals task completion."""

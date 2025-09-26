@@ -17,7 +17,7 @@ class ApiClient:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    def invoke_agent_streaming(self, prompt: str, text_file_path: str, image_path: str):
+    async def invoke_agent_streaming(self, prompt: str, text_file_path: str, image_path: str):
         """
         Calls the streaming FastAPI backend and yields updates for the UI.
         This function is a generator.
@@ -34,7 +34,10 @@ class ApiClient:
                 return
 
         if image_path:
-            payload["image_to_process"] = self._encode_image_to_base64(image_path.name)
+            try:
+                payload["image_to_process"] = self._encode_image_to_base64(image_path.name)
+            except Exception as e:
+                yield {"status": f"Error reading image: {e}"}
 
         try:
             with requests.post(STREAM_URL, json=payload, stream=True, timeout=300) as response:
@@ -95,5 +98,5 @@ class ApiClient:
                     "archive": archive_report
                 }
 
-        except requests.exceptions.RequestException as e:
+        except Exception as e:
             yield {"status": f"API Error: {e}", "logs": log_history + f"\nERROR: {e}"}

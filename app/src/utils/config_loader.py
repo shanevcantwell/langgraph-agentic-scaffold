@@ -11,8 +11,8 @@ from .path_utils import PROJECT_ROOT
 from ..enums import CoreSpecialist
 
 logger = logging.getLogger(__name__)
-BLUEPRINT_CONFIG_FILE = PROJECT_ROOT / "config.yaml"
-USER_SETTINGS_FILE = PROJECT_ROOT / "user_settings.yaml"
+BLUEPRINT_CONFIG_FILE = "config.yaml"
+USER_SETTINGS_FILE = "user_settings.yaml"
 
 class ConfigLoader:
     _merged_config: dict = None
@@ -20,7 +20,7 @@ class ConfigLoader:
 
     def __new__(cls):
         if cls._instance is None:
-            cls._instance = super(ConfigLoader, cls).__new__(cls)
+            cls._instance = super().__new__(cls)
             cls._instance._load_and_merge_configs()
         return cls._instance
 
@@ -32,7 +32,7 @@ class ConfigLoader:
         blueprint_config = self._load_yaml_with_schema(BLUEPRINT_CONFIG_FILE, RootConfig)
         user_settings = self._load_yaml_with_schema(USER_SETTINGS_FILE, UserSettings, is_optional=True)
 
-        # If user settings don't exist, create a default empty one
+        # If user settings don't exist or are empty, create a default empty one
         if user_settings is None:
             user_settings = UserSettings().model_dump()
             logger.info(f"User settings file not found at {USER_SETTINGS_FILE}. Proceeding with defaults.")
@@ -44,6 +44,10 @@ class ConfigLoader:
 
     def _load_yaml_with_schema(self, file_path, schema_model, is_optional=False):
         """Loads a single YAML file and validates it against a Pydantic schema."""
+        # In a test environment, the file path might be mocked.
+        # For real runs, we resolve it relative to the project root.
+        if os.path.exists(PROJECT_ROOT / file_path):
+            file_path = PROJECT_ROOT / file_path
         try:
             with open(file_path, 'r', encoding='utf-8') as f:
                 logger.debug(f"Loading configuration file: {file_path}")
@@ -175,4 +179,4 @@ class ConfigLoader:
 
     def get_config(self) -> dict:
         """Returns the final, merged configuration."""
-        return ConfigLoader._merged_config
+        return copy.deepcopy(ConfigLoader._merged_config)

@@ -17,7 +17,8 @@ app = typer.Typer(
 @app.command()
 def invoke(
     prompt: Annotated[Optional[str], typer.Argument(
-        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
+        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from "
+             "standard input."
     )] = None,
     json_only: Annotated[bool, typer.Option(
         "--json-only",
@@ -33,7 +34,8 @@ def invoke(
     # If no prompt is passed as a command-line argument, read from standard input.
     if prompt is None:
         if not json_only and sys.stdin.isatty():
-            print("▶️  Enter your multi-line prompt below. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter (Windows) when finished.")
+            print("▶️  Enter your multi-line prompt below. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter "
+                  "(Windows) when finished.")
             print("---")
         prompt = sys.stdin.read().strip()
 
@@ -55,7 +57,7 @@ def invoke(
 
     try:
         # Make the POST request to the server.
-        # Setting a long timeout as agentic workflows can take time.
+        # Setting a long timeout as agentic workflows can take time. The payload now includes optional null values.
         response = requests.post(invoke_url, json=payload, timeout=300)
         response.raise_for_status()  # Raises an HTTPError for bad responses (4xx or 5xx)
 
@@ -122,7 +124,8 @@ def invoke(
 
     except requests.exceptions.RequestException as e:
         if not json_only:
-            print(f"\n❌ Error: Could not connect to the API server at {invoke_url}.", file=sys.stderr)
+            print(f"\n❌ Error: Could not connect to the API server at {invoke_url}.",
+                  file=sys.stderr)
             print("Please ensure the server is running with './scripts/server.sh' or '.\\scripts\\server.bat'.", file=sys.stderr)
             print(f"Details: {e}", file=sys.stderr)
         sys.exit(1)
@@ -130,7 +133,8 @@ def invoke(
 @app.command()
 def stream(
     prompt: Annotated[Optional[str], typer.Argument(
-        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
+        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from "
+             "standard input."
     )] = None,
     json_only: Annotated[bool, typer.Option(
         "--json-only",
@@ -144,7 +148,8 @@ def stream(
     """
     if prompt is None:
         if not json_only and sys.stdin.isatty():
-            print("▶️  Enter your multi-line prompt for streaming. Press Ctrl+D (Linux/macOS) or Ctrl+Z+Enter (Windows) when finished.")
+            print("▶️  Enter your multi-line prompt for streaming. Press Ctrl+D (Linux/macOS) or "
+                  "Ctrl+Z+Enter (Windows) when finished.")
             print("---")
         prompt = sys.stdin.read().strip()
 
@@ -162,7 +167,7 @@ def stream(
     payload = {"input_prompt": prompt}
 
     try:
-        with requests.post(stream_url, json=payload, stream=True, timeout=300) as response:
+        with requests.post(stream_url, json=payload, stream=True, timeout=300) as response: # The payload now includes optional null values.
             response.raise_for_status()
             final_state_json = None
             for line in response.iter_lines():
@@ -175,7 +180,7 @@ def stream(
                         if not json_only:
                             print(decoded_line)
             
-            if not json_only:
+            if not json_only and sys.stdout.isatty():
                 print("--- End of Stream ---")
             
             if final_state_json:

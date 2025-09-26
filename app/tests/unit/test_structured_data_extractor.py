@@ -1,4 +1,4 @@
-# Audit Date: Sept 23, 2025
+
 import pytest
 from unittest.mock import MagicMock, ANY
 from pydantic import BaseModel, Field
@@ -48,13 +48,13 @@ def test_structured_data_extractor_success(structured_data_extractor):
     structured_data_extractor.llm_adapter.invoke.assert_called_once()
     request = structured_data_extractor.llm_adapter.invoke.call_args[0][0]
     assert request.tools == [MockUserInfo]
-    assert request.tool_choice == "MockUserInfo"
+    assert request.force_tool_call is True
 
     assert "extracted_data" in result_state
     # The artifact is now a dictionary in the 'extracted_data' key
     assert result_state["extracted_data"]["name"] == "John Doe"
     assert result_state["extracted_data"]["email"] == "john.doe@example.com"
-    assert result_state["task_is_complete"] is True
+    assert result_state.get("task_is_complete") is True
     assert "Successfully extracted" in result_state["messages"][0].content
 
 def test_structured_data_extractor_missing_scratchpad_input(structured_data_extractor):
@@ -134,13 +134,9 @@ def test_structured_data_extractor_handles_llm_invocation_error(structured_data_
         "scratchpad": {"extraction_schema": MockUserInfo, "target_artifact_name": "user_profile"}
     }
 
-    # Act
-    result_state = structured_data_extractor._execute_logic(initial_state)
-
-    # Assert
-    assert "extracted_data" not in result_state
-    assert "LLM invocation failed" in result_state["messages"][0].content
-    assert "API timeout" in result_state["messages"][0].content
+    # Act & Assert
+    with pytest.raises(LLMInvocationError, match="API timeout"):
+        structured_data_extractor._execute_logic(initial_state)
 
 def test_structured_data_extractor_handles_invalid_schema_in_scratchpad(structured_data_extractor):
     """Tests that the specialist handles an invalid schema object gracefully."""
@@ -159,4 +155,4 @@ def test_structured_data_extractor_handles_invalid_schema_in_scratchpad(structur
     # Assert
     structured_data_extractor.llm_adapter.invoke.assert_not_called()
     assert "extracted_data" not in result_state
-    assert "is not a valid Pydantic model" in result_state["messages"][0].content
+    assert "Expected a Pydantic model class" in result_state["messages"][0].content

@@ -1,28 +1,27 @@
-# Audit Date: Sept 23, 2025
 # app/tests/unit/test_gradio_app.py
-import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 import gradio as gr
 
-# We patch the ApiClient before importing the app to inject our mock
-mock_api_client = MagicMock()
-# The API client's method is async, so we need to mock it with an AsyncMock
-mock_api_client.invoke_agent_streaming = AsyncMock()
-
+# We patch the ApiClient class before importing the app to inject our mock.
+# The mock will be an instance of MagicMock.
+mock_api_client = MagicMock() 
+# The method `invoke_agent_streaming` is an async generator. We'll set its
+# return value inside each test.
 with patch('app.src.ui.api_client.ApiClient', return_value=mock_api_client):
-    from app.src.ui.gradio_app import create_ui
+    # We import the function that contains the logic, not the whole app
+    from app.src.ui.gradio_app import handle_submit
+
+import pytest
 
 @pytest.fixture
 def mock_ui_components():
     """Mocks Gradio components to be used as dictionary keys."""
-    return {
-        "status_output": MagicMock(),
-        "log_output": MagicMock(),
-        "json_output": MagicMock(),
-        "html_output": MagicMock(),
-        "image_output": MagicMock(),
-        "archive_output": MagicMock(),
-    }
+    # In tests, we can use simple strings or objects as stand-ins for the
+    # actual Gradio component objects, since they are just used as keys.
+    return {key: MagicMock(name=key) for key in [
+        "status_output", "log_output", "json_output", "html_output",
+        "image_output", "archive_output"
+    ]}
 
 @pytest.fixture(autouse=True)
 def reset_mocks():
@@ -37,78 +36,108 @@ async def test_handle_submit_processes_stream_correctly(mock_ui_components):
     updates from the ApiClient and yields Gradio update dictionaries.
     """
     # Arrange
-    async def mock_stream_generator():
+    def mock_stream_generator(*args, **kwargs):
         yield {"status": "Processing...", "logs": "Log 1\n"}
         yield {"logs": "Log 1\nLog 2\n"}
         yield {"html": "<h1>Result</h1>", "final_state": {"status": "complete"}, "status": "Complete!"}
 
-    mock_api_client.invoke_agent_streaming.return_value = mock_stream_generator()
-
-    demo = create_ui(mock_api_client)
-    handle_submit_fn = demo.fns[0][0]
+    # The mock needs to return an async generator
+    async def mock_async_gen(*args, **kwargs):
+        for item in mock_stream_generator():
+            yield item # This makes it an async generator
+    mock_api_client.invoke_agent_streaming.return_value = mock_async_gen() # The method returns the generator
+    
+    # The handle_submit function returns a closure, which is our test subject
+    handle_submit_fn = handle_submit(
+        mock_api_client, **mock_ui_components
+    )
 
     # Act
-    yielded_updates = [update async for update in handle_submit_fn("test prompt", None, None)]
+    # The closure returns an async generator, which we consume.
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
 
     # Assert
     mock_api_client.invoke_agent_streaming.assert_called_once_with("test prompt", None, None)
     assert len(yielded_updates) == 3
-    assert yielded_updates[0] == {mock_ui_components["status_output"]: "Processing...", mock_ui_components["log_output"]: "Log 1\n"}
-    assert yielded_updates[1] == {mock_ui_components["log_output"]: "Log 1\nLog 2\n"}
-    assert yielded_updates[2] == {mock_ui_components["html_output"]: "<h1>Result</h1>", mock_ui_components["json_output"]: {"status": "complete"}, mock_ui_components["status_output"]: "Complete!"}
+    assert yielded_updates[0] == {mock_ui_components["status_output"]: "Processing...", mock_ui_components["log_output"]: "Log 1\n"} # First yield
+    assert yielded_updates[1] == {mock_ui_components["log_output"]: "Log 1\nLog 2\n"} # Second yield
+    assert yielded_updates[2] == {
+        mock_ui_components["status_output"]: "Complete!",
+        mock_ui_components["json_output"]: {"status": "complete"},
+        mock_ui_components["html_output"]: gr.update(value="<h1>Result</h1>", visible=True)
+    } # Third yield
 
 @pytest.mark.asyncio
 async def test_handle_submit_handles_api_error(mock_ui_components):
     """Tests that handle_submit yields an error message if the API client fails."""
     # Arrange
-    mock_api_client.invoke_agent_streaming.side_effect = Exception("API Connection Failed")
-    demo = create_ui(mock_api_client)
-    handle_submit_fn = demo.fns[0][0]
+    def mock_fail_generator(*args, **kwargs):
+        # This simulates how the api_client would yield an error
+        yield {"status": "API Error: API Connection Failed"}
+
+    async def mock_async_gen(*args, **kwargs):
+        for item in mock_fail_generator():
+            yield item # This makes it an async generator
+    mock_api_client.invoke_agent_streaming.return_value = mock_async_gen() # The method returns the generator
+
+    handle_submit_fn = handle_submit(
+        mock_api_client, **mock_ui_components
+    )
 
     # Act
-    yielded_updates = [update async for update in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
 
     # Assert
     assert len(yielded_updates) == 1
-    error_update = yielded_updates[0]
-    assert "Error" in error_update[mock_ui_components["status_output"]]
-    assert "API Connection Failed" in error_update[mock_ui_components["status_output"]]
+    update = yielded_updates[0]
+    assert "API Error" in update[mock_ui_components["status_output"]]
+    assert "API Connection Failed" in update[mock_ui_components["status_output"]]
 
 @pytest.mark.asyncio
 async def test_handle_submit_handles_all_output_types(mock_ui_components):
     """Tests that all possible output types from the stream are handled."""
     # Arrange
-    async def mock_stream_generator():
+    def mock_stream_generator(*args, **kwargs):
         yield {"image": "path/to/image.png", "archive": "path/to/archive.zip"}
 
-    mock_api_client.invoke_agent_streaming.return_value = mock_stream_generator()
-    demo = create_ui(mock_api_client)
-    handle_submit_fn = demo.fns[0][0]
+    async def mock_async_gen(*args, **kwargs):
+        for item in mock_stream_generator():
+            yield item # This makes it an async generator
+    mock_api_client.invoke_agent_streaming.return_value = mock_async_gen() # The method returns the generator
+
+    handle_submit_fn = handle_submit(
+        mock_api_client, **mock_ui_components
+    )
 
     # Act
-    yielded_updates = [update async for update in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
 
     # Assert
     assert len(yielded_updates) == 1
     update = yielded_updates[0]
-    assert update[mock_ui_components["image_output"]] == gr.update(value="path/to/image.png", visible=True)
-    assert update[mock_ui_components["archive_output"]] == gr.update(value="path/to/archive.zip", visible=True)
+    assert update[mock_ui_components["image_output"]] == gr.update(value="path/to/image.png", visible=bool("path/to/image.png"))
+    assert update[mock_ui_components["archive_output"]] == "path/to/archive.zip"
 
 @pytest.mark.asyncio
 async def test_handle_submit_handles_empty_stream_data(mock_ui_components):
     """Tests that empty or malformed data in the stream is ignored gracefully."""
     # Arrange
-    async def mock_stream_generator():
+    def mock_stream_generator(*args, **kwargs):
         yield {}  # Empty dict
         yield {"unknown_key": "some_value"} # Unknown key
         yield {"status": "Still working..."}
 
-    mock_api_client.invoke_agent_streaming.return_value = mock_stream_generator()
-    demo = create_ui(mock_api_client)
-    handle_submit_fn = demo.fns[0][0]
+    async def mock_async_gen(*args, **kwargs):
+        for item in mock_stream_generator():
+            yield item # This makes it an async generator
+    mock_api_client.invoke_agent_streaming.return_value = mock_async_gen() # The method returns the generator
+
+    handle_submit_fn = handle_submit(
+        mock_api_client, **mock_ui_components
+    )
 
     # Act
-    yielded_updates = [update async for update in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
 
     # Assert
     # The first two yields should produce empty dicts, which are filtered out.
@@ -120,12 +149,13 @@ async def test_handle_submit_handles_empty_stream_data(mock_ui_components):
 async def test_handle_submit_with_no_prompt(mock_ui_components):
     """Tests that submitting with no prompt does not call the API."""
     # Arrange
-    demo = create_ui(mock_api_client)
-    handle_submit_fn = demo.fns[0][0]
+    handle_submit_fn = handle_submit(
+        mock_api_client, **mock_ui_components
+    )
 
     # Act
-    yielded_updates = [update async for update in handle_submit_fn("", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("", None, None)]
 
     # Assert
     mock_api_client.invoke_agent_streaming.assert_not_called()
-    assert len(yielded_updates) == 0
+    assert yielded_updates[0] == {mock_ui_components["status_output"]: "Please enter a prompt."}

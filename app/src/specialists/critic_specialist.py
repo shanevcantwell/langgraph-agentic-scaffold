@@ -19,7 +19,7 @@ class CriticSpecialist(BaseSpecialist):
         logger.info(f"Executing CriticSpecialist logic by delegating to {self.strategy.__class__.__name__}.")
 
         # 1. Delegate the core task to the injected strategy.
-        critique_output = self.strategy.critique(state)
+        critique_output = self.strategy.critique(state) # type: ignore
 
         # 2. Handle Unrecoverable Failure from the Strategy.
         if critique_output.status == StatusEnum.FAILURE:

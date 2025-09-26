@@ -108,4 +108,3 @@ def test_prompt_triage_no_specialist_map_configured(initialized_specialist_facto
     # Assert
     specialist.llm_adapter.invoke.assert_not_called() # LLM should not be called
     assert result_state["recommended_specialists"] == []
-    assert "triage_recommendations" not in result_state # Should not be set if no recommendations

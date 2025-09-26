@@ -17,6 +17,10 @@ class DataProcessorSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         json_artifact = state.get("json_artifact")
+        if json_artifact is None:
+            # This specialist is procedural and cannot self-correct with an LLM.
+            # It returns a simple error message.
+            return {"messages": [AIMessage(content="State is missing the required 'json_artifact' key.")]}
         if isinstance(json_artifact, str):
             data = json.loads(json_artifact)
         else:

@@ -1,6 +1,5 @@
 # app/src/llm/lmstudio_adapter.py
 import logging
-import html
 import json
 import os
 import tiktoken
@@ -12,6 +11,7 @@ from pydantic import BaseModel
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, RateLimitError
 from . import adapters_helpers
+import html
 
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 120

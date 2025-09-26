@@ -20,7 +20,7 @@ class DataExtractorSpecialist(BaseSpecialist):
         messages = state.get("messages", [])
         text_to_process = state.get("artifacts", {}).get("text_to_process")
 
-        if not text_to_process:
+        if not text_to_process or not text_to_process.strip():
             logger.warning("DataExtractorSpecialist cannot execute: 'text_to_process' artifact is missing.")
             ai_message = create_llm_message(
                 specialist_name=self.specialist_name,

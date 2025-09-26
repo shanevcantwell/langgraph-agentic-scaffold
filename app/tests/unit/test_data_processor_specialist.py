@@ -1,6 +1,6 @@
 import pytest
 import json
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.data_processor_specialist import DataProcessorSpecialist
 
@@ -54,7 +54,14 @@ def test_data_processor_specialist_processes_dict(data_processor_specialist):
     assert result_state["processed_data"]["processed_by"] == "data_processor_specialist"
 
 def test_data_processor_specialist_no_json_artifact_raises_error(data_processor_specialist):
-    """Tests behavior when no json_artifact is present in state, expecting a TypeError."""
-    initial_state = {"messages": [HumanMessage(content="Process nothing.")]}
-    with pytest.raises(TypeError):
-        data_processor_specialist._execute_logic(initial_state)
+    """Tests that the specialist returns an error message when no json_artifact is present."""
+    with patch('app.src.specialists.data_processor_specialist.AIMessage') as mock_ai_message:
+        # Arrange
+        initial_state = {"messages": [HumanMessage(content="Process nothing.")]}
+
+        # Act
+        result_state = data_processor_specialist._execute_logic(initial_state)
+
+        # Assert
+        mock_ai_message.assert_called_once()
+        assert "State is missing the required 'json_artifact' key" in mock_ai_message.call_args.kwargs['content']

@@ -1,4 +1,3 @@
-# Audited on Sept 23, 2025
 # app/tests/unit/test_router_specialist.py
 import pytest
 import logging
@@ -14,6 +13,71 @@ def router_specialist(initialized_specialist_factory):
     """Fixture for an initialized RouterSpecialist."""
     return initialized_specialist_factory("RouterSpecialist")
 
+# --- Fine-Grained Unit Tests for Helper Methods ---
+
+def test_get_available_specialists_no_recommendations(router_specialist):
+    """Tests that all specialists are returned when no recommendations are present."""
+    # Arrange
+    router_specialist.set_specialist_map({
+        "spec1": {"desc": "d1"},
+        "spec2": {"desc": "d2"}
+    })
+    state = {"messages": []} # No recommended_specialists
+    # Act
+    available = router_specialist._get_available_specialists(state)
+    # Assert
+    assert "spec1" in available
+    assert "spec2" in available
+    assert len(available) == 2
+
+def test_get_available_specialists_with_recommendations(router_specialist):
+    """Tests that the specialist list is filtered by recommendations."""
+    # Arrange
+    router_specialist.set_specialist_map({
+        "spec1": {"desc": "d1"},
+        "spec2": {"desc": "d2"},
+        "spec3": {"desc": "d3"}
+    })
+    state = {"recommended_specialists": ["spec1", "spec3"]}
+    # Act
+    available = router_specialist._get_available_specialists(state)
+    # Assert
+    assert "spec1" in available
+    assert "spec3" in available
+    assert "spec2" not in available
+    assert len(available) == 2
+
+def test_handle_llm_failure_fallback_priority(router_specialist):
+    """Tests the fallback logic when the LLM fails to make a decision."""
+    # Case 1: Default Responder is available
+    router_specialist.set_specialist_map({CoreSpecialist.DEFAULT_RESPONDER.value: {}, CoreSpecialist.ARCHIVER.value: {}})
+    result = router_specialist._handle_llm_failure()
+    assert result["next_specialist"] == CoreSpecialist.DEFAULT_RESPONDER.value
+
+    # Case 2: No Default Responder, Archiver is available
+    router_specialist.set_specialist_map({CoreSpecialist.ARCHIVER.value: {}})
+    result = router_specialist._handle_llm_failure()
+    assert result["next_specialist"] == CoreSpecialist.ARCHIVER.value
+
+    # Case 3: No fallbacks available
+    router_specialist.set_specialist_map({"some_other_specialist": {}})
+    result = router_specialist._handle_llm_failure()
+    assert result["next_specialist"] == END
+
+def test_validate_llm_choice(router_specialist):
+    """Tests the validation of the LLM's routing choice."""
+    valid_options = ["spec1", "spec2"]
+
+    # Case 1: Valid choice
+    choice = router_specialist._validate_llm_choice("spec1", valid_options)
+    assert choice == "spec1"
+
+    # Case 2: Invalid choice
+    choice = router_specialist._validate_llm_choice("invalid_spec", valid_options)
+    assert choice == CoreSpecialist.DEFAULT_RESPONDER.value
+
+
+# --- Integration-Style Tests for _execute_logic ---
 
 def test_router_stage_3_termination_logic(router_specialist):
     """
@@ -38,10 +102,8 @@ def test_router_stage_3_termination_logic(router_specialist):
     result = router_specialist._execute_logic(state_after_archiver)
 
     # Assert - Stage 3
-    # This test is currently failing because the router logic doesn't yet
-    # have the pre-LLM check for this termination condition.
-    # For now, we accept the fallback to pass the test and will fix the router later.
-    assert result["next_specialist"] == CoreSpecialist.DEFAULT_RESPONDER.value
+    # The router should recognize the presence of the archive report and route to END.
+    assert result["next_specialist"] == END
 
 
 def test_router_normal_llm_routing(router_specialist):
@@ -136,7 +198,8 @@ def test_router_stage_2_routes_to_archiver(router_specialist):
     # Assert
     # This test is currently failing because the router logic doesn't yet
     # have the pre-LLM check for this termination condition.
-    assert result["next_specialist"] == CoreSpecialist.DEFAULT_RESPONDER.value
+    # The router should see the final response and route to the archiver.
+    assert result["next_specialist"] == CoreSpecialist.ARCHIVER.value
 
 def setup_module(module):
     """Set up logging for the test module."""

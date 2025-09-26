@@ -132,8 +132,8 @@ class GeminiAdapter(BaseAdapter):
         # The order of checks is important: Tool Call -> JSON -> Text
 
         # 1. Check for a tool call response.
-        if candidate.content.parts and hasattr(candidate.content.parts[0], 'function_call'):
-            part = candidate.content.parts[0]
+        if candidate.content.parts and hasattr(candidate.content.parts[0], 'function_call') and candidate.content.parts[0].function_call:
+            part = candidate.content.parts[0] # type: ignore
             function_call = part.function_call
 
             if not function_call.name:
@@ -147,11 +147,6 @@ class GeminiAdapter(BaseAdapter):
             }
             logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
             return tool_call_response
-
-        # If tools were requested but not returned, it's a failure for components like the router.
-        if request.tools:
-            logger.warning("GeminiAdapter was given tools but returned a text response instead of a tool call.")
-            return {"tool_calls": []}
 
         # 2. Check for a JSON response.
         if request.output_model_class:

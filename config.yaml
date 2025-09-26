@@ -193,7 +193,6 @@ specialists:
 
   archiver_specialist:
     type: "procedural"
-    archive_path: "./logs/archive"
     pruning_strategy: "count"
     pruning_max_count: 50
     description: "Summarizes the conversation and prepares the final report. This is the final step."

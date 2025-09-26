@@ -1,4 +1,4 @@
-# Audit Date: Sept 23, 2025
+
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -92,11 +92,7 @@ def test_data_extractor_no_text_to_process_on_empty_string(data_extractor_specia
     """
     # Arrange
     initial_state = {"messages": [], "artifacts": {"text_to_process": text_input}}
-    
-    if not text_input: # Only handles ""
-        result_state = data_extractor_specialist._execute_logic(initial_state)
-        data_extractor_specialist.llm_adapter.invoke.assert_not_called()
-        assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
-    else: # Handles "   "
-        with pytest.raises(ValueError, match="failed to get a valid JSON response"):
-            data_extractor_specialist._execute_logic(initial_state)
+    result_state = data_extractor_specialist._execute_logic(initial_state)
+    # Assert
+    data_extractor_specialist.llm_adapter.invoke.assert_not_called()
+    assert "'file_specialist' should probably run first" in result_state["messages"][-1].content

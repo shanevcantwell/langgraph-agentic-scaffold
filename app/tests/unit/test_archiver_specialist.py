@@ -5,20 +5,22 @@ from app.src.specialists.archiver_specialist import ArchiverSpecialist
 
 @pytest.fixture
 def archiver_specialist(tmp_path, initialized_specialist_factory):
-    """Provides an ArchiverSpecialist instance with a temporary archive directory."""
+    """
+    Provides an ArchiverSpecialist instance, mocking the environment variable
+    to point its archive directory to a temporary path for isolated testing.
+    """
     archive_dir = tmp_path / "test_archives"
-    # The specialist creates this directory, so we don't need to mkdir here.
 
-    specialist = initialized_specialist_factory(
-        "ArchiverSpecialist",
-        specialist_name_override="archiver_specialist",
-        config_override={
-            "archive_dir": str(archive_dir),
-            "pruning_strategy": "count",
-            "pruning_max_count": 5,
-        },
-    )
-    return specialist
+    with patch.dict(os.environ, {"AGENTIC_SCAFFOLD_ARCHIVE_PATH": str(archive_dir)}):
+        specialist = initialized_specialist_factory(
+            "ArchiverSpecialist",
+            specialist_name_override="archiver_specialist",
+            config_override={
+                "pruning_strategy": "count",
+                "pruning_max_count": 5,
+            },
+        )
+        return specialist
 
 @pytest.fixture
 def initial_state():
@@ -29,22 +31,6 @@ def initial_state():
         "artifacts": {"final_user_response.md": "This is the final response."},
         "scratchpad": {},
     }
-
-@pytest.fixture
-def specialist_config():
-    """Provides a basic config dictionary for testing."""
-    return {"archive_dir": "test_archives"}
-
-@patch("os.makedirs")
-def test_archiver_initialization_creates_directory(mock_makedirs, specialist_config):
-    """Tests that the specialist creates the archive directory on initialization."""
-    ArchiverSpecialist(
-        specialist_name="archiver_specialist",
-        specialist_config=specialist_config,
-    )
-    # The specialist expands user paths, so we check for the original path.
-    # os.path.expanduser is deterministic for paths without `~`.
-    mock_makedirs.assert_called_once_with(os.path.expanduser("test_archives"), exist_ok=True)
 
 def test_save_report_writes_to_file(archiver_specialist):
     """Tests that _save_report correctly writes content to a file."""

@@ -1,4 +1,3 @@
-# Audit Date: Sept 23, 2025
 # app/tests/unit/test_workflow_runner.py
 import pytest
 from unittest.mock import MagicMock

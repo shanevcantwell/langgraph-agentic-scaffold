@@ -1,4 +1,4 @@
-# Audit Date: Sept 23, 2025
+
 import pytest
 import os
 from unittest.mock import patch, MagicMock, mock_open
@@ -13,45 +13,21 @@ from langchain_core.messages import HumanMessage, AIMessage
 # on the filesystem. This is the standard best practice for testing file I/O.
 
 @pytest.fixture
-def mock_config_loader():
-    """Mocks the ConfigLoader to prevent file system access during tests."""
-    with patch('app.src.utils.config_loader.ConfigLoader') as mock_loader:
-        mock_loader.return_value.get_specialist_config.return_value = {
-            "root_dir": "./test_workspace",
-            "prompt_file": "fake_prompt.md"
-        }
-        mock_loader.return_value.get_provider_config.return_value = {}
-        yield mock_loader
-
-@pytest.fixture
-def mock_adapter_factory():
-    """Mocks the AdapterFactory to prevent LLM client instantiation."""
-    with patch('app.src.llm.factory.AdapterFactory') as mock_factory:
-        yield mock_factory
-
-@pytest.fixture
-def mock_load_prompt():
-    """Mocks the prompt loader."""
-    with patch('app.src.utils.prompt_loader.load_prompt') as mock_load:
-        mock_load.return_value = "Fake system prompt"
-        yield mock_load
-
-@pytest.fixture
-def file_specialist(tmp_path, mock_config_loader, mock_adapter_factory, mock_load_prompt):
+def file_specialist(tmp_path, initialized_specialist_factory):
     """Provides a FileSpecialist instance with a temporary workspace."""
     workspace = tmp_path / "test_workspace"
     workspace.mkdir()
-    
-    # Create a mock LLM adapter
-    mock_llm_adapter = MagicMock()
-    mock_adapter_factory.return_value.create_adapter.return_value = mock_llm_adapter
 
-    # Pass the mocked root_dir directly to specialist_config
-    specialist_config = {"root_dir": str(workspace)}
-    mock_config_loader.return_value.get_specialist_config.return_value.update(specialist_config)
-    
-    specialist = FileSpecialist(specialist_name="file_specialist", specialist_config=specialist_config)
-    specialist.llm_adapter = mock_llm_adapter # Manually set the mock adapter
+    # Use the centralized factory to create the specialist, providing the
+    # temporary workspace path as a configuration override.
+    specialist = initialized_specialist_factory(
+        "FileSpecialist",
+        specialist_name_override="file_specialist",
+        config_override={
+            "root_dir": str(workspace)
+        }
+    )
+
     assert specialist.root_dir == str(workspace)
     return specialist
 

@@ -32,16 +32,42 @@ class RouterSpecialist(BaseSpecialist):
         self.specialist_map = {k: v for k, v in specialist_configs.items() if k != self.specialist_name}
         logger.info(f"Router now aware of all specialist configurations.")
 
+    def _get_available_specialists(self, state: Dict[str, Any]) -> Dict[str, Dict]:
+        """Determines the list of specialists available for routing in the current turn."""
+        recommended_specialists = state.get("recommended_specialists")
+        if recommended_specialists:
+            # Filter the main specialist map based on recommendations
+            available = {name: self.specialist_map[name] for name in recommended_specialists if name in self.specialist_map}
+            logger.info(f"Filtering router choices based on Triage recommendations: {list(available.keys())}")
+            return available
+        return self.specialist_map
+
+    def _handle_llm_failure(self) -> Dict[str, Any]:
+        """Provides a robust fallback mechanism if the LLM fails to make a decision."""
+        logger.error("Router LLM failed to produce a valid tool call. Attempting to fall back to a default handler.")
+        # Fallback Priority: 1. Default Responder, 2. Archiver, 3. End
+        if CoreSpecialist.DEFAULT_RESPONDER.value in self.specialist_map:
+            next_specialist = CoreSpecialist.DEFAULT_RESPONDER.value
+            content = "Router failed to select a valid next specialist. Routing to DefaultResponderSpecialist."
+        elif CoreSpecialist.ARCHIVER.value in self.specialist_map:
+            next_specialist = CoreSpecialist.ARCHIVER.value
+            content = "Router failed to select a valid next specialist. Routing to ArchiverSpecialist for a final report."
+        else:
+            next_specialist = END
+            content = "Router failed to select a valid next specialist and no fallback handlers are available. Routing to EndSpecialist."
+        return {"next_specialist": next_specialist, "tool_calls": [], "content": content}
+
+    def _validate_llm_choice(self, llm_choice: str, valid_options: List[str]) -> str:
+        """Ensures the LLM's choice is a valid, available specialist."""
+        if llm_choice not in valid_options:
+            logger.warning(f"Router LLM returned an invalid specialist: '{llm_choice}'. Valid options are {valid_options}. Falling back to DefaultResponder.")
+            return CoreSpecialist.DEFAULT_RESPONDER.value
+        return llm_choice
+
     def _get_llm_choice(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Invokes the LLM to get the next specialist and returns the validated decision."""
         messages: List[BaseMessage] = state["messages"][:]  # Make a copy
-        recommended_specialists = state.get("recommended_specialists")
-
-        if recommended_specialists:
-            current_specialists = {name: self.specialist_map[name] for name in recommended_specialists if name in self.specialist_map}
-            logger.info(f"Filtering router choices based on Triage recommendations: {list(current_specialists.keys())}")
-        else:
-            current_specialists = self.specialist_map
+        current_specialists = self._get_available_specialists(state)
 
         if not current_specialists:
             logger.warning("Router has no specialists to choose from after filtering. Ending workflow.")
@@ -58,46 +84,39 @@ class RouterSpecialist(BaseSpecialist):
         tool_calls = response_data.get("tool_calls", [])
 
         next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist') if tool_calls and tool_calls[0].get('args') else None
-
         if not next_specialist_from_llm:
-            logger.error("Router LLM failed to produce a valid tool call. Attempting to fall back to a default handler.")
-            # Fallback Priority: 1. Default Responder, 2. Archiver, 3. End
-            if CoreSpecialist.DEFAULT_RESPONDER.value in self.specialist_map:
-                next_specialist = CoreSpecialist.DEFAULT_RESPONDER.value
-                content = "Router failed to select a valid next specialist. Routing to DefaultResponderSpecialist."
-            elif CoreSpecialist.ARCHIVER.value in self.specialist_map:
-                next_specialist = CoreSpecialist.ARCHIVER.value
-                content = "Router failed to select a valid next specialist. Routing to ArchiverSpecialist for a final report."
-            else:
-                next_specialist = CoreSpecialist.END.value
-                content = "Router failed to select a valid next specialist and no fallback handlers are available. Routing to EndSpecialist."
-            return {"next_specialist": next_specialist, "tool_calls": [], "content": content}
+            return self._handle_llm_failure()
         
-        valid_options = list(current_specialists.keys())
-        if next_specialist_from_llm not in valid_options:
-            logger.warning(f"Router LLM returned an invalid specialist: '{next_specialist_from_llm}'. Valid options are {valid_options}. Falling back to DefaultResponder.")
-            next_specialist_from_llm = CoreSpecialist.DEFAULT_RESPONDER.value
-        
-        content = f"Routing to specialist: {next_specialist_from_llm}"
-        return {"next_specialist": next_specialist_from_llm, "tool_calls": tool_calls, "content": content}
+        validated_choice = self._validate_llm_choice(next_specialist_from_llm, list(current_specialists.keys()))
+        content = f"Routing to specialist: {validated_choice}"
+        return {"next_specialist": validated_choice, "tool_calls": tool_calls, "content": content}
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         turn_count = state.get("turn_count", 0) + 1
         logger.debug(f"Executing turn {turn_count}")
 
-        next_specialist_name = ""
-        routing_type = ""
-        content = ""
-        tool_calls = []
-
-        # The router's primary role is to use its LLM to make a decision.
-        # It will filter its choices based on recommendations, but the final
-        # decision is always made by the LLM for consistency.
-        llm_decision = self._get_llm_choice(state)
-        routing_type = "llm_decision"
-        next_specialist_name = llm_decision["next_specialist"]
-        content = llm_decision["content"]
-        tool_calls = llm_decision.get("tool_calls", [])
+        # --- Pre-LLM Termination Checks ---
+        # Stage 3: If an archive report exists, the workflow must end.
+        if state.get("artifacts", {}).get("archive_report.md"):
+            logger.info("Router: Found 'archive_report.md'. Routing to END.")
+            next_specialist_name = END
+            routing_type = "deterministic_end"
+            content = "Workflow complete. Archive report generated."
+            tool_calls = []
+        # Stage 2: If a final user response exists, route to the archiver.
+        elif state.get("artifacts", {}).get("final_user_response.md"):
+            logger.info("Router: Found 'final_user_response.md'. Routing to archiver.")
+            next_specialist_name = CoreSpecialist.ARCHIVER.value
+            routing_type = "deterministic_archive"
+            content = "Final response generated. Routing to archiver for final report."
+            tool_calls = []
+        else:
+            # Stage 1: Standard LLM-based routing.
+            llm_decision = self._get_llm_choice(state)
+            next_specialist_name = llm_decision["next_specialist"]
+            routing_type = "llm_decision"
+            content = llm_decision["content"]
+            tool_calls = llm_decision.get("tool_calls", [])
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,

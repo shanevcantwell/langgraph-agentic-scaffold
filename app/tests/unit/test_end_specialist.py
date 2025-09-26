@@ -7,30 +7,22 @@ from langchain_core.messages import AIMessage
 from app.src.specialists.response_synthesizer_specialist import ResponseSynthesizerSpecialist
 from app.src.specialists.archiver_specialist import ArchiverSpecialist
 
-
 @pytest.fixture
-def mock_specialist_configs():
-    """Provides mock configurations for specialists orchestrated by EndSpecialist."""
-    return { # These configs are now embedded in the EndSpecialist's own config
-        "response_synthesizer_specialist": {"type": "llm", "prompt_file": "response_synthesizer_prompt.md"},
-        "archiver_specialist": {"type": "procedural", "archive_path": "./logs/archive"}
-    }
-
-@pytest.fixture
-def end_specialist(initialized_specialist_factory, mock_config_loader, mock_specialist_configs):
+def end_specialist(initialized_specialist_factory):
     """Fixture for an initialized EndSpecialist."""
-    # Update the main mock config to include the configs EndSpecialist needs
-    # The EndSpecialist's config now nests the configs of the specialists it controls.
-    mock_config = mock_config_loader.get_config.return_value
-    mock_config['specialists']['end_specialist'] = mock_specialist_configs
-    mock_config_loader.get_config.return_value = mock_config
-    # Use the standard factory to create the specialist
-    specialist = initialized_specialist_factory(
-        "EndSpecialist",
-        specialist_name_override="end_specialist"
-    )
-    return specialist
-
+    # Patch the classes that EndSpecialist instantiates internally. This isolates
+    # the EndSpecialist's orchestration logic without needing to mock the config loader.
+    with patch('app.src.specialists.end_specialist.ResponseSynthesizerSpecialist') as MockSynthesizer, \
+         patch('app.src.specialists.end_specialist.ArchiverSpecialist') as MockArchiver:
+        
+        # Use the standard factory to create the specialist
+        specialist = initialized_specialist_factory(
+            "EndSpecialist",
+            specialist_name_override="end_specialist"
+        )
+        # The instances created inside EndSpecialist will be mocks.
+        # We can now test the orchestration logic.
+        yield specialist
 
 def test_end_specialist_orchestrates_synthesis_and_archiving(end_specialist):
     """

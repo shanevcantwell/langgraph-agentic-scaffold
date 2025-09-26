@@ -21,30 +21,13 @@ class WebBuilder(BaseSpecialist):
         logger.info(f"---INITIALIZED {self.specialist_name}---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        # MODIFICATION: Remove all logic related to 'refinement_cycles' and 'iteration'.
-        # The specialist's job is to build or revise, not to manage loops.
-        
-        critique = state.get("artifacts", {}).get("critique.md")
-        current_html = state.get("artifacts", {}).get("html_document.html")
-        
-        logger.info("Executing WebBuilder logic.")
-
-        contextual_messages: List[BaseMessage] = state["messages"][:]
-
-        # If we have existing HTML and a critique, this is a refinement cycle.
-        if current_html and critique:
-            logger.info("Refining existing HTML based on critique.")
-            refinement_prompt = HumanMessage(content=(
-                "This is a refinement cycle. Please improve the following HTML based on the critique provided in the conversation history.\n\n"
-                f"Here is the previous HTML to improve:\n```html\n{current_html}\n```\n\n"
-                f"And here is the critique to address:\n```\n{critique}\n```"
-            ))
-            contextual_messages.append(refinement_prompt)
-        else:
-            logger.info("Performing initial HTML build from system plan.")
+        # The specialist's logic is now stateless. It simply acts on the current
+        # message history. If a critique was added by the CriticSpecialist, it will
+        # be in the history, naturally guiding the LLM to refine the HTML.
+        logger.info("Executing WebBuilder logic to generate/refine HTML.")
 
         request = StandardizedLLMRequest(
-            messages=contextual_messages,
+            messages=state["messages"],
             output_model_class=WebContent
         )
 

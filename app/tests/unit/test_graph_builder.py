@@ -7,6 +7,16 @@ from app.src.workflow.graph_builder import GraphBuilder
 from app.src.utils.errors import SpecialistLoadError
 from app.src.specialists.base import BaseSpecialist
 
+def create_mock_specialist(name, config, is_enabled=True, pre_flight_passes=True):
+    """Helper function to create a configured mock specialist instance."""
+    instance = MagicMock(spec=BaseSpecialist, specialist_name=name, specialist_config=config)
+    # Use PropertyMock for properties like is_enabled
+    type(instance).is_enabled = PropertyMock(return_value=is_enabled)
+    # Mock the pre-flight check method
+    instance._perform_pre_flight_checks.return_value = pre_flight_passes
+    # Return a mock class that returns this instance
+    return MagicMock(return_value=instance)
+
 # (ADR-TS-001, Task 2.1) Refactored to use centralized fixtures.
 
 @patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
@@ -33,32 +43,8 @@ def test_load_specialists_and_configure_router(
     mock_config['llm_providers'] = {"gemini-test": {"type": "gemini", "api_identifier": "gemini-test-model", "api_key": "test_key"}}
     mock_config['workflow'] = {"entry_point": "router_specialist"}
 
-    mock_router_instance = MagicMock(spec=BaseSpecialist, specialist_name="router_specialist", specialist_config=specialist_configs["router_specialist"])
-    type(mock_router_instance).is_enabled = PropertyMock(return_value=True)
-    mock_router_instance._perform_pre_flight_checks.return_value = True
-
-    mock_spec1_instance = MagicMock(spec=BaseSpecialist, specialist_name="specialist1", specialist_config=specialist_configs["specialist1"])
-    type(mock_spec1_instance).is_enabled = PropertyMock(return_value=True)
-    mock_spec1_instance._perform_pre_flight_checks.return_value = True
-
-    mock_spec2_instance = MagicMock(spec=BaseSpecialist, specialist_name="specialist2", specialist_config=specialist_configs["specialist2"])
-    type(mock_spec2_instance).is_enabled = PropertyMock(return_value=True)
-    mock_spec2_instance._perform_pre_flight_checks.return_value = True
-
-    mock_end_instance = MagicMock(spec=BaseSpecialist, specialist_name="end_specialist", specialist_config=specialist_configs["end_specialist"])
-    type(mock_end_instance).is_enabled = PropertyMock(return_value=True)
-    mock_end_instance._perform_pre_flight_checks.return_value = True
-
     def get_class_side_effect(name, config):
-        if name == "router_specialist":
-            return MagicMock(return_value=mock_router_instance)
-        elif name == "specialist1":
-            return MagicMock(return_value=mock_spec1_instance)
-        elif name == "specialist2":
-            return MagicMock(return_value=mock_spec2_instance)
-        elif name == "end_specialist":
-            return MagicMock(return_value=mock_end_instance)
-        return MagicMock()
+        return create_mock_specialist(name, config)
 
     mock_get_specialist_class.side_effect = get_class_side_effect
 
@@ -89,21 +75,8 @@ def test_build_graph(
     mock_config['llm_providers'] = {"gemini-test": {"type": "gemini", "api_identifier": "gemini-test-model", "api_key": "test_key"}}
     mock_config['workflow'] = {"entry_point": "router_specialist"}
 
-    mock_router_instance = MagicMock(spec=BaseSpecialist, is_enabled=True, specialist_name="router_specialist", specialist_config=spec_configs["router_specialist"])
-    mock_router_instance._perform_pre_flight_checks.return_value = True
-    mock_other_instance = MagicMock(spec=BaseSpecialist, is_enabled=True, specialist_name="some_other_specialist", specialist_config=spec_configs["some_other_specialist"])
-    mock_other_instance._perform_pre_flight_checks.return_value = True
-    mock_end_instance = MagicMock(spec=BaseSpecialist, is_enabled=True, specialist_name="end_specialist", specialist_config=spec_configs["end_specialist"])
-    mock_end_instance._perform_pre_flight_checks.return_value = True
-
     def get_class_side_effect(name, config):
-        if name == "router_specialist":
-            return MagicMock(return_value=mock_router_instance)
-        elif name == "some_other_specialist":
-            return MagicMock(return_value=mock_other_instance)
-        elif name == "end_specialist":
-            return MagicMock(return_value=mock_end_instance)
-        return MagicMock()
+        return create_mock_specialist(name, config)
 
     mock_get_specialist_class.side_effect = get_class_side_effect
 
@@ -133,32 +106,9 @@ def test_graph_builder_handles_disabled_specialist(mock_get_specialist_class, mo
     mock_config['llm_providers'] = {"gemini-test": {"type": "gemini", "api_identifier": "gemini-test-model", "api_key": "test_key"}}
     mock_config['workflow'] = {"entry_point": "enabled_specialist"}
 
-    mock_router_instance = MagicMock(spec=BaseSpecialist, specialist_name="router_specialist", specialist_config=spec_configs["router_specialist"])
-    type(mock_router_instance).is_enabled = PropertyMock(return_value=True)
-    mock_router_instance._perform_pre_flight_checks.return_value = True
-
-    mock_enabled_instance = MagicMock(spec=BaseSpecialist, specialist_name="enabled_specialist", specialist_config=spec_configs["enabled_specialist"])
-    type(mock_enabled_instance).is_enabled = PropertyMock(return_value=True)
-    mock_enabled_instance._perform_pre_flight_checks.return_value = True
-
-    mock_disabled_instance = MagicMock(spec=BaseSpecialist, specialist_name="disabled_specialist", specialist_config=spec_configs["disabled_specialist"])
-    type(mock_disabled_instance).is_enabled = PropertyMock(return_value=False)
-    mock_disabled_instance._perform_pre_flight_checks.return_value = True
-
-    mock_end_instance = MagicMock(spec=BaseSpecialist, specialist_name="end_specialist", specialist_config=spec_configs["end_specialist"])
-    type(mock_end_instance).is_enabled = PropertyMock(return_value=True)
-    mock_end_instance._perform_pre_flight_checks.return_value = True
-    
     def get_class_side_effect(name, config):
-        if name == "router_specialist":
-            return MagicMock(return_value=mock_router_instance)
-        elif name == "enabled_specialist":
-            return MagicMock(return_value=mock_enabled_instance)
-        elif name == "disabled_specialist":
-            return MagicMock(return_value=mock_disabled_instance)
-        elif name == "end_specialist":
-            return MagicMock(return_value=mock_end_instance)
-        return MagicMock()
+        is_enabled = config.get("is_enabled", True)
+        return create_mock_specialist(name, config, is_enabled=is_enabled)
 
     mock_get_specialist_class.side_effect = get_class_side_effect
 
@@ -186,32 +136,9 @@ def test_graph_builder_handles_pre_flight_check_failure(mock_get_specialist_clas
     mock_config['llm_providers'] = {"gemini-test": {"type": "gemini", "api_identifier": "gemini-test-model", "api_key": "test_key"}}
     mock_config['workflow'] = {"entry_point": "passing_specialist"}
 
-    mock_router_instance = MagicMock(spec=BaseSpecialist, specialist_name="router_specialist", specialist_config=spec_configs["router_specialist"])
-    type(mock_router_instance).is_enabled = PropertyMock(return_value=True)
-    mock_router_instance._perform_pre_flight_checks.return_value = True
-
-    mock_passing_instance = MagicMock(spec=BaseSpecialist, specialist_name="passing_specialist", specialist_config=spec_configs["passing_specialist"])
-    type(mock_passing_instance).is_enabled = PropertyMock(return_value=True)
-    mock_passing_instance._perform_pre_flight_checks.return_value = True
-
-    mock_failing_instance = MagicMock(spec=BaseSpecialist, specialist_name="failing_specialist", specialist_config=spec_configs["failing_specialist"])
-    type(mock_failing_instance).is_enabled = PropertyMock(return_value=True)
-    mock_failing_instance._perform_pre_flight_checks.return_value = False
-
-    mock_end_instance = MagicMock(spec=BaseSpecialist, specialist_name="end_specialist", specialist_config=spec_configs["end_specialist"])
-    type(mock_end_instance).is_enabled = PropertyMock(return_value=True)
-    mock_end_instance._perform_pre_flight_checks.return_value = True
-
     def get_class_side_effect(name, config):
-        if name == "router_specialist":
-            return MagicMock(return_value=mock_router_instance)
-        elif name == "passing_specialist":
-            return MagicMock(return_value=mock_passing_instance)
-        elif name == "failing_specialist":
-            return MagicMock(return_value=mock_failing_instance)
-        elif name == "end_specialist":
-            return MagicMock(return_value=mock_end_instance)
-        return MagicMock()
+        pre_flight_passes = name != "failing_specialist"
+        return create_mock_specialist(name, config, pre_flight_passes=pre_flight_passes)
 
     mock_get_specialist_class.side_effect = get_class_side_effect
 

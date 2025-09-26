@@ -36,12 +36,20 @@ class StructuredDataExtractor(BaseSpecialist):
                 content=error_message
             )]}
 
+        if not isinstance(pydantic_schema, type) or not issubclass(pydantic_schema, BaseModel):
+            error_message = f"Invalid 'extraction_schema' provided in scratchpad. Expected a Pydantic model class, but got {type(pydantic_schema).__name__}."
+            return {"messages": [create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content=error_message
+            )]}
+
         # Use the system LLM to generate a structured plan (the data object).
         # We pass the schema as a tool and force the LLM to use it.
         request = StandardizedLLMRequest(
             messages=messages,
             tools=[pydantic_schema],
-            tool_choice=pydantic_schema.__name__
+            force_tool_call=True
         )
         response = self.llm_adapter.invoke(request)
         
@@ -54,8 +62,16 @@ class StructuredDataExtractor(BaseSpecialist):
                 content=fallback_msg
             )]}
 
-        # The "execution" is simply validating and returning the structured data.
-        extracted_data = pydantic_schema(**tool_calls[0]['args'])
+        try:
+            # The "execution" is simply validating and returning the structured data.
+            extracted_data = pydantic_schema(**tool_calls[0]['args'])
+        except Exception as e:
+            error_message = f"LLM tool call arguments failed Pydantic validation for schema '{pydantic_schema.__name__}'. Error: {e}"
+            return {"messages": [create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content=error_message
+            )]}
 
         success_message = create_llm_message(
             specialist_name=self.specialist_name,

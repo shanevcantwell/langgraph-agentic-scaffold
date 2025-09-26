@@ -64,6 +64,16 @@ class InvokeRequest(BaseModel):
         description="The initial user prompt to send to the agentic graph.",
         examples=["What is the capital of France?"]
     )
+    text_to_process: Optional[str] = Field(
+        None,
+        description="Optional text content to be processed (e.g., from an uploaded file).",
+        examples=["This is the content of a document."]
+    )
+    image_to_process: Optional[str] = Field(
+        None,
+        description="Optional base64-encoded image to be processed.",
+        examples=["data:image/png;base64,iVBORw0KGgo..."]
+    )
 
 class InvokeResponse(BaseModel):
     final_output: Dict[str, Any] = Field(
@@ -82,17 +92,15 @@ async def stream_graph(request: InvokeRequest):
     try:
         logger.info(f"Received request to stream graph with prompt: '{request.input_prompt}'")
         
-        async def event_generator():
-            async for event in workflow_runner.run_streaming(goal=request.input_prompt):
-                # Check if the event is the final state dictionary
-                if isinstance(event, dict):
-                    # If it is, serialize it to JSON and prefix it for the client
-                    import json
-                    yield f"FINAL_STATE::{json.dumps(event)}\n"
-                else:
-                    # Otherwise, it's a log string, so yield it directly
-                    yield f"{event}\n"
-        return StreamingResponse(event_generator(), media_type="text/event-stream")
+        # The runner's streaming method is already an async generator.
+        # We can pass it directly to the StreamingResponse.
+        # This simplifies the code and ensures proper handling of the async iterator.
+        return StreamingResponse(
+            workflow_runner.run_streaming(
+                goal=request.input_prompt, text_to_process=request.text_to_process, image_to_process=request.image_to_process
+            ),
+            media_type="text/event-stream"
+        )
     except WorkflowError as e:
         logger.error(f"Workflow streaming error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")
@@ -100,8 +108,10 @@ async def stream_graph(request: InvokeRequest):
 @app.post("/v1/graph/invoke", response_model=InvokeResponse)
 def invoke_graph(request: InvokeRequest):
     try:
-        logger.info(f"Received request to invoke graph with prompt: '{request.input_prompt}'")
-        final_state = workflow_runner.run(goal=request.input_prompt)
+        logger.info(f"Received sync request to invoke graph with prompt: '{request.input_prompt}'")
+        final_state = workflow_runner.run(
+            goal=request.input_prompt, text_to_process=request.text_to_process, image_to_process=request.image_to_process
+        )
     
         if error_report := final_state.get("error_report"):
             logger.error("Workflow ended with an error. Returning error report.")
