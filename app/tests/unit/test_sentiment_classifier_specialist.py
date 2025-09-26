@@ -5,7 +5,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from app.src.specialists.sentiment_classifier_specialist import SentimentClassifierSpecialist, Sentiment
 from app.src.utils.errors import LLMInvocationError
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
+from pydantic import ValidationError
 
 @pytest.fixture
 def sentiment_classifier_specialist(initialized_specialist_factory):
@@ -43,12 +44,12 @@ def test_sentiment_classifier_handles_invalid_sentiment_value(sentiment_classifi
     sentiment_classifier_specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "ambivalent"}}
     initial_state = {"messages": [HumanMessage(content="It was okay.")]}
 
-    # Act
+    # Act & Assert
+    # The specialist catches the validation error and creates a self-correction message.
     result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+    assert "I was unable to parse the sentiment" in result_state["messages"][0].content
+    assert "ambivalent" in result_state["messages"][0].content
 
-    # Assert
-    assert "sentiment" not in result_state.get("artifacts", {})
-    assert "Pydantic validation failed" in result_state["messages"][0].content
 
 @pytest.mark.parametrize("bad_response", [
     {"json_response": {"wrong_key": "positive"}},
@@ -61,10 +62,11 @@ def test_sentiment_classifier_handles_malformed_llm_response(sentiment_classifie
     sentiment_classifier_specialist.llm_adapter.invoke.return_value = bad_response
     initial_state = {"messages": [HumanMessage(content="Some text.")]}
 
+    # Act & Assert
     if bad_response.get("json_response") is None:
-        with pytest.raises(ValueError, match="SentimentClassifier failed to get a valid JSON response from the LLM."):
-            sentiment_classifier_specialist._execute_logic(initial_state)
-    else: # Handles wrong_key
+        result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+        assert "did not return a 'json_response'" in result_state["messages"][0].content
+    else:  # Handles wrong_key and other validation errors
         result_state = sentiment_classifier_specialist._execute_logic(initial_state)
         assert "Pydantic validation failed" in result_state["messages"][0].content
 
@@ -73,10 +75,12 @@ def test_sentiment_classifier_handles_llm_invocation_error(sentiment_classifier_
     # Arrange
     sentiment_classifier_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API is down")
     initial_state = {"messages": [HumanMessage(content="Some text.")]}
-
-    # Act & Assert
-    with pytest.raises(LLMInvocationError, match="API is down"):
-        sentiment_classifier_specialist._execute_logic(initial_state)
+    
+    # Act
+    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+    # Assert
+    assert "An unexpected error occurred" in result_state["messages"][0].content
+    assert "API is down" in result_state["messages"][0].content
 
 @pytest.mark.parametrize("messages", [
     [],
@@ -87,32 +91,11 @@ def test_sentiment_classifier_no_human_message_to_analyze(sentiment_classifier_s
     # Arrange
     initial_state = {"messages": messages}
 
-    if not messages:
-        with pytest.raises(ValueError, match="Cannot classify sentiment of empty message history"):
-            sentiment_classifier_specialist._execute_logic(initial_state)
-    else: # Handles no_human_message
-        result_state = sentiment_classifier_specialist._execute_logic(initial_state)
-        assert "Pydantic validation failed" in result_state["messages"][0].content
-
-def test_sentiment_classifier_uses_last_human_message(sentiment_classifier_specialist):
-    """Tests that the specialist specifically analyzes the last HumanMessage."""
-    # Arrange
-    sentiment_classifier_specialist.llm_adapter.invoke.return_value = {"json_response": {"sentiment": "positive"}}
-    initial_state = {
-        "messages": [
-            HumanMessage(content="This is old and bad."),
-            AIMessage(content="Some AI response."),
-            HumanMessage(content="This is new and good!")
-        ]
-    }
-
-    # Act
-    sentiment_classifier_specialist._execute_logic(initial_state)
-
-    # Assert
-    invoke_request = sentiment_classifier_specialist.llm_adapter.invoke.call_args[0][0]
-    assert "This is new and good!" in invoke_request.messages[-1].content
-    sentiment_classifier_specialist._execute_logic(initial_state)
+    # Act & Assert
+    result_state = sentiment_classifier_specialist._execute_logic(initial_state)
+    assert "I cannot run because there is no text to analyze" in result_state["messages"][0].content
+    assert "recommended_specialists" in result_state
+    assert result_state["recommended_specialists"] == ["default_responder_specialist"]
 
 def test_sentiment_classifier_uses_last_human_message(sentiment_classifier_specialist):
     """Tests that the specialist specifically analyzes the last HumanMessage."""

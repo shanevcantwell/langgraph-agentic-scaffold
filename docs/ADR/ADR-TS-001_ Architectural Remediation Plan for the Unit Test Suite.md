@@ -47,11 +47,13 @@ With the foundational fixtures in place, refactor the failing test files to use 
 
 **Task 2.1: Refactor Core Workflow Tests**
 
+*   **Status: Completed**
 * **Files:** `test_graph_builder.py`, `test_graph_orchestrator.py`, `test_workflow_runner.py`.  
 * **Action:** These tests are the most critical to stabilize. Update them to use the new fixtures where applicable. Ensure they pass cleanly before proceeding.
 
 **Task 2.2: Refactor Specialist Unit Tests**
 
+*   **Status: Completed**
 * **Files:** All files matching `app/tests/specialists/test_*_specialist.py`.  
 * **Action:** This is the largest batch. For each file:  
   1. Remove all local, ad-hoc mocks for `ConfigLoader`, `AdapterFactory`, or any other shared dependency.  

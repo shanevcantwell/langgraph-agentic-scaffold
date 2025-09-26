@@ -118,10 +118,29 @@ def initialized_specialist_factory(
         if config_override:
             specialist_config.update(config_override)
 
-        # Step 1: Instantiate the specialist with its name and final config
-        specialist_instance = SpecialistClass(
-            specialist_name=specialist_name, specialist_config=specialist_config
-        )
+        # Step 1: Instantiate the specialist, handling special cases
+        if class_name == "EndSpecialist":
+            # EndSpecialist requires the adapter_factory in its constructor
+            specialist_instance = SpecialistClass(
+                specialist_name=specialist_name,
+                specialist_config=specialist_config,
+                adapter_factory=mock_adapter_factory,
+            )
+        elif class_name == "CriticSpecialist":
+            # CriticSpecialist requires a critique_strategy. We'll mock it.
+            # This avoids having to refactor test_critic_specialist.py for now.
+            mock_strategy = MagicMock(name="mock_critique_strategy")
+            specialist_instance = SpecialistClass(
+                specialist_name=specialist_name,
+                specialist_config=specialist_config,
+                critique_strategy=mock_strategy,
+            )
+        else:
+            # Standard instantiation for most specialists
+            specialist_instance = SpecialistClass(
+                specialist_name=specialist_name,
+                specialist_config=specialist_config,
+            )
 
         # Step 2: Simulate GraphBuilder's logic by creating and binding the mock adapter
         mock_llm_adapter = mock_adapter_factory.create_adapter(specialist_name)

@@ -105,7 +105,7 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         for _ in response_chunks:
             pass
         
-        outputs = [msg.get('content', '') for msg in interpreter.messages if msg.get('role') == 'computer' and msg.get('type') == 'output']
+        outputs = [msg.get('content', '') for msg in interpreter.messages if msg.get('role') == 'computer' and msg.get('type') == 'output' and msg.get('content')]
         final_output = "\n".join(outputs) if outputs else "Code executed with no output."
         
         logger.info(f"Phase 2 Complete. Execution output: {final_output[:500]}...")

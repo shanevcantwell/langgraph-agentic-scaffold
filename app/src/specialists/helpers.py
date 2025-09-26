@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, List
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from ..llm.adapter import BaseAdapter
 
 def create_llm_message(
@@ -26,3 +26,24 @@ def create_llm_message(
         name=specialist_name,
         additional_kwargs=final_kwargs,
     )
+
+def create_error_message(
+    error_content: str,
+    recommended_specialists: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Creates a standardized dictionary for returning an error message and
+    re-routing recommendations from a specialist.
+    """
+    message = AIMessage(
+        content=error_content,
+        name="error_handler",
+        additional_kwargs={"is_error": True},
+    )
+    
+    state_update: Dict[str, Any] = {"messages": [message]}
+    
+    if recommended_specialists:
+        state_update["recommended_specialists"] = recommended_specialists
+        
+    return state_update

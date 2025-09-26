@@ -43,8 +43,8 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
 
     assert "artifacts" in result_state
     assert "system_plan" in result_state["artifacts"]
-    assert result_state["artifacts"]["system_plan"]["plan_summary"] == mock_plan_summary
-    assert "Generate HTML" in result_state["artifacts"]["system_plan"]["execution_steps"] or "Use HTML, CSS, and basic JS." in result_state["artifacts"]["system_plan"]["execution_steps"]
+    assert result_state["artifacts"]["system_plan"]["plan_summary"] == mock_plan_summary # This is a dict now
+    assert "Generate HTML" in result_state["artifacts"]["system_plan"]["execution_steps"]
 
     assert "recommended_specialists" in result_state
     assert result_state["recommended_specialists"] == ["web_builder"]
