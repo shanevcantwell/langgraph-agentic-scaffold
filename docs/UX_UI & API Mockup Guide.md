@@ -20,13 +20,13 @@ The user's entry point for interacting with the agent.
 
 *   **Description:** A simple text input area where the user types their prompt or command.
 *   **API Interaction:** Submitting a prompt triggers a `POST` request to the `/v1/invoke` endpoint.
-
+*   **API Interaction:** Submitting a prompt triggers a `POST` request to the `/v1/graph/stream` endpoint.
 ### **2.2 The Agent Log (Real-time Feedback)**
 
 Provides a live, streaming view of the agent's internal state and actions. This is crucial for user trust and transparency.
 
 *   **Description:** A scrolling log that displays messages from the various specialists as they work. It should feel like watching a team of experts collaborate in a chat room.
-*   **API Interaction:** The UI should connect to the `WS /v1/ws/agent_monitor` WebSocket endpoint. Upon connection, it will receive a stream of `TurnUpdate` objects as the agent works.
+*   **API Interaction:** The UI consumes the `StreamingResponse` from the `/v1/graph/stream` endpoint.
 
 ### **2.3 The Artifact Display (The Result)**
 
@@ -34,6 +34,7 @@ The area where the final output of the agent's work is presented.
 
 *   **Description:** A flexible component that can render different types of final products. The UI should be able to handle various artifact types gracefully.
 *   **API Interaction:** The final `Artifact` object is delivered as part of the JSON response from the `POST /v1/invoke` endpoint once the entire workflow is complete.
+*   **API Interaction:** The final artifacts are delivered as part of the `FINAL_STATE` message in the stream from `/v1/graph/stream`.
 
 ### **2.4 The Settings Panel (User Configuration)**
 
@@ -44,9 +45,22 @@ Allows the user to make choices from a pre-approved list of options, as defined 
 
 ## **3.0 API Endpoints**
 
+### **3.1 `POST /v1/graph/invoke`**
+
+*   **Description:** A synchronous, non-streaming endpoint to initiate an agentic workflow. This is primarily for automated testing or simple use cases where a final result is expected without real-time updates.
+*   **Request Body:**
+    ```json
+    {
+      "input_prompt": "Your detailed request for the agent goes here.",
+      "text_to_process": "(Optional) The content of an uploaded text file.",
+      "image_to_process": "(Optional) A base64-encoded string of an uploaded image."
+    }
+    ```
+*   **Success Response (200 OK):** A JSON object containing the final state of the graph.
+
 ### **3.1 `POST /v1/graph/stream`**
 
-*   **Description:** The primary endpoint to initiate an agentic workflow. This is a blocking call that returns when the agent has finished its task or encountered a terminal error.
+*   **Description:** The primary endpoint for UI interaction. It initiates an agentic workflow and returns a real-time stream of server-sent events (SSE).
 *   **Request Body:**
     ```json
     {
@@ -64,28 +78,20 @@ Allows the user to make choices from a pre-approved list of options, as defined 
 *   **Description:** Retrieves the user-configurable settings as defined by the system's configuration files.
 *   **Request Body:** None.
 *   **Success Response (200 OK):** Returns a `SettingsConfiguration` object.
-*   **Note:** This endpoint is defined in the guide but not yet implemented in `api.py`.
 
 ## **4.0 Data Contracts**
 
 ### **4.1 `Stream Event` (for `/v1/graph/stream`)**
 
-The stream is composed of simple text lines, making it easy to consume.
+The stream is composed of simple, newline-delimited text lines, making it easy to consume. The `ApiClient` in the UI is responsible for parsing these lines and converting them into structured updates for the Gradio components.
 
 ```json
-{
-  "turn_id": 1,
-  "timestamp": "2025-08-23T15:30:00Z",
-  "event_type": "specialist_start" | "specialist_end" | "workflow_end",
-  "specialist_name": "file_specialist",
-  "status_message": "FileSpecialist is attempting to read 'my_document.txt'.",
-  "state_delta": {
-    "messages": [
-      {"type": "ai", "content": "Reading file...", "name": "file_specialist"}
-    ],
-    "text_to_process": "The content of the file..."
-  }
-}
+Entering node: router_specialist
+Routing to specialist: file_specialist...
+Finished node: router_specialist
+Entering node: file_specialist
+FileSpecialist action 'ReadFileParams' completed. Status: Successfully read file 'README.md'.
+FINAL_STATE::{"messages": [...], "artifacts": {...}}
 ```
 *   `event_type` (enum): The type of event that occurred.
 *   `specialist_name` (string): The name of the specialist that is currently active.

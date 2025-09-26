@@ -128,11 +128,7 @@ Contains all project documentation.
 -   `docs/CREATING_A_NEW_SPECIALIST.md`: A step-by-step tutorial for adding new specialists.
 -   `docs/PROJECT_STRUCTURE.md`: (This file) A detailed breakdown of the repository layout.
 -   `docs/UX_UI & API Mockup Guide.md`: UX/UI and API Mockup Guide.
--   `docs/ADR/`: Contains Architecture Decision Records (ADRs) that document key architectural choices and their rationale.
-    -   `ADR-004_ Specialist-Driven Conditional Routing.md`
-    -   `ADR_ 4-in-1 Chief of Staff and Router Refactor v2.md`
-    -   `ADR_ Directed Inter-Specialist Communication via the Dossier Pattern.md`
-    -   `ROADMAP_ l-a-s Project Bedrock_ A Unified Roadmap for the Next-Generation Scaffold Architecture.md`
+-   `docs/ADR/`: Contains Architecture Decision Records (ADRs) that document key architectural choices and their rationale for historical context.
 
 ## `scripts/`
 

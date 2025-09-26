@@ -98,12 +98,11 @@ class CodeWriterSpecialist(BaseSpecialist):
 To ensure your specialist integrates smoothly and reliably into the system, please follow these best practices:
 
 *   **Return Only Deltas:** Your specialist should only return the *new* state changes (the "delta"). For example, only return the new `AIMessage` you created, not the entire message history. The graph is configured to append new messages automatically.
-*   **Future-Proof Your State Management:** The system is moving towards a generic state management model. New specialists should be designed to use this new, preferred pattern:
+*   **Use Standard State Management Patterns:** To ensure your specialist is compatible with the system architecture, use the following state management patterns:
     *   **For significant data outputs:** Write to the `artifacts` dictionary.
         *   `return {"artifacts": {"my_report.txt": "This is the content..."}}`
     *   **For private, transient state (e.g., counters):** Write to the `scratchpad` dictionary.
         *   `return {"scratchpad": {"my_specialist_counter": 1}}`
-    *   This practice will ensure your specialist is compatible with future versions of the architecture without needing a refactor.
 *   **Do Not Modify Global State Counters:** The `turn_count` is managed exclusively by the `RouterSpecialist`. Do not attempt to change this value from within your specialist, as it will break the workflow in unpredictable ways.
 *   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (`recommended_specialists`) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows. See the `DEVELOPERS_GUIDE.md` for more details.
 
@@ -154,39 +153,34 @@ After creating your specialist, it's important to test it. You can write a simpl
 
 The project uses `pytest` as its testing framework. Here is an example test for our `CodeWriterSpecialist` that follows the `pytest` style.
 
-```python
-# app/tests/unit/test_code_writer_specialist.py
+```python# app/tests/unit/test_code_writer_specialist.py
 
+import pytest
 from unittest.mock import MagicMock, ANY
-from typing import Dict, Any
 from langchain_core.messages import AIMessage, HumanMessage
-from app.src.specialists.code_writer_specialist import CodeWriterSpecialist
 
-def test_code_writer_specialist_execute():
+@pytest.fixture
+def code_writer_specialist(initialized_specialist_factory):
+    """Fixture to provide an initialized CodeWriterSpecialist."""
+    return initialized_specialist_factory("CodeWriterSpecialist")
+
+def test_code_writer_specialist_execute(code_writer_specialist):
     # Arrange
-    specialist_config: Dict[str, Any] = {}
-    specialist = CodeWriterSpecialist(
-        specialist_name="code_writer_specialist",
-        specialist_config=specialist_config
-    )
-    
     # Mock the LLM adapter to avoid making a real API call.
-    specialist.llm_adapter = MagicMock()
+    # The adapter is already mocked by the initialized_specialist_factory.
     mock_response = "print('Hello, World!')"
-    specialist.llm_adapter.invoke.return_value = {"text_response": mock_response}
+    code_writer_specialist.llm_adapter.invoke.return_value = {"text_response": mock_response}
 
     # Define the initial state with a user message.
-    initial_state = {
-        "messages": [HumanMessage(content="Write a hello world script.")]
-    }
+    initial_state = {"messages": [HumanMessage(content="Write a hello world script.")]}
 
     # Act
     # We test the internal `_execute_logic` method directly.
-    result_state = specialist._execute_logic(initial_state)
+    result_state = code_writer_specialist._execute_logic(initial_state)
 
     # Assert
     # Check that the LLM adapter was called once.
-    specialist.llm_adapter.invoke.assert_called_once_with(ANY)
+    code_writer_specialist.llm_adapter.invoke.assert_called_once_with(ANY)
 
     # Check that the new AI message was added to the state correctly.
     # The specialist should only return the *new* message it created.

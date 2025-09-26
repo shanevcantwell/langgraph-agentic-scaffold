@@ -12,7 +12,7 @@ This document provides all the necessary information to understand, run, test, a
 
 The system is composed of several agent types with a clear separation of concerns:
 1.  **Specialists (`BaseSpecialist`):** Functional, LLM-driven components that perform a single, well-defined task.
-2.  **Runtime Orchestrator (`RouterSpecialist`):** A specialized agent that makes the turn-by-turn routing decisions *within* the running graph.
+2.  **Runtime Orchestrator (`RouterSpecialist` & `GraphOrchestrator`):** The `RouterSpecialist` is an agent that makes the turn-by-turn routing decisions *within* the graph. The `GraphOrchestrator` contains the runtime logic (decider functions, safety wrappers) that the graph itself executes.
 3.  **Structural Orchestrator (`GraphBuilder`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
 
 ## 3.0 Observability with LangSmith (Essential for Development)
@@ -66,15 +66,15 @@ Off-by-one errors in agentic loops can be common. Ensure that loop termination l
 
 ### 4.3 Enforce Centralized Control with Three-Stage Termination
 
-To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence** coordinated by a single procedural specialist. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion, which triggers a standardized shutdown process.
+To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion or produce final artifacts, which triggers a standardized shutdown process.
 
 This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event.
 
 The process is as follows:
 
 1.  **Stage 1: Signal Completion**
-    *   A functional specialist (e.g., `web_builder`) completes its primary task.
-    *   It signals this completion by including `task_is_complete: True` in its return state.
+    *   A functional specialist (e.g., `critic_specialist` after accepting work) completes its primary task.
+    *   It signals this by including `task_is_complete: True` in its return state.
     *   The `GraphBuilder` configures a conditional edge that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `end_specialist` instead of back to the main `router_specialist`.
 
 2.  **Stage 2: Coordinate Finalization (`EndSpecialist`)**
@@ -84,10 +84,10 @@ The process is as follows:
         2.  **Archiving:** It then immediately calls the `archiver_specialist`'s logic, passing it the complete, updated state (including the newly synthesized response) to generate the final `archive_report.md`.
 
 3.  **Stage 3: Terminate**
-    *   The `GraphBuilder` wires the `end_specialist` directly to the special `END` node in the graph.
-    *   After the `end_specialist` completes its coordinated sequence, the graph execution halts cleanly.
+    *   After the `archiver_specialist` runs (either via the `EndSpecialist` or by being routed to directly), it produces the `archive_report.md` artifact.
+    *   On the next turn, the `RouterSpecialist` performs a pre-LLM check. It sees the `archive_report.md` artifact and deterministically routes to the special `END` node, cleanly terminating the graph.
 
-This explicit `... -> (task_is_complete?) -> EndSpecialist -> END` sequence is defined in the `GraphBuilder` when the graph is compiled. This structural guarantee centralizes the entire termination process into a single, reliable node, which significantly enhances the system's robustness and simplifies the graph's wiring.
+This explicit, multi-stage sequence ensures that termination is a robust, observable process, centralizing the finalization logic and preventing premature or disorderly graph exits.
 
 ### 4.4 The Adapter Robust Parsing Contract
 
@@ -99,46 +99,59 @@ This explicit `... -> (task_is_complete?) -> EndSpecialist -> END` sequence is d
 
 ### 4.5 Understanding the 3-Tiered Configuration System
 
-The system's configuration is not a single file but a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved from bottom to top:
+The system's configuration is a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved at startup by the `ConfigLoader`.
 
 **Tier 1: Secrets (`.env`)**
-This file provides the raw secrets and connection details (API keys, URLs). It is never committed to source control.
+*   **File:** `.env`
+*   **Purpose:** Provides raw secrets and environment-specific connection details (e.g., `GOOGLE_API_KEY`, `LMSTUDIO_BASE_URL`).
+*   **Git:** Ignored.
 
 **Tier 2: Architectural Blueprint (`config.yaml`)**  
-This is the system's architectural source of truth, managed by the developer. It defines all possible components (specialists, LLM provider configurations) that can be used in the system.
+*   **File:** `config.yaml`
+*   **Purpose:** The system's architectural source of truth, managed by the developer. It defines all possible components (specialists, LLM provider configurations) and sets the default LLM binding (`default_llm_config`).
+*   **Git:** Committed to source control.
 
 **Tier 3: User Overrides (`user_settings.yaml`)**  
-This optional file allows an end-user to customize the system's behavior without modifying the core architecture. It is used to bind specific specialists to the LLM provider configurations defined in `config.yaml`.
+*   **File:** `user_settings.yaml`
+*   **Purpose:** An optional file for developers or end-users to customize the system's behavior without modifying the core architecture. It is used to:
+    1.  Bind specific specialists to different LLM providers (`specialist_model_bindings`).
+    2.  Provide the specific `api_identifier` (model name) for each provider (`provider_models`).
+*   **Git:** Ignored.
 
-At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (Tier 2) and then applies any overrides from your user settings (Tier 3). The application components then use this final configuration to function, pulling in the necessary secrets from the environment (Tier 1) as needed.
+At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (`config.yaml`), injects secrets from the environment (`.env`), and then applies any overrides from `user_settings.yaml`. This creates the final, runnable configuration.
 
 **Example of Merging Logic:**
 
 1.  **Developer defines the architecture in `config.yaml`:**
     ```yaml
     # config.yaml
+    default_llm_config: gemini_flash # Default model for all LLM specialists
+
     llm_providers:
-      powerful_model:
+      gemini_pro:
         type: "gemini"
-        api_identifier: "gemini-1.5-pro"
-      fast_model:
+      gemini_flash:
         type: "gemini"
-        api_identifier: "gemini-1.5-flash"
     
     specialists:
       router_specialist:
         type: "llm"
-        # ...
     ```
 
 2.  **User chooses a model in `user_settings.yaml`:**
     ```yaml
     # user_settings.yaml
-    specialist_model_bindings:
-      router_specialist: "fast_model" # User wants speed over power for routing.
+    specialist_model_bindings: # Override the default for a specific specialist
+      router_specialist: "gemini_pro"
+
+    provider_models: # Provide the specific model names for the providers
+      gemini_pro:
+        api_identifier: "gemini-1.5-pro-latest"
+      gemini_flash:
+        api_identifier: "gemini-1.5-flash-latest"
     ```
 
-3.  **Result:** At runtime, the `GraphBuilder` will instantiate the `router_specialist` and configure it to use the `fast_model` provider configuration (`gemini-1.5-flash`).
+3.  **Result:** At runtime, the `GraphBuilder` will instantiate the `router_specialist` and, seeing the override in `user_settings.yaml`, will configure it to use the `gemini_pro` provider with the `gemini-1.5-pro-latest` model identifier. All other LLM specialists will use the `gemini_flash` provider as defined by `default_llm_config`.
 
 ## 5.0 How to Extend the System: Creating Specialists
 
@@ -148,6 +161,41 @@ Please refer to it for:
 *   Creating a standard, LLM-based specialist.
 *   Creating an advanced, procedural specialist.
 *   Best practices for state management and agentic robustness patterns.
+
+## 6.0 Unit Testing Principles
+
+The project has a centralized, fixture-based testing architecture to ensure that unit tests are robust, maintainable, and easy to write. This approach eliminates brittle, ad-hoc mocks and provides a consistent way to test specialists in isolation.
+
+### 6.1 The Centralized Fixture Architecture (`conftest.py`)
+
+All core architectural components are mocked centrally in `app/tests/conftest.py`. This provides a single source of truth for test dependencies. Key fixtures include `mock_config_loader` and `mock_adapter_factory`.
+
+### 6.2 The `initialized_specialist_factory` (Canonical Fixture)
+
+The cornerstone of the testing strategy is the `initialized_specialist_factory` fixture. This is a factory function that returns a fully initialized specialist instance with all its core dependencies (like the LLM adapter) already mocked.
+
+**This is the canonical way to get a specialist instance for testing.**
+
+**Example Usage:**
+```python
+# in app/tests/unit/test_my_new_specialist.py
+
+def test_my_logic(initialized_specialist_factory):
+    # Get a ready-to-test instance of your specialist
+    my_specialist = initialized_specialist_factory("MyNewSpecialist")
+    
+    # The specialist's LLM adapter is already a mock
+    my_specialist.llm_adapter.invoke.return_value = {"text_response": "mocked LLM output"}
+    
+    # ... proceed with your test logic ...
+```
+
+### 6.3 Mandatory Policy for New Tests
+
+1.  **MUST use the `initialized_specialist_factory`:** All new unit tests for specialists **must** use this fixture to obtain the specialist instance under test.
+2.  **MUST NOT implement local mocks:** New tests **must not** create their own local mocks for core components like `ConfigLoader`, `AdapterFactory`, or the LLM adapter. Rely on the centralized fixtures to provide these.
+
+Adhering to these principles is mandatory to prevent architectural drift and ensure the long-term stability and maintainability of the test suite.
 
 ```markdown
 # docs/CREATING_A_NEW_SPECIALIST.md

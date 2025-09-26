@@ -28,16 +28,19 @@ The foundation of the new testing architecture will be a set of canonical, reusa
 
 **Task 1.1: Create `mock_config_loader` Fixture**
 
+*   **Status: Completed**
 * **Action:** Create a pytest fixture named `mock_config_loader`.  
 * **Implementation:** This fixture will instantiate and return a `MagicMock` of the `ConfigLoader`. It should be pre-configured with a default, valid configuration dictionary that can be used by the majority of tests. The fixture should allow for overriding the config for specific tests if needed.
 
 **Task 1.2: Create `mock_adapter_factory` Fixture**
 
+*   **Status: Completed**
 * **Action:** Create a pytest fixture named `mock_adapter_factory`.  
 * **Implementation:** This fixture will instantiate and return a `MagicMock` of the `AdapterFactory`. Its `create_adapter` method should return another `MagicMock` by default, representing a generic LLM adapter.
 
 **Task 1.3: Create `initialized_specialist_factory` Fixture (Critical Path)**
 
+*   **Status: Completed**
 * **Action:** Create a pytest fixture named `initialized_specialist_factory`.  
 * **Implementation:** This fixture will be a *factory function*. It will take a specialist's class name (e.g., `"RouterSpecialist"`) and an optional configuration override as input. It will perform the necessary steps to return a fully initialized instance of that specialist with its core dependencies (`ConfigLoader`, `AdapterFactory`, `llm_adapter`) correctly mocked using the fixtures defined above. This fixture encapsulates the complex instantiation logic, making it trivial for any test to get a valid subject under test.
 
@@ -62,6 +65,7 @@ With the foundational fixtures in place, refactor the failing test files to use 
 
 **Task 2.3: Refactor Integration and Application-Level Tests**
 
+*   **Status: Completed**
 * **Files:** `test_api.py`, `test_cli.py`, `test_gradio_app.py`.  
 * **Action:** Update the high-level mocks in these files. The primary change will be to patch `app.src.workflow.runner.GraphBuilder` instead of the old components. The goal is to provide a mock `GraphBuilder` whose `build()` method returns a mock application, isolating the integration tests from the full graph construction logic.
 
@@ -69,10 +73,12 @@ With the foundational fixtures in place, refactor the failing test files to use 
 
 **Task 3.1: Full Test Suite Execution**
 
+*   **Status: Completed**
 * **Action:** Run the entire test suite (`pytest`). All tests should now pass. Address any remaining outliers.
 
 **Task 3.2: Documentation and Best Practices**
 
+*   **Status: Completed**
 * **Action:** Add a section to the `DEVELOPERS_GUIDE.md` titled "Unit Testing Principles."  
 * **Content:** Briefly explain the new fixture-based architecture. Mandate that all new specialist tests **MUST** use the `initialized_specialist_factory` fixture and **MUST NOT** implement their own mocks for core components. This enforces the new architectural standard and prevents future brittleness.
 

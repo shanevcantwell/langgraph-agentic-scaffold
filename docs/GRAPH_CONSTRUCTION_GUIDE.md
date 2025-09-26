@@ -62,7 +62,7 @@ This is where the agent's behavior and control flow are defined. The system uses
 
 The system uses explicit, high-priority conditional edges for specific, well-defined sub-workflows, bypassing the main router for efficiency.
 
-*   **The "Generate-and-Critique" Loop (ADR-004):**
+*   **The "Generate-and-Critique" Loop:**
     *   An edge is added from the `critic_specialist` to the `GraphOrchestrator.after_critique_decider` function.
     *   If the critic's decision is `REVISE`, the graph is routed directly to the configured `revision_target` (e.g., `web_builder`), creating a tight, efficient refinement loop.
     *   If the decision is `ACCEPT`, it routes to the standard `check_task_completion` function to begin the termination sequence.
