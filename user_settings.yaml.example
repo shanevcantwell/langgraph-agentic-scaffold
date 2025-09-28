@@ -37,13 +37,15 @@ specialist_model_bindings:
   router_specialist: "lmstudio_router"
   prompt_triage_specialist: "lmstudio_router"
 
-# --- 3. Set the Default ---
-# The default LLM configuration to use for any specialist that is not
-# explicitly bound above. This must match a key from the providers defined above.
-default_llm_config: "gemini_flash"
-
   # --- Procedural Specialist Bindings ---
   # The Open Interpreter specialist is procedural, but it requires an LLM to function.
   # You MUST bind it to an LLM provider here for it to work. An OpenAI-compatible
   # provider (like LM Studio) is recommended.
   open_interpreter_specialist: "lmstudio_specialist"
+
+# --- 3. Set the Default ---
+# The default LLM configuration to use for any specialist that is not
+# explicitly bound above. This must match a key from the providers defined above.
+default_llm_config: "gemini_flash"
+
+  
