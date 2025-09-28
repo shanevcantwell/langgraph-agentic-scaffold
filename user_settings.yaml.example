@@ -12,9 +12,9 @@
 provider_models:
   # For cloud providers, this is the API model name.
   gemini_flash:
-    api_identifier: "gemini-2.5-flash-latest"
+    api_identifier: "gemini-2.5-flash"
   gemini_pro:
-    api_identifier: "gemini-2.5-pro-latest"
+    api_identifier: "gemini-2.5-pro"
 
   # For local providers (like LM Studio), this is typically the model file path/name
   # that the server is loading.
