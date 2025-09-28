@@ -178,29 +178,6 @@ def test_router_handles_invalid_llm_response(router_specialist):
     assert "Routing to specialist: default_responder_specialist" in ai_message.content
     assert ai_message.additional_kwargs["routing_type"] == "llm_decision" # It's still an LLM decision, just a corrected one.
 
-def test_router_stage_2_routes_to_archiver(router_specialist):
-    """
-    Tests Stage 2 of termination: after response synthesis, route to the archiver.
-    """
-    # Arrange
-    router_specialist.set_specialist_map({CoreSpecialist.ARCHIVER.value: {"description": "Archives things"}, CoreSpecialist.RESPONSE_SYNTHESIZER.value: {"description": "Synthesizes"}})
-
-    # State after ResponseSynthesizer has run, but before Archiver
-    state_after_synthesis = {
-        "artifacts": {"final_user_response.md": "This is the final response."},
-        "messages": [HumanMessage(content="Do the thing.")],
-        "routing_history": ["some_other_specialist", CoreSpecialist.RESPONSE_SYNTHESIZER.value]
-    }
-
-    # Act
-    result = router_specialist._execute_logic(state_after_synthesis)
-
-    # Assert
-    # This test is currently failing because the router logic doesn't yet
-    # have the pre-LLM check for this termination condition.
-    # The router should see the final response and route to the archiver.
-    assert result["next_specialist"] == CoreSpecialist.ARCHIVER.value
-
 def setup_module(module):
     """Set up logging for the test module."""
     logging.basicConfig(

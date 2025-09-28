@@ -9,24 +9,17 @@ class LLMProviderConfig(BaseModel):
     type: Literal["gemini", "lmstudio", "ollama"] = Field(
         ..., description="The type of the LLM provider implementation to use."
     )
-    # This is now optional in the base blueprint config, as it will be injected
-    # from user_settings.yaml by the ConfigLoader. It remains a required
-    # field for the final merged configuration used by the adapters.
-    api_identifier: Optional[str] = Field(
-        None,
-        description="The specific model identifier for the provider's API (e.g., 'gemini-1.5-pro' or 'local-model/nous-hermes-gguf').",
-    )
+
+
+class ProviderModelSettings(BaseModel):
+    """Defines the user-specific model identifier for a provider config."""
+    api_identifier: str = Field(..., description="The specific model identifier for the API.")
     context_window: Optional[int] = Field(
         None, description="The total context window size of the model (input + output)."
     )
     parameters: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="A dictionary of parameters to pass to the model's API (e.g., max_tokens, temperature)."
     )
-
-
-class ProviderModelSettings(BaseModel):
-    """Defines the user-specific model identifier for a provider config."""
-    api_identifier: str = Field(..., description="The specific model identifier for the API.")
 
 
 class WorkflowConfig(BaseModel):

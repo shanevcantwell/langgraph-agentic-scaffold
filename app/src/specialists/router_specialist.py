@@ -99,12 +99,6 @@ class RouterSpecialist(BaseSpecialist):
             routing_type = "deterministic_end"
             content = "Workflow complete. Archive report generated."
             tool_calls = []
-        elif state.get("artifacts", {}).get("final_user_response.md"):
-            logger.info("Router: Found 'final_user_response.md'. Routing to archiver.")
-            next_specialist_name = CoreSpecialist.ARCHIVER.value
-            routing_type = "deterministic_archive"
-            content = "Final response generated. Routing to archiver for final report."
-            tool_calls = []
         else:
             llm_decision = self._get_llm_choice(state)
             next_specialist_name = llm_decision["next_specialist"]

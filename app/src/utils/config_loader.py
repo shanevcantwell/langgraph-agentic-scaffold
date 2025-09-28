@@ -139,26 +139,28 @@ class ConfigLoader:
         for name, spec_config in merged["specialists"].items():
             # --- Layered Binding Logic ---
             # Determine the binding for ANY specialist by checking layers in order of precedence:
-            # 1. A specific binding for this specialist in user_settings.yaml (Layer 2).
-            # 2. The default binding from user_settings.yaml (Layer 2), ONLY if it's an LLM specialist.
+            # 1. A specific binding for this specialist in user_settings.yaml.
+            # 2. The default binding from user_settings.yaml, ONLY if it's an LLM specialist.
             user_specific_binding = bindings.get(name)
 
             final_binding = ""  # Use empty string to signify no binding found
 
-            # Layer 2: User-specific binding
+            # Tier 3 (Highest): User-specific binding from user_settings.yaml
             if user_specific_binding and user_specific_binding in merged["llm_providers"]:
                 final_binding = user_specific_binding
-            # Layer 2: User-default binding
+            # Tier 3 (Lowest): User-default binding from user_settings.yaml
             elif spec_config.get("type") == "llm" and default_binding and default_binding in merged["llm_providers"]:
                 final_binding = default_binding
 
             # Apply the binding if one was found
             if final_binding:
                 spec_config["llm_config"] = final_binding
-            # If no binding was found AND it's a required LLM specialist, disable it.
+            # If no binding was found AND it's a required LLM specialist, this is a fatal configuration error.
             elif spec_config.get("type") == "llm":
-                logger.warning(f"LLM specialist '{name}' has no model binding and will be disabled. Provide a binding in {USER_SETTINGS_FILE}.")
-                continue
+                raise ConfigError(
+                    f"LLM specialist '{name}' has no model binding. Provide a binding in '{USER_SETTINGS_FILE}' "
+                    f"via 'specialist_model_bindings' or set a global 'default_llm_config'."
+                )
 
             # Validate that LLM specialists have a fully defined provider after merging.
             if spec_config.get("type") == "llm" and final_binding and not merged["llm_providers"][final_binding].get("api_identifier"):

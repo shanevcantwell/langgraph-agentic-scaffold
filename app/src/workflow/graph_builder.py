@@ -135,7 +135,13 @@ class GraphBuilder:
             "4. **Use Provided Tools**: You MUST choose from the list of specialists provided to you."
         )
         dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"
-        router_instance.llm_adapter = self.adapter_factory.create_adapter(router_config.get("llm_config"), dynamic_system_prompt)
+
+        # Correctly resolve the binding from the merged configuration.
+        binding_key = router_config.get("llm_config")
+        if not binding_key:
+            raise WorkflowError(f"Could not resolve LLM binding for '{CoreSpecialist.ROUTER.value}'. Ensure it is bound in 'user_settings.yaml' or a 'default_llm_config' is set.")
+
+        router_instance.llm_adapter = self.adapter_factory.create_adapter(binding_key, dynamic_system_prompt)
         logger.info("RouterSpecialist adapter created with dynamic, context-aware prompt.")
 
     def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
@@ -147,7 +153,13 @@ class GraphBuilder:
         base_prompt = load_prompt(triage_config.get("prompt_file", ""))
         specialist_descs = "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])
         dynamic_system_prompt = f"{base_prompt}\n\n--- AVAILABLE SPECIALISTS ---\nYou MUST choose one or more of the following specialists:\n{specialist_descs}"
-        triage_instance.llm_adapter = self.adapter_factory.create_adapter(triage_config.get("llm_config"), dynamic_system_prompt)
+        
+        # Correctly resolve the binding. The ConfigLoader has already applied the
+        # default or a user override to the specialist's config dictionary.
+        binding_key = triage_config.get("llm_config")
+        if not binding_key:
+            raise WorkflowError(f"Could not resolve LLM binding for '{CoreSpecialist.TRIAGE.value}'. Ensure it is bound in 'user_settings.yaml' or a 'default_llm_config' is set.")
+        triage_instance.llm_adapter = self.adapter_factory.create_adapter(binding_key, dynamic_system_prompt)
         logger.info("Triage specialist adapter created with dynamic, context-aware prompt.")
 
     def _add_nodes_to_graph(self, workflow: StateGraph):

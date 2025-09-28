@@ -63,10 +63,18 @@ class WorkflowRunner:
         logger.info("Performing pre-flight environment checks...")
         llm_providers = self.config.get("llm_providers", {})
         
+        # Build a comprehensive set of all provider bindings that are actually in use.
         used_provider_bindings = set()
+        # 1. Check bindings on individual specialists
         for spec_config in self.config.get("specialists", {}).values():
             if binding := spec_config.get("llm_config"):
                 used_provider_bindings.add(binding)
+        # 2. Check the default binding
+        if default_binding := self.config.get("workflow", {}).get("default_llm_config"):
+            used_provider_bindings.add(default_binding)
+
+        if not used_provider_bindings:
+            logger.warning("Pre-flight check: No LLM providers appear to be in use.")
 
         for binding_key, provider_config in llm_providers.items():
             if binding_key not in used_provider_bindings:

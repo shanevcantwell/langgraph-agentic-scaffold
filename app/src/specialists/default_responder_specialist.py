@@ -54,4 +54,7 @@ class DefaultResponderSpecialist(BaseSpecialist):
 
         # Per the termination sequence, this specialist signals completion
         # by adding its final message and setting the `task_is_complete` flag.
-        return {"messages": [ai_message]}
+        return {
+            "messages": [ai_message],
+            "task_is_complete": True
+        }

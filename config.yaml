@@ -24,50 +24,26 @@ llm_providers:
   # A configuration for a local model via LM Studio
   lmstudio_router:
     # Uses the LMSTUDIO_BASE_URL from your .env file
-    # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "openai/gpt-oss-20b" # The model identifier for the server.
-    # The model's total context window (input + output). This value is used by the llm
-    # adapter to proactively prune the conversation history to prevent context overflow errors.
-    context_window: 4096
 
   lmstudio_specialist:
     # Uses the LMSTUDIO_BASE_URL from your .env file
-    # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
     type: "lmstudio"
-    api_identifier: "gemma3:27b" # The model identifier for the server.
-    # The model's total context window (input + output).
-    context_window: 8192
-    # Parameters to pass to the model's API.
-    parameters:
-      # max_tokens controls the maximum length of the model's *output*.
-      # It should be less than the context_window to leave room for the input prompt.
-      max_tokens: 8192
 
   # A configuration for a local model via Ollama
   ollama:
     # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
-    # Example: OLLAMA_BASE_URL=http://localhost:11434
     type: "ollama"
-    api_identifier: "gemma3:27b" # The model name registered with Ollama.
-    # Ollama uses different parameter names than OpenAI-compatible servers.
-    parameters:
-      # num_predict is Ollama's equivalent of max_tokens. It controls the
-      # maximum number of tokens to generate in the response.
-      num_predict: 8192
 
   # A configuration for a powerful, general-purpose Gemini model
   gemini_pro:
     # Uses GOOGLE_API_KEY from your .env file
     type: "gemini"
-    api_identifier: "gemini-2.5-pro"
-    # Future parameters could go here, e.g., temperature: 0.5
 
   # A configuration for a fast, cheaper Gemini model
   gemini_flash:
     # Uses GOOGLE_API_KEY from your .env file
     type: "gemini"
-    api_identifier: "gemini-2.5-flash"
 
 # ==============================================================================
 # WORKFLOW CONFIGURATION
@@ -171,14 +147,12 @@ specialists:
   prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
-    task_is_complete: false # Explicitly state that this specialist does not end the turn.
     description: "A specialist for advanced prompt engineering tasks. Can be used to generate or refine prompts for other specialists or to analyze prompt structures. Does not terminate the turn."
 
   default_responder_specialist:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
     description: "Handles direct, conversational Q&A and simple instructions that do not require file I/O or complex text analysis. This is the default specialist for general conversation or when no specific tool seems necessary. Acts as a fallback."
-    task_is_complete: true
 
   # --- Procedural Specialists with External Dependencies ---
   # open_interpreter_specialist: ...
