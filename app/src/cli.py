@@ -10,15 +10,42 @@ from typing import Optional
 API_BASE_URL = "http://127.0.0.1:8000"
 
 app = typer.Typer(
-    help="A command-line interface to interact with the agentic system."
+    help="A command-line interface for interacting with the agentic system.",
+    invoke_without_command=True,
 )
 
+@app.callback()
+def main(
+    ctx: typer.Context,
+    prompt: Annotated[Optional[str], typer.Argument(
+        help=(
+            "The initial prompt to send to the agentic system. If omitted, the CLI will read from "
+            "standard input."
+        )
+    )] = None,
+    json_only: Annotated[bool, typer.Option(
+        "--json-only",
+        "-j",
+        help="Output only the JSON response, suppressing other messages."
+    )] = False,
+):
+    """Default to invoke command if no subcommand is given."""
+    # If a subcommand (like 'stream') is used, do nothing in this callback.
+    if ctx.invoked_subcommand is not None:
+        return
 
+    # If no subcommand is given, we default to 'invoke'.
+    # We must also handle the case where the prompt comes from stdin.
+    if prompt is None and not sys.stdin.isatty():
+        prompt = sys.stdin.read().strip()
+    ctx.invoke(invoke, prompt=prompt, json_only=json_only)
 @app.command()
 def invoke(
     prompt: Annotated[Optional[str], typer.Argument(
-        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from "
-             "standard input."
+        help=(
+            "The initial prompt to send to the agentic system. If omitted, the CLI will read from "
+            "standard input."
+        )
     )] = None,
     json_only: Annotated[bool, typer.Option(
         "--json-only",
@@ -130,8 +157,10 @@ def invoke(
 @app.command()
 def stream(
     prompt: Annotated[Optional[str], typer.Argument(
-        help="The initial prompt to send to the agentic system. If omitted, the CLI will read from "
-             "standard input."
+        help=(
+            "The initial prompt to send to the agentic system. If omitted, the CLI will read from "
+            "standard input."
+        )
     )] = None,
     json_only: Annotated[bool, typer.Option(
         "--json-only",
