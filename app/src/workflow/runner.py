@@ -98,17 +98,21 @@ class WorkflowRunner:
 
         logger.info("All pre-flight checks passed successfully.")
 
-    def run(self, goal: str) -> Dict[str, Any]:
+    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None) -> Dict[str, Any]:
         """
         Executes the workflow with a given goal.
         """
         logger.info(f"--- Starting workflow for goal: '{goal}' ---")
-        
+
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
             "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
             "artifacts": {}, "scratchpad": {}, "recommended_specialists": None, "error_report": None
         }
+        if image_to_process:
+            initial_state["artifacts"]["uploaded_image.png"] = image_to_process
+        if text_to_process:
+            initial_state["artifacts"]["text_to_process"] = text_to_process
 
         try:
             final_state = self.app.invoke(initial_state, config={"recursion_limit": self.recursion_limit})
@@ -126,22 +130,22 @@ class WorkflowRunner:
                 "messages": [HumanMessage(content=goal)], "turn_count": 0,
             }
 
-    async def run_streaming(self, goal: str, text_content: str = None, image_b64: str = None) -> AsyncGenerator[str, None]:
+    async def run_streaming(self, goal: str, text_to_process: str = None, image_to_process: str = None) -> AsyncGenerator[str, None]:
         """
         Executes the workflow with a given goal and streams back real-time updates.
         """
         logger.info(f"--- Starting streaming workflow for goal: '{goal}' ---")
-        
+
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
             "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
             "artifacts": {}, "scratchpad": {}, "recommended_specialists": None, "error_report": None
         }
-        if image_b64:
-             initial_state["artifacts"]["uploaded_image.png"] = image_b64
-        if text_content:
-            initial_state["artifacts"]["text_to_process"] = text_content
-        
+        if image_to_process:
+             initial_state["artifacts"]["uploaded_image.png"] = image_to_process
+        if text_to_process:
+            initial_state["artifacts"]["text_to_process"] = text_to_process
+
         final_state = None
         try:
             async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
