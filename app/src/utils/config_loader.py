@@ -164,8 +164,11 @@ class ConfigLoader:
 
             # Validate that LLM specialists have a fully defined provider after merging.
             if spec_config.get("type") == "llm" and final_binding and not merged["llm_providers"][final_binding].get("api_identifier"):
-                logger.warning(f"LLM specialist '{name}' is bound to provider '{final_binding}', but no 'api_identifier' was specified in {USER_SETTINGS_FILE}. The specialist will be disabled.")
-                continue
+                raise ConfigError(
+                    f"Configuration Error for specialist '{name}': It is bound to provider '{final_binding}', "
+                    f"but this provider is missing its 'api_identifier' in '{USER_SETTINGS_FILE}'. "
+                    "The application cannot start without a fully configured model for each LLM specialist."
+                )
 
             # Add the configured specialist to the final list.
             # Procedural specialists without a binding will pass through here correctly.

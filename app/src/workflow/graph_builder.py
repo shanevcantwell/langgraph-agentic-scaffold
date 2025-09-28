@@ -87,8 +87,14 @@ class GraphBuilder:
                 else:
                     instance = SpecialistClass(specialist_name=name, specialist_config=config)
 
-                if not instance._perform_pre_flight_checks() or not instance.is_enabled:
-                    logger.warning(f"Specialist '{name}' failed pre-flight checks or is disabled. It will not be loaded.")
+                is_critical = name in self.config.get("workflow", {}).get("critical_specialists", [])
+                if not instance.is_enabled:
+                    logger.warning(f"Specialist '{name}' is disabled in its configuration. It will not be loaded.")
+                    continue
+                if not instance._perform_pre_flight_checks():
+                    if is_critical:
+                        raise SpecialistLoadError(f"Critical specialist '{name}' failed its pre-flight checks and could not be loaded. The application cannot start.")
+                    logger.error(f"Specialist '{name}' failed its pre-flight checks and will be disabled.")
                     continue
                 
                 binding_key = config.get("llm_config")
