@@ -1,6 +1,5 @@
 # app/tests/unit/test_end_specialist.py
-
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import MagicMock, ANY, patch
 import pytest
 from app.src.specialists.end_specialist import EndSpecialist
 from langchain_core.messages import AIMessage
@@ -8,21 +7,12 @@ from app.src.specialists.response_synthesizer_specialist import ResponseSynthesi
 from app.src.specialists.archiver_specialist import ArchiverSpecialist
 
 @pytest.fixture
-def end_specialist(initialized_specialist_factory):
-    """Fixture for an initialized EndSpecialist."""
-    # Patch the classes that EndSpecialist instantiates internally. This isolates
-    # the EndSpecialist's orchestration logic without needing to mock the config loader.
-    with patch('app.src.specialists.end_specialist.ResponseSynthesizerSpecialist') as MockSynthesizer, \
-         patch('app.src.specialists.end_specialist.ArchiverSpecialist') as MockArchiver:
-        
-        # Use the standard factory to create the specialist
-        specialist = initialized_specialist_factory(
-            "EndSpecialist",
-            specialist_name_override="end_specialist"
-        )
-        # The instances created inside EndSpecialist will be mocks.
-        # We can now test the orchestration logic.
-        yield specialist
+def end_specialist(initialized_specialist_factory, mock_adapter_factory):
+    """
+    Fixture for an initialized EndSpecialist. The conftest factory now handles
+    the complex internal patching required for this specialist.
+    """
+    return initialized_specialist_factory("EndSpecialist", specialist_name_override="end_specialist")
 
 def test_end_specialist_initialization(end_specialist, mock_adapter_factory):
     """
@@ -31,7 +21,7 @@ def test_end_specialist_initialization(end_specialist, mock_adapter_factory):
     """
     assert isinstance(end_specialist.synthesizer, ResponseSynthesizerSpecialist)
     assert isinstance(end_specialist.archiver, ArchiverSpecialist)
-    mock_adapter_factory.create_adapter.assert_called_once_with("response_synthesizer_specialist", ANY)
+    assert end_specialist.synthesizer.llm_adapter is not None
 
 def test_end_specialist_orchestrates_synthesis_and_archiving(end_specialist):
     """

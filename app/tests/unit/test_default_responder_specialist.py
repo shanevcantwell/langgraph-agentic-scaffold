@@ -42,7 +42,7 @@ def test_default_responder_generates_response_and_completes_task(default_respond
     assert isinstance(result_state["messages"][0], AIMessage)
     assert result_state["messages"][0].content == mock_llm_response_content
     assert result_state["messages"][0].name == "default_responder_specialist"
-    assert "task_is_complete" not in result_state
+    assert result_state["task_is_complete"] is True
 
 def test_default_responder_handles_empty_llm_response(default_responder_specialist):
     """Tests that the specialist provides a fallback message if LLM returns empty."""
@@ -64,7 +64,7 @@ def test_default_responder_handles_empty_llm_response(default_responder_speciali
     assert isinstance(result_state["messages"][0], AIMessage)
     assert "I was unable to provide a response." in result_state["messages"][0].content
     assert "LLM returned nothing useful." in result_state["messages"][0].content
-    assert "task_is_complete" not in result_state
+    assert result_state["task_is_complete"] is True
 
 def test_default_responder_filters_messages_correctly(default_responder_specialist):
     """Tests that only HumanMessage and its own AIMessages are passed to the LLM."""

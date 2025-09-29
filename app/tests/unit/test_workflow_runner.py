@@ -50,8 +50,8 @@ def test_workflow_runner_run_sync(mock_graph_builder):
     result = runner.run(goal)
 
     # Assert
-    runner.app.invoke.assert_called_once()
-    assert result == {"final_user_response": "Workflow complete"}
+    runner.app.invoke.assert_called_once() # The runner returns the full state now
+    assert result == {"artifacts": {"final_user_response.md": "Workflow complete"}}
 
 def test_workflow_runner_run_sync_handles_missing_artifact(mock_graph_builder):
     """Tests that the sync run method handles a missing final artifact gracefully."""
@@ -64,7 +64,7 @@ def test_workflow_runner_run_sync_handles_missing_artifact(mock_graph_builder):
     result = runner.run("Test goal")
 
     # Assert
-    assert result == {"final_user_response": "Workflow completed, but no final user response was generated."}
+    assert result == {"artifacts": {"some_other_artifact.txt": "some data"}}
 
 def test_workflow_runner_run_sync_handles_invoke_error(mock_graph_builder):
     """Tests that the sync run method raises a WorkflowError on graph invocation failure."""
@@ -76,8 +76,8 @@ def test_workflow_runner_run_sync_handles_invoke_error(mock_graph_builder):
     result = runner.run("Test goal")
 
     # Assert
-    assert "error" in result
-    assert "Graph failed!" in result["error"]
+    assert "error" in result # The runner now returns a dict with an error key
+    assert "Workflow failed catastrophically: Graph failed!" in result["error"]
 
 @pytest.mark.asyncio
 async def test_workflow_runner_run_streaming_handles_astream_error(mock_graph_builder):
@@ -89,7 +89,7 @@ async def test_workflow_runner_run_streaming_handles_astream_error(mock_graph_bu
     # Act & Assert
     error_message_found = False
     async for item in runner.run_streaming("Test goal"):
-        if "error" in item:
+        if "FINAL_STATE" in item and "error" in item:
             error_message_found = True
             assert "Stream failed!" in item
             break
@@ -109,11 +109,12 @@ async def test_workflow_runner_run_streaming(mock_graph_builder):
     runner.app.astream.assert_called_once()
     
     # Check the yielded log messages and final state
-    assert len(streamed_results) == 3
+    assert len(streamed_results) == 3 # 2 log lines, 1 final state
     assert "Finished node: node1" in streamed_results[0]
     assert "Finished node: node2" in streamed_results[1]
 
     # Check that the final state is yielded correctly
     final_state_message = streamed_results[-1]
     assert final_state_message.startswith("FINAL_STATE::")
-    assert '"final_user_response.md": "Final streaming response"' in final_state_message
+    # The runner now serializes the full state, so we check for the artifact within it.
+    assert '"artifacts":' in final_state_message and '"final_user_response.md": "Final streaming response"' in final_state_message

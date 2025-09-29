@@ -128,8 +128,11 @@ class GraphBuilder:
         # --- Deferred Configuration and Adapter Attachment ---
         all_configs = self.config.get("specialists", {})
 
-        if CoreSpecialist.ROUTER.value in loaded_specialists:
-            self._configure_router(loaded_specialists, all_configs)
+        try:
+            if CoreSpecialist.ROUTER.value in loaded_specialists:
+                self._configure_router(loaded_specialists, all_configs)
+        except (IOError, FileNotFoundError) as e:
+            raise SpecialistLoadError(f"Could not load specialist '{CoreSpecialist.ROUTER.value}' due to a prompt loading error: {e}") from e
         
         if CoreSpecialist.TRIAGE.value in loaded_specialists:
             self._configure_triage(loaded_specialists, all_configs)

@@ -18,7 +18,7 @@ class BaseSpecialist(ABC):
         self.specialist_name = specialist_name
         self.specialist_config = specialist_config
         self.llm_adapter: Optional[BaseAdapter] = None
-        self.is_enabled = self.specialist_config.get("enabled", True)
+        self.is_enabled = self.specialist_config.get("is_enabled", True)
 
     @abstractmethod
     def _execute_logic(self, state: dict) -> Dict[str, Any]:

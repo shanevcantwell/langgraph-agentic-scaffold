@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import json
 import re
 from typing import List, Dict, Type, Any, Optional, cast
+import html
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
 from ..utils.errors import LLMInvocationError, SafetyFilterError, RateLimitError
@@ -52,22 +53,18 @@ class BaseAdapter(ABC):
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         pass
     
-    def _robustly_parse_json_from_text(self, text: str) -> Optional[Dict[str, Any]]:
-        """A concrete helper to robustly extract a JSON object from a string."""
-        if not isinstance(text, str):
-            return None
-        
-        # Pattern to find JSON within markdown code blocks (```json ... ```)
-        match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
-        if match:
-            text = match.group(1)
-
     def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
         """
         Hook for adapters to post-process JSON responses before Pydantic validation.
         Default implementation returns the response as is.
         Subclasses can override this for specific schema transformations.
         """
+        # Some local models, when instructed to return JSON containing an HTML
+        # document, will incorrectly HTML-escape the string content of the
+        # 'html_document' field. This method corrects that by un-escaping it.
+        if 'html_document' in json_response and isinstance(json_response.get('html_document'), str):
+            json_response['html_document'] = html.unescape(json_response['html_document'])
+            
         return json_response
 
     def _robustly_parse_json_from_text(self, text: str) -> Optional[Dict[str, Any]]:

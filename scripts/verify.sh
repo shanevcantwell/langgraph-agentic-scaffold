@@ -49,8 +49,8 @@ for i in {1..30}; do
         echo "--- Running CLI verification test ---"
         # Read the prompt from a file and pipe it to the CLI. This is the most
         # robust way to handle complex prompts. The CLI defaults to the 'invoke'
-        # command and reads from stdin if no prompt argument is given.
-        JSON_RESPONSE=$(cat ./scripts/test_prompt.txt | ./scripts/cli.sh --json-only)
+        # command.
+        JSON_RESPONSE=$(cat ./scripts/test_prompt.txt | ./scripts/cli.sh --json-only -)
 
         # Check if JSON_RESPONSE is empty or not valid JSON
         if [ -z "$JSON_RESPONSE" ]; then

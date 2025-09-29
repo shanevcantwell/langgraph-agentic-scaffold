@@ -272,12 +272,3 @@ class LMStudioAdapter(BaseAdapter):
         except Exception as e:
             logger.error(f"LMStudio API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"LMStudio API error: {e}") from e
-
-    def _post_process_json_response(self, json_response: Dict[str, Any], output_model_class: Optional[Type[BaseModel]]) -> Dict[str, Any]:
-        # Some local models, when instructed to return JSON containing an HTML
-        # document, will incorrectly HTML-escape the string content of the
-        # 'html_document' field. This method corrects that by un-escaping it.
-        if 'html_document' in json_response and isinstance(json_response.get('html_document'), str):
-            logger.info("Found 'html_document' in response. Applying HTML un-escaping to its content.")
-            json_response['html_document'] = html.unescape(json_response['html_document'])
-        return json_response

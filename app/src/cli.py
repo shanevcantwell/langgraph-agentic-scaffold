@@ -14,66 +14,6 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
-@app.command()
-def invoke(
-    prompt: Annotated[Optional[str], typer.Argument(
-        help=(
-            "The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
-        )
-    )] = None,
-    json_only: Annotated[bool, typer.Option(
-        "--json-only",
-        "-j",
-        help="Output only the JSON response, suppressing other messages."
-    )] = False
-):
-    """
-    Sends a prompt to the agent's /v1/graph/invoke endpoint and prints the final response.
-    If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
-    """
-    _run_invoke(prompt, json_only)
-
-@app.command()
-def stream(
-    prompt: Annotated[Optional[str], typer.Argument(
-        help=(
-            "The initial prompt to send to the agentic system. If omitted, the CLI will read from "
-            "standard input."
-        )
-    )] = None,
-    json_only: Annotated[bool, typer.Option(
-        "--json-only",
-        "-j",
-        help="Output only the final JSON state, suppressing live logs."
-    )] = False
-):
-    """
-    Connects to the streaming endpoint (/v1/graph/stream) to get real-time logs from the agent.
-    If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
-    """
-    _run_stream(prompt, json_only)
-
-@app.callback()
-def main(
-    ctx: typer.Context,
-    prompt: Annotated[Optional[str], typer.Argument(
-        help=(
-            "The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
-        )
-    )] = None,
-    json_only: Annotated[bool, typer.Option(
-        "--json-only",
-        "-j",
-        help="Output only the JSON response, suppressing other messages."
-    )] = False,
-):
-    """
-    Default to the 'invoke' command if no subcommand is given.
-    This allows running the CLI like `./cli.sh "my prompt"` directly.
-    """
-    if ctx.invoked_subcommand is None:
-        _run_invoke(prompt, json_only)
-
 def _run_invoke(prompt: Optional[str], json_only: bool):
     """Shared logic for the invoke command."""
     if prompt is None:
@@ -113,12 +53,8 @@ def _run_invoke(prompt: Optional[str], json_only: bool):
         if json_only:
             print(json.dumps(final_output, indent=2))
         else:
-            if user_response := final_output.get("user_response"):
-                print("\n✅ --- Agent Final Response ---")
-                print(user_response)
-            else:
-                print("\n✅ --- Agent Final Response (Full State) ---")
-                print(json.dumps(final_output, indent=2))
+            print("\n✅ --- Agent Final Response (Full State) ---")
+            print(json.dumps(final_output, indent=2))
             print("--- End of Response ---")
 
         messages = final_output.get("messages", [])
@@ -142,6 +78,58 @@ def _run_invoke(prompt: Optional[str], json_only: bool):
             print("Please ensure the server is running with './scripts/server.sh' or '.\\scripts\\server.bat'.", file=sys.stderr)
             print(f"Details: {e}", file=sys.stderr)
         sys.exit(1)
+
+@app.command()
+def invoke(
+    prompt: Annotated[Optional[str], typer.Argument(
+        help=(
+            "The initial prompt to send to the agentic system. If omitted, the CLI will read from standard input."
+        )
+    )] = None,
+    json_only: Annotated[bool, typer.Option(
+        "--json-only",
+        "-j",
+        help="Output only the JSON response, suppressing other messages."
+    )] = False
+):
+    """
+    Sends a prompt to the agent's /v1/graph/invoke endpoint and prints the final response.
+    If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
+    """
+    _run_invoke(prompt, json_only)
+
+
+@app.command()
+def stream(
+    prompt: Annotated[Optional[str], typer.Argument(
+        help=(
+            "The initial prompt to send to the agentic system. If omitted, the CLI will read from "
+            "standard input."
+        )
+    )] = None,
+    json_only: Annotated[bool, typer.Option(
+        "--json-only",
+        "-j",
+        help="Output only the final JSON state, suppressing live logs."
+    )] = False
+):
+    """
+    Connects to the streaming endpoint (/v1/graph/stream) to get real-time logs from the agent.
+    If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
+    """
+    _run_stream(prompt, json_only)
+
+@app.callback()
+def main(
+    ctx: typer.Context,    
+):
+    """
+    Default to the 'invoke' command if no subcommand is given.
+    This allows running the CLI like `./cli.sh "my prompt"` directly.
+    """
+    if ctx.invoked_subcommand is None:
+        typer.echo("No command specified. Defaulting to 'invoke'. Use --help for options.", err=True)
+        ctx.invoke(invoke, prompt=ctx.params.get('prompt'))
 
 def _run_stream(prompt: Optional[str], json_only: bool):
     """
@@ -186,7 +174,18 @@ def _run_stream(prompt: Optional[str], json_only: bool):
             
             if final_state_json:
                 # Always print the final state for scripting purposes
-                print(final_state_json)
+                try:
+                    # Validate it's JSON before just printing
+                    json.loads(final_state_json)
+                    print(final_state_json)
+                except json.JSONDecodeError:
+                    if not json_only:
+                        print("\n❌ Verification FAILED: Failed to parse FINAL_STATE JSON.", file=sys.stderr)
+                    sys.exit(1)
+            else:
+                if not json_only:
+                    print("\n❌ Verification FAILED: Stream completed without a FINAL_STATE message.", file=sys.stderr)
+                sys.exit(1)
 
     except requests.exceptions.RequestException as e:
         if not json_only:

@@ -6,7 +6,7 @@ creating a modular and resilient testing architecture.
 """
 
 import importlib
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -36,6 +36,11 @@ def mock_config_loader() -> MagicMock:
                 "type": "llm",
                 "model": "default_llm",
                 "prompt_template": "router_specialist.md",
+            },
+            "response_synthesizer_specialist": {
+                "type": "llm",
+                "llm_config": "default_llm",
+                "prompt_file": "response_synthesizer_prompt.md"
             },
             # Add other specialist configs as needed for default tests
         },
@@ -120,12 +125,19 @@ def initialized_specialist_factory(
 
         # Step 1: Instantiate the specialist, handling special cases
         if class_name == "EndSpecialist":
-            # EndSpecialist requires the adapter_factory in its constructor
-            specialist_instance = SpecialistClass(
-                specialist_name=specialist_name,
-                specialist_config=specialist_config,
-                adapter_factory=mock_adapter_factory,
-            )
+            # For EndSpecialist, we patch the internal `_execute_logic` methods of the classes
+            # it depends on. This allows real instances to be created (passing isinstance checks)
+            # while still mocking the execution logic for test isolation.
+            with patch('app.src.specialists.response_synthesizer_specialist.ResponseSynthesizerSpecialist._execute_logic', return_value={}) as mock_synth_logic, \
+                 patch('app.src.specialists.archiver_specialist.ArchiverSpecialist._execute_logic', return_value={}) as mock_archive_logic:
+                specialist_instance = SpecialistClass(
+                    specialist_name=specialist_name,
+                    specialist_config={
+                        "response_synthesizer_specialist": mock_config_loader.get_config().get("specialists", {}).get("response_synthesizer_specialist", {}),
+                        "archiver_specialist": mock_config_loader.get_config().get("specialists", {}).get("archiver_specialist", {}),
+                    },
+                    adapter_factory=mock_adapter_factory,
+                )
         elif class_name == "CriticSpecialist":
             # CriticSpecialist requires a critique_strategy. We'll mock it.
             # This avoids having to refactor test_critic_specialist.py for now.

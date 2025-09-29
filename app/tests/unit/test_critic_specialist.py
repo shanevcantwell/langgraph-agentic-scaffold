@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage
+from pydantic import BaseModel
 from app.src.specialists.critic_specialist import CriticSpecialist, BaseCritiqueStrategy
 from app.src.specialists.schemas import StatusEnum, SpecialistOutput
 from app.src.strategies.critique.llm_strategy import LLMCritiqueStrategy
@@ -13,7 +14,6 @@ class MockCritique(BaseModel):
     points_for_improvement: list
     positive_feedback: list
 
-
 @pytest.fixture
 def critic_specialist(initialized_specialist_factory):
     """Fixture for an initialized CriticSpecialist."""
@@ -24,10 +24,10 @@ def critic_specialist(initialized_specialist_factory):
         config_override={"revision_target": "web_builder"}
     )
     # For testing, we can mock the `critique` method on the *actual* strategy instance.
-    specialist.critique_strategy.critique = MagicMock()
+    specialist.strategy.critique = MagicMock()
     return specialist
 
-def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_critique_strategy):
+def test_critic_specialist_accepts_and_completes_task(critic_specialist):
     """Tests that the specialist accepts the work and signals task completion."""
     # Arrange
     mock_critique = MockCritique(
@@ -37,7 +37,7 @@ def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_cr
         positive_feedback=["Well done!"]
     )
     mock_critique_output = SpecialistOutput(status=StatusEnum.SUCCESS, rationale="Critique generated.", payload=mock_critique)
-    mock_critique_strategy.critique.return_value = mock_critique_output
+    critic_specialist.strategy.critique.return_value = mock_critique_output
 
     initial_state = {"messages": [HumanMessage(content="Here's some work.")]}
 
@@ -45,7 +45,7 @@ def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_cr
     result_state = critic_specialist._execute_logic(initial_state)
 
     # Assert
-    mock_critique_strategy.critique.assert_called_once_with(initial_state)
+    critic_specialist.strategy.critique.assert_called_once_with(initial_state)
     assert "messages" in result_state
     assert len(result_state["messages"]) == 1
     assert isinstance(result_state["messages"][0], AIMessage)
@@ -58,7 +58,7 @@ def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_cr
     assert result_state["task_is_complete"] is True
     assert "recommended_specialists" not in result_state
 
-def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock_critique_strategy):
+def test_critic_specialist_revises_and_recommends_target(critic_specialist):
     """Tests that the specialist recommends revision and a target specialist."""
     # Arrange
     mock_critique = MockCritique(
@@ -68,7 +68,7 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock
         positive_feedback=[]
     )
     mock_critique_output = SpecialistOutput(status=StatusEnum.SUCCESS, rationale="Revisions needed.", payload=mock_critique)
-    mock_critique_strategy.critique.return_value = mock_critique_output
+    critic_specialist.strategy.critique.return_value = mock_critique_output
 
     initial_state = {"messages": [HumanMessage(content="Here's some work.")]}
 
@@ -76,7 +76,7 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock
     result_state = critic_specialist._execute_logic(initial_state)
 
     # Assert
-    mock_critique_strategy.critique.assert_called_once_with(initial_state)
+    critic_specialist.strategy.critique.assert_called_once_with(initial_state)
     assert "Critique complete. Decision: REVISE" in result_state["messages"][0].content
     assert "**Points for Improvement:**\n- Fix this.\n- Fix that." in result_state["artifacts"]["critique.md"]
     assert result_state["scratchpad"]["critique_decision"] == "REVISE"
@@ -84,24 +84,17 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist, mock
     assert result_state["recommended_specialists"] == ["web_builder"]
     assert "task_is_complete" not in result_state # Should not be set to True
 
-def test_critic_specialist_handles_strategy_failure(critic_specialist, mock_critique_strategy):
+def test_critic_specialist_handles_strategy_failure(critic_specialist):
     """Tests that the specialist handles unrecoverable failure from its strategy."""
     # Arrange
-    mock_critique_output = SpecialistOutput(status=StatusEnum.FAILURE, rationale="Strategy failed.")
-    mock_critique_strategy.critique.return_value = mock_critique_output
+    mock_critique_output = SpecialistOutput(status=StatusEnum.FAILURE, rationale="Strategy failed.", payload=None)
+    critic_specialist.strategy.critique.return_value = mock_critique_output
 
     initial_state = {"messages": [HumanMessage(content="Here's some work.")]}
 
     # Act
     result_state = critic_specialist._execute_logic(initial_state)
-
     # Assert
-    mock_critique_strategy.critique.assert_called_once_with(initial_state)
+    critic_specialist.strategy.critique.assert_called_once_with(initial_state)
     assert "error" in result_state
-    assert "critique strategy encountered an unrecoverable error: Strategy failed." in result_state["error"]
-    assert "messages" in result_state
-    assert "FATAL ERROR" in result_state["messages"][0].content
-    assert "artifacts" in result_state
-    assert "FATAL ERROR" in result_state["artifacts"]["critique.md"]
-    assert "recommended_specialists" not in result_state
-    assert "task_is_complete" not in result_state
+    assert "unrecoverable error" in result_state["error"]

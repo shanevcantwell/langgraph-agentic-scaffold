@@ -154,7 +154,7 @@ class GeminiAdapter(BaseAdapter):
             content = response.text or "{}"
             try:
                 json_response = json.loads(content)
-                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)} # Use the hook
             except json.JSONDecodeError as e:
                 logger.warning(
                     f"GeminiAdapter direct JSON parse failed: {e}. Attempting robust extraction. Content: {content[:500]}..."
