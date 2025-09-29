@@ -122,14 +122,20 @@ def stream(
 @app.callback()
 def main(
     ctx: typer.Context,    
+    prompt: Annotated[Optional[str], typer.Argument()] = None,
+    json_only: Annotated[bool, typer.Option("--json-only", "-j")] = False
 ):
     """
     Default to the 'invoke' command if no subcommand is given.
     This allows running the CLI like `./cli.sh "my prompt"` directly.
     """
     if ctx.invoked_subcommand is None:
-        typer.echo("No command specified. Defaulting to 'invoke'. Use --help for options.", err=True)
-        ctx.invoke(invoke, prompt=ctx.params.get('prompt'))
+        # Manually call the underlying function for the 'invoke' command,
+        # passing all the relevant options from the main callback.
+        # This correctly handles top-level options when no subcommand is specified.
+        if not json_only:
+            typer.echo("No command specified. Defaulting to 'invoke'. Use --help for options.", err=True)
+        _run_invoke(prompt, json_only)
 
 def _run_stream(prompt: Optional[str], json_only: bool):
     """

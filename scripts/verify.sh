@@ -23,6 +23,17 @@ fi
 PORT=8000
 HEALTH_CHECK_URL="http://127.0.0.1:${PORT}/"
 
+# --- Test Configuration ---
+# Default to 'ping' for a quick test. Pass 'complex' as an argument to use the complex prompt.
+TEST_TYPE=${1:-ping}
+if [ "$TEST_TYPE" == "ping" ]; then
+    PROMPT_FILE="./scripts/ping_prompt.txt"
+elif [ "$TEST_TYPE" == "complex" ]; then
+    PROMPT_FILE="./scripts/complex_prompt.txt"
+else
+    echo "Error: Invalid test type '$TEST_TYPE'. Use 'ping' or 'complex'." >&2; exit 1
+fi
+
 # --- Cleanup function ---
 # This function will be called on script exit to ensure the server is stopped.
 cleanup() {
@@ -46,11 +57,10 @@ for i in {1..30}; do
     if curl -s --fail "$HEALTH_CHECK_URL" > /dev/null;
     then
         echo "Server is up and running."
-        echo "--- Running CLI verification test ---"
-        # Read the prompt from a file and pipe it to the CLI. This is the most
-        # robust way to handle complex prompts. The CLI defaults to the 'invoke'
-        # command.
-        JSON_RESPONSE=$(cat ./scripts/test_prompt.txt | ./scripts/cli.sh --json-only -)
+        echo "--- Running CLI verification test (type: $TEST_TYPE) ---"
+        # Read the prompt from a file and pipe it to the CLI. The CLI now correctly
+        # handles top-level options and defaults to the 'invoke' command.
+        JSON_RESPONSE=$(cat "$PROMPT_FILE" | ./scripts/cli.sh --json-only)
 
         # Check if JSON_RESPONSE is empty or not valid JSON
         if [ -z "$JSON_RESPONSE" ]; then

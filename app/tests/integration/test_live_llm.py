@@ -8,8 +8,8 @@ from src.utils.config_loader import ConfigLoader
 @pytest.mark.live_llm
 def test_live_gemini_adapter_interaction():
     """Tests a basic interaction with a live Gemini model via the AdapterFactory."""
-    if not os.getenv("GEMINI_API_KEY"):
-        pytest.skip("GEMINI_API_KEY not set. Skipping live Gemini test.")
+    if not os.getenv("GOOGLE_API_KEY"):
+        pytest.skip("GOOGLE_API_KEY not set. Skipping live Gemini test.")
 
     try:
         # Manually load the config, which now resolves env vars. This keeps the

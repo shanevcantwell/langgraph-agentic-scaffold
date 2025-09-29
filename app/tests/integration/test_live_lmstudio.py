@@ -3,6 +3,7 @@ import os
 from src.llm.factory import AdapterFactory
 from src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage
+from src.utils.config_loader import ConfigLoader
 
 @pytest.mark.live_llm
 def test_live_lmstudio_adapter_interaction():
@@ -10,27 +11,18 @@ def test_live_lmstudio_adapter_interaction():
     if not os.getenv("LMSTUDIO_BASE_URL"):
         pytest.skip("LMSTUDIO_BASE_URL environment variable not set. Skipping live LM Studio test.")
 
-    # Mock the config to force the prompt_specialist to use the lmstudio provider
-    mock_config = {
-        "llm_providers": {
-            "local_lmstudio": {
-                "type": "lmstudio",
-                "api_identifier": "local-model", # A generic identifier
-                "base_url": os.getenv("LMSTUDIO_BASE_URL")
-            }
-        },
-        "specialists": {
-            "prompt_specialist": {
-                "type": "llm",
-                "llm_config": "local_lmstudio",
-                "prompt_file": "prompt_specialist_prompt.md"
-            }
-        }
-    }
-
     try:
-        factory = AdapterFactory(mock_config)
+        # Manually load the config, which now resolves env vars. This keeps the
+        # test integrated with the actual config files.
+        # Ensure your user_settings.yaml binds a specialist to an lmstudio provider.
+        # For example, binding 'prompt_specialist' to 'lmstudio_specialist'.
+        config = ConfigLoader().get_config()
+        
+        # Instantiate the factory with the loaded config
+        factory = AdapterFactory(config)
         adapter = factory.create_adapter(
+            # This specialist must be bound to an lmstudio provider in your user_settings.yaml
+            # for this test to work correctly.
             specialist_name="prompt_specialist",
             system_prompt="You are a helpful assistant."
         )

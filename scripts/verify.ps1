@@ -18,6 +18,21 @@ $Port = 8000
 $HealthCheckUrl = "http://127.0.0.1:$Port/"
 $TimeoutSeconds = 30
 
+# --- Test Configuration ---
+# Default to 'ping' for a quick test. Pass 'complex' as an argument to use the complex prompt.
+$TestType = if ($args.Count -gt 0) { $args[0] } else { "ping" }
+$PromptFile = ""
+if ($TestType -eq "ping") {
+    $PromptFile = Join-Path $ProjectRoot "scripts\ping_prompt.txt"
+}
+elseif ($TestType -eq "complex") {
+    $PromptFile = Join-Path $ProjectRoot "scripts\complex_prompt.txt"
+}
+else {
+    Write-Host "Error: Invalid test type '$TestType'. Use 'ping' or 'complex'." -ForegroundColor Red
+    exit 1
+}
+
 # --- Check for jq dependency ---
 # PowerShell doesn't have a direct equivalent of 'command -v'.
 # We check if jq.exe exists in any of the directories listed in the PATH environment variable.
@@ -69,11 +84,10 @@ try {
     }
     
     # Run the CLI script with --json-only flag and capture its output
-    Write-Host "--- Running CLI verification test ---"
-    # Read the prompt from a file and pipe it to the CLI. This is the most
-    # robust way to handle complex prompts. The CLI reads from stdin if no
-    # prompt argument is given.
-    $cliOutputLines = Get-Content -Path (Join-Path $ProjectRoot "scripts\test_prompt.txt") | & $CliScript --json-only
+    Write-Host "--- Running CLI verification test (type: $TestType) ---"
+    # Read the prompt from a file and pipe it to the CLI. The CLI now correctly
+    # handles top-level options and defaults to the 'invoke' command.
+    $cliOutputLines = Get-Content -Path $PromptFile | & $CliScript --json-only
     
     # The output might be an array of strings (if there were logs) or a single string.
     # We are interested in the last line, which should be the final JSON state.
