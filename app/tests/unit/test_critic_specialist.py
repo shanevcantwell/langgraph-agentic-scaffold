@@ -1,10 +1,10 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage
-from pydantic import BaseModel
 from app.src.specialists.critic_specialist import CriticSpecialist, BaseCritiqueStrategy
 from app.src.specialists.schemas import StatusEnum, SpecialistOutput
-# Assuming CritiqueOutput and Critique are Pydantic models from app.src.strategies.critique.schemas
+from app.src.strategies.critique.llm_strategy import LLMCritiqueStrategy
+# Assuming Critique is a Pydantic model from app.src.specialists.schemas
 # Since they are not provided in context, we'll create simple mocks that mimic their structure.
 
 class MockCritique(BaseModel):
@@ -13,24 +13,19 @@ class MockCritique(BaseModel):
     points_for_improvement: list
     positive_feedback: list
 
-@pytest.fixture
-def mock_critique_strategy():
-    """Mock for BaseCritiqueStrategy."""
-    mock_strategy = MagicMock(spec=BaseCritiqueStrategy)
-    return mock_strategy
 
 @pytest.fixture
-def critic_specialist(initialized_specialist_factory, mock_critique_strategy):
+def critic_specialist(initialized_specialist_factory):
     """Fixture for an initialized CriticSpecialist."""
-    # The CriticSpecialist requires its strategy at initialization time.
-    # We bypass the factory here and instantiate it directly with the mock strategy.
-    # This is a valid exception to the "always use the factory" rule for specialists
-    # with complex, non-serializable dependencies.
-    return CriticSpecialist(
-        specialist_name="critic_specialist",
-        specialist_config={"revision_target": "web_builder"},
-        critique_strategy=mock_critique_strategy,
+    # Use the factory, which now correctly simulates the GraphBuilder's
+    # logic for creating the critic and its internal LLM-based strategy.
+    specialist = initialized_specialist_factory(
+        "CriticSpecialist",
+        config_override={"revision_target": "web_builder"}
     )
+    # For testing, we can mock the `critique` method on the *actual* strategy instance.
+    specialist.critique_strategy.critique = MagicMock()
+    return specialist
 
 def test_critic_specialist_accepts_and_completes_task(critic_specialist, mock_critique_strategy):
     """Tests that the specialist accepts the work and signals task completion."""

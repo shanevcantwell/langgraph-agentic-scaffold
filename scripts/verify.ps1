@@ -16,7 +16,6 @@ $ServerScript = Join-Path $ProjectRoot "scripts\server.bat"
 $CliScript = Join-Path $ProjectRoot "scripts\cli.bat"
 $Port = 8000
 $HealthCheckUrl = "http://127.0.0.1:$Port/"
-$TestPrompt = "From the installation steps described in README.md, make me a 1970s wood and brushed aluminum themed animated web page with active checklist boxes. Iterate on the page at least twice, checking with the systems architect between iterations."
 $TimeoutSeconds = 30
 
 # --- Check for jq dependency ---
@@ -71,11 +70,10 @@ try {
     
     # Run the CLI script with --json-only flag and capture its output
     Write-Host "--- Running CLI verification test ---"
-    # Use the 'stream' command with '--json-only' to test the streaming endpoint.
-    # The command will output live logs (which we ignore here) and then the final
-    # JSON state object on the last line, which is what we capture.
-    $cliOutputLines = & $CliScript stream --json-only $TestPrompt
-
+    # Read the prompt from a file and pipe it to the CLI. This is the most robust
+    # way to handle complex prompts. The CLI defaults to the 'invoke' command.
+    $cliOutputLines = Get-Content -Path (Join-Path $ProjectRoot "scripts\test_prompt.txt") | & $CliScript --json-only
+    
     # The output might be an array of strings (if there were logs) or a single string.
     # We are interested in the last line, which should be the final JSON state.
     if ($cliOutputLines -is [array]) {
@@ -96,12 +94,10 @@ try {
         throw "Verification test FAILED: CLI output was not valid JSON. Details: $($_.Exception.Message)"
     }
 
-    # Validate the JSON response
-    # A successful workflow will now produce a non-empty `user_response` string.
-    # This is a more direct and reliable indicator of success.
-    if (($jsonResponse.user_response -is [string]) -and `
-        ($jsonResponse.user_response.Length -gt 0) -and `
-        ($null -ne $jsonResponse.artifacts)) {
+    # A successful workflow is defined by the presence of the 'final_user_response.md'
+    # key within the 'artifacts' dictionary. This is the most reliable signal
+    # that the entire termination sequence completed successfully.
+    if ($null -ne $jsonResponse.artifacts.'final_user_response.md') {
         
         Write-Host "---"
         Write-Host "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully." -ForegroundColor Green

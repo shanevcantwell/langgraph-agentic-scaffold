@@ -90,7 +90,7 @@ class GraphBuilder:
                         
                         logger.debug(f"CriticSpecialist: Creating internal adapter for strategy using specialist name '{name}'.")
                         strategy_llm_adapter = self.adapter_factory.create_adapter(name, "") # Pass specialist name
-                        if not strategy_llm_adapter:
+                        if not strategy_llm_adapter: # pragma: no cover
                             logger.error(f"CRITICAL: AdapterFactory returned None for CriticSpecialist's internal strategy adapter.")
                         critique_strategy_instance = LLMCritiqueStrategy(llm_adapter=strategy_llm_adapter, prompt_file=strategy_prompt_file)
                     else:

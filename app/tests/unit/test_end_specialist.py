@@ -24,6 +24,15 @@ def end_specialist(initialized_specialist_factory):
         # We can now test the orchestration logic.
         yield specialist
 
+def test_end_specialist_initialization(end_specialist, mock_adapter_factory):
+    """
+    Verifies that the EndSpecialist correctly initializes its internal specialists
+    and provides the synthesizer with an LLM adapter.
+    """
+    assert isinstance(end_specialist.synthesizer, ResponseSynthesizerSpecialist)
+    assert isinstance(end_specialist.archiver, ArchiverSpecialist)
+    mock_adapter_factory.create_adapter.assert_called_once_with("response_synthesizer_specialist", ANY)
+
 def test_end_specialist_orchestrates_synthesis_and_archiving(end_specialist):
     """
     Tests that EndSpecialist correctly calls the response synthesizer and then the archiver.

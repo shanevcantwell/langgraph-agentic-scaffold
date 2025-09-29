@@ -100,7 +100,11 @@ def invoke_graph(request: InvokeRequest):
             logger.error("Workflow ended with an error. Returning error report.")
             return InvokeResponse(final_output={"error_report": error_report})
     
+        # The final state from the workflow runner is the complete dictionary we want.
+        # We pass it directly as the value for the 'final_output' field in our response model.
+        # This ensures the client receives the full state, including 'artifacts', 'messages', etc.
         return InvokeResponse(final_output=final_state)
+
     except WorkflowError as e:
         logger.error(f"Workflow execution error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow execution error: {e}")

@@ -26,10 +26,14 @@ class EndSpecialist(BaseSpecialist):
         self.synthesizer = ResponseSynthesizerSpecialist("response_synthesizer_specialist", synthesizer_config)
         self.archiver = ArchiverSpecialist("archiver_specialist", archiver_config)
 
-        # The synthesizer is an LLM specialist and requires an adapter.
-        # We use the passed-in factory to create one for it, using its own name and config.
-        if synthesizer_config.get("type") == "llm":
-            self.synthesizer.llm_adapter = adapter_factory.create_adapter("response_synthesizer_specialist", "")
+        # The synthesizer is an LLM specialist and requires an adapter. We use the
+        # passed-in factory to create one for it, using its own name and config.
+        # This is a special case because EndSpecialist is a procedural coordinator
+        # that internally manages another LLM-based specialist.
+        if synthesizer_config and synthesizer_config.get("type") == "llm":
+            prompt_file = synthesizer_config.get("prompt_file")
+            system_prompt = load_prompt(prompt_file) if prompt_file else ""
+            self.synthesizer.llm_adapter = adapter_factory.create_adapter("response_synthesizer_specialist", system_prompt)
             logger.info("EndSpecialist successfully created LLM adapter for its internal ResponseSynthesizer.")
 
         logger.info("---INITIALIZED EndSpecialist Coordinator---")
@@ -42,16 +46,16 @@ class EndSpecialist(BaseSpecialist):
 
         current_state = state.copy()
 
-        scratchpad = current_state.get("scratchpad", {})
-        if not scratchpad.get("user_response_snippets"):
-            logger.info("EndSpecialist: No user_response_snippets found. Attempting to synthesize from last AI message.")
-            messages = current_state.get("messages", [])
-            last_ai_message = next((msg for msg in reversed(messages) if isinstance(msg, AIMessage) and msg.name not in ["router_specialist", "prompt_triage_specialist"]), None)
-            if last_ai_message and last_ai_message.content:
-                if "scratchpad" not in current_state:
-                    current_state["scratchpad"] = {}
-                current_state["scratchpad"]["user_response_snippets"] = [last_ai_message.content]
-                logger.info(f"Found content from '{last_ai_message.name}' to use for final synthesis.")
+        # scratchpad = current_state.get("scratchpad", {})
+        # if not scratchpad.get("user_response_snippets"):
+        #     logger.info("EndSpecialist: No user_response_snippets found. Attempting to synthesize from last AI message.")
+        #     messages = current_state.get("messages", [])
+        #     last_ai_message = next((msg for msg in reversed(messages) if isinstance(msg, AIMessage) and msg.name not in ["router_specialist", "prompt_triage_specialist"]), None)
+        #     if last_ai_message and last_ai_message.content:
+        #         if "scratchpad" not in current_state:
+        #             current_state["scratchpad"] = {}
+        #         current_state["scratchpad"]["user_response_snippets"] = [last_ai_message.content]
+        #         logger.info(f"Found content from '{last_ai_message.name}' to use for final synthesis.")
 
         if not current_state.get("artifacts", {}).get("final_user_response.md"):
             logger.info("EndSpecialist: Synthesizing final response.")

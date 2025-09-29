@@ -56,5 +56,6 @@ class DefaultResponderSpecialist(BaseSpecialist):
         # by adding its final message and setting the `task_is_complete` flag.
         return {
             "messages": [ai_message],
-            "task_is_complete": True
+            "task_is_complete": True,
+            "scratchpad": {"user_response_snippets": [text_response]}
         }

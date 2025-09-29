@@ -57,9 +57,13 @@ class ArchiverSpecialist(BaseSpecialist):
             content="Final report has been generated and the workflow is complete.",
         )
 
+        # Preserve existing artifacts (like final_user_response.md) and add the new one.
+        updated_artifacts = state.get("artifacts", {}).copy()
+        updated_artifacts["archive_report.md"] = markdown_report
+
         return {
             "messages": [ai_message],
-            "artifacts": {"archive_report.md": markdown_report},
+            "artifacts": updated_artifacts,
         }
 
     def _summarize_conversation(self, messages: List[Dict[str, Any]]) -> str:

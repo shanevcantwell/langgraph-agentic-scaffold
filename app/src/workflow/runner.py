@@ -126,10 +126,9 @@ class WorkflowRunner:
             final_state = self.app.invoke(initial_state, config={"recursion_limit": self.recursion_limit})
             logger.info("--- Workflow completed successfully ---")
 
-            final_artifacts = final_state.get("artifacts", {})
-            final_response = final_artifacts.get("final_user_response.md", "Workflow completed, but no final user response was generated.")
-            
-            return {"final_user_response": final_response}
+            # Return the entire final state so the API layer can decide what to do with it.
+            # This ensures the client receives the full context, including artifacts.
+            return _make_state_serializable(final_state)
 
         except Exception as e:
             logger.error(f"--- Workflow failed with an unhandled exception: {e} ---", exc_info=True)

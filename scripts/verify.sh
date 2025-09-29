@@ -22,7 +22,6 @@ fi
 
 PORT=8000
 HEALTH_CHECK_URL="http://127.0.0.1:${PORT}/"
-TEST_PROMPT="From the installation steps described in README.md, web page with active checklist boxes. Iterate on the page at least twice, checking with the systems architect between iterations."
 
 # --- Cleanup function ---
 # This function will be called on script exit to ensure the server is stopped.
@@ -48,9 +47,10 @@ for i in {1..30}; do
     then
         echo "Server is up and running."
         echo "--- Running CLI verification test ---"
-        # Use the 'invoke' command with '--json-only'. This command is simpler
-        # for verification as it directly outputs the final JSON state without logs.
-        JSON_RESPONSE=$(./scripts/cli.sh invoke --json-only "$TEST_PROMPT")
+        # Read the prompt from a file and pipe it to the CLI. This is the most
+        # robust way to handle complex prompts. The CLI defaults to the 'invoke'
+        # command and reads from stdin if no prompt argument is given.
+        JSON_RESPONSE=$(cat ./scripts/test_prompt.txt | ./scripts/cli.sh --json-only)
 
         # Check if JSON_RESPONSE is empty or not valid JSON
         if [ -z "$JSON_RESPONSE" ]; then
@@ -63,10 +63,10 @@ for i in {1..30}; do
         fi
 
         # Validate the JSON response using jq
-        # A successful workflow will now produce a non-empty `user_response` string.
-        # This is a more direct and reliable indicator of success than checking turn counts.
-        # We also check that the final state includes an 'artifacts' dictionary as a sanity check.
-        if echo "$JSON_RESPONSE" | jq -e '.user_response | (type == "string" and length > 0) and .artifacts'; then
+        # A successful workflow is defined by the presence of the 'final_user_response.md'
+        # key within the 'artifacts' dictionary. This is the most reliable signal
+        # that the entire termination sequence completed successfully.
+        if echo "$JSON_RESPONSE" | jq -e '.artifacts."final_user_response.md"'; then
             echo "---"
             echo "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully."
             exit 0

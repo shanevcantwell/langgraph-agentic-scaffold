@@ -36,11 +36,11 @@ class ResponseSynthesizerSpecialist(BaseSpecialist):
         # The prompt for this specialist should instruct the LLM on how to combine these.
         combined_snippets = "\n\n---\n\n".join(str(s) for s in user_response_snippets)
 
-        # Create a clean, minimal message list for the LLM. The system prompt (loaded
-        # via the adapter) will guide the LLM, and we provide only the snippets
-        # it needs to work on, avoiding the complexity of the full message history.
+        # Create a clean, minimal message for the LLM. The system prompt (loaded
+        # by the adapter) contains all the instructions. We just need to provide
+        # the raw data to be synthesized.
         messages = [
-            HumanMessage(content=f"Please synthesize the following information into a single, coherent, user-facing response:\n\n{combined_snippets}")
+            HumanMessage(content=combined_snippets)
         ]
 
         request = StandardizedLLMRequest(messages=messages)

@@ -1,0 +1,1 @@
+From the installation steps described in README.md, make me a 1970s wood and brushed aluminum themed animated web page with active checklist boxes. Iterate on the page at least twice, checking with the systems architect between iterations.
