@@ -26,11 +26,10 @@ class EndSpecialist(BaseSpecialist):
         self.synthesizer = ResponseSynthesizerSpecialist("response_synthesizer_specialist", synthesizer_config)
         self.archiver = ArchiverSpecialist("archiver_specialist", archiver_config)
 
-        synthesizer_binding_key = synthesizer_config.get("llm_config")
-        if synthesizer_binding_key:
-            prompt_file = synthesizer_config.get("prompt_file")
-            system_prompt = load_prompt(prompt_file) if prompt_file else ""
-            self.synthesizer.llm_adapter = adapter_factory.create_adapter(synthesizer_binding_key, system_prompt)
+        # The synthesizer is an LLM specialist and requires an adapter.
+        # We use the passed-in factory to create one for it, using its own name and config.
+        if synthesizer_config.get("type") == "llm":
+            self.synthesizer.llm_adapter = adapter_factory.create_adapter("response_synthesizer_specialist", "")
             logger.info("EndSpecialist successfully created LLM adapter for its internal ResponseSynthesizer.")
 
         logger.info("---INITIALIZED EndSpecialist Coordinator---")

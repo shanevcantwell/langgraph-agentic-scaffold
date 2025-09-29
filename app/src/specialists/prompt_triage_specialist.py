@@ -27,6 +27,11 @@ class PromptTriageSpecialist(BaseSpecialist):
         logger.info("Triage specialist now aware of all available functional specialists.")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # --- Pre-execution check to head off the error ---
+        if self.llm_adapter is None:
+            logger.error(f"FATAL: Attempted to execute '{self.specialist_name}' but 'self.llm_adapter' is None. This indicates a failure during the graph build process.")
+            # Raising a specific error here to make the failure explicit.
+            raise RuntimeError(f"'{self.specialist_name}' cannot execute because its LLM adapter was not initialized.")
         messages: List[BaseMessage] = state["messages"]
 
         if not self.specialist_map:

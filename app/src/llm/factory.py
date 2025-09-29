@@ -24,21 +24,26 @@ class AdapterFactory:
         """
         Creates an LLM adapter based on a provider binding key from the configuration.
         """
+        logger.debug(f"AdapterFactory: Received request to create adapter for specialist_name='{specialist_name}'.")
         if not specialist_name:
             raise ValueError("Cannot create adapter: 'specialist_name' was not provided.")
 
         specialist_config = self.full_config.get("specialists", {}).get(specialist_name)
         if not specialist_config or specialist_config.get("type") != "llm":
+            logger.debug(f"AdapterFactory: No LLM specialist config found for name '{specialist_name}'. Returning None.")
             return None # Not an LLM specialist, no adapter needed.
 
         binding_key = specialist_config.get("llm_config")
         if not binding_key:
             raise ValueError(f"LLM specialist '{specialist_name}' is missing 'llm_config' key.")
+        logger.debug(f"AdapterFactory: Found binding key '{binding_key}' for specialist '{specialist_name}'.")
 
         # Get the full provider configuration block from the top-level `llm_providers`
         provider_config = self.full_config.get("llm_providers", {}).get(binding_key)
         if not provider_config:
             raise ValueError(f"Provider '{binding_key}' for specialist '{specialist_name}' not found in 'llm_providers'.")
+        
+        logger.debug(f"AdapterFactory: Full provider config for '{binding_key}': {provider_config}")
         
         # Add the binding key to the config for better error messages within the adapter.
         provider_config['binding_key'] = binding_key
@@ -47,7 +52,11 @@ class AdapterFactory:
         base_provider_type = provider_config.get('type')
         AdapterClass = ADAPTER_REGISTRY.get(base_provider_type)
         if not AdapterClass:
-            raise ValueError(f"Unknown base provider type '{base_provider_type}' specified in '{binding_key}'. Supported types are: {list(ADAPTER_REGISTRY.keys())}")
+            logger.error(f"AdapterFactory: Unknown base provider type '{base_provider_type}' specified in '{binding_key}'. Supported types are: {list(ADAPTER_REGISTRY.keys())}")
+            return None
 
         # Use the adapter's own factory method to create the instance.
-        return AdapterClass.from_config(provider_config, system_prompt)
+        adapter = AdapterClass.from_config(provider_config, system_prompt)
+        if not adapter:
+            logger.error(f"AdapterFactory: AdapterClass.from_config for '{base_provider_type}' returned None.")
+        return adapter
