@@ -70,9 +70,10 @@ try {
     
     # Run the CLI script with --json-only flag and capture its output
     Write-Host "--- Running CLI verification test ---"
-    # Read the prompt from a file and pipe it to the CLI. This is the most robust
-    # way to handle complex prompts. We use '-' to tell the CLI to read from stdin.
-    $cliOutputLines = Get-Content -Path (Join-Path $ProjectRoot "scripts\test_prompt.txt") | & $CliScript --json-only -
+    # Read the prompt from a file and pipe it to the CLI. This is the most
+    # robust way to handle complex prompts. The CLI reads from stdin if no
+    # prompt argument is given.
+    $cliOutputLines = Get-Content -Path (Join-Path $ProjectRoot "scripts\test_prompt.txt") | & $CliScript --json-only
     
     # The output might be an array of strings (if there were logs) or a single string.
     # We are interested in the last line, which should be the final JSON state.
