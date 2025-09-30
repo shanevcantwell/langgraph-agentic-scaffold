@@ -12,10 +12,14 @@ def test_live_gemini_adapter_interaction():
         pytest.skip("GOOGLE_API_KEY not set. Skipping live Gemini test.")
 
     try:
-        # Manually load the config, which now resolves env vars. This keeps the
-        # test integrated with the actual config files.
+        # Load the base config, then programmatically override it to ensure this
+        # test always targets a Gemini provider, regardless of user_settings.yaml.
         config = ConfigLoader().get_config()
+        specialist_name_to_test = "systems_architect"
+        provider_name_to_test = "gemini_flash" # Must be a provider of type 'gemini'
 
+        # Force the binding for this test run
+        config["specialists"][specialist_name_to_test]["llm_config"] = provider_name_to_test
         # Instantiate the factory with the loaded config
         factory = AdapterFactory(config)
         adapter = factory.create_adapter(

@@ -9,6 +9,7 @@ from typing import Optional
 
 API_BASE_URL = "http://127.0.0.1:8000"
 
+# The main callback is now only for the --json-only flag and default command logic.
 app = typer.Typer(
     help="A command-line interface for interacting with the agentic system.",
     invoke_without_command=True,
@@ -108,38 +109,12 @@ def stream(
         )
     )] = None,
     json_only: Annotated[bool, typer.Option(
-        "--json-only",
-        "-j",
-        help="Output only the final JSON state, suppressing live logs."
-    )] = False
+        "--json-only", "-j", help="Output only the final JSON state."
+    )] = False,
 ):
     """
     Connects to the streaming endpoint (/v1/graph/stream) to get real-time logs from the agent.
     If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
-    """
-    _run_stream(prompt, json_only)
-
-@app.callback()
-def main(
-    ctx: typer.Context,    
-    prompt: Annotated[Optional[str], typer.Argument()] = None,
-    json_only: Annotated[bool, typer.Option("--json-only", "-j")] = False
-):
-    """
-    Default to the 'invoke' command if no subcommand is given.
-    This allows running the CLI like `./cli.sh "my prompt"` directly.
-    """
-    if ctx.invoked_subcommand is None:
-        # Manually call the underlying function for the 'invoke' command,
-        # passing all the relevant options from the main callback.
-        # This correctly handles top-level options when no subcommand is specified.
-        if not json_only:
-            typer.echo("No command specified. Defaulting to 'invoke'. Use --help for options.", err=True)
-        _run_invoke(prompt, json_only)
-
-def _run_stream(prompt: Optional[str], json_only: bool):
-    """
-    Shared logic for the stream command.
     """
     if prompt is None:
         if not json_only and sys.stdin.isatty():

@@ -131,7 +131,7 @@ def test_cli_stream_malformed_final_state_json(mock_requests):
     assert result.exit_code == 1 # Verification should fail
     assert "Failed to parse FINAL_STATE JSON" in result.stderr
 
-def test_cli_invoke_no_prompt():
+def test_cli_invoke_no_prompt(mock_requests):
     """Tests that the 'invoke' command exits with an error if no prompt is provided."""
     # With the new structure, invoking without a prompt reads from stdin.
     # An empty stdin should result in an exit code of 1 from our logic.
@@ -139,7 +139,7 @@ def test_cli_invoke_no_prompt():
     assert result.exit_code == 1
     assert "Error: Prompt is empty." in result.stderr
 
-def test_cli_stream_no_prompt():
+def test_cli_stream_no_prompt(mock_requests):
     """Tests that the 'stream' command exits with an error if no prompt is provided."""
     result = runner.invoke(app, ["stream"], input="")
     assert result.exit_code == 1

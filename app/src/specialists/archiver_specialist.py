@@ -35,14 +35,16 @@ class ArchiverSpecialist(BaseSpecialist):
         """
         logger.info(f"--- Archiver: Preparing final report. ---")
 
+        # Prune the state to get a clean conversation summary, but use the
+        # original, full state for the report's artifacts.
         pruned_state = state_pruner.prune_state(state)
 
-        final_user_response = pruned_state.get("artifacts", {}).get("final_user_response.md", "No final response was generated.")
+        final_user_response = state.get("artifacts", {}).get("final_user_response.md", "No final response was generated.")
         report_data = SuccessReport(
             final_user_response=final_user_response,
-            routing_history=pruned_state.get("routing_history", []),
-            artifacts=pruned_state.get("artifacts", {}),
-            scratchpad=pruned_state.get("scratchpad", {}),
+            routing_history=state.get("routing_history", []),
+            artifacts=state.get("artifacts", {}),
+            scratchpad=state.get("scratchpad", {}),
             conversation_summary=self._summarize_conversation(pruned_state.get("messages", [])),
         )
 
