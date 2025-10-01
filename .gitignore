@@ -53,5 +53,6 @@ workspace/*
 
 ui.sh
 archives/*
+docs/ADR/*
 proxy/*
 !proxy/squid.conf.example
