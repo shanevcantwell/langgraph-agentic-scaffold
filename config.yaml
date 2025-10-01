@@ -1,50 +1,3 @@
-# Configuration Example
-# Version: 3.0
-#
-# ==============================================================================
-# DEVELOPER-LEVEL CONFIGURATION
-# This file is the system's blueprint, intended for developers to define the
-# agent's architecture. It should NOT be exposed to or editable by end-users.
-# ==============================================================================
-#
-# This file defines the structure of the agentic system. It is the single
-# source of truth for wiring together providers, models, and specialists.
-# Copy this file to `config.yaml` and customize it for your setup.
-
-# ==============================================================================
-# LLM PROVIDER CONFIGURATION
-# ==============================================================================
-# Define the available LLM providers. The keys here (e.g., 'lmstudio') are
-# referenced by the specialists below.
-# The application will read environment variables defined in .env for secrets.
-#
-# Supported providers: "lmstudio", "ollama", "gemini"
-# ==============================================================================
-llm_providers:
-  # A configuration for a local model via LM Studio
-  lmstudio_router:
-    # Uses the LMSTUDIO_BASE_URL from your .env file
-    type: "lmstudio"
-
-  lmstudio_specialist:
-    # Uses the LMSTUDIO_BASE_URL from your .env file
-    type: "lmstudio"
-
-  # A configuration for a local model via Ollama
-  ollama:
-    # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
-    type: "ollama"
-
-  # A configuration for a powerful, general-purpose Gemini model
-  gemini_pro:
-    # Uses GOOGLE_API_KEY from your .env file
-    type: "gemini"
-
-  # A configuration for a fast, cheaper Gemini model
-  gemini_flash:
-    # Uses GOOGLE_API_KEY from your .env file
-    type: "gemini"
-
 # ==============================================================================
 # WORKFLOW CONFIGURATION
 # ==============================================================================
@@ -170,6 +123,7 @@ specialists:
 
   archiver_specialist:
     type: "procedural"
+    archive_path: "./logs/archive"
     pruning_strategy: "count"
     pruning_max_count: 50
     description: "Summarizes the conversation and prepares the final report. This is the final step."

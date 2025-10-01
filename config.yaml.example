@@ -12,64 +12,6 @@
 # Copy this file to `config.yaml` and customize it for your setup.
 
 # ==============================================================================
-# LLM PROVIDER CONFIGURATION
-# ==============================================================================
-# Define the available LLM providers. The keys here (e.g., 'lmstudio') are
-# referenced by the specialists below.
-# The application will read environment variables defined in .env for secrets.
-#
-# Supported providers: "lmstudio", "ollama", "gemini"
-# ==============================================================================
-llm_providers:
-  # A configuration for a local model via LM Studio
-  lmstudio_router:
-    # Uses the LMSTUDIO_BASE_URL from your .env file
-    # Example: LMSTUDIO_BASE_URL=http://localhost:1234/v1
-    type: "lmstudio"
-    # The 'api_identifier' (the specific model) is now defined in user_settings.yaml.
-    # The model's total context window (input + output). This value is used by the llm
-    # adapter to proactively prune the conversation history to prevent context overflow errors.
-    context_window: 8192
-
-  lmstudio_specialist:
-    type: "lmstudio"
-    # The 'api_identifier' (the specific model) is now defined in user_settings.yaml.
-
-    # The model's total context window (input + output).
-    context_window: 8192
-    # Parameters to pass to the model's API.
-    parameters:
-      # max_tokens controls the maximum length of the model's *output*.
-      # It should be less than the context_window to leave room for the input prompt.
-      max_tokens: 8192
-
-  # A configuration for a local model via Ollama
-  ollama:
-    # Uses OLLAMA_BASE_URL and OLLAMA_MODEL from your .env file
-    # Example: OLLAMA_BASE_URL=http://localhost:11434
-    type: "ollama"
-    # The 'api_identifier' (the specific model tag) is now defined in user_settings.yaml.
-
-    # Ollama uses different parameter names than OpenAI-compatible servers.
-    parameters:
-      # num_predict is Ollama's equivalent of max_tokens. It controls the
-      # maximum number of tokens to generate in the response.
-      num_predict: 8192
-
-  # A configuration for a powerful, general-purpose Gemini model
-  gemini_pro:
-    # Uses GOOGLE_API_KEY from your .env file
-    type: "gemini"
-    # The 'api_identifier' (e.g., "gemini-1.5-pro") is now defined in user_settings.yaml.
-    # Future parameters could go here, e.g., temperature: 0.5
-
-  # A configuration for a fast, cheaper Gemini model
-  gemini_flash:
-    # Uses GOOGLE_API_KEY from your .env file
-    type: "gemini"
-    # The 'api_identifier' (e.g., "gemini-1.5-flash") is now defined in user_settings.yaml.
-
-# ==============================================================================
 # WORKFLOW CONFIGURATION
 # ==============================================================================
 # Define the entry point for the graph. Defaults to 'router_specialist'.
