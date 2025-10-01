@@ -134,8 +134,6 @@ Add a new entry under the `specialists` key:
 ```yaml
 # config.yaml
 
-# ... other sections like llm_providers ...
-
 specialists:
   # ... other specialists ...
 

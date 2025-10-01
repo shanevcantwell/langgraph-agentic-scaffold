@@ -7,23 +7,29 @@
 # ==============================================================================
 
 # --- 1. Define Your Concrete Models ---
-# This section maps the abstract provider configurations from config.yaml
-# to the specific, concrete model identifiers you want to use.
-provider_models:
+# This section defines your named LLM provider configurations. Each configuration
+# must have a `type` (which maps to an adapter) and an `api_identifier` (the model name).
+llm_providers:
   # For cloud providers, this is the API model name.
   gemini_flash:
+    type: "gemini"
     api_identifier: "gemini-2.5-flash"
   gemini_pro:
+    type: "gemini"
     api_identifier: "gemini-2.5-pro"
 
   # For local providers (like LM Studio), this is typically the model file path/name
   # that the server is loading.
   lmstudio_router:
+    type: "lmstudio"
     api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
   lmstudio_specialist:
+    type: "lmstudio"
     api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
-  ollama:
-    api_identifier: "llama3:8b"
+  # ollama_local:
+  #   type: "ollama"
+  #   api_identifier: "llama3:8b"
+
 
 # --- 2. Assign Models to Specialists ---
 # This section binds the abstract specialists (from config.yaml) to one of the
