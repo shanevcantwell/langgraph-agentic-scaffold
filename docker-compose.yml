@@ -1,0 +1,48 @@
+# /docker-compose.yml
+version: '3.8'
+
+services:
+  app:
+    # Build the application image using the Dockerfile in the current directory.
+    build: .
+    container_name: agentic_scaffold_app
+    # Load secrets and configuration from the .env file.
+    env_file:
+      - .env
+    # Set environment variables to route traffic through the proxy.
+    environment:
+      - HTTP_PROXY=http://proxy:3128
+      - HTTPS_PROXY=http://proxy:3128
+    # This makes the host's services (Ollama, LM Studio) available to the container.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Mount the project directory for live code changes during development.
+      - .:/app
+      # Create a named volume for the agent's persistent "walled garden" workspace.
+      - app_workspace:/app/workspace
+    ports:
+      # Map the API and UI ports from the container to your host machine.
+      - "8000:8000"
+      - "5003:5003"
+    # Run the startup script.
+    command: /bin/bash /app/start.sh
+    # Ensure the proxy is running before the app starts.
+    depends_on:
+      - proxy
+    restart: unless-stopped
+
+  proxy:
+    image: ubuntu/squid:latest
+    container_name: agentic_scaffold_proxy
+    volumes:
+      # Mount our custom, restrictive configuration file into the container.
+      - ./proxy/squid.conf:/etc/squid/squid.conf
+    ports:
+      # Optionally expose the proxy port for direct inspection.
+      - "3128:3128"
+    restart: unless-stopped
+
+volumes:
+  # Define the named volume for persistent storage.
+  app_workspace:

@@ -93,7 +93,7 @@ def main():
     demo = create_ui(api_client)
 
     print(f"Launching Gradio UI on port {args.port}...")
-    demo.launch(server_port=args.port)
+    demo.launch(server_port=args.port,server_name="0.0.0.0")
 
 if __name__ == "__main__":
     main()
