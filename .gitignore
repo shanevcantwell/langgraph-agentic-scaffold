@@ -51,6 +51,5 @@ runverify.sh
 workspace/*
 
 
-Dockerfile
 ui.sh
 archives/*

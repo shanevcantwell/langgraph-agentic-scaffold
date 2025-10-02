@@ -2,7 +2,7 @@
 from ._base import SpecialistOutput, StatusEnum
 from ._archiver import SuccessReport
 from ._data import ExtractedData, Sentiment
-from ._file_ops import ReadFileParams, WriteFileParams, ListDirectoryParams
+from ._file_ops import CreateDirectoryParams, WriteFileParams, CreateZipFromDirectoryParams
 from ._orchestration import (
     SystemPlan,
     Critique,
@@ -15,7 +15,7 @@ from ._analysis import TextAnalysis
 __all__ = [
     "SpecialistOutput", "StatusEnum", "SuccessReport",
     "ExtractedData", "Sentiment",
-    "ReadFileParams", "WriteFileParams", "ListDirectoryParams",
+    "CreateDirectoryParams", "WriteFileParams", "CreateZipFromDirectoryParams",
     "SystemPlan", "Critique", "TriageRecommendations", "CodeExecutionParams",
     "WebContent",
     "TextAnalysis",

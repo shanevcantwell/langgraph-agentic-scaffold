@@ -1,149 +1,104 @@
 import logging
 import os
-from typing import Optional, Dict, Any
+import shutil
+from typing import Dict, Any, Union
 
-from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
+from langchain_core.messages import ToolMessage
 
-from app.src.llm.adapter import StandardizedLLMRequest
-from app.src.utils.errors import SpecialistError
-from app.src.utils.path_utils import PROJECT_ROOT
 from app.src.specialists.base import BaseSpecialist
-from .helpers import create_llm_message
-from .schemas import ReadFileParams, WriteFileParams, ListDirectoryParams
+from app.src.specialists.schemas._file_ops import (
+    CreateDirectoryParams,
+    WriteFileParams,
+    CreateZipFromDirectoryParams,
+)
+from app.src.utils.errors import SpecialistError
 
 logger = logging.getLogger(__name__)
 
-
-# --- Specialist Implementation ---
-
 class FileSpecialist(BaseSpecialist):
     """
-    A specialist for interacting with the filesystem, using Pydantic for structured tool calls.
-    It can read files and list directories. Write operations are disabled by a safety lock.
+    A procedural specialist that provides composable file system tools.
+    This specialist executes tool calls for directory creation, file writing, and zipping.
     """
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        relative_root_dir = self.specialist_config.get("root_dir", "./workspace")
-        self.root_dir = str(PROJECT_ROOT / relative_root_dir)
-        os.makedirs(self.root_dir, exist_ok=True)
-        logger.info(f"Initialized {self.__class__.__name__} with workspace directory: {self.root_dir}")
-        
-        self.safety_lock_file = ".agent_safety_off.lock"
-        self.is_safety_on = not os.path.exists(self.safety_lock_file)
-        if self.is_safety_on:
-            logger.warning(f"FileSpecialist safety is ON. No file modifications will be made. To disable, create a file named '{self.safety_lock_file}' in the project root.")
-        else:
-            logger.warning(f"FileSpecialist safety is OFF. The agent can now write to the filesystem within its workspace.")
+        # Configuration for the root directory can be added here if needed
 
-    def _get_full_path(self, relative_path: str) -> str:
-        """Validates and resolves a relative path against the root directory."""
-        if ".." in relative_path or os.path.isabs(relative_path):
-            raise SpecialistError("Access denied: Only relative paths are allowed.")
-        
-        full_path = os.path.abspath(os.path.join(self.root_dir, relative_path))
-        
-        if not full_path.startswith(self.root_dir):
-            raise SpecialistError("Access denied: Path is outside the allowed directory.")
-        
-        return full_path
-
-    def _read_file(self, params: ReadFileParams) -> tuple[Optional[str], str]:
-        """Implementation for reading a file."""
+    def _create_directory(self, path: str) -> str:
+        """Creates a directory and any missing parent directories."""
         try:
-            full_path = self._get_full_path(params.file_path)
-            with open(full_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            status_message = f"Successfully read file '{params.file_path}'. Content is now in context."
-            return content, status_message
+            os.makedirs(path, exist_ok=True)
+            msg = f"Successfully created directory: {path}"
+            logger.info(msg)
+            return msg
         except Exception as e:
-            return None, f"Error reading file '{params.file_path}': {e}"
+            raise SpecialistError(f"Error creating directory at {path}: {e}")
 
-    def _write_file(self, params: WriteFileParams) -> str:
-        """Implementation for writing a file."""
+    def _write_file(self, path: str, content: Union[str, bytes]) -> str:
+        """Writes content to a file, creating parent directories if necessary."""
         try:
-            full_path = self._get_full_path(params.file_path)
-            if self.is_safety_on:
-                return f"[DRY RUN] Operation successful. Would have written content to file: {params.file_path}"
-            else:
-                os.makedirs(os.path.dirname(full_path), exist_ok=True)
-                with open(full_path, 'w', encoding='utf-8') as f:
-                    f.write(params.content)
-                return f"Successfully wrote to {params.file_path}"
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            mode = 'wb' if isinstance(content, bytes) else 'w'
+            with open(path, mode) as f:
+                f.write(content)
+            msg = f"Successfully wrote file: {path}"
+            logger.info(msg)
+            return msg
         except Exception as e:
-            return f"Error writing file '{params.file_path}': {e}"
+            raise SpecialistError(f"Error writing file at {path}: {e}")
 
-    def _list_directory(self, params: ListDirectoryParams) -> str:
-        """Implementation for listing a directory."""
+    def _create_zip_from_directory(self, source_path: str, destination_path: str) -> str:
+        """Creates a zip archive from a source directory."""
         try:
-            full_path = self._get_full_path(params.dir_path)
-            if not os.path.isdir(full_path):
-                return f"Error: '{params.dir_path}' is not a directory."
-            return ".\n" + "\n".join(os.listdir(full_path))
+            # shutil.make_archive will create the parent directory for the destination if it doesn't exist
+            archive_path_without_ext = destination_path.removesuffix('.zip')
+            shutil.make_archive(archive_path_without_ext, 'zip', source_path)
+            msg = f"Successfully created zip archive from '{source_path}' to '{destination_path}'"
+            logger.info(msg)
+            return msg
         except Exception as e:
-            return f"Error listing directory '{params.dir_path}': {e}"
+            raise SpecialistError(f"Error creating zip from '{source_path}': {e}")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Executes the file operation based on the LLM's structured output."""
-        messages = state["messages"]
-        
-        contextual_messages = messages[:]
-        contextual_messages.append(HumanMessage(
-            content="Based on the conversation history, determine which file system operation is required and call the appropriate tool. If the request is ambiguous, state what information you need."
-        ))
+        """Procedural tool dispatcher for file operations."""
+        last_message = state["messages"][-1]
+        if not isinstance(last_message, ToolMessage):
+            # This specialist should only be called with a ToolMessage
+            # In a future iteration, we might return an error message
+            return {}
 
-        request = StandardizedLLMRequest(
-            messages=contextual_messages,
-            tools=[ReadFileParams, WriteFileParams, ListDirectoryParams]
-        )
-        response_data = self.llm_adapter.invoke(request)
-        tool_calls = response_data.get("tool_calls", [])
+        tool_call = last_message
+        tool_name = tool_call.name
+        tool_args = tool_call.additional_kwargs.get('parsed_args', {})
 
-        if not tool_calls:
-            error_message = "File Specialist Error: The model did not request a valid tool call. Please rephrase your request."
-            return {"messages": [AIMessage(content=error_message, name=self.specialist_name)]}
-
-        tool_call = tool_calls[0]
-        tool_name = tool_call.get("name")
-        tool_args = tool_call.get("args", {})
-        
-        updated_state: Dict[str, Any] = {}
-        result_content = ""
-        action_name_for_report = tool_name
-
+        status_message = ""
         try:
-            tool_map = {
-                ReadFileParams.__name__: ReadFileParams, "read_file": ReadFileParams, "ReadFile": ReadFileParams,
-                WriteFileParams.__name__: WriteFileParams, "write_file": WriteFileParams, "WriteFile": WriteFileParams,
-                ListDirectoryParams.__name__: ListDirectoryParams, "list_directory": ListDirectoryParams, "ListDirectory": ListDirectoryParams,
-            }
-            TargetToolClass = tool_map.get(tool_name)
-
-            if TargetToolClass == ReadFileParams:
-                action_name_for_report = "ReadFile"
-                file_content, result_content = self._read_file(TargetToolClass(**tool_args))
-                if file_content is not None:
-                    updated_state["artifacts"] = {"text_to_process": file_content}
-            elif TargetToolClass == ListDirectoryParams:
-                action_name_for_report = "ListDirectory"
-                result_content = self._list_directory(TargetToolClass(**tool_args))
-                updated_state["artifacts"] = {"text_to_process": result_content}
-            elif TargetToolClass == WriteFileParams:
-                action_name_for_report = "WriteFile"
-                result_content = self._write_file(TargetToolClass(**tool_args))
+            if tool_name == CreateDirectoryParams.__name__:
+                params = CreateDirectoryParams(**tool_args)
+                status_message = self._create_directory(params.path)
+            elif tool_name == WriteFileParams.__name__:
+                params = WriteFileParams(**tool_args)
+                status_message = self._write_file(params.path, params.content)
+            elif tool_name == CreateZipFromDirectoryParams.__name__:
+                params = CreateZipFromDirectoryParams(**tool_args)
+                status_message = self._create_zip_from_directory(params.source_path, params.destination_path)
             else:
-                result_content = f"Error: Unknown tool '{tool_name}' requested."
-        except SpecialistError as e:
-            result_content = f"Error executing tool '{tool_name}': {e}"
-        except Exception as e:
-            logger.error(f"An unexpected error occurred in FileSpecialist during '{tool_name}': {e}", exc_info=True)
-            result_content = f"An unexpected error occurred during '{tool_name}': {e}"
+                status_message = f"Unknown tool '{tool_name}' called on FileSpecialist."
+                logger.warning(status_message)
 
-        ai_message = create_llm_message(
-            specialist_name=self.specialist_name,
-            llm_adapter=self.llm_adapter,
-            content=f"FileSpecialist action '{action_name_for_report}' completed. Status: {result_content}",
+        except SpecialistError as e:
+            status_message = str(e)
+            logger.error(f"FileSpecialist Error: {status_message}")
+        except Exception as e:
+            status_message = f"An unexpected error occurred in {tool_name}: {e}"
+            logger.error(status_message, exc_info=True)
+
+        # Return a new ToolMessage with the result of the operation
+        response_message = ToolMessage(
+            content=status_message,
+            tool_call_id=tool_call.tool_call_id,
+            name=self.specialist_name
         )
 
-        updated_state["messages"] = [ai_message]
-        return updated_state
+        return {"messages": [response_message]}

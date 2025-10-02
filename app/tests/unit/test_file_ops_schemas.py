@@ -1,52 +1,51 @@
-# app/tests/specialists/schemas/test_file_ops_schemas.py
+# app/tests/unit/test_file_ops_schemas.py
 import pytest
 from pydantic import ValidationError
-from app.src.specialists.schemas._file_ops import ReadFileParams, WriteFileParams, ListDirectoryParams
+from app.src.specialists.schemas._file_ops import (
+    CreateDirectoryParams,
+    WriteFileParams,
+    CreateZipFromDirectoryParams,
+)
 
-def test_read_file_params():
-    """Tests that ReadFileParams inherits file_path correctly."""
-    params = ReadFileParams(file_path="/path/to/file.txt")
-    assert params.file_path == "/path/to/file.txt"
+def test_create_directory_params():
+    """Tests valid CreateDirectoryParams."""
+    params = CreateDirectoryParams(path="/some/new/dir")
+    assert params.path == "/some/new/dir"
 
 def test_write_file_params():
-    """Tests that WriteFileParams has both inherited and its own fields."""
-    params = WriteFileParams(file_path="/path/to/file.txt", content="Hello")
-    assert params.file_path == "/path/to/file.txt"
-    assert params.content == "Hello"
+    """Tests valid WriteFileParams with string and bytes content."""
+    # Test with string content
+    params_str = WriteFileParams(path="/path/to/file.txt", content="Hello, world!")
+    assert params_str.path == "/path/to/file.txt"
+    assert params_str.content == "Hello, world!"
 
-def test_write_file_params_missing_content():
-    """Tests validation error when a required field is missing."""
-    with pytest.raises(ValidationError):
-        WriteFileParams(file_path="/path/to/file.txt")
+    # Test with bytes content
+    params_bytes = WriteFileParams(path="/path/to/binary.dat", content=b"\x01\x02\x03")
+    assert params_bytes.path == "/path/to/binary.dat"
+    assert params_bytes.content == b"\x01\x02\x03"
 
-def test_list_directory_params_default():
-    """Tests that ListDirectoryParams uses its default value correctly."""
-    params = ListDirectoryParams()
-    assert params.dir_path == "."
+def test_create_zip_from_directory_params():
+    """Tests valid CreateZipFromDirectoryParams."""
+    params = CreateZipFromDirectoryParams(source_path="/path/to/source", destination_path="/path/to/archive.zip")
+    assert params.source_path == "/path/to/source"
+    assert params.destination_path == "/path/to/archive.zip"
 
-def test_list_directory_params_explicit_path():
-    """Tests that ListDirectoryParams accepts an explicit path."""
-    params = ListDirectoryParams(dir_path="some/dir")
-    assert params.dir_path == "some/dir"
-
-@pytest.mark.parametrize("param_class, field", [
-    (ReadFileParams, "file_path"),
-    (WriteFileParams, "file_path"),
-    (ListDirectoryParams, "dir_path"),
+@pytest.mark.parametrize("param_class, data", [
+    (CreateDirectoryParams, {"path": ""}),
+    (WriteFileParams, {"path": "/some/path", "content": None}), # Content is required
+    (WriteFileParams, {"path": "", "content": "some content"}),
+    (CreateZipFromDirectoryParams, {"source_path": "", "destination_path": "/dest"}),
+    (CreateZipFromDirectoryParams, {"source_path": "/src", "destination_path": ""}),
 ])
-def test_path_params_reject_empty_string(param_class, field):
-    """
-    Tests that path parameters do not allow empty strings.
-    This assumes the Pydantic models have validation like `min_length=1`.
-    """
+def test_invalid_params_raise_validation_error(param_class, data):
+    """Tests that Pydantic models raise ValidationError for invalid input."""
     with pytest.raises(ValidationError):
-        # For WriteFileParams, content is also required for valid instantiation
-        if param_class == WriteFileParams:
-            param_class(**{field: "", "content": "some content"})
-        else:
-            param_class(**{field: ""})
+        param_class(**data)
 
 def test_write_file_params_allows_empty_content():
-    """Tests that writing an empty string as content is valid."""
-    params = WriteFileParams(file_path="/path/to/file.txt", content="")
-    assert params.content == ""
+    """Tests that writing an empty string or empty bytes as content is valid."""
+    params_str = WriteFileParams(path="/path/to/file.txt", content="")
+    assert params_str.content == ""
+
+    params_bytes = WriteFileParams(path="/path/to/file.txt", content=b"")
+    assert params_bytes.content == b""

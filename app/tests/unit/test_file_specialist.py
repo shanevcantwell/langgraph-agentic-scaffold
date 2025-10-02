@@ -1,306 +1,170 @@
+# app/tests/unit/test_file_specialist.py
 
 import pytest
 import os
-from unittest.mock import patch, MagicMock, mock_open
+import shutil
+from uuid import uuid4
+from pathlib import Path
 
-from app.src.specialists.file_specialist import FileSpecialist, ReadFileParams, WriteFileParams, ListDirectoryParams
-from app.src.utils.errors import SpecialistError, LLMInvocationError
-from langchain_core.messages import HumanMessage, AIMessage
+from app.src.specialists.file_specialist import FileSpecialist
+from app.src.specialists.schemas._file_ops import (
+    CreateDirectoryParams,
+    WriteFileParams,
+    CreateZipFromDirectoryParams,
+)
+from app.src.utils.errors import SpecialistError
+from langchain_core.messages import ToolMessage, HumanMessage
 
-# Architectural Note: The 'tmp_path' fixture is provided by pytest.
-# It creates a unique temporary directory for each test function, ensuring that
-# tests are isolated and do not interfere with each other or leave artifacts
-# on the filesystem. This is the standard best practice for testing file I/O.
+# --- Architectural Note ---
+# This test suite validates the FileSpecialist in its refactored role as a
+# PROCEDURAL TOOL DISPATCHER. Unlike its predecessor, this specialist does not
+# invoke an LLM. Its primary responsibility is to receive a `ToolMessage` from
+# an upstream planner and execute the corresponding deterministic file operation.
+#
+# Therefore, these tests focus on two areas:
+# 1. The correctness of the internal file operation methods (e.g., _write_file).
+# 2. The correctness of the main `_execute_logic` dispatcher.
 
 @pytest.fixture
-def file_specialist(tmp_path, initialized_specialist_factory):
-    """Provides a FileSpecialist instance with a temporary workspace."""
-    workspace = tmp_path / "test_workspace"
-    workspace.mkdir()
+def file_specialist_instance(initialized_specialist_factory):
+    """Provides a clean FileSpecialist instance for each test."""
+    return initialized_specialist_factory("FileSpecialist", "file_specialist")
 
-    # Use the centralized factory to create the specialist, providing the
-    # temporary workspace path as a configuration override.
-    specialist = initialized_specialist_factory(
-        "FileSpecialist",
-        specialist_name_override="file_specialist",
-        config_override={
-            "root_dir": str(workspace)
-        }
-    )
+# === Group 1: Internal Method Logic Tests ===
+# These tests validate the core business logic of each file operation.
 
-    assert specialist.root_dir == str(workspace)
-    return specialist
+def test_create_directory(file_specialist_instance, tmp_path: Path):
+    """Tests the internal _create_directory method."""
+    dir_path = tmp_path / "new_dir"
+    status = file_specialist_instance._create_directory(str(dir_path))
+    assert dir_path.is_dir()
+    assert "Successfully created directory" in status
 
-def test_get_full_path_success(file_specialist, tmp_path):
-    """Tests that a valid relative path is resolved correctly."""
-    workspace = tmp_path / "test_workspace"
-    expected_path = os.path.abspath(str(workspace / "test.txt"))
-    resolved_path = file_specialist._get_full_path("test.txt")
-    assert resolved_path == expected_path
+def test_write_file(file_specialist_instance, tmp_path: Path):
+    """Tests the internal _write_file method with both string and bytes content."""
+    # Test with string
+    file_path_str = tmp_path / "test.txt"
+    status_str = file_specialist_instance._write_file(str(file_path_str), "hello")
+    assert file_path_str.read_text() == "hello"
+    assert "Successfully wrote file" in status_str
 
-def test_get_full_path_traversal_denied(file_specialist):
-    """Tests that directory traversal using '..' is blocked."""
-    with pytest.raises(SpecialistError, match="Only relative paths are allowed"):
-        file_specialist._get_full_path("../secret.txt")
+    # Test with bytes
+    file_path_bytes = tmp_path / "test.bin"
+    status_bytes = file_specialist_instance._write_file(str(file_path_bytes), b"world")
+    assert file_path_bytes.read_bytes() == b"world"
+    assert "Successfully wrote file" in status_bytes
 
-def test_get_full_path_absolute_path_denied(file_specialist):
-    """Tests that absolute paths are blocked."""
-    with pytest.raises(SpecialistError, match="Only relative paths are allowed"):
-        file_specialist._get_full_path("/etc/passwd")
+def test_write_file_empty_content(file_specialist_instance, tmp_path: Path):
+    """Tests that writing an empty file is handled correctly."""
+    file_path = tmp_path / "empty.txt"
+    file_specialist_instance._write_file(str(file_path), "")
+    assert file_path.exists()
+    assert file_path.read_text() == ""
 
-def test_read_file_success(file_specialist, tmp_path):
-    """Tests successful file reading via the internal method."""
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    test_file.write_text("Hello, world!")
-    
-    params = ReadFileParams(file_path="test.txt")
-    content, status = file_specialist._read_file(params)
-    
-    assert content == "Hello, world!"
-    assert "Successfully read" in status
+def test_create_zip_from_directory(file_specialist_instance, tmp_path: Path):
+    """Tests the internal _create_zip_from_directory method."""
+    source_dir = tmp_path / "source_dir"
+    source_dir.mkdir()
+    (source_dir / "file.txt").write_text("zip content")
+    dest_path = tmp_path / "archive.zip"
 
-def test_read_file_not_found(file_specialist):
-    """Tests reading a file that does not exist."""
-    params = ReadFileParams(file_path="non_existent_file.txt")
-    content, status = file_specialist._read_file(params)
-    
-    assert content is None
-    assert "Error reading file" in status
+    status = file_specialist_instance._create_zip_from_directory(str(source_dir), str(dest_path))
 
-def test_read_file_empty(file_specialist, tmp_path):
-    """Tests reading a file that is empty."""
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    test_file.touch() # Create an empty file
+    assert dest_path.is_file()
+    assert "Successfully created zip archive" in status
 
-    params = ReadFileParams(file_path="test.txt")
-    content, status = file_specialist._read_file(params)
+    # For extra confidence, unpack the archive and verify its contents
+    shutil.unpack_archive(str(dest_path), tmp_path / "unpacked")
+    assert (tmp_path / "unpacked" / "file.txt").read_text() == "zip content"
 
-    assert content == ""
-    assert "Successfully read" in status
+# === Group 2: Main Dispatcher Logic Tests (_execute_logic) ===
+# These tests validate the specialist's main entry point and its ability to
+# correctly interpret and dispatch incoming ToolMessages.
 
-def test_write_file_safety_on(file_specialist, tmp_path):
-    """Tests that file writing is mocked when safety is ON (default)."""
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    
-    file_specialist.is_safety_on = True # Explicitly set for test clarity
+@pytest.mark.parametrize("tool_name, tool_args, test_id", [
+    ("CreateDirectoryParams", {"path": "new_dir"}, "create_dir"),
+    ("WriteFileParams", {"path": "new_file.txt", "content": "content"}, "write_file"),
+    ("CreateZipFromDirectoryParams", {"source_path": "src_dir", "destination_path": "archive.zip"}, "create_zip"),
+])
+def test_execute_logic_success_dispatch(file_specialist_instance, tmp_path: Path, tool_name, tool_args, test_id):
+    """
+    Tests that _execute_logic correctly dispatches various tool calls
+    and executes them successfully.
+    """
+    # Adjust paths to be absolute for the test execution environment
+    if "path" in tool_args:
+        tool_args["path"] = str(tmp_path / tool_args["path"])
+    if "source_path" in tool_args:
+        source_path = tmp_path / tool_args["source_path"]
+        source_path.mkdir()
+        (source_path / "dummy.txt").touch()
+        tool_args["source_path"] = str(source_path)
+    if "destination_path" in tool_args:
+        tool_args["destination_path"] = str(tmp_path / tool_args["destination_path"])
 
-    params = WriteFileParams(file_path="test.txt", content="new content")
-    status = file_specialist._write_file(params)
-    
-    # Assert that the file was NOT created.
-    assert not test_file.exists()
-    assert "DRY RUN" in status
-    assert "Would have written content" in status
-
-def test_write_file_safety_off(file_specialist, tmp_path):
-    """Tests that file writing proceeds when safety is OFF."""
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    file_specialist.is_safety_on = False # Explicitly disable safety for this test
-    params = WriteFileParams(file_path="test.txt", content="new content")
-    status = file_specialist._write_file(params)
-    assert test_file.exists()
-    assert test_file.read_text() == "new content"
-    assert "Successfully wrote" in status
-
-def test_write_file_safety_off_overwrites_existing_file(file_specialist, tmp_path):
-    """Tests that writing to an existing file overwrites its content when safety is off."""
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    test_file.write_text("initial content")
-
-    file_specialist.is_safety_on = False
-    params = WriteFileParams(file_path="test.txt", content="overwritten content")
-    status = file_specialist._write_file(params)
-
-    assert test_file.read_text() == "overwritten content"
-    assert "Successfully wrote" in status
-
-def test_write_file_permission_error(file_specialist):
-    """Tests that a permission error during writing is handled gracefully."""
-    file_specialist.is_safety_on = False
-    params = WriteFileParams(file_path="protected/file.txt", content="some content")
-
-    with patch("builtins.open", mock_open()) as mocked_open:
-        mocked_open.side_effect = PermissionError("Permission denied")
-        status = file_specialist._write_file(params)
-        assert "Error writing file" in status
-        assert "Permission denied" in status
-
-def test_list_directory_success(file_specialist, tmp_path):
-    """Tests successful directory listing."""
-    workspace = tmp_path / "test_workspace"
-    (workspace / "file1.txt").touch()
-    (workspace / "subdir").mkdir()
-    (workspace / "subdir" / "file2.txt").touch()
-    
-    params = ListDirectoryParams(dir_path=".")
-    result = file_specialist._list_directory(params)
-    
-    assert "file1.txt" in result
-    assert "subdir" in result
-    
-    params_subdir = ListDirectoryParams(dir_path="subdir")
-    result_subdir = file_specialist._list_directory(params_subdir)
-    assert "file2.txt" in result_subdir
-
-def test_list_directory_non_existent(file_specialist):
-    """Tests listing a directory that does not exist."""
-    params = ListDirectoryParams(dir_path="non_existent_dir")
-    result = file_specialist._list_directory(params)
-    assert "is not a directory" in result
-
-def test_list_directory_empty(file_specialist, tmp_path):
-    """Tests listing an empty directory.""" # This test seems to have a logic issue in the specialist itself.
-    workspace = tmp_path / "test_workspace"
-    (workspace / "empty_dir").mkdir()
-    params = ListDirectoryParams(dir_path="empty_dir")
-    result = file_specialist._list_directory(params)
-    assert "is empty" in result or result == ".\n"
-
-def test_execute_logic_reads_file(file_specialist, tmp_path):
-    """Tests the full logic execution for a read_file operation."""
-    # Arrange
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    test_file.write_text("file content")
-
-    # Mock the LLM response
-    mock_llm_response = {
-        "tool_calls": [{
-            "name": "ReadFileParams",
-            "args": {"file_path": "test.txt"},
-            "id": "call_123"
-        }]
+    tool_call_id = str(uuid4())
+    state = {
+        "messages": [
+            ToolMessage(
+                name=tool_name,
+                content="", # Content is ignored by the dispatcher
+                tool_call_id=tool_call_id,
+                additional_kwargs={"parsed_args": tool_args}
+            )
+        ]
     }
-    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
 
-    initial_state = {"messages": [HumanMessage(content="Read test.txt")]}
+    result_state = file_specialist_instance._execute_logic(state)
 
-    # Act
-    result_state = file_specialist._execute_logic(initial_state)
+    assert "messages" in result_state
+    response_message = result_state["messages"][0]
+    assert isinstance(response_message, ToolMessage)
+    assert response_message.tool_call_id == tool_call_id
+    assert "Successfully" in response_message.content
 
-    # Assert
-    file_specialist.llm_adapter.invoke.assert_called_once()
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert "FileSpecialist action 'ReadFile' completed" in result_state["messages"][0].content
-    assert "artifacts" in result_state
-    assert result_state["artifacts"].get("text_to_process") == "file content"
-
-def test_execute_logic_writes_file_safety_on(file_specialist, tmp_path):
-    """Tests the full logic for a write_file operation when safety is ON."""
-    # Arrange
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    file_specialist.is_safety_on = True # Explicitly set for test clarity
-    mock_llm_response = {
-        "tool_calls": [{
-            "name": "WriteFileParams",
-            "args": {"file_path": "test.txt", "content": "written content"},
-            "id": "call_123"
-        }]
+def test_execute_logic_handles_unknown_tool(file_specialist_instance):
+    """Tests that an unknown tool call is handled gracefully with a clear message."""
+    tool_call_id = str(uuid4())
+    state = {
+        "messages": [
+            ToolMessage(
+                name="UnknownTool",
+                content="",
+                tool_call_id=tool_call_id,
+                additional_kwargs={"parsed_args": {}}
+            )
+        ]
     }
-    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
-    initial_state = {"messages": [HumanMessage(content="Write to test.txt")]}
+    result_state = file_specialist_instance._execute_logic(state)
+    response_message = result_state["messages"][0]
+    assert "Unknown tool 'UnknownTool'" in response_message.content
 
-    # Act
-    result_state = file_specialist._execute_logic(initial_state)
-
-    # Assert
-    # Assert that the file was NOT created.
-    assert not test_file.exists()
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert "DRY RUN" in result_state["messages"][0].content
-    assert "text_to_process" not in result_state # Write ops shouldn't populate this
-
-def test_execute_logic_writes_file_safety_off(file_specialist, tmp_path):
-    """Tests the full logic for a write_file operation when safety is OFF."""
-    # Arrange
-    workspace = tmp_path / "test_workspace"
-    test_file = workspace / "test.txt"
-    file_specialist.is_safety_on = False # Explicitly disable safety for this test
-    mock_llm_response = {
-        "tool_calls": [{
-            "name": "WriteFileParams",
-            "args": {"file_path": "test.txt", "content": "written content"},
-            "id": "call_123"
-        }]
+def test_execute_logic_handles_tool_execution_error(file_specialist_instance):
+    """Tests that a SpecialistError during tool execution is caught and reported."""
+    # Attempt to write to a path that will cause a permission error.
+    # On most systems, writing to the root directory is not allowed.
+    tool_args = {"path": "/", "content": "test"}
+    tool_call_id = str(uuid4())
+    state = {
+        "messages": [
+            ToolMessage(
+                name="WriteFileParams",
+                content="",
+                tool_call_id=tool_call_id,
+                additional_kwargs={"parsed_args": tool_args}
+            )
+        ]
     }
-    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
-    initial_state = {"messages": [HumanMessage(content="Write to test.txt")]}
-    # Act
-    result_state = file_specialist._execute_logic(initial_state)
-    # Assert
-    assert test_file.exists()
-    assert test_file.read_text() == "written content"
-    assert "Successfully wrote" in result_state["messages"][0].content
+    result_state = file_specialist_instance._execute_logic(state)
+    response_message = result_state["messages"][0]
+    assert "Error writing file" in response_message.content
 
-def test_execute_logic_handles_llm_failure(file_specialist):
-    """Tests that the specialist handles when the LLM adapter itself fails."""
-    # Arrange
-    file_specialist.llm_adapter.invoke.side_effect = LLMInvocationError("API Error")
-    initial_state = {"messages": [HumanMessage(content="some request")]}
+def test_execute_logic_ignores_non_tool_message(file_specialist_instance):
+    """
+    Tests that the specialist does nothing if the last message is not a ToolMessage,
+    adhering to its procedural contract.
+    """
+    state = {"messages": [HumanMessage(content="This is not a tool call.")]}
+    result_state = file_specialist_instance._execute_logic(state)
+    assert result_state == {}
 
-    # Act & Assert
-    with pytest.raises(LLMInvocationError, match="API Error"):
-        file_specialist._execute_logic(initial_state)
-
-def test_execute_logic_handles_malformed_tool_input(file_specialist):
-    """Tests handling of LLM responses where tool_input is malformed."""
-    # Arrange - LLM returns a tool call for a tool that doesn't exist
-    mock_llm_response = {
-        "tool_calls": [{
-            "name": "NonExistentTool",
-            "args": {"file_path": "test.txt"},
-            "id": "call_123"
-        }]
-    }
-    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
-    initial_state = {"messages": [HumanMessage(content="Read the file")]}
-    # Act
-    result_state = file_specialist._execute_logic(initial_state)
-    # Assert
-    assert "Unknown tool 'NonExistentTool' requested" in result_state["messages"][0].content
-    
-def test_execute_logic_handles_llm_no_json(file_specialist):
-    """Tests that the specialist handles when the LLM fails to return a valid Pydantic object."""
-    # Arrange
-    file_specialist.llm_adapter.invoke.return_value = {"tool_calls": []}
-    initial_state = {"messages": [HumanMessage(content="gibberish request")]}
-
-    # Act
-    result_state = file_specialist._execute_logic(initial_state)
-
-    # Assert
-    assert "did not request a valid tool" in result_state["messages"][0].content
-    assert "text_to_process" not in result_state.get("artifacts", {})
-
-def test_execute_logic_lists_directory(file_specialist, tmp_path):
-    """Tests the full logic execution for a list_directory operation."""
-    # Arrange
-    workspace = tmp_path / "test_workspace"
-    (workspace / "file1.txt").touch()
-    (workspace / "subdir").mkdir()
-
-    mock_llm_response = {
-        "tool_calls": [{
-            "name": "ListDirectoryParams",
-            "args": {"dir_path": "."},
-            "id": "call_456"
-        }]
-    }
-    file_specialist.llm_adapter.invoke.return_value = mock_llm_response
-    initial_state = {"messages": [HumanMessage(content="List files")]}
-
-    # Act
-    result_state = file_specialist._execute_logic(initial_state)
-
-    # Assert
-    assert "FileSpecialist action 'ListDirectory' completed" in result_state["messages"][0].content
-    assert "file1.txt" in result_state["artifacts"]["text_to_process"]
-    assert "subdir" in result_state["artifacts"]["text_to_process"]
