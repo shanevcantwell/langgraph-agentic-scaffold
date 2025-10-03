@@ -14,7 +14,7 @@ export no_proxy="localhost,127.0.0.1"
 # ------------------------
 
 echo "--- Starting FastAPI server (with reload) ---"
-uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --reload &
+uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --reload --log-config log_config.yaml &
 
 echo "--- Starting Gradio UI server ---"
 python -m app.src.ui --port 5003 &
