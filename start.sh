@@ -14,7 +14,11 @@ export no_proxy="localhost,127.0.0.1"
 # ------------------------
 
 echo "--- Starting FastAPI server (with reload) ---"
-uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --reload --log-config log_config.yaml &
+# Use explicit reload directories to prevent the log file from triggering reloads.
+# Watch the 'app' directory for changes, but exclude the 'logs' directory.
+uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --reload \
+--reload-dir app \
+--reload-exclude "logs/*" --log-config log_config.yaml &
 
 echo "--- Starting Gradio UI server ---"
 python -m app.src.ui --port 5003 &
