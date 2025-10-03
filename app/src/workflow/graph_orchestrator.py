@@ -103,7 +103,7 @@ class GraphOrchestrator:
         ai_message = AIMessage(content=content, name=specialist_name)
         return {"messages": [ai_message], "recommended_specialists": recommended_specialists}
 
-    def create_safe_executor(self, specialist_instance: BaseSpecialist) -> Callable[[GraphState], Dict[str, Any]]:
+    def create_safe_executor(self, specialist_instance: BaseSpecialist, streaming_callback: Callable[[str], None] = None) -> Callable[[GraphState], Dict[str, Any]]:
         """
         Creates a wrapper around a specialist's execute method to enforce preconditions
         and provide centralized exception handling.
@@ -132,6 +132,10 @@ class GraphOrchestrator:
                             )
 
             try:
+                # If a streaming callback is provided, use it to signal the start of execution.
+                if streaming_callback:
+                    streaming_callback(f"Entering node: {specialist_name}\n")
+
                 update = specialist_instance.execute(state)
                 if "turn_count" in update:
                     logger.warning(f"Specialist '{specialist_name}' returned a 'turn_count'. This is not allowed and will be ignored.")

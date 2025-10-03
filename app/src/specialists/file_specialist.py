@@ -101,4 +101,8 @@ class FileSpecialist(BaseSpecialist):
             name=self.specialist_name
         )
 
-        return {"messages": [response_message]}
+        return {
+            "messages": [response_message],
+            # Add a user-facing summary of the action to the scratchpad.
+            "scratchpad": {"user_response_snippets": [status_message]}
+        }

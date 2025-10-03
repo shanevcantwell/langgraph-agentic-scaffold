@@ -32,27 +32,35 @@ class ResponseSynthesizerSpecialist(BaseSpecialist):
         scratchpad = state.get("scratchpad", {})
         user_response_snippets = scratchpad.get("user_response_snippets", [])
 
-        # Concatenate all snippets into a single string for the LLM to process.
-        # The prompt for this specialist should instruct the LLM on how to combine these.
-        combined_snippets = "\n\n---\n\n".join(str(s) for s in user_response_snippets)
+        # Guard clause: If there are no snippets, do not call the LLM.
+        # Instead, provide a generic but safe completion message. This prevents
+        # the LLM from hallucinating on an empty prompt.
+        if not user_response_snippets:
+            logger.warning(f"{self.specialist_name}: No user_response_snippets found. Providing a default completion message.")
+            synthesized_response = "The workflow has completed its tasks, but no specific output was generated to display."
+            # Skip directly to artifact creation
+        else:
+            # Concatenate all snippets into a single string for the LLM to process.
+            # The prompt for this specialist should instruct the LLM on how to combine these.
+            combined_snippets = "\n\n---\n\n".join(str(s) for s in user_response_snippets)
 
-        # Create a clean, minimal message for the LLM. The system prompt (loaded
-        # by the adapter) contains all the instructions. We just need to provide
-        # the raw data to be synthesized.
-        messages = [
-            HumanMessage(content=combined_snippets)
-        ]
+            # Create a clean, minimal message for the LLM. The system prompt (loaded
+            # by the adapter) contains all the instructions. We just need to provide
+            # the raw data to be synthesized.
+            messages = [
+                HumanMessage(content=combined_snippets)
+            ]
 
-        request = StandardizedLLMRequest(messages=messages)
-        response_data = self.llm_adapter.invoke(request)
+            request = StandardizedLLMRequest(messages=messages)
+            response_data = self.llm_adapter.invoke(request)
 
-        synthesized_response = response_data.get("text_response")
-        if not synthesized_response:
-            # If the LLM fails, log the issue and create a neutral placeholder.
-            # The archiver will still capture the state for debugging, but we avoid
-            # showing a technical error message to the end-user.
-            logger.error(f"ResponseSynthesizer LLM failed. Raw output: {response_data.get('raw_response_content', 'N/A')}")
-            synthesized_response = "I was unable to generate a final response based on the preceding actions."
+            synthesized_response = response_data.get("text_response")
+            if not synthesized_response:
+                # If the LLM fails, log the issue and create a neutral placeholder.
+                # The archiver will still capture the state for debugging, but we avoid
+                # showing a technical error message to the end-user.
+                logger.error(f"ResponseSynthesizer LLM failed. Raw output: {response_data.get('raw_response_content', 'N/A')}")
+                synthesized_response = "I was unable to generate a final response based on the preceding actions."
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
