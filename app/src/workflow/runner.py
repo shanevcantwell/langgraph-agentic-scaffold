@@ -52,7 +52,7 @@ class WorkflowRunner:
         self.specialists = self.builder.specialists
         self._perform_pre_flight_checks()
         self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
-        self.app = self.builder.build()
+        self.app = self.builder.build() # Build a non-streaming version for sync calls
         logger.info("WorkflowRunner initialized with compiled graph.")
 
     def _perform_pre_flight_checks(self):
@@ -153,9 +153,18 @@ class WorkflowRunner:
         if text_to_process:
             initial_state["artifacts"]["text_to_process"] = text_to_process
 
+        # --- Streaming-Specific Logic ---
+        # Define a callback that the graph can use to yield messages mid-stream.
+        async def stream_callback(message: str):
+            yield message
+
+        # Build a new version of the graph specifically for this streaming run,
+        # injecting the callback into the node executors.
+        streaming_app = self.builder.build(streaming_callback=stream_callback)
+
         final_state = None
         try:
-            async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
+            async for event in streaming_app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
                 for node_name, node_state in event.items():
                     final_state = node_state
                     yield f"Finished node: {node_name}\n"

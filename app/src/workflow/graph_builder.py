@@ -1,6 +1,6 @@
 # app/src/workflow/graph_builder.py
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Callable
 
 from langgraph.graph import StateGraph, END
 
@@ -40,12 +40,12 @@ class GraphBuilder:
         else:
             self.entry_point = raw_entry_point
 
-    def build(self) -> StateGraph:
+    def build(self, streaming_callback: Callable[[str], None] = None) -> StateGraph:
         """
         Builds and compiles the LangGraph StateGraph instance.
         """
         workflow = StateGraph(GraphState)
-        self._add_nodes_to_graph(workflow)
+        self._add_nodes_to_graph(workflow, streaming_callback)
         self._wire_hub_and_spoke_edges(workflow)
         workflow.set_entry_point(self.entry_point)
         compiled_graph = workflow.compile()
@@ -197,7 +197,7 @@ class GraphBuilder:
             logger.error(f"CRITICAL: An unexpected error occurred while creating the adapter for '{triage_instance.specialist_name}': {e}", exc_info=True)
             triage_instance.llm_adapter = None
 
-    def _add_nodes_to_graph(self, workflow: StateGraph):
+    def _add_nodes_to_graph(self, workflow: StateGraph, streaming_callback: Callable[[str], None] = None):
         for name, instance in self.specialists.items():
             if name == CoreSpecialist.ROUTER.value:
                 workflow.add_node(name, instance.execute)
