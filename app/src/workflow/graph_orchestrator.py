@@ -6,7 +6,7 @@ from typing import Dict, Any, Callable
 from langchain_core.messages import AIMessage
 
 from ..specialists.base import BaseSpecialist
-from ..graph.state import GraphState
+from ..graph.state import GraphState, Scratchpad
 from ..enums import CoreSpecialist
 from ..utils import state_pruner
 from ..utils.errors import SpecialistError
@@ -67,7 +67,11 @@ class GraphOrchestrator:
                         is_loop = False
                         break
                 if is_loop:
-                    logger.error(f"Unproductive loop detected: '{list(last_block)}' repeated. Halting.")
+                    termination_reason = (f"The workflow is stuck in an unproductive loop and has been halted. "
+                                          f"The sequence '{list(last_block)}' was repeated {self.max_loop_cycles} times.")
+                    logger.error(termination_reason)
+                    # Add the reason to the scratchpad so the EndSpecialist can report it.
+                    state.setdefault("scratchpad", {})["termination_reason"] = termination_reason
                     return True
         return False
 
@@ -135,6 +139,11 @@ class GraphOrchestrator:
                 # If a streaming callback is provided, use it to signal the start of execution.
                 if streaming_callback:
                     streaming_callback(f"Entering node: {specialist_name}\n")
+
+                # Log the system prompt for LLM-based specialists for better observability.
+                if hasattr(specialist_instance, 'llm_adapter') and specialist_instance.llm_adapter:
+                    if hasattr(specialist_instance.llm_adapter, 'system_prompt'):
+                        logger.debug(f"System prompt for '{specialist_name}':\n---PROMPT---\n{specialist_instance.llm_adapter.system_prompt}\n---ENDPROMPT---")
 
                 update = specialist_instance.execute(state)
                 if "turn_count" in update:

@@ -155,9 +155,9 @@ specialists:
     description: "Handles direct, conversational Q&A and simple instructions that do not require file I/O or complex text analysis. This is the default specialist for general conversation or when no specific tool seems necessary. Acts as a fallback."
 
   # --- Procedural Specialists with External Dependencies ---
-  # open_interpreter_specialist:
-  #   type: "procedural"
-  #   description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
+  open_interpreter_specialist:
+    type: "procedural"
+    description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
 
   end_specialist:
     type: "procedural"

@@ -105,4 +105,8 @@ class OpenInterpreterSpecialist(BaseSpecialist):
             content=f"I have executed the following {code_params.language} code:\n\n```\n{code_params.code}\n```\n\n**Result:**\n{final_output}",
         )
         
-        return {"messages": [ai_message]}
+        return {
+            "messages": [ai_message],
+            # Add a user-facing summary of the action to the scratchpad.
+            "scratchpad": {"user_response_snippets": [f"Executed code and got the following result:\n\n{final_output}"]}
+        }

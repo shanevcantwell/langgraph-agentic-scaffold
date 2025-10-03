@@ -33,6 +33,7 @@ class Scratchpad(BaseModel):
     extraction_schema: Optional[Any] = None
     target_artifact_name: Optional[str] = None
     web_builder_iteration: Optional[int] = None
+    termination_reason: Optional[str] = None
 
 class GraphState(TypedDict):
     """
