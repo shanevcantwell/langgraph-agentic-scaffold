@@ -6,6 +6,10 @@ FROM python:3.12-slim
 # Set the working directory inside the container.
 WORKDIR /app
 
+# Declare a build-time argument for the execution mode. Defaults to 'supervised'.
+# Can be overridden during build with --build-arg EXECUTION_MODE=unsupervised
+ARG EXECUTION_MODE=supervised
+
 # Install system dependencies. 'build-essential' includes kernel headers.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
@@ -25,6 +29,11 @@ USER appuser
 
 # Copy all project files into the working directory.
 COPY --chown=appuser:appuser . .
+
+# Conditionally create the execution mode lock file based on the build argument.
+RUN if [ "$EXECUTION_MODE" = "unsupervised" ]; then \
+    touch .unsupervised_execution.lock; \
+    fi
 
 # Now, install Python dependencies from pyproject.toml.
 RUN pip install --no-cache-dir -e '.[dev]'

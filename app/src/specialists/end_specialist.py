@@ -46,15 +46,20 @@ class EndSpecialist(BaseSpecialist):
 
         current_state = state.copy()
 
-        # Per DEVELOPERS_GUIDE.md, the EndSpecialist must handle cases where no
-        # user-facing snippets were generated.
+        # Check for a specific termination reason (e.g., from loop detection).
+        # If present, use it as the final response and bypass the synthesizer.
+        termination_reason = current_state.get("scratchpad", {}).get("termination_reason")
+        if termination_reason:
+            logger.warning(f"EndSpecialist: Using explicit termination reason for final response: {termination_reason}")
+            current_state.setdefault("artifacts", {})["final_user_response.md"] = termination_reason
+
+        # If no termination reason, check if we have snippets to synthesize.
         scratchpad = current_state.get("scratchpad", {})
-        if not scratchpad.get("user_response_snippets"):
+        if not current_state.get("artifacts", {}).get("final_user_response.md") and not scratchpad.get("user_response_snippets"):
             logger.warning("EndSpecialist: No user_response_snippets found. Generating fallback response.")
             messages = current_state.get("messages", [])
             last_message = messages[-1] if messages else None
 
-            # If the last action was a tool, present its output directly.
             if isinstance(last_message, ToolMessage):
                 fallback_content = f"The task finished with the following result:\n\n```\n{last_message.content}\n```"
             else:

@@ -46,8 +46,8 @@ external_agents/*
 docs/agent_scratchpad.md
 runverify.sh
 
-# --- "Safety" Lock for Real Filesystem Changes ---
-.agent_safety_off.lock
+# --- Lock file for unsupervised code execution ---
+.unsupervised_execution.lock
 workspace/*
 
 

@@ -74,7 +74,10 @@ class FileSpecialist(BaseSpecialist):
 
         status_message = ""
         try:
-            if tool_name == WriteFileParams.__name__:
+            if tool_name == CreateDirectoryParams.__name__:
+                params = CreateDirectoryParams(**tool_args)
+                status_message = self._create_directory(params.path)
+            elif tool_name == WriteFileParams.__name__:
                 params = WriteFileParams(**tool_args)
                 status_message = self._write_file(params.path, params.content)
             elif tool_name == CreateZipFromDirectoryParams.__name__:

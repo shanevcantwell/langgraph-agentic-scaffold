@@ -110,7 +110,7 @@ specialists:
 
   file_specialist:
     type: "procedural"
-    description: "A procedural specialist that executes structured tool calls for file operations (e.g., list, write, create directory). It does not interpret natural language; it only executes plans from other specialists."
+    description: "A procedural specialist that executes pre-planned, structured tool calls for file modification (e.g., write file, create directory). It does not interpret natural language and cannot list files; it only executes plans from other specialists."
     root_dir: "./workspace"
 
   # --- Data & Analysis ---

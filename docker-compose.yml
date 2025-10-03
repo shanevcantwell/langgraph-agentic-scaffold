@@ -4,7 +4,12 @@ version: '3.8'
 services:
   app:
     # Build the application image using the Dockerfile in the current directory.
-    build: .
+    build:
+      context: .
+      args:
+        # Pass the EXECUTION_MODE build argument. It defaults to 'supervised' if the
+        # EXECUTION_MODE_OVERRIDE environment variable is not set on the host.
+        - EXECUTION_MODE=${EXECUTION_MODE_OVERRIDE:-supervised}
     # Load secrets and configuration from the .env file.
     env_file:
       - .env
