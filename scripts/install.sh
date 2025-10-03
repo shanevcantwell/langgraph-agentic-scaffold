@@ -40,6 +40,9 @@ fi
 if [ ! -f user_settings.yaml ]; then
     cp user_settings.yaml.example user_settings.yaml
 fi
+if [ ! -f proxy/squid.conf ]; then
+    cp proxy/squid.conf.example proxy/squid.conf
+fi
 
 echo "---"
 echo "✅ Development environment setup complete."

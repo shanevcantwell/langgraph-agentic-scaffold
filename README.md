@@ -100,6 +100,19 @@ Using Docker is the recommended way to run this project. It provides a secure, s
     cat your_prompt.txt | docker compose exec -T app python -m app.src.cli
     ```
 
+### Applying Configuration Changes
+
+If you make changes to configuration files while the containers are running, you may need to restart the services for them to take effect.
+
+  * **Changes to `.env`, `config.yaml`, or Python code:** Restart the `app` container.
+    ```bash
+    docker compose restart app
+    ```
+  * **Changes to `proxy/squid.conf`:** Restart the `proxy` container.
+    ```bash
+    docker compose restart proxy
+    ```
+
 -----
 
 ## Local Virtual Environment Setup (Alternative)

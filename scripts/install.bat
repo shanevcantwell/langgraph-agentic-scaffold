@@ -25,10 +25,11 @@ if %errorlevel% neq 0 (
     echo jq is installed.
 )
 
-echo --- Copying example configuration files ---
-copy .env.example .env >nul
-copy config.yaml.example config.yaml >nul
-copy user_settings.yaml.example user_settings.yaml >nul
+echo --- Copying example configuration files (if they don't already exist) ---
+if not exist ".env" copy ".env.example" ".env" >nul
+if not exist "config.yaml" copy "config.yaml.example" "config.yaml" >nul
+if not exist "user_settings.yaml" copy "user_settings.yaml.example" "user_settings.yaml" >nul
+if not exist "proxy\squid.conf" copy "proxy\squid.conf.example" "proxy\squid.conf" >nul
 
 echo ---
 echo ✅ Development environment setup complete.

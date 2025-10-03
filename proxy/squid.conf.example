@@ -4,6 +4,7 @@
 acl SSL_ports port 443
 acl Safe_ports port 80       # http
 acl Safe_ports port 443      # https
+# acl Safe_ports port 1234     # LM Studio
 
 # --- Define Whitelisted Domains ---
 # Create an ACL for the domains your agent is allowed to contact.
@@ -13,6 +14,8 @@ acl allowed_domains dstdomain .github.com        # For source code and assets
 acl allowed_domains dstdomain .huggingface.co    # For models and datasets
 acl allowed_domains dstdomain .googleapis.com    # For Google Gemini API
 acl allowed_domains dstdomain api.smith.langchain.com # For LangSmith
+
+# acl allowed_domains dstdomain <your-LMStudio-server>  # For LM Studio
 
 # --- Access Rules ---
 # Deny requests to non-standard ports
