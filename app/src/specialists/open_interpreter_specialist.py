@@ -50,20 +50,15 @@ class OpenInterpreterSpecialist(BaseSpecialist):
 
         messages = state.get("messages", [])
         
-        last_human_message_content = next(
-            (msg.content for msg in reversed(messages) if isinstance(msg, HumanMessage)),
-            "No specific user instruction found. Review the conversation history and decide on the next code action."
-        )
-
         # --- Phase 1: Plan the Code to Execute ---
         logger.info("Phase 1: Generating code execution plan...")
         planning_prompt = (
             "Based on the following user request and conversation history, your task is to generate a single, "
             "self-contained code block to be executed by the open-interpreter. "
-            "You must respond by calling the 'CodeExecutionParams' tool.\n\n"
-            f"USER REQUEST: {last_human_message_content}"
+            "You must respond by calling the 'CodeExecutionParams' tool."
         )
         
+        # Pass the full message history to the planning LLM for context.
         request = StandardizedLLMRequest(
             messages=messages + [HumanMessage(content=planning_prompt)],
             tools=[CodeExecutionParams]

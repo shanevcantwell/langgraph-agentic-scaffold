@@ -56,3 +56,41 @@ def test_open_interpreter_specialist_handles_no_tool_call_from_llm(open_interpre
 
     # Assert
     assert "failed to produce a valid code plan" in result_state.get("error", "")
+
+@patch('interpreter.interpreter', new_callable=MagicMock)
+def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_interpreter_specialist):
+    """
+    Tests that OpenInterpreterSpecialist can correctly plan and execute a
+    shell command for a common prompt like 'list files'.
+    """
+    # --- Arrange ---
+    # 1. Mock the LLM "Plan" phase to generate a bash command
+    mock_llm_response = {
+        "tool_calls": [{
+            "name": "CodeExecutionParams",
+            "args": {"language": "bash", "code": "ls -F"},
+            "id": "call_456"
+        }]
+    }
+    open_interpreter_specialist.llm_adapter.invoke.return_value = mock_llm_response
+
+    # 2. Mock the "Execute" phase to simulate the output of 'ls -F'
+    mock_interpreter.chat.return_value = (_ for _ in [])
+    mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'README.md\nsrc/\n'}]
+
+    initial_state = {"messages": [HumanMessage(content="List files available")]}
+
+    # --- Act ---
+    result_state = open_interpreter_specialist._execute_logic(initial_state)
+
+    # --- Assert ---
+    # Assert that the final AI message contains the result
+    final_message = result_state["messages"][0]
+    assert "Result:" in final_message.content
+    assert "README.md" in final_message.content
+
+    # Assert that the scratchpad was populated for the ResponseSynthesizer
+    scratchpad = result_state["scratchpad"]
+    assert "user_response_snippets" in scratchpad
+    assert "Executed code and got the following result" in scratchpad["user_response_snippets"][0]
+    assert "README.md" in scratchpad["user_response_snippets"][0]
