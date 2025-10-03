@@ -106,7 +106,7 @@ class ArchiverSpecialist(BaseSpecialist):
 
     def _save_report(self, report_content: str):
         """Saves the report content to a timestamped file."""
-        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"run_{timestamp}.md"
         filepath = os.path.join(self.archive_dir, filename)
         try:
