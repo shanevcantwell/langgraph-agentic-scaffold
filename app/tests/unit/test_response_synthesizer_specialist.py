@@ -54,18 +54,15 @@ def test_synthesizer_without_snippets(response_synthesizer_specialist):
     # Arrange
     initial_state = {
         "messages": [],
-        "scratchpad": {} # No snippets
+        "scratchpad": {"user_response_snippets": []} # No snippets
     }
 
     # Act
     result_state = response_synthesizer_specialist._execute_logic(initial_state)
 
     # Assert
-    # The synthesizer is now always called, even with no snippets, as EndSpecialist provides a fallback.
-    response_synthesizer_specialist.llm_adapter.invoke.assert_called_once()
-    assert "artifacts" in result_state
-    assert "final_user_response.md" in result_state["artifacts"]
-    assert "messages" in result_state
+    response_synthesizer_specialist.llm_adapter.invoke.assert_not_called()
+    assert "The workflow has completed" in result_state["artifacts"]["final_user_response.md"]
 
 @pytest.mark.parametrize("snippets", [
     [],
@@ -86,9 +83,8 @@ def test_synthesizer_with_empty_snippets_list(response_synthesizer_specialist, s
     result_state = response_synthesizer_specialist._execute_logic(initial_state)
 
     # Assert
-    # The synthesizer is now always called.
-    response_synthesizer_specialist.llm_adapter.invoke.assert_called_once()
-    assert "final_user_response.md" in result_state["artifacts"]
+    response_synthesizer_specialist.llm_adapter.invoke.assert_not_called()
+    assert "The workflow has completed" in result_state["artifacts"]["final_user_response.md"]
 
 def test_synthesizer_handles_llm_invocation_error(response_synthesizer_specialist):
     """Tests that an LLMInvocationError is caught and handled."""

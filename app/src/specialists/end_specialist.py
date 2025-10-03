@@ -3,7 +3,7 @@ import logging
 from typing import Dict, Any
 
 from .base import BaseSpecialist
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from .response_synthesizer_specialist import ResponseSynthesizerSpecialist
 from .archiver_specialist import ArchiverSpecialist
 from ..llm.factory import AdapterFactory
@@ -46,16 +46,22 @@ class EndSpecialist(BaseSpecialist):
 
         current_state = state.copy()
 
-        # scratchpad = current_state.get("scratchpad", {})
-        # if not scratchpad.get("user_response_snippets"):
-        #     logger.info("EndSpecialist: No user_response_snippets found. Attempting to synthesize from last AI message.")
-        #     messages = current_state.get("messages", [])
-        #     last_ai_message = next((msg for msg in reversed(messages) if isinstance(msg, AIMessage) and msg.name not in ["router_specialist", "prompt_triage_specialist"]), None)
-        #     if last_ai_message and last_ai_message.content:
-        #         if "scratchpad" not in current_state:
-        #             current_state["scratchpad"] = {}
-        #         current_state["scratchpad"]["user_response_snippets"] = [last_ai_message.content]
-        #         logger.info(f"Found content from '{last_ai_message.name}' to use for final synthesis.")
+        # Per DEVELOPERS_GUIDE.md, the EndSpecialist must handle cases where no
+        # user-facing snippets were generated.
+        scratchpad = current_state.get("scratchpad", {})
+        if not scratchpad.get("user_response_snippets"):
+            logger.warning("EndSpecialist: No user_response_snippets found. Generating fallback response.")
+            messages = current_state.get("messages", [])
+            last_message = messages[-1] if messages else None
+
+            # If the last action was a tool, present its output directly.
+            if isinstance(last_message, ToolMessage):
+                fallback_content = f"The task finished with the following result:\n\n```\n{last_message.content}\n```"
+            else:
+                fallback_content = "The workflow has completed."
+
+            current_state.setdefault("artifacts", {})["final_user_response.md"] = fallback_content
+            logger.info("EndSpecialist: Fallback response created. Skipping synthesizer.")
 
         if not current_state.get("artifacts", {}).get("final_user_response.md"):
             logger.info("EndSpecialist: Synthesizing final response.")
