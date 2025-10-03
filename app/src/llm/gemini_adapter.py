@@ -7,7 +7,7 @@ import google.generativeai as genai
 from google.api_core import exceptions as google_exceptions
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, SafetyFilterError, RateLimitError
+from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, SafetyFilterError, RateLimitError, ProxyError
 from . import adapters_helpers
 
 logger = logging.getLogger(__name__)
@@ -99,8 +99,23 @@ class GeminiAdapter(BaseAdapter):
             error_message = f"Gemini API rate limit exceeded: {e}"
             logger.error(error_message, exc_info=True)
             raise RateLimitError(error_message) from e
+        
+        except google_exceptions.RetryError as e:
+            clean_message = ("A network error occurred, which is often due to a proxy blocking the request. "
+                             "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
+            # Log the full error for debugging, but raise a clean message.
+            logger.error(f"{clean_message} Original error: {e}", exc_info=True)
+            # Re-raise as a specific, catchable error.
+            raise ProxyError(clean_message) from e
 
         except Exception as e:
+            # A generic catch-all for other proxy-related issues, like receiving an HTML error page.
+            if "proxy" in str(e).lower() or "<html>" in str(e).lower():
+                clean_message = ("A proxy error occurred, likely due to a blocked request. "
+                                 "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
+                logger.error(f"{clean_message} Original error: {e}", exc_info=True)
+                raise ProxyError(clean_message) from e
+
             logger.error(f"Gemini API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"Gemini API error: {e}") from e
 

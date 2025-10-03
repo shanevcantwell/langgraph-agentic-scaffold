@@ -21,6 +21,10 @@ class RateLimitError(LLMInvocationError):
     """Raised when the LLM provider returns a rate limit error (e.g., 429)."""
     pass
 
+class ProxyError(LLMInvocationError):
+    """Raised when a connection is blocked by a proxy."""
+    pass
+
 class WorkflowError(Exception):
     """Custom exception for errors that occur within the overall workflow execution."""
     pass

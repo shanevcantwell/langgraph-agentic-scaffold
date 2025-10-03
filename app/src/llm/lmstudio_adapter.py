@@ -4,12 +4,13 @@ import json
 import os
 import tiktoken
 from typing import Dict, Any, List, Optional, Type
-from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError
+from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
+import httpx
 from langchain_core.messages import BaseMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
 from pydantic import BaseModel
 
-from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, RateLimitError
+from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, RateLimitError, ProxyError
 from . import adapters_helpers
 import html
 
@@ -259,12 +260,23 @@ class LMStudioAdapter(BaseAdapter):
             logger.error(error_message, exc_info=True)
             raise RateLimitError(error_message) from e
         
+        # Consolidated proxy/network error handling. These exceptions all indicate a failure
+        # to communicate with the server, often due to a proxy block or network issue.
+        except (APIConnectionError, PermissionDeniedError, httpx.ProxyError) as e:
+            clean_message = ("A network error occurred, which is often due to a proxy blocking the request. "
+                             "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
+            # Log the full error for debugging, but raise a clean message.
+            logger.error(f"{clean_message} Original error: {e}", exc_info=True)
+            # Re-raise as a specific, catchable error.
+            raise ProxyError(clean_message) from e
+
         except BadRequestError as e:
             if "context length" in str(e).lower():
                 error_message = (f"LMStudio API context length error: {e}. This can happen if the configured "
                                  f"'context_window' in config.yaml is too large for the loaded model.")
                 logger.error(error_message, exc_info=True)
                 raise LLMInvocationError(error_message) from e
+            # Check for HTML in the response body, which is a strong indicator of a proxy error page.
             else:
                 logger.error(f"LMStudio API BadRequestError: {e}", exc_info=True)
                 raise LLMInvocationError(f"LMStudio API BadRequestError: {e}") from e

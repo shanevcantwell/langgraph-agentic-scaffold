@@ -5,7 +5,7 @@ from typing import List, Dict, Type, Any, Optional, cast
 import html
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage
-from ..utils.errors import LLMInvocationError, SafetyFilterError, RateLimitError
+from ..utils.errors import LLMInvocationError, SafetyFilterError, RateLimitError, ProxyError
 
 MAX_TOOL_CALLS = 10 # A reasonable upper limit for a single turn
 
