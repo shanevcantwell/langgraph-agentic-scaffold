@@ -4,8 +4,9 @@ from unittest.mock import patch, MagicMock, call
 
 from app.src.llm.lmstudio_adapter import LMStudioAdapter
 from app.src.llm.adapter import StandardizedLLMRequest
-from app.src.utils.errors import LLMInvocationError
+from app.src.utils.errors import LLMInvocationError, ProxyError
 from langchain_core.messages import HumanMessage
+from openai import APIConnectionError, PermissionDeniedError, httpx
 from pydantic import BaseModel
 
 MOCK_MODEL_NAME = "test-model/test-model-GGUF"
@@ -94,4 +95,29 @@ def test_invoke_raises_llm_invocation_error(mock_openai_client, mock_model_confi
 
     # Act & Assert
     with pytest.raises(LLMInvocationError, match="LMStudio API error: API call failed"):
+        adapter.invoke(request)
+
+@pytest.mark.parametrize("raised_exception", [
+    APIConnectionError(request=MagicMock()),
+    PermissionDeniedError("Access Denied", response=MagicMock(), body=None),
+    httpx.ProxyError("Proxy connection failed")
+])
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_invoke_raises_proxy_error_on_connection_issues(mock_openai_client, mock_model_config, raised_exception):
+    """
+    Tests that the LMStudio adapter correctly catches various connection-related
+    exceptions and raises a unified ProxyError.
+    """
+    # Arrange
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    mock_create = mock_openai_client.return_value.chat.completions.create
+    mock_create.side_effect = raised_exception
+
+    request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
+
+    expected_message = ("A network error occurred, which is often due to a proxy blocking the request. "
+                        "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
+
+    # Act & Assert
+    with pytest.raises(ProxyError, match=expected_message):
         adapter.invoke(request)
