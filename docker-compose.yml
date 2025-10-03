@@ -5,7 +5,6 @@ services:
   app:
     # Build the application image using the Dockerfile in the current directory.
     build: .
-    container_name: agentic_scaffold_app
     # Load secrets and configuration from the .env file.
     env_file:
       - .env
@@ -34,7 +33,6 @@ services:
 
   proxy:
     image: ubuntu/squid:latest
-    container_name: agentic_scaffold_proxy
     volumes:
       # Mount our custom, restrictive configuration file into the container.
       - ./proxy/squid.conf:/etc/squid/squid.conf
