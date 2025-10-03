@@ -44,27 +44,23 @@ export LANGCHAIN_PROJECT="your-exact-project-name-from-the-ui"
 ```
 
 **Step 2: Ensure Graceful Shutdown**
-The system uses a framework-native lifecycle hook in the FastAPI application to ensure buffered traces are sent before the server process exits. Verify that the `@app.on_event("shutdown")` handler is present in `app/src/api.py`.
+The system uses a framework-native `lifespan` manager in the FastAPI application (`api.py`) to ensure buffered traces are sent before the server process exits. Verify that the `@asynccontextmanager` function named `lifespan` is present in `app/src/api.py`.
 
 ## 4.0 Architectural Best Practices & Lessons Learned
 
-### 4.1 Match Component Capability to Architectural Role
+### 4.1 Principle: Match Model Capability to Architectural Role
 
 The `router_specialist` is the most critical reasoning component in the architecture. Assigning a small or less capable model to this role is a significant architectural risk and has been observed to cause pathological failures (runaway generation, context collapse).
 
 **Recommendation:** The `router_specialist` should be run by a capable, instruction-tuned model known for reliable tool use (e.g., Gemini Flash, GPT-3.5-Turbo, or larger). Reserve smaller, more efficient models for more constrained, less critical specialist tasks.
 
-### 4.1.1 Intentional vs. Unproductive Loops
+### 4.2 Pattern: Intentional vs. Unproductive Loops
 
-The `GraphOrchestrator` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck.
+The `GraphOrchestrator` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck. This is the preferred pattern for creating controlled, stateful cycles.
 
 Intentional loops, such as the "Generate-and-Critique" cycle, are architected differently. They are implemented using conditional edges in the graph that create a direct `Specialist A -> Specialist B -> Specialist A` sub-graph. Because this sub-loop does not repeatedly pass through the main `RouterSpecialist`, it is not flagged by the generic unproductive loop detector. This is the preferred pattern for creating controlled, stateful cycles.
 
-### 4.2 Implement Robust Loop Control
-
-Off-by-one errors in agentic loops can be common. Ensure that loop termination logic in stateful specialists uses strict inequality (`<`) rather than (`<=`) to compare the current iteration count against the maximum number of cycles.
-
-### 4.3 Enforce Centralized Control with Three-Stage Termination
+### 4.3 Pattern: Enforce Centralized Control with Three-Stage Termination
 
 To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion or produce final artifacts, which triggers a standardized shutdown process.
 
@@ -89,7 +85,7 @@ The process is as follows:
 
 This explicit, multi-stage sequence ensures that termination is a robust, observable process, centralizing the finalization logic and preventing premature or disorderly graph exits.
 
-### 4.4 The Adapter Robust Parsing Contract
+### 4.4 Contract: The Adapter Robust Parsing Contract
 
 **Principle:** The LLM Adapter layer is solely responsible for abstracting provider-specific idiosyncrasies. This includes inconsistent formatting of structured data responses.
 
@@ -97,7 +93,7 @@ This explicit, multi-stage sequence ensures that termination is a robust, observ
 
 **Implementation:** To ensure consistency and prevent code duplication, all adapters MUST utilize the `_robustly_parse_json_from_text()` helper method provided by the `BaseAdapter` class as a fallback mechanism. An adapter should only return an empty `json_response` if both a direct parse and the robust fallback parse fail. This contract is non-negotiable and is verified by the system's contract tests (`app/tests/llm/test_adapter_contracts.py`).
 
-### 4.5 Understanding the 3-Tiered Configuration System
+### 4.5 Architecture: The 3-Tiered Configuration System
 
 The system's configuration is a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved at startup by the `ConfigLoader`.
 
@@ -108,50 +104,49 @@ The system's configuration is a three-tiered hierarchy. Understanding this model
 
 **Tier 2: Architectural Blueprint (`config.yaml`)**  
 *   **File:** `config.yaml`
-*   **Purpose:** The system's architectural source of truth, managed by the developer. It defines all possible components (specialists, LLM provider configurations) and sets the default LLM binding (`default_llm_config`).
+*   **Purpose:** The system's architectural source of truth, managed by the developer. It defines all possible components (specialists) and the workflow structure. It is a pure blueprint of *what* the system can do, but not *how* it does it.
 *   **Git:** Committed to source control.
 
-**Tier 3: User Overrides (`user_settings.yaml`)**  
+**Tier 3: User Implementation (`user_settings.yaml`)**  
 *   **File:** `user_settings.yaml`
-*   **Purpose:** An optional file for developers or end-users to customize the system's behavior without modifying the core architecture. It is used to:
-    1.  Bind specific specialists to different LLM providers (`specialist_model_bindings`).
-    2.  Provide the specific `api_identifier` (model name) for each provider (`provider_models`).
+*   **Purpose:** Defines the concrete implementation of the system for a given environment. While the file can be absent, a functional system **requires** it to define LLM providers and bind them to specialists. It is the single source of truth for:
+    1.  Defining and naming all LLM provider configurations (`llm_providers`). This is where you specify which models to use (e.g., `gemini-2.5-pro`) and what to call them (e.g., `my_strong_model`).
+    2.  Binding specialists to those providers (`specialist_model_bindings`).
+    3.  Setting a system-wide default model (`default_llm_config`).
 *   **Git:** Ignored.
-
-At startup, the `ConfigLoader` merges these layers. It starts with the blueprint (`config.yaml`), injects secrets from the environment (`.env`), and then applies any overrides from `user_settings.yaml`. This creates the final, runnable configuration.
 
 **Example of Merging Logic:**
 
-1.  **Developer defines the architecture in `config.yaml`:**
+1.  **Developer defines the architecture in `config.yaml` (no providers here):**
     ```yaml
     # config.yaml
-    default_llm_config: gemini_flash # Default model for all LLM specialists
-
-    llm_providers:
-      gemini_pro:
-        type: "gemini"
-      gemini_flash:
-        type: "gemini"
-    
     specialists:
       router_specialist:
         type: "llm"
+        # ...
+      web_builder:
+        type: "llm"
+        # ...
     ```
 
-2.  **User chooses a model in `user_settings.yaml`:**
+2.  **User defines providers and bindings in `user_settings.yaml`:**
     ```yaml
     # user_settings.yaml
-    specialist_model_bindings: # Override the default for a specific specialist
-      router_specialist: "gemini_pro"
+    default_llm_config: "my_fast_model"
 
-    provider_models: # Provide the specific model names for the providers
-      gemini_pro:
+    llm_providers:
+      my_strong_model:
+        type: "gemini"
         api_identifier: "gemini-1.5-pro-latest"
-      gemini_flash:
+      my_fast_model:
+        type: "gemini"
         api_identifier: "gemini-1.5-flash-latest"
+
+    specialist_model_bindings:
+      router_specialist: "my_strong_model"
     ```
 
-3.  **Result:** At runtime, the `GraphBuilder` will instantiate the `router_specialist` and, seeing the override in `user_settings.yaml`, will configure it to use the `gemini_pro` provider with the `gemini-1.5-pro-latest` model identifier. All other LLM specialists will use the `gemini_flash` provider as defined by `default_llm_config`.
+3.  **Result:** At runtime, the `GraphBuilder` will instantiate the `router_specialist` and, seeing the binding in `user_settings.yaml`, will configure it to use the `my_strong_model` provider. The `web_builder` specialist, having no specific binding, will fall back to using the `my_fast_model` provider as defined by `default_llm_config`.
 
 ## 5.0 How to Extend the System: Creating Specialists
 

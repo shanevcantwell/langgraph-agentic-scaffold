@@ -6,16 +6,11 @@ from typing import Dict, Literal, Union, Optional, Any
 class LLMProviderConfig(BaseModel):
     """Defines the configuration for a single LLM provider instance."""
 
-    type: Literal["gemini", "lmstudio", "ollama"] = Field(
+    type: Literal["gemini", "lmstudio", "ollama"] = Field( # The adapter type
         ..., description="The type of the LLM provider implementation to use."
     )
-
-
-class ProviderModelSettings(BaseModel):
-    """Defines the user-specific model identifier for a provider config."""
-    api_identifier: str = Field(..., description="The specific model identifier for the API.")
-    context_window: Optional[int] = Field(
-        None, description="The total context window size of the model (input + output)."
+    api_identifier: str = Field(
+        ..., description="The specific model identifier for the provider's API (e.g., 'gemini-1.5-pro' or 'local-model/nous-hermes-gguf')."
     )
     parameters: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="A dictionary of parameters to pass to the model's API (e.g., max_tokens, temperature)."
@@ -68,21 +63,22 @@ SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig]
 class RootConfig(BaseModel):
     """The root model for the entire config.yaml file."""
 
-    llm_providers: Dict[str, LLMProviderConfig]
     workflow: WorkflowConfig
     specialists: Dict[str, SpecialistConfig]
 
 
 class UserSettings(BaseModel):
     """The root model for the user_settings.yaml file."""
-    provider_models: Optional[Dict[str, ProviderModelSettings]] = Field(
+
+    # This is now the authoritative source for defining and naming LLM provider configurations.
+    llm_providers: Optional[Dict[str, LLMProviderConfig]] = Field(
         default_factory=dict,
-        description="Maps a provider config name to its specific model identifier."
+        description="Defines the user's named LLM provider configurations (e.g., 'my_fast_model', 'my_strong_model')."
     )
 
     specialist_model_bindings: Optional[Dict[str, str]] = Field(
         default_factory=dict,
-        description="Maps a specialist name to the key of an llm_provider from config.yaml.",
+        description="Maps a specialist name to one of the llm_providers defined above.",
     )
     default_llm_config: Optional[str] = Field(
         None,
