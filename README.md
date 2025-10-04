@@ -1,6 +1,6 @@
 # langgraph-agentic-scaffold: An Open Core Scaffold for Agentic Systems
 
-<img width="3407" height="2072" alt="LangGraph Agentic Scaffold Architecture Diagram" src="[https://github.com/user-attachments/assets/a54e5b79-281f-470b-a0e8-a446b1f205b1](https://github.com/user-attachments/assets/a54e5b79-281f-470b-a0e8-a446b1f205b1)" />
+<img width="3407" height="2072" alt="LangGraph Agentic Scaffold Architecture Diagram" src="https://github.com/user-attachments/assets/a54e5b79-281f-470b-a0e8-a446b1f205b1" />
 
 [](https://opensource.org/licenses/MIT)
 [](https://www.python.org/downloads/)
@@ -12,7 +12,7 @@ A foundational scaffold for building robust, modular, and scalable multi-agent s
 
 | 5-Minute Developer Briefing | 90-Second Elevator Pitch |
 | :---: | :---: |
-| [](https://www.youtube.com/watch?v=KfqKRXvznDc) | [](http://reflectiveattention.ai/videos/Unlocking_Multi-Agent_AI__Elevator_Pitch_for_the_Langgraph-Agen.mp4) |
+| [![Watch the 5-Minute Briefing](https://github.com/user-attachments/assets/0bf289cf-da47-48d5-b0b9-ce54fd72486d)](https://www.youtube.com/watch?v=KfqKRXvznDc) | [![Listen to the 90-Second Pitch](https://github.com/user-attachments/assets/155d60bc-be1c-4508-a46c-341bdebfd69c)](http://reflectiveattention.ai/videos/Unlocking_Multi-Agent_AI__Elevator_Pitch_for_the_Langgraph-Agen.mp4) |
 | A complete technical rundown of the scaffold's architecture, mission, and how to get started. | A concise, audio-only overview of the project's value proposition. |
 
 ## Mission & Philosophy
