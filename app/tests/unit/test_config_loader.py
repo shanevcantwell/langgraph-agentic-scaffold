@@ -16,6 +16,9 @@ specialists:
   file_specialist:
     type: 'procedural'
     description: 'File ops'
+  hybrid_specialist:
+    type: 'hybrid'
+    description: 'Hybrid ops'
 """
 
 USER_SETTINGS_YAML_FOR_BASIC_TEST = """
@@ -25,6 +28,7 @@ llm_providers:
     api_identifier: 'gemini-2.5-flash-test'
 specialist_model_bindings:
   router_specialist: 'gemini_flash'
+  hybrid_specialist: 'gemini_flash'
 """
 
 
@@ -79,6 +83,7 @@ def test_load_and_get_config(mocker):
     loader = ConfigLoader()
     config = loader.get_config()
     assert "specialists" in config
+    assert "hybrid_specialist" in config["specialists"]
 
 @patch("builtins.open", side_effect=FileNotFoundError)
 @patch("os.path.exists", return_value=False)
@@ -97,24 +102,13 @@ def test_malformed_yaml():
 
 def test_merge_user_settings():
     """Tests that user_settings.yaml correctly merges with and overrides config.yaml."""
-    # This base config is more representative of the real one.
-    base_config_for_merge = """
-workflow:
-  entry_point: 'router_specialist'
-specialists:
-  router_specialist:
-    type: 'llm'
-    prompt_file: 'router.md'
-    description: 'Routes things'
-"""
     def mock_open_side_effect(file, mode='r', encoding=None):
         if 'config.yaml' in str(file):
-            return mock_open(read_data=base_config_for_merge)(). __enter__()
+            return mock_open(read_data=BASE_CONFIG_YAML)(). __enter__()
         if 'user_settings.yaml' in str(file):
             return mock_open(read_data=USER_SETTINGS_YAML)(). __enter__()
         raise FileNotFoundError(file)
 
-    # os.path.exists needs to be mocked to find both files
     def mock_exists_side_effect(path):
         return 'config.yaml' in str(path) or 'user_settings.yaml' in str(path)
 
@@ -123,11 +117,11 @@ specialists:
         
         config = ConfigLoader().get_config()
 
-        # Assert override from specialist_model_bindings
         assert config.get("specialists", {}).get("router_specialist", {}).get("llm_config") == 'user_provider'
-        # Assert provider definitions from user_settings.yaml
         assert config.get("llm_providers", {}).get("gemini_flash", {}).get("api_identifier") == 'gemini-1.5-flash'
         assert config.get("llm_providers", {}).get("user_provider", {}).get("api_identifier") == 'user-model-id'
+        # Hybrid specialist should get the default binding
+        assert config.get("specialists", {}).get("hybrid_specialist", {}).get("llm_config") == 'gemini_flash'
 
 @patch("builtins.open", new_callable=mock_open, read_data="")
 @patch("os.path.exists", return_value=True)

@@ -55,9 +55,19 @@ class ProceduralSpecialistConfig(BaseSpecialistConfig):
     type: Literal["procedural"]
 
 
+class HybridSpecialistConfig(BaseSpecialistConfig):
+    """Configuration for a specialist that uses an LLM for planning but executes code procedurally."""
+
+    type: Literal["hybrid"]
+    prompt_file: Optional[str] = Field(
+        None,
+        description="The optional filename of a markdown prompt for this specialist, located in the `app/prompts` directory.",
+    )
+
+
 # A discriminated union to handle the different types of specialists.
 # Pydantic will use the 'type' field to determine which model to use for validation.
-SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig]
+SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig, HybridSpecialistConfig]
 
 
 class RootConfig(BaseModel):

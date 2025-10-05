@@ -221,7 +221,7 @@ First, add `open-interpreter` to your `pyproject.toml` and run the sync script t
 
 #### Step 2: Configure the Specialist in `config.yaml`
 
-Add a new entry to your `config.yaml` file. Note that `type` is `"procedural"`, as it executes code directly.
+Add a new entry to your `config.yaml` file. For a specialist that uses the "Plan and Execute" pattern, the `type` should be `"hybrid"`. This signals to the system that while the specialist executes code procedurally, it still requires an LLM for the planning phase.
 
 ```yaml
 # config.yaml
@@ -229,7 +229,7 @@ specialists:
   # ... other specialists ...
 
   open_interpreter_specialist:
-    type: "procedural"
+    type: "hybrid"
     description: "Executes shell commands and code (Python, etc.) to perform file system operations, data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
 ```
 

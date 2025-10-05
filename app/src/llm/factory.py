@@ -29,9 +29,10 @@ class AdapterFactory:
             raise ValueError("Cannot create adapter: 'specialist_name' was not provided.")
 
         specialist_config = self.full_config.get("specialists", {}).get(specialist_name)
-        if not specialist_config or specialist_config.get("type") != "llm":
-            logger.debug(f"AdapterFactory: No LLM specialist config found for name '{specialist_name}'. Returning None.")
-            return None # Not an LLM specialist, no adapter needed.
+        specialist_type = specialist_config.get("type") if specialist_config else None
+        if specialist_type not in ["llm", "hybrid"]:
+            logger.debug(f"AdapterFactory: Specialist '{specialist_name}' is of type '{specialist_type}', no LLM adapter will be created. Returning None.")
+            return None
 
         binding_key = specialist_config.get("llm_config")
         if not binding_key:

@@ -1,107 +1,86 @@
+# app/tests/unit/test_llm_factory.py
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from app.src.llm.factory import AdapterFactory
-from app.src.llm.gemini_adapter import GeminiAdapter
-from app.src.llm.lmstudio_adapter import LMStudioAdapter
+from app.src.llm.adapters import GeminiAdapter, LMStudioAdapter
 
-def test_factory_creates_gemini_adapter():
-    """Tests that the factory correctly creates a GeminiAdapter."""
-    # Arrange
-    mock_config = {
-        "llm_providers": {
-            "gemini_config": {"type": "gemini", "api_identifier": "gemini-test", "api_key": "fake-key"}
-        },
+@pytest.fixture
+def mock_full_config():
+    """Provides a mock full_config dictionary for testing the factory."""
+    return {
         "specialists": {
-            "test_specialist": {"type": "llm", "llm_config": "gemini_config", "prompt_file": "fake.md"}
+            "llm_specialist": {
+                "type": "llm",
+                "llm_config": "gemini_provider"
+            },
+            "hybrid_specialist": {
+                "type": "hybrid",
+                "llm_config": "lmstudio_provider"
+            },
+            "procedural_specialist": {
+                "type": "procedural"
+                # No llm_config
+            },
+            "missing_binding_specialist": {
+                "type": "llm"
+                # Missing llm_config key
+            },
+            "unresolvable_binding_specialist": {
+                "type": "llm",
+                "llm_config": "non_existent_provider"
+            },
+            "unknown_provider_type_specialist": {
+                "type": "llm",
+                "llm_config": "unknown_provider"
+            }
+        },
+        "llm_providers": {
+            "gemini_provider": {"type": "gemini", "api_identifier": "gemini-pro"},
+            "lmstudio_provider": {"type": "lmstudio", "api_identifier": "lmstudio-model"},
+            "unknown_provider": {"type": "future_provider_type"},
         }
     }
-    
-    # Act
-    factory = AdapterFactory(mock_config)
-    adapter = factory.create_adapter("test_specialist", "system prompt")
 
-    # Assert
-    assert isinstance(adapter, GeminiAdapter)
+@pytest.fixture
+def adapter_factory(mock_full_config):
+    """Provides an AdapterFactory instance initialized with mock config."""
+    return AdapterFactory(mock_full_config)
 
-@patch('app.src.llm.lmstudio_adapter.LMStudioAdapter.from_config')
-def test_factory_creates_lmstudio_adapter(mock_from_config):
-    """Tests that the factory correctly creates an LMStudioAdapter."""
-    # Arrange
-    mock_config = {
-        "llm_providers": {
-            "lmstudio_config": {"type": "lmstudio", "api_identifier": "lmstudio-test", "base_url": "http://localhost:1234/v1"}
-        },
-        "specialists": {
-            "test_specialist": {"type": "llm", "llm_config": "lmstudio_config", "prompt_file": "fake.md"}
-        }
-    }
-    
-    # Act
-    factory = AdapterFactory(mock_config)
-    adapter = factory.create_adapter("test_specialist", "system prompt")
-
-    # Assert
+@patch('app.src.llm.adapters.GeminiAdapter.from_config')
+def test_factory_creates_adapter_for_llm_specialist(mock_from_config, adapter_factory):
+    """Tests that an adapter is correctly created for a specialist of type 'llm'."""
+    mock_from_config.return_value = MagicMock(spec=GeminiAdapter)
+    adapter = adapter_factory.create_adapter("llm_specialist", "system prompt")
+    assert adapter is not None
+    assert isinstance(adapter, MagicMock)
     mock_from_config.assert_called_once()
 
-def test_factory_returns_none_for_procedural_specialist():
-    """Tests that the factory returns None for non-LLM specialists."""
-    # Arrange
-    mock_config = {
-        "specialists": {
-            "procedural_specialist": {"type": "procedural"}
-        }
-    }
-    
-    # Act
-    factory = AdapterFactory(mock_config)
-    adapter = factory.create_adapter("procedural_specialist", "system prompt")
+@patch('app.src.llm.adapters.LMStudioAdapter.from_config')
+def test_factory_creates_adapter_for_hybrid_specialist(mock_from_config, adapter_factory):
+    """Tests that an adapter is correctly created for the new 'hybrid' specialist type."""
+    mock_from_config.return_value = MagicMock(spec=LMStudioAdapter)
+    adapter = adapter_factory.create_adapter("hybrid_specialist", "system prompt")
+    assert adapter is not None
+    assert isinstance(adapter, MagicMock)
+    mock_from_config.assert_called_once()
 
-    # Assert
+def test_factory_returns_none_for_procedural_specialist(adapter_factory):
+    """Tests that no adapter is created for a 'procedural' specialist."""
+    adapter = adapter_factory.create_adapter("procedural_specialist", "system prompt")
     assert adapter is None
 
-def test_factory_raises_error_for_unknown_provider():
-    """Tests that the factory raises a ValueError for an unregistered provider type."""
-    # Arrange
-    mock_config = {
-        "llm_providers": {
-            "unknown_config": {"type": "unknown_provider", "api_identifier": "test"}
-        },
-        "specialists": {
-            "test_specialist": {"type": "llm", "llm_config": "unknown_config", "prompt_file": "fake.md"}
-        }
-    }
-    
-    # Act & Assert
-    factory = AdapterFactory(mock_config)
-    adapter = factory.create_adapter("test_specialist", "system prompt")
+def test_factory_raises_error_for_missing_llm_config(adapter_factory):
+    """Tests that a ValueError is raised if 'llm_config' is missing for an LLM specialist."""
+    with pytest.raises(ValueError, match="is missing 'llm_config' key"):
+        adapter_factory.create_adapter("missing_binding_specialist", "system prompt")
+
+def test_factory_raises_error_for_unresolvable_provider(adapter_factory):
+    """Tests that a ValueError is raised if the provider key in 'llm_config' doesn't exist."""
+    with pytest.raises(ValueError, match="not found in 'llm_providers'"):
+        adapter_factory.create_adapter("unresolvable_binding_specialist", "system prompt")
+
+def test_factory_returns_none_for_unknown_provider_type(adapter_factory):
+    """Tests that the factory returns None if the provider 'type' is not in the registry."""
+    adapter = adapter_factory.create_adapter("unknown_provider_type_specialist", "system prompt")
     assert adapter is None
-
-def test_factory_raises_error_for_missing_llm_config():
-    """Tests that an error is raised if an LLM specialist is missing the 'llm_config' key."""
-    # Arrange
-    mock_config = {
-        "specialists": {
-            "bad_specialist": {"type": "llm"} # Missing 'llm_config'
-        }
-    }
-    factory = AdapterFactory(mock_config)
-
-    # Act & Assert
-    with pytest.raises(ValueError, match="LLM specialist 'bad_specialist' is missing 'llm_config' key."):
-        factory.create_adapter("bad_specialist", "system prompt")
-
-def test_factory_raises_error_for_unresolvable_provider():
-    """Tests that an error is raised if 'llm_config' points to a non-existent provider."""
-    # Arrange
-    mock_config = {
-        "llm_providers": {"real_provider": {"type": "gemini"}}, # Empty providers
-        "specialists": {
-            "test_specialist": {"type": "llm", "llm_config": "non_existent_provider", "prompt_file": "fake.md"}
-        }
-    }
-    factory = AdapterFactory(mock_config)
-
-    # Act & Assert
-    with pytest.raises(ValueError, match="Provider 'non_existent_provider' for specialist 'test_specialist' not found in 'llm_providers'."):
-        factory.create_adapter("test_specialist", "system prompt")

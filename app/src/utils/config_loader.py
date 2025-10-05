@@ -142,7 +142,7 @@ class ConfigLoader:
                 final_binding = user_specific_binding
                 logger.debug(f"Applying user-specific binding '{final_binding}' to specialist '{name}'.")
             # Layer 2: User-default binding
-            elif spec_config.get("type") == "llm" and default_binding and default_binding in merged["llm_providers"]:
+            elif spec_config.get("type") in ["llm", "hybrid"] and default_binding and default_binding in merged["llm_providers"]:
                 final_binding = default_binding
                 logger.debug(f"Applying user default binding '{final_binding}' to specialist '{name}'.")
 
@@ -150,12 +150,12 @@ class ConfigLoader:
             if final_binding:
                 spec_config["llm_config"] = final_binding
             # If no binding was found AND it's a required LLM specialist, disable it.
-            elif spec_config.get("type") == "llm":
+            elif spec_config.get("type") in ["llm", "hybrid"]:
                 logger.warning(f"LLM specialist '{name}' has no model binding and will be disabled. Provide a binding in {USER_SETTINGS_FILE}.")
                 continue
 
             # Validate that LLM specialists have a fully defined provider after merging.
-            if spec_config.get("type") == "llm" and final_binding and not merged.get("llm_providers", {}).get(final_binding, {}).get("api_identifier"):
+            if spec_config.get("type") in ["llm", "hybrid"] and final_binding and not merged.get("llm_providers", {}).get(final_binding, {}).get("api_identifier"):
                 logger.warning(f"LLM specialist '{name}' is bound to provider '{final_binding}', but no 'api_identifier' was specified in {USER_SETTINGS_FILE}. The specialist will be disabled.")
                 continue
 
