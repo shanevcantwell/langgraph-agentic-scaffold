@@ -61,11 +61,14 @@ async def test_handle_submit_processes_stream_correctly(mock_ui_components):
     assert len(yielded_updates) == 3
     assert yielded_updates[0] == {mock_ui_components["status_output"]: "Processing...", mock_ui_components["log_output"]: "Log 1\n"} # First yield
     assert yielded_updates[1] == {mock_ui_components["log_output"]: "Log 1\nLog 2\n"} # Second yield
+    
+    # The HTML content is now wrapped in an iframe for sandboxing.
+    expected_iframe = f'<iframe srcdoc="&lt;h1&gt;Result&lt;/h1&gt;" style="width: 100%; height: 600px; border: none;"></iframe>'
     assert yielded_updates[2] == {
         mock_ui_components["status_output"]: "Complete!",
         mock_ui_components["json_output"]: {"status": "complete"},
-        mock_ui_components["html_output"]: gr.update(value="<h1>Result</h1>", visible=True)
-    } # Third yield
+        mock_ui_components["html_output"]: gr.update(value=expected_iframe, visible=True)
+    }
 
 @pytest.mark.asyncio
 async def test_handle_submit_handles_api_error(mock_ui_components):

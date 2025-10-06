@@ -22,11 +22,14 @@ with patch('app.src.workflow.runner.GraphBuilder', return_value=mock_graph_build
      patch('app.src.workflow.graph_builder.AdapterFactory', MagicMock()):
     from app.src import api
     from fastapi.testclient import TestClient
-
+ 
 async def mock_streaming_gen(*args, **kwargs):
-    yield "Entering node: router_specialist\n"
-    yield "Finished node: router_specialist\n"
-    yield "FINAL_STATE::{\"status\": \"complete\"}\n"
+    """
+    A mock async generator that simulates the output of LangGraph's astream.
+    It must yield dictionaries representing the output of each node.
+    """
+    yield {"router_specialist": {"messages": ["routed to next"]}}
+    yield {"file_specialist": {"messages": ["wrote a file"]}}
 
 @pytest.fixture
 @pytest.mark.asyncio
@@ -110,9 +113,9 @@ async def test_stream_graph_async(client):
     # Assert
     assert response.status_code == 200
     # The TestClient automatically consumes the stream content
-    content = response.text
-    assert "Entering node: router_specialist" in content
-    assert "FINAL_STATE::{\"status\": \"complete\"}" in content
+    # We check that the formatter correctly processed our mock dicts into status updates
+    assert 'data: {"status": "Executing specialist: router_specialist..."}' in response.text
+    assert 'data: {"status": "Executing specialist: file_specialist..."}' in response.text
     api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None)
 
 @pytest.mark.asyncio
@@ -129,7 +132,8 @@ async def test_stream_graph_async_handles_runner_error(client, mocker):
     assert response.status_code == 500
     assert "Workflow streaming error: Streaming failed" in response.json()["detail"]
 
-def test_stream_graph_async_invalid_input(client):
+@pytest.mark.asyncio
+async def test_stream_graph_async_invalid_input(client):
     """Tests that the stream endpoint returns a 422 for invalid input."""
     response = client.post("/v1/graph/stream", json={"wrong_key": "value", "text_to_process": None, "image_to_process": None})
     assert response.status_code == 422 # Unprocessable Entity
