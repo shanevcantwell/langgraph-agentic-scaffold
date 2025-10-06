@@ -1,5 +1,5 @@
 # app/src/ui/api_client.py
-import requests
+import httpx
 import json
 import base64
 from PIL import Image
@@ -39,64 +39,54 @@ class ApiClient:
             except Exception as e:
                 yield {"status": f"Error reading image: {e}"}
 
-        try:
-            with requests.post(STREAM_URL, json=payload, stream=True, timeout=300) as response:
-                response.raise_for_status()
+        try: # Use httpx.AsyncClient for non-blocking streaming
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                async with client.stream("POST", STREAM_URL, json=payload) as response:
+                    response.raise_for_status()
+                    
+                    async for line in response.aiter_lines():
+                        if line:
+                            decoded_line = line.strip()
+                            # SSE format is "data: { ... }"
+                            if decoded_line.startswith("data:"):
+                                try:
+                                    data_str = decoded_line[len("data:"):].strip()
+                                    data = json.loads(data_str)
+                                    # The API now sends discrete updates. The client's job
+                                    # is to simply yield them to the UI handler.
+                                    yield data
+                                except json.JSONDecodeError:
+                                    log_history += f"\n[UI-CLIENT-ERROR] Failed to parse JSON from stream: {decoded_line}"
+                                    yield {"logs": log_history}
 
-                final_state_json_parts = []
-                is_capturing_final_state = False
-
-                for line in response.iter_lines():
-                    if line:
-                        decoded_line = line.decode('utf-8').strip()
-                        if is_capturing_final_state:
-                            final_state_json_parts.append(decoded_line)
-                        elif decoded_line.startswith("FINAL_STATE::"):
-                            is_capturing_final_state = True
-                            # Add the first part of the JSON, stripping the prefix
-                            final_state_json_parts.append(decoded_line.replace("FINAL_STATE::", "", 1))
-                        else:
-                            log_history += decoded_line + "\n"
-                            yield {"logs": log_history}
-                final_state_json = "".join(final_state_json_parts)
-
-            if final_state_json:
-                # --- MODIFICATION: Add robust JSON parsing ---
-                try:
-                    final_state = json.loads(final_state_json)
-                except json.JSONDecodeError as e:
-                    # If parsing fails, show the raw string and error in the UI.
-                    error_report = {
-                        "JSON Parsing Error": str(e),
-                        "Received Malformed String": final_state_json
-                    }
-                    yield {
-                        "status": "Error: Received invalid JSON from backend.",
-                        "final_state": error_report,
-                        "logs": log_history + "\nERROR: Failed to parse final state JSON."
-                    }
-                    return
-                # --- END MODIFICATION ---
-
-                artifacts = final_state.get("artifacts", {})
-                archive_report = artifacts.get("archive_report.md", "No archive report was generated.")
-                html_content = artifacts.get("html_document.html", "")
-                image_ui_output = None
-                if image_artifact_b64 := artifacts.get("image_artifact_b64"):
+                # The backend now sends Server-Sent Events (SSE) with a JSON payload.
+                # We need to parse these events correctly.
+            
+            # After the stream is complete, we can make a separate call to get the final state.
+            # This is a more robust pattern than trying to parse it from the stream.
+            # For now, we will just yield the final status from the stream.
+            
+            # The final state is no longer sent in the stream. The UI handler will
+            # receive the final status update from the stream itself. We yield an
+            # empty final block to ensure the UI updates correctly on completion.
+            artifacts = {}
+            archive_report = artifacts.get("archive_report.md", "No archive report was generated.")
+            html_content = artifacts.get("html_document.html", "")
+            image_ui_output = None
+            if image_artifact_b64 := artifacts.get("image_artifact_b64"):
                     try:
                         img_data = base64.b64decode(image_artifact_b64)
                         image_ui_output = Image.open(io.BytesIO(img_data))
                     except Exception as e:
                         log_history += f"\nError decoding image artifact: {e}"
 
-                yield {
-                    "status": "Workflow Complete!",
-                    "final_state": final_state,
-                    "html": html_content,
-                    "image": image_ui_output,
-                    "logs": log_history,
-                    "archive": archive_report
-                }
-
+            yield {
+                "final_state": {},
+                "html": html_content,
+                "image": image_ui_output,
+                "logs": log_history,
+                "archive": archive_report
+            }
+                
         except Exception as e:
             yield {"status": f"API Error: {e}", "logs": log_history + f"\nERROR: {e}"}

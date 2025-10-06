@@ -111,16 +111,16 @@ try {
 
     # A successful workflow is defined by the presence of the 'final_user_response.md'
     # key within the 'artifacts' dictionary. This is the most reliable signal
-    # that the entire termination sequence completed successfully.
-    if ($null -ne $jsonResponse.artifacts.'final_user_response.md') {
+    # that the entire termination sequence (including archiving) completed successfully.
+    if ($null -ne $jsonResponse.artifacts.'archive_report.md') {
         
         Write-Host "---"
-        Write-Host "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully." -ForegroundColor Green
+        Write-Host "✅ Verification test PASSED: Agent completed the full workflow and generated an archive report." -ForegroundColor Green
         exit 0
     } else {
         Write-Host "---"
-        Write-Host "❌ Verification test FAILED: Agent response was not meaningful or routing failed." -ForegroundColor Red
-        Write-Host "JSON Response:" -ForegroundColor Red
+        Write-Host "❌ Verification test FAILED: Agent did not generate a final archive report." -ForegroundColor Red
+        Write-Host "Final State JSON:" -ForegroundColor Red
         $jsonResponse | ConvertTo-Json -Depth 100 | Write-Host -ForegroundColor Red
         exit 1
     }

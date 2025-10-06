@@ -12,11 +12,12 @@ By creating new Specialists, you can extend the capabilities of the system to pe
 
 ### The Files You Will Touch
 
-Creating a new specialist involves creating and modifying a few files:
+Creating a new specialist involves creating and modifying the following files:
 
 1.  `app/src/specialists/your_specialist_name.py`: A new Python file for your specialist's logic.
 2.  `app/prompts/your_specialist_prompt.md`: A new prompt file that tells your specialist what to do.
 3.  `config.yaml`: The main configuration file where you will register your new specialist.
+4.  `app/tests/unit/test_your_specialist_name.py`: A new unit test file to verify your specialist's behavior.
 
 ### Step 1: Create the Specialist Python File
 
@@ -230,6 +231,7 @@ specialists:
 
   open_interpreter_specialist:
     type: "hybrid"
+    prompt_file: "open_interpreter_prompt.md"
     description: "Executes shell commands and code (Python, etc.) to perform file system operations, data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
 ```
 

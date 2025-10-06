@@ -137,9 +137,11 @@ class WorkflowRunner:
                 "messages": [HumanMessage(content=goal)], "turn_count": 0,
             }
 
-    async def run_streaming(self, goal: str, text_to_process: str = None, image_to_process: str = None) -> AsyncGenerator[str, None]:
+    async def run_streaming(self, goal: str, text_to_process: str = None, image_to_process: str = None) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        Executes the workflow with a given goal and streams back real-time updates.
+        Executes the workflow with a given goal and streams back the raw
+        LangGraph events. The API layer is responsible for formatting these
+        events for the client.
         """
         logger.info(f"--- Starting streaming workflow for goal: '{goal}' ---")
 
@@ -153,34 +155,12 @@ class WorkflowRunner:
         if text_to_process:
             initial_state["artifacts"]["text_to_process"] = text_to_process
 
-        # --- Streaming-Specific Logic ---
-        # Define a callback that the graph can use to yield messages mid-stream.
-        async def stream_callback(message: str):
-            yield message
-
-        # Build a new version of the graph specifically for this streaming run,
-        # injecting the callback into the node executors.
-        streaming_app = self.builder.build(streaming_callback=stream_callback)
-
-        final_state = None
         try:
-            async for event in streaming_app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
-                for node_name, node_state in event.items():
-                    final_state = node_state
-                    yield f"Finished node: {node_name}\n"
-
-            if final_state:
-                
-                serializable_state = _make_state_serializable(final_state)
-                final_state_json = json.dumps(serializable_state, indent=2)
-                yield f"FINAL_STATE::{final_state_json}"
-                logger.info("--- Streaming workflow complete. Sent final state to client. ---")
-            else:
-                logger.error("--- Streaming workflow finished but no final state was captured. ---")
-        
+            async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
+                yield event
+            logger.info("--- Streaming workflow complete. ---")
         except Exception as e:
             logger.error(f"--- Streaming workflow failed with an unhandled exception: {e} ---", exc_info=True)
             # Create a serializable error message
             error_message_dict = {"error": f"Workflow failed catastrophically: {str(e)}"}
-            error_message_json = json.dumps(error_message_dict)
-            yield f"FINAL_STATE::{error_message_json}"
+            yield {"error_report": error_message_dict}

@@ -1,6 +1,7 @@
 #!/bin/bash
 # This script compiles pyproject.toml into requirements files using pip-tools.
 # This ensures that we have pinned, reproducible dependencies.
+# We add httpx here to ensure it's included in both base and dev requirements.
 
 echo "Compiling base requirements..."
 pip-compile --resolver=backtracking -o requirements.txt pyproject.toml

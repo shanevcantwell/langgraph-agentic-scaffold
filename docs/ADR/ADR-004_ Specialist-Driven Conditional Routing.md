@@ -4,13 +4,13 @@
 * **Date:** 2025-09-18  
 * **Author:** Senior Systems Architect
 
-### 1\. Context
+### 1. Context
 
-The current workflow for artifact refinement (e.g., `SystemsArchitect` \-\> `WebBuilder` \-\> `CriticSpecialist`) is defined implicitly by the `RouterSpecialist`'s LLM-based reasoning. This creates a rigid, pre-ordained loop. The system lacks a mechanism for a specialist to act as an autonomous "gatekeeper," making a firm decision that directly alters the graph's path. This places an excessive inferential burden on the `Router` and prevents the creation of more dynamic, state-driven workflows where an artifact's quality can determine the next step (e.g., "Is this good enough to show the user, or does it need more work?").
+The current workflow for artifact refinement (e.g., `SystemsArchitect` -> `WebBuilder` -> `CriticSpecialist`) is defined implicitly by the `RouterSpecialist`'s LLM-based reasoning. This creates a rigid, pre-ordained loop. The system lacks a mechanism for a specialist to act as an autonomous "gatekeeper," making a firm decision that directly alters the graph's path. This places an excessive inferential burden on the `Router` and prevents the creation of more dynamic, state-driven workflows where an artifact's quality can determine the next step (e.g., "Is this good enough to show the user, or does it need more work?").
 
 To mature the architecture, we need a pattern that allows for conditional branching based on the explicit, structured output of a specialist, with the branching logic itself being defined declaratively in the system's configuration.
 
-### 2\. Decision
+### 2. Decision
 
 We will introduce the **Specialist-Driven Conditional Routing** pattern. This pattern elevates a specialist from a simple data processor to a decision-making node within the graph. The `CriticSpecialist` will be the first to implement this pattern.
 
@@ -20,13 +20,14 @@ The implementation consists of three coordinated parts:
 2. **Orchestrator as Wire-Puller:** The `GraphBuilder` will be taught to read a new `conditional_routing` flag from `config.yaml`. If this flag is present for a specialist, it will wire a conditional edge in the graph instead of the default edge back to the router.  
 3. **Configuration as Blueprint:** The `config.yaml` file will be used to declaratively enable this behavior and define the target for the "revision" branch, making the workflow's structure explicit and easily modifiable.
 
-### 3\. Implementation Details
+### 3. Implementation Details
 
 #### 3.1. Schema Enhancement (`_orchestration.py`)
 
 The `Critique` schema, which serves as the data contract for the `CriticSpecialist`, must be updated to include the new decision field. This is the correct location as it pertains to orchestration-level feedback.
 
-\# app/src/specialists/schemas/\_orchestration.py
+```python
+# app/src/specialists/schemas/_orchestration.py
 
 from pydantic import BaseModel, Field
 
@@ -36,7 +37,7 @@ class TriageRecommendations(BaseModel):
 
     """A model for the Triage specialist's recommendations."""
 
-    recommended\_specialists: List\[str\] \= Field(
+    recommended_specialists: List[str] = Field(
 
         ...,
 
@@ -48,33 +49,35 @@ class SystemPlan(BaseModel):
 
     """A model for the Systems Architect's technical plan."""
 
-    plan\_summary: str \= Field(..., description="A concise, one-sentence summary of the plan.")
+    plan_summary: str = Field(..., description="A concise, one-sentence summary of the plan.")
 
-    required\_components: List\[str\] \= Field(..., description="A list of technologies, libraries, or assets needed.")
+    required_components: List[str] = Field(..., description="A list of technologies, libraries, or assets needed.")
 
-    execution\_steps: List\[str\] \= Field(..., description="A list of detailed, sequential steps to implement the plan.")
+    execution_steps: List[str] = Field(..., description="A list of detailed, sequential steps to implement the plan.")
 
-    refinement\_cycles: int \= Field(default=1, description="The number of refinement cycles (e.g., with a critic) to perform.")
+    refinement_cycles: int = Field(default=1, description="The number of refinement cycles (e.g., with a critic) to perform.")
 
 class Critique(BaseModel):
 
     """A structured critique of a generated artifact, used by the CriticSpecialist."""
 
-    overall\_assessment: str \= Field(..., description="A brief, one-paragraph summary of the critique, assessing how well the artifact meets the requirements.")
+    overall_assessment: str = Field(..., description="A brief, one-paragraph summary of the critique, assessing how well the artifact meets the requirements.")
 
-    points\_for\_improvement: List\[str\] \= Field(..., description="A list of specific, actionable points of feedback for what to change or add in the next iteration.")
+    points_for_improvement: List[str] = Field(..., description="A list of specific, actionable points of feedback for what to change or add in the next iteration.")
 
-    positive\_feedback: List\[str\] \= Field(..., description="Specific aspects of the artifact that were well-executed and should be kept or built upon.")
+    positive_feedback: List[str] = Field(..., description="Specific aspects of the artifact that were well-executed and should be kept or built upon.")
 
-    \# MODIFICATION: Add a machine-readable decision field to enable conditional routing.
+    # MODIFICATION: Add a machine-readable decision field to enable conditional routing.
 
-    decision: Literal\["ACCEPT", "REVISE"\] \= Field(..., description="The final verdict. 'REVISE' if significant changes are needed, otherwise 'ACCEPT'.")
+    decision: Literal["ACCEPT", "REVISE"] = Field(..., description="The final verdict. 'REVISE' if significant changes are needed, otherwise 'ACCEPT'.")
+```
 
 #### 3.2. Specialist Logic (`critic_specialist.py`)
 
 The specialist's logic is updated to use the new schema, leverage the `create_llm_message` helper, and write its decision to the `scratchpad`. The responsibility of recommending the next specialist is removed, as this is now handled by the graph's structure.
 
-\# app/src/specialists/critic\_specialist.py
+```python
+# app/src/specialists/critic_specialist.py
 
 import logging
 
@@ -84,7 +87,7 @@ import jmespath
 
 from .base import BaseSpecialist
 
-from .helpers import create\_llm\_message, create\_missing\_artifact\_response
+from .helpers import create_llm_message, create_missing_artifact_response
 
 from ..enums import CoreSpecialist
 
@@ -92,9 +95,9 @@ from ..llm.adapter import StandardizedLLMRequest
 
 from .schemas import Critique
 
-from langchain\_core.messages import AIMessage, BaseMessage, HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
-logger \= logging.getLogger(\_\_name\_\_)
+logger = logging.getLogger(__name__)
 
 class CriticSpecialist(BaseSpecialist):
 
@@ -106,105 +109,106 @@ class CriticSpecialist(BaseSpecialist):
 
     """
 
-    def \_\_init\_\_(self, specialist\_name: str, specialist\_config: Dict\[str, Any\]):
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
 
-        super().\_\_init\_\_(specialist\_name, specialist\_config)
+        super().__init__(specialist_name, specialist_config)
 
         logger.info("---INITIALIZED CriticSpecialist---")
 
-    def \_execute\_logic(self, state: dict) \-\> Dict\[str, Any\]:
+    def _execute_logic(self, state: dict) -> Dict[str, Any]:
 
         logger.info("Executing CriticSpecialist logic.")
 
-        html\_artifact \= state.get("artifacts", {}).get("html\_document.html")
+        html_artifact = state.get("artifacts", {}).get("html_document.html")
 
-        if not html\_artifact:
+        if not html_artifact:
 
-            \# This is a critical failure. The critic cannot operate without the HTML.
+            # This is a critical failure. The critic cannot operate without the HTML.
 
-            return create\_missing\_artifact\_response(
+            return create_missing_artifact_response(
 
-                specialist\_name=self.specialist\_name,
+                specialist_name=self.specialist_name,
 
-                missing\_artifacts=\["html\_document.html"\],
+                missing_artifacts=["html_document.html"],
 
-                recommended\_specialists=\[CoreSpecialist.WEB\_BUILDER.value\]
+                recommended_specialists=[CoreSpecialist.WEB_BUILDER.value]
 
             )
 
-        contextual\_messages: List\[BaseMessage\] \= state\["messages"\]\[:\]
+        contextual_messages: List[BaseMessage] = state["messages"][:]
 
-        contextual\_messages.append(HumanMessage(
+        contextual_messages.append(HumanMessage(
 
-            content=f"Here is the HTML document to critique:\\n\\n\`\`\`html\\n{html\_artifact}\\n\`\`\`"
+            content=f"Here is the HTML document to critique:*\n*\n\`\`\`html*\n{html_artifact}*\n\`\`\`"
 
         ))
 
-        request \= StandardizedLLMRequest(
+        request = StandardizedLLMRequest(
 
-            messages=contextual\_messages,
+            messages=contextual_messages,
 
-            output\_model\_class=Critique
+            output_model_class=Critique
 
         )
 
-        response\_data \= self.llm\_adapter.invoke(request)
+        response_data = self.llm_adapter.invoke(request)
 
-        json\_response \= response\_data.get("json\_response")
+        json_response = response_data.get("json_response")
 
-        if not json\_response:
+        if not json_response:
 
             raise ValueError("CriticSpecialist failed to get a valid structured response from the LLM.")
 
         try:
 
-            critique \= Critique(\*\*json\_response)
+            critique = Critique(**json_response)
 
         except Exception as e:
 
-            logger.error(f"Pydantic validation failed for critic: {e}", exc\_info=True)
+            logger.error(f"Pydantic validation failed for critic: {e}", exc_info=True)
 
             raise e
 
-        critique\_text\_parts \= \[f"\*\*Overall Assessment:\*\*\\n{critique.overall\_assessment}\\n"\]
+        critique_text_parts = [f"**Overall Assessment:***\n{critique.overall_assessment}*\n"]
 
-        if critique.points\_for\_improvement:
+        if critique.points_for_improvement:
 
-            improvement\_points \= "\\n".join(\[f"- {point}" for point in critique.points\_for\_improvement\])
+            improvement_points = "*\n".join([f"- {point}" for point in critique.points_for_improvement])
 
-            critique\_text\_parts.append(f"\*\*Points for Improvement:\*\*\\n{improvement\_points}\\n")
+            critique_text_parts.append(f"**Points for Improvement:***\n{improvement_points}*\n")
 
-        if critique.positive\_feedback:
+        if critique.positive_feedback:
 
-            positive\_points \= "\\n".join(\[f"- {point}" for point in critique.positive\_feedback\])
+            positive_points = "*\n".join([f"- {point}" for point in critique.positive_feedback])
 
-            critique\_text\_parts.append(f"\*\*What Went Well:\*\*\\n{positive\_points}")
+            critique_text_parts.append(f"**What Went Well:***\n{positive_points}")
 
-        critique\_text \= "\\n".join(critique\_text\_parts)
+        critique_text = "*\n".join(critique_text_parts)
 
-        ai\_message \= create\_llm\_message(
+        ai_message = create_llm_message(
 
-            specialist\_name=self.specialist\_name,
+            specialist_name=self.specialist_name,
 
-            llm\_adapter=self.llm\_adapter,
+            llm_adapter=self.llm_adapter,
 
-            content=f"Critique complete. My decision is to \*\*{critique.decision}\*\* the artifact.",
+            content=f"Critique complete. My decision is to **{critique.decision}** the artifact.",
 
         )
 
-        \# The specialist's output is now a decision placed in the scratchpad.
+        # The specialist's output is now a decision placed in the scratchpad.
 
-        \# The graph's structure, not this specialist, will determine the next step.
+        # The graph's structure, not this specialist, will determine the next step.
 
         return {
 
-            "messages": \[ai\_message\],
+            "messages": [ai_message],
 
-            "artifacts": {"critique.md": critique\_text},
+            "artifacts": {"critique.md": critique_text},
 
-            "scratchpad": {"critique\_decision": critique.decision}
+            "scratchpad": {"critique_decision": critique.decision}
 
         }
+```
 
 #### 3.3. Orchestration Logic (`graph_builder.py` and `graph_orchestrator.py`)
 
@@ -218,43 +222,45 @@ The `GraphBuilder` and `GraphOrchestrator` are enhanced to read the new configur
 
 The workflow is now defined declaratively. The `revision_target` can be changed to point to `systems_architect` to trigger a full re-planning, or to `web_builder` for a simple rebuild, all without code changes.
 
-\# in config.yaml
+```python
+# in config.yaml
 
 specialists:
 
-  \# ... other specialists
+  # ... other specialists
 
-  critic\_specialist:
+  critic_specialist:
 
     type: "llm"
 
-    prompt\_file: "critic\_prompt.md"
+    prompt_file: "critic_prompt.md"
 
     description: "Analyzes an artifact, provides a critique, and decides if revision is needed."
 
-    requires\_artifacts: \["html\_document.html"\]
+    requires_artifacts: ["html_document.html"]
 
-    artifact\_providers:
+    artifact_providers:
 
-      html\_document.html: "web\_builder"
+      html_document.html: "web_builder"
 
     
 
-    \# \--- NEW CONFIGURATION FOR CONDITIONAL ROUTING \---
+    # --- NEW CONFIGURATION FOR CONDITIONAL ROUTING ---
 
-    \    # This flag tells the GraphBuilder to wire this specialist as a conditional node.
+    # This flag tells the GraphBuilder to wire this specialist as a conditional node.
 
-    conditional\_routing: true
+    conditional_routing: true
 
-    \# This key defines the destination for the 'REVISE' branch.
+    # This key defines the destination for the 'REVISE' branch.
 
-    \# To re-run the builder: "web\_builder"
+    # To re-run the builder: "web_builder"
 
-    \# To re-run the entire plan: "systems\_architect"
+    # To re-run the entire plan: "systems_architect"
 
-    revision\_target: "web\_builder"
+    revision_target: "web_builder"
+```
 
-### 4\. Consequences
+### 4. Consequences
 
 **4.1. Positive**
 
@@ -268,36 +274,38 @@ specialists:
 * **Increased Orchestration Complexity:** The logic within `GraphBuilder` and `GraphOrchestrator` is now more complex, as it must handle both default and conditional edges. This complexity must be managed carefully as more conditional nodes are added.  
 * **Implicit Contracts:** The pattern relies on an implicit contract between the specialist (which writes to `scratchpad['critique_decision']`) and the orchestrator (which reads from it). This contract should be formally documented.
 
-### 5\. Workflow Diagram
+### 5. Workflow Diagram
 
 The new, dynamic workflow can be visualized as follows:
 
+```mermaid
 graph TD
 
     subgraph Main Workflow
 
-        A\[Router\] \--\> B(SystemsArchitect);
+        A[Router] --> B(SystemsArchitect);
 
-        B \--\> A;
+        B --> A;
 
-        A \--\> C(WebBuilder);
+        A --> C(WebBuilder);
 
-        A \--\> E(ResponseSynthesizer);
+        A --> E(ResponseSynthesizer);
 
-        E \--\> F(Archiver);
+        E --> F(Archiver);
 
-        F \--\> A;
+        F --> A;
 
-        A \--\> G\[END\];
+        A --> G[END];
 
     end
 
     subgraph Refinement Sub-Graph
 
-        C \--\> D{CriticSpecialist};
+        C --> D{CriticSpecialist};
 
-        D \-- Decision: REVISE \--\> C;
+        D -- Decision: REVISE --> C;
 
-        D \-- Decision: ACCEPT \--\> A;
+        D -- Decision: ACCEPT --> A;
 
     end  
+```

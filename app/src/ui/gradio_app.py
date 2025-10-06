@@ -4,6 +4,7 @@ import argparse
 import sys
 import os
 
+import html
 from .api_client import ApiClient
 
 def handle_submit(api_client: ApiClient, status_output, json_output, html_output, image_output, log_output, archive_output):
@@ -28,7 +29,13 @@ def handle_submit(api_client: ApiClient, status_output, json_output, html_output
             if "final_state" in update:
                 ui_update[json_output] = update["final_state"]
             if "html" in update:
-                ui_update[html_output] = gr.update(value=update["html"], visible=bool(update["html"]))
+                html_content = update["html"]
+                if html_content:
+                    # Ensure we only escape raw strings, not Gradio update objects
+                    iframe_html = f'<iframe srcdoc="{html.escape(html_content if isinstance(html_content, str) else "")}" style="width: 100%; height: 600px; border: none;"></iframe>'
+                    ui_update[html_output] = gr.update(value=iframe_html, visible=True)
+                else:
+                    ui_update[html_output] = gr.update(value="", visible=False)
             if "image" in update:
                 ui_update[image_output] = gr.update(value=update["image"], visible=bool(update["image"]))
             if "archive" in update:
