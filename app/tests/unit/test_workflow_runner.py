@@ -89,9 +89,9 @@ async def test_workflow_runner_run_streaming_handles_astream_error(mock_graph_bu
     # Act & Assert
     error_message_found = False
     async for item in runner.run_streaming("Test goal"):
-        if "FINAL_STATE" in item and "error" in item:
+        if "error_report" in item and "error" in item["error_report"]:
             error_message_found = True
-            assert "Stream failed!" in item
+            assert "Stream failed!" in item["error_report"]["error"]
             break
     assert error_message_found
 
@@ -108,13 +108,9 @@ async def test_workflow_runner_run_streaming(mock_graph_builder):
     # Assert
     runner.app.astream.assert_called_once()
     
-    # Check the yielded log messages and final state
-    assert len(streamed_results) == 3 # 2 log lines, 1 final state
-    assert "Finished node: node1" in streamed_results[0]
-    assert "Finished node: node2" in streamed_results[1]
-
-    # Check that the final state is yielded correctly
-    final_state_message = streamed_results[-1]
-    assert final_state_message.startswith("FINAL_STATE::")
-    # The runner now serializes the full state, so we check for the artifact within it.
-    assert '"artifacts":' in final_state_message and '"final_user_response.md": "Final streaming response"' in final_state_message
+    # The runner now yields the raw events from LangGraph's astream.
+    # The mock generator yields two events.
+    assert len(streamed_results) == 2
+    assert "node1" in streamed_results[0]
+    assert "node2" in streamed_results[1]
+    assert "final_user_response.md" in streamed_results[1]["node2"]["artifacts"]
