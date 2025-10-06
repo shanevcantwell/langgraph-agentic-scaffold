@@ -161,7 +161,8 @@ Please refer to it for:
 ## 6.0 Unit Testing Principles
 
 The project has a centralized, fixture-based testing architecture to ensure that unit tests are robust, maintainable, and easy to write. This approach eliminates brittle, ad-hoc mocks and provides a consistent way to test specialists in isolation.
-
+To ensure `pytest` can always find the project's root and the central `conftest.py` file, a `pytest.ini` is placed in the `app/tests/` directory. This file sets `rootdir = ../..`, which is critical for allowing tests to be run directly from within an IDE or from any subdirectory.
+ 
 ### 6.1 The Centralized Fixture Architecture (`conftest.py`)
 
 All core architectural components are mocked centrally in `app/tests/conftest.py`. This provides a single source of truth for test dependencies. Key fixtures include `mock_config_loader` and `mock_adapter_factory`.

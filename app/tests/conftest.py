@@ -139,14 +139,20 @@ def initialized_specialist_factory(
                     adapter_factory=mock_adapter_factory,
                 )
         elif class_name == "CriticSpecialist":
-            # CriticSpecialist requires a critique_strategy. We'll mock it.
-            # This avoids having to refactor test_critic_specialist.py for now.
-            mock_strategy = MagicMock(name="mock_critique_strategy")
+            # CriticSpecialist requires a strategy object at initialization.
+            # We'll create a mock strategy to satisfy the constructor,
+            # allowing tests to mock its methods as needed.
+            from app.src.strategies.critique.base import BaseCritiqueStrategy
+            mock_strategy = MagicMock(spec=BaseCritiqueStrategy)
+            
             specialist_instance = SpecialistClass(
                 specialist_name=specialist_name,
                 specialist_config=specialist_config,
                 critique_strategy=mock_strategy,
             )
+            # The strategy itself might need an adapter, so we'll attach one.
+            mock_strategy.llm_adapter = mock_adapter_factory.create_adapter(specialist_name)
+
         else:
             # Standard instantiation for most specialists
             specialist_instance = SpecialistClass(

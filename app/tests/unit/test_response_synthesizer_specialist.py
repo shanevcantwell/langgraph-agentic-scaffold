@@ -38,7 +38,7 @@ def test_synthesizer_with_snippets(response_synthesizer_specialist):
     assert result_state["artifacts"]["final_user_response.md"] == mock_response
 
     # Check that the snippets are cleared from the scratchpad
-    assert "scratchpad" in result_state
+    assert "scratchpad" in result_state # This key should exist
     assert result_state["scratchpad"]["user_response_snippets"] == []
 
     # Check that a new AI message was created
@@ -62,7 +62,7 @@ def test_synthesizer_without_snippets(response_synthesizer_specialist):
 
     # Assert
     response_synthesizer_specialist.llm_adapter.invoke.assert_not_called()
-    assert "The workflow has completed" in result_state["artifacts"]["final_user_response.md"]
+    assert "workflow has completed" in result_state["artifacts"]["final_user_response.md"]
 
 @pytest.mark.parametrize("snippets", [
     [],
@@ -84,7 +84,7 @@ def test_synthesizer_with_empty_snippets_list(response_synthesizer_specialist, s
 
     # Assert
     response_synthesizer_specialist.llm_adapter.invoke.assert_not_called()
-    assert "The workflow has completed" in result_state["artifacts"]["final_user_response.md"]
+    assert "workflow has completed" in result_state["artifacts"]["final_user_response.md"]
 
 def test_synthesizer_handles_llm_invocation_error(response_synthesizer_specialist):
     """Tests that an LLMInvocationError is caught and handled."""

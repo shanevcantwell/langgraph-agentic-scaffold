@@ -25,11 +25,14 @@ def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter
     }
     open_interpreter_specialist.llm_adapter.invoke.return_value = mock_llm_response
 
-    # 2. Mock the "Execute" phase
-    # The chat method returns a generator, which we mock as an empty list.
-    # The results are then read from the .messages attribute on the mock.
-    mock_interpreter.chat.return_value = (_ for _ in [])
-    mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'hello'}]
+    # 2. Mock the "Execute" phase. The `chat` method populates the `messages`
+    #    attribute on the interpreter instance as it runs. We simulate this by
+    #    having the mock function update the mock's `messages` attribute.
+    def mock_chat_effect(*args, **kwargs):
+        mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'hello'}]
+        return (_ for _ in []) # Return an empty generator for the stream
+
+    mock_interpreter.chat.side_effect = mock_chat_effect
 
     initial_state = {"messages": [HumanMessage(content="Run a hello world script")]}
 
@@ -45,6 +48,7 @@ def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter
     message = result_state["messages"][0]
     assert isinstance(message, AIMessage)
     assert "I have executed the following python code" in message.content
+    assert "hello" in message.content
 
 def test_open_interpreter_specialist_handles_no_tool_call_from_llm(open_interpreter_specialist):
     """Tests that the specialist handles the case where the LLM fails to generate a plan."""
@@ -75,8 +79,12 @@ def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_inter
     open_interpreter_specialist.llm_adapter.invoke.return_value = mock_llm_response
 
     # 2. Mock the "Execute" phase to simulate the output of 'ls -F'
-    mock_interpreter.chat.return_value = (_ for _ in [])
-    mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'README.md\nsrc/\n'}]
+    def mock_chat_effect(*args, **kwargs):
+        mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'README.md\nsrc/\n'}]
+        return (_ for _ in [])
+
+    mock_interpreter.chat.side_effect = mock_chat_effect
+
 
     initial_state = {"messages": [HumanMessage(content="List files available")]}
 
@@ -87,7 +95,7 @@ def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_inter
     # Assert that the final AI message contains the result
     final_message = result_state["messages"][0]
     assert "Result:" in final_message.content
-    assert "README.md" in final_message.content
+    assert "README.md\nsrc/\n" in final_message.content
 
     # Assert that the scratchpad was populated for the ResponseSynthesizer
     scratchpad = result_state["scratchpad"]

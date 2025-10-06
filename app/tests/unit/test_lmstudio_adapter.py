@@ -6,7 +6,8 @@ from app.src.llm.lmstudio_adapter import LMStudioAdapter
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.utils.errors import LLMInvocationError, ProxyError
 from langchain_core.messages import HumanMessage
-from openai import APIConnectionError, PermissionDeniedError, httpx
+import httpx
+from openai import APIConnectionError, PermissionDeniedError
 from pydantic import BaseModel
 
 MOCK_MODEL_NAME = "test-model/test-model-GGUF"

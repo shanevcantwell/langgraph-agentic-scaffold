@@ -30,12 +30,15 @@ class ResponseSynthesizerSpecialist(BaseSpecialist):
         logger.info(f"--- {self.specialist_name}: Synthesizing final response. ---")
 
         scratchpad = state.get("scratchpad", {})
-        user_response_snippets = scratchpad.get("user_response_snippets", [])
+        raw_snippets = scratchpad.get("user_response_snippets", [])
+
+        # Filter out any empty or whitespace-only snippets before processing.
+        user_response_snippets = [s for s in raw_snippets if str(s).strip()]
 
         # Guard clause: If there are no snippets, do not call the LLM.
         # Instead, provide a generic but safe completion message. This prevents
         # the LLM from hallucinating on an empty prompt.
-        if not user_response_snippets:
+        if not user_response_snippets and "final_user_response.md" not in state.get("artifacts", {}):
             logger.warning(f"{self.specialist_name}: No user_response_snippets found. Providing a default completion message.")
             synthesized_response = "The workflow has completed its tasks, but no specific output was generated to display."
             # Skip directly to artifact creation
