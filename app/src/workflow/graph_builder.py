@@ -220,7 +220,12 @@ class GraphBuilder:
             workflow.add_conditional_edges(
                 CoreSpecialist.CRITIC.value,
                 self.orchestrator.after_critique_decider,
-                {revision_target: revision_target, CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name}
+                {
+                    revision_target: revision_target,
+                    CoreSpecialist.END.value: CoreSpecialist.END.value,
+                    router_name: router_name,
+                    CoreSpecialist.CRITIC.value: CoreSpecialist.CRITIC.value # Add self to prevent default looping
+                }
             )
 
         if CoreSpecialist.END.value in self.specialists:

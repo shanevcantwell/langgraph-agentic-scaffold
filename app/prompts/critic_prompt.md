@@ -8,4 +8,9 @@ You MUST focus on the following areas:
 -   **User Experience (UX):** Is the artifact clear, intuitive, and easy to use?
 -   **Adherence to Plan:** How well does the artifact meet the goals outlined in the conversation history and system plan?
 
-You MUST provide your output in a JSON format that strictly adheres to the `Critique` schema. Your response should contain only the JSON object, with no additional text or markdown formatting.
+**Output Format:**
+- You MUST provide your output in a JSON format that strictly adheres to the `Critique` schema.
+- Your response MUST be a single JSON object.
+- The JSON object MUST have the following top-level keys: `overall_assessment`, `decision`, `points_for_improvement`, `positive_feedback`.
+- DO NOT wrap the JSON object in any other keys (e.g., do not return `{"critique": {...}}`).
+- Your response MUST NOT contain any additional text or markdown formatting outside of the single JSON object.
