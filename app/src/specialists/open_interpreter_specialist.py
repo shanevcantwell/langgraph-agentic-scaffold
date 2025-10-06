@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
+from ..utils.prompt_loader import PromptLoader
 from .schemas import CodeExecutionParams
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ class OpenInterpreterSpecialist(BaseSpecialist):
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
+        self.prompt_loader = PromptLoader()
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
     def _plan_code(self, last_human_message: HumanMessage) -> CodeExecutionParams | None:
@@ -32,16 +34,17 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         structured `CodeExecutionParams` object.
         """
         logger.info("Phase 1: Generating code execution plan...")
-        planning_prompt = (
-            "Based on the following user request, your task is to generate a single, "
-            "self-contained code block to be executed by the open-interpreter. "
-            "The code should be self-contained and not require user input. "
-            "You must respond by calling the 'CodeExecutionParams' tool."
-        )
+        prompt_file = self.specialist_config.get("prompt_file")
+        if not prompt_file:
+            raise ValueError("OpenInterpreterSpecialist requires a 'prompt_file' in its configuration.")
+        planning_prompt = self.prompt_loader.load_prompt(prompt_file)
 
         request = StandardizedLLMRequest(
             messages=[last_human_message, HumanMessage(content=planning_prompt)],
-            tools=[CodeExecutionParams]
+            tools=[CodeExecutionParams],
+            # This specialist's prompt demands a tool call, so we must enforce it.
+            # This ensures the adapter uses the strongest possible mechanism to get a tool call.
+            force_tool_call=True
         )
 
         response_data = self.llm_adapter.invoke(request)

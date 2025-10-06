@@ -156,6 +156,7 @@ specialists:
   # --- Procedural Specialists with External Dependencies ---
   open_interpreter_specialist:
     type: "hybrid"
+    prompt_file: "open_interpreter_prompt.md"
     description: "Executes general-purpose shell commands and code (e.g., Python, bash) to perform complex, open-ended tasks like data analysis, web research, or running scripts. Use this for tasks that require more than simple file manipulation."
 
   end_specialist:

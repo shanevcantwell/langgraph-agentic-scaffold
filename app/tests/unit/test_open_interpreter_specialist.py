@@ -44,6 +44,11 @@ def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter
     # Assert Plan phase
     open_interpreter_specialist.llm_adapter.invoke.assert_called_once()
 
+    # Assert that force_tool_call was set to True in the request
+    request_arg = open_interpreter_specialist.llm_adapter.invoke.call_args[0][0]
+    assert hasattr(request_arg, 'force_tool_call')
+    assert request_arg.force_tool_call is True
+
     # Assert final state
     assert len(result_state["messages"]) == 1
     message = result_state["messages"][0]
