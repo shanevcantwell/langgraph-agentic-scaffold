@@ -6,8 +6,14 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 @pytest.fixture
 def open_interpreter_specialist(initialized_specialist_factory):
-    """Fixture for an initialized OpenInterpreterSpecialist."""
-    return initialized_specialist_factory("OpenInterpreterSpecialist")
+    """
+    Fixture for an initialized OpenInterpreterSpecialist.
+    It injects the required 'prompt_file' configuration to ensure the
+    specialist can be instantiated correctly for all tests.
+    """
+    specialist = initialized_specialist_factory("OpenInterpreterSpecialist")
+    specialist.specialist_config['prompt_file'] = 'open_interpreter_prompt.md'
+    return specialist
 
 @patch('interpreter.interpreter', new_callable=MagicMock)
 def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter, open_interpreter_specialist):
@@ -91,7 +97,6 @@ def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_inter
         return (_ for _ in [])
 
     mock_interpreter.chat.side_effect = mock_chat_effect
-
     mock_interpreter.messages = []
 
     initial_state = {"messages": [HumanMessage(content="List files available")]}
@@ -111,3 +116,18 @@ def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_inter
     assert "Executed code and got the following result" in scratchpad["user_response_snippets"][0]
     assert "README.md" in scratchpad["user_response_snippets"][0]
     assert result_state.get("task_is_complete") is True
+
+def test_open_interpreter_specialist_raises_error_if_no_prompt_file(initialized_specialist_factory):
+    """
+    Tests that the specialist raises a ValueError if the 'prompt_file' is
+    missing from its configuration, as it's a critical dependency.
+    """
+    # Arrange: Create a specialist but do NOT add the prompt_file to its config
+    specialist = initialized_specialist_factory("OpenInterpreterSpecialist")
+    # We can be extra sure by deleting it if the factory ever changes
+    if 'prompt_file' in specialist.specialist_config:
+        del specialist.specialist_config['prompt_file']
+
+    initial_state = {"messages": [HumanMessage(content="This will fail.")]}
+    with pytest.raises(ValueError, match="requires a 'prompt_file'"):
+        specialist._execute_logic(initial_state)

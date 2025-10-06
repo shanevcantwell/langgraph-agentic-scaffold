@@ -60,6 +60,8 @@ def test_plan_and_execute_workflow(open_interpreter_specialist):
     open_interpreter_specialist.llm_adapter.invoke.return_value = {
         "tool_calls": [{"id": "call_123", "type": "tool_code", "args": mock_plan}]
     }
+    # The specialist now requires a prompt_file in its config.
+    open_interpreter_specialist.specialist_config['prompt_file'] = 'open_interpreter_prompt.md'
 
     # 4. Mock the Executor's external dependency (`interpreter` library).
     # We patch the `interpreter` at the point of import within the method under test.
@@ -119,6 +121,10 @@ def test_plan_and_execute_handles_llm_planning_failure(open_interpreter_speciali
     # 1. Define user intent
     user_intent = "This is an ambiguous request that won't map to a tool."
     initial_state = {"messages": [HumanMessage(content=user_intent)]}
+
+    # The integration test factory doesn't have the full mock config context,
+    # so we need to ensure the prompt_file is set for this test.
+    open_interpreter_specialist.specialist_config['prompt_file'] = 'open_interpreter_prompt.md'
 
     # 2. Mock the Planner's LLM to return an empty response (no tool calls)
     open_interpreter_specialist.llm_adapter.invoke.return_value = {"tool_calls": []}
