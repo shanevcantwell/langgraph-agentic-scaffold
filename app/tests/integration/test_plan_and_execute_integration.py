@@ -105,3 +105,27 @@ def test_plan_and_execute_workflow(open_interpreter_specialist):
         # Confirm the final result message "closes the loop" by reporting the outcome.
         assert "I have executed the following python code" in result_state["messages"][0].content
         assert "File 'test.txt' created successfully." in result_state["messages"][0].content
+
+        # Confirm the task is marked as complete
+        assert result_state.get("task_is_complete") is True
+
+
+def test_plan_and_execute_handles_llm_planning_failure(open_interpreter_specialist):
+    """
+    Tests that the specialist correctly handles the case where the LLM fails
+    to generate a valid plan (e.g., returns no tool calls).
+    """
+    # --- Arrange ---
+    # 1. Define user intent
+    user_intent = "This is an ambiguous request that won't map to a tool."
+    initial_state = {"messages": [HumanMessage(content=user_intent)]}
+
+    # 2. Mock the Planner's LLM to return an empty response (no tool calls)
+    open_interpreter_specialist.llm_adapter.invoke.return_value = {"tool_calls": []}
+
+    # --- Act ---
+    result_state = open_interpreter_specialist._execute_logic(initial_state)
+
+    # --- Assert ---
+    assert "error" in result_state
+    assert "failed to produce a valid code plan" in result_state["error"]

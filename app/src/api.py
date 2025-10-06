@@ -1,17 +1,24 @@
 # app/src/api.py
-import logging
 import time
+# --- Environment Variable Loading ---
+# This MUST be the first import and execution, to ensure that all subsequent
+# modules have access to the environment variables.
+from dotenv import load_dotenv
+load_dotenv()
+print("Environment variables from .env file loaded.")
+
+from typing import Dict, Optional, Any
+import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from typing import Dict, Any, Optional
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
 from langsmith import Client
 langsmith_client: Optional[Client] = None
 logger = logging.getLogger(__name__)
 
-workflow_runner: Optional[WorkflowRunner] = None
+workflow_runner: WorkflowRunner | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -137,11 +137,14 @@ class ConfigLoader:
 
             final_binding = None  # Use None to signify no binding found
 
-            # Layer 2: User-specific binding
+            # Layer 2: User-specific binding. This has the highest precedence.
+            # If the user explicitly binds a model to ANY specialist (even a procedural one),
+            # we MUST respect it. This allows for special cases like OpenInterpreter.
             if user_specific_binding and user_specific_binding in merged["llm_providers"]:
                 final_binding = user_specific_binding
                 logger.debug(f"Applying user-specific binding '{final_binding}' to specialist '{name}'.")
-            # Layer 2: User-default binding
+            # Layer 2: User-default binding. This only applies if the specialist is an
+            # LLM or hybrid type and does NOT have a specific binding.
             elif spec_config.get("type") in ["llm", "hybrid"] and default_binding and default_binding in merged["llm_providers"]:
                 final_binding = default_binding
                 logger.debug(f"Applying user default binding '{final_binding}' to specialist '{name}'.")

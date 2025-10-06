@@ -2,7 +2,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from app.src.specialists.open_interpreter_specialist import OpenInterpreterSpecialist
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
 @pytest.fixture
 def open_interpreter_specialist(initialized_specialist_factory):
@@ -29,10 +29,11 @@ def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter
     #    attribute on the interpreter instance as it runs. We simulate this by
     #    having the mock function update the mock's `messages` attribute.
     def mock_chat_effect(*args, **kwargs):
-        mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'hello'}]
+        mock_interpreter.messages.append({'role': 'computer', 'type': 'output', 'content': 'hello'})
         return (_ for _ in []) # Return an empty generator for the stream
 
     mock_interpreter.chat.side_effect = mock_chat_effect
+    mock_interpreter.messages = []
 
     initial_state = {"messages": [HumanMessage(content="Run a hello world script")]}
 
@@ -49,6 +50,7 @@ def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter
     assert isinstance(message, AIMessage)
     assert "I have executed the following python code" in message.content
     assert "hello" in message.content
+    assert result_state.get("task_is_complete") is True
 
 def test_open_interpreter_specialist_handles_no_tool_call_from_llm(open_interpreter_specialist):
     """Tests that the specialist handles the case where the LLM fails to generate a plan."""
@@ -80,11 +82,12 @@ def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_inter
 
     # 2. Mock the "Execute" phase to simulate the output of 'ls -F'
     def mock_chat_effect(*args, **kwargs):
-        mock_interpreter.messages = [{'role': 'computer', 'type': 'output', 'content': 'README.md\nsrc/\n'}]
+        mock_interpreter.messages.append({'role': 'computer', 'type': 'output', 'content': 'README.md\nsrc/\n'})
         return (_ for _ in [])
 
     mock_interpreter.chat.side_effect = mock_chat_effect
 
+    mock_interpreter.messages = []
 
     initial_state = {"messages": [HumanMessage(content="List files available")]}
 
@@ -102,3 +105,4 @@ def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_inter
     assert "user_response_snippets" in scratchpad
     assert "Executed code and got the following result" in scratchpad["user_response_snippets"][0]
     assert "README.md" in scratchpad["user_response_snippets"][0]
+    assert result_state.get("task_is_complete") is True

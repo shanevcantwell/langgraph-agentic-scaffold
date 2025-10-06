@@ -261,91 +261,135 @@ Create the specialist file `app/src/specialists/open_interpreter_specialist.py`.
 
 ```python
 # app/src/specialists/open_interpreter_specialist.py
+
 import logging
 from typing import Dict, Any
 
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+# DO NOT IMPORT 'interpreter' HERE AT THE MODULE LEVEL
+from langchain_core.messages import HumanMessage
 
 from .base import BaseSpecialist
-from .schemas.open_interpreter_schemas import CodeExecutionParams
+from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
+from .schemas import CodeExecutionParams
 
 logger = logging.getLogger(__name__)
 
+
 class OpenInterpreterSpecialist(BaseSpecialist):
     """
-    A procedural specialist that uses the open-interpreter library
-    following a 'Plan and Execute' pattern.
+    A specialist that uses the open-interpreter library to execute code.
+    It follows a robust two-phase process:
+    1. Plan: Use its own LLM adapter to generate a structured code block.
+    2. Execute: Programmatically run the generated code using the interpreter library.
     """
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
-        # Lazily import the interpreter to keep startup times fast.
-        self._interpreter = None
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
-    @property
-    def interpreter(self):
-        """Lazy loader for the interpreter singleton."""
-        if self._interpreter is None:
+    def _plan_code(self, last_human_message: HumanMessage) -> CodeExecutionParams | None:
+        """
+        Phase 1: Plan the code to execute by using the LLM to generate a
+        structured `CodeExecutionParams` object.
+        """
+        logger.info("Phase 1: Generating code execution plan...")
+        planning_prompt = (
+            "Based on the following user request, your task is to generate a single, "
+            "self-contained code block to be executed by the open-interpreter. "
+            "The code should be self-contained and not require user input. "
+            "You must respond by calling the 'CodeExecutionParams' tool."
+        )
+
+        request = StandardizedLLMRequest(
+            messages=[last_human_message, HumanMessage(content=planning_prompt)],
+            tools=[CodeExecutionParams]
+        )
+
+        response_data = self.llm_adapter.invoke(request)
+        tool_calls = response_data.get("tool_calls", [])
+
+        if not tool_calls or not tool_calls[0].get('args'):
+            logger.error("LLM failed to generate a valid code execution plan. Aborting.")
+            return None
+
+        try:
+            return CodeExecutionParams(**tool_calls[0]['args'])
+        except Exception as e:
+            logger.error(f"Failed to parse LLM tool call into CodeExecutionParams: {e}", exc_info=True)
+            return None
+
+    def _execute_code(self, code_params: CodeExecutionParams) -> str:
+        """
+        Phase 2: Execute the code from the plan using the interpreter library.
+        """
+        logger.info(f"Phase 2: Executing code...\n---\n{code_params.code}\n---")
+        try:
             from interpreter import interpreter
             interpreter.auto_run = True
-            interpreter.llm.model = "" # We disable the internal LLM
-            interpreter.llm.api_key = "no_key_needed"
-            self._interpreter = interpreter
-        return self._interpreter
+            interpreter.llm.context_window = 0 # We don't want the interpreter's internal LLM to have context
+        except ImportError:
+            logger.error(
+                "The 'open-interpreter' package is not installed. "
+                "Please add 'open-interpreter' to pyproject.toml and run './scripts/sync-reqs.sh'."
+            )
+            return "Error: Required package 'open-interpreter' is not installed."
+
+        interpreter.messages = []  # Clear previous messages
+        response_chunks = interpreter.chat(
+            f"Please execute this {code_params.language} code:\n```{code_params.language}\n{code_params.code}\n```",
+            display=False,
+            stream=True
+        )
+
+        for _ in response_chunks:
+            pass
+
+        outputs = [msg.get('content', '') for msg in interpreter.messages if msg.get('role') == 'computer' and msg.get('type') == 'output' and msg.get('content')]
+        final_output = "\n".join(outputs) if outputs else "Code executed with no output."
+        logger.info(f"Phase 2 Complete. Execution output: {final_output[:500]}...")
+        return final_output
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        """
+        Generates and executes code based on the user's request.
+        """
         if not self.llm_adapter:
-            raise RuntimeError("OpenInterpreterSpecialist requires an LLM adapter for planning.")
+            raise RuntimeError(
+                "OpenInterpreterSpecialist requires an LLM adapter to generate code. "
+                "Ensure it is bound to a provider in user_settings.yaml."
+            )
 
         messages = state.get("messages", [])
+        # Find the last human message to use as the basis for the plan.
+        # This prevents the specialist from re-evaluating its own previous AI messages.
+        last_human_message = next((msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None)
 
-        # === 1. PLAN PHASE ===
-        # Use the system LLM to generate a structured plan for code execution.
-        request = StandardizedLLMRequest(
-            messages=messages,
-            tools=[CodeExecutionParams],
-            tool_choice="CodeExecutionParams"
-        )
-        response = self.llm_adapter.invoke(request)
-        
-        # Check if the LLM returned a valid tool call
-        tool_calls = response.get("tool_calls", [])
-        if not tool_calls:
-            # Fallback if the LLM fails to generate a plan
-            return {"messages": [AIMessage(content="I was unable to determine which code to execute.", name=self.specialist_name)]}
+        if not last_human_message:
+            logger.error("OpenInterpreterSpecialist could not find a HumanMessage to act on.")
+            return {"error": "OpenInterpreterSpecialist requires a user request to function."}
 
-        # === 2. EXECUTE PHASE ===
-        # Execute the plan using the open-interpreter library as a code runner.
-        params = tool_calls[0]['args']
-        language = params.get("language")
-        code_to_run = params.get("code")
+        # Phase 1: Plan
+        code_params = self._plan_code(last_human_message)
+        if not code_params:
+            return {"error": "OpenInterpreterSpecialist's LLM failed to produce a valid code plan."}
 
-        if not all([language, code_to_run]):
-            return {"messages": [AIMessage(content="Invalid code execution plan received.", name=self.specialist_name)]}
+        # Phase 2: Execute
+        final_output = self._execute_code(code_params)
 
-        # Reset interpreter state and execute
-        self.interpreter.messages = []
-        execution_messages = self.interpreter.chat(
-            f"Please execute this {language} code:\n`{language}\n{code_to_run}\n`",
-            display=False,
-            stream=False,
+        # --- Create a Standardized Response ---
+        ai_message = create_llm_message(
+            specialist_name=self.specialist_name,
+            llm_adapter=self.llm_adapter,
+            content=f"I have executed the following {code_params.language} code:\n\n```\n{code_params.code}\n```\n\n**Result:**\n{final_output}",
         )
 
-        # Parse the output to find the result of the code execution.
-        computer_outputs = [m['content'] for m in execution_messages if m.get('role') == 'computer']
-        final_output = "\n".join(computer_outputs) if computer_outputs else "Task completed with no output."
-
-        # Return the result as a ToolMessage to provide clear context to the graph.
-        tool_message = ToolMessage(
-            content=final_output,
-            tool_call_id=tool_calls[0]['id'],
-            name=self.specialist_name
-        )
-        
-        # Signal that the task is complete to trigger the archiver.
-        return {"messages": [tool_message], "task_is_complete": True}
+        return {
+            "messages": [ai_message],
+            # Add a user-facing summary of the action to the scratchpad.
+            "scratchpad": {"user_response_snippets": [f"Executed code and got the following result:\n\n{final_output}"]},
+            "task_is_complete": True # Signal that the task is done to prevent looping.
+        }
 ```
 
 ## Conclusion

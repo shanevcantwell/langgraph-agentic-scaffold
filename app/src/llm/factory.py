@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Any
 from .adapter import BaseAdapter
 from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
+from ..specialists.open_interpreter_specialist import OpenInterpreterSpecialist
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ class AdapterFactory:
 
         specialist_config = self.full_config.get("specialists", {}).get(specialist_name)
         specialist_type = specialist_config.get("type") if specialist_config else None
+
         if specialist_type not in ["llm", "hybrid"]:
             logger.debug(f"AdapterFactory: Specialist '{specialist_name}' is of type '{specialist_type}', no LLM adapter will be created. Returning None.")
             return None

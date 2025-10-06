@@ -26,22 +26,72 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         super().__init__(specialist_name, specialist_config)
         logger.info("---INITIALIZED OpenInterpreterSpecialist---")
 
-    def _execute_logic(self, state: dict) -> Dict[str, Any]:
+    def _plan_code(self, last_human_message: HumanMessage) -> CodeExecutionParams | None:
         """
-        Generates and executes code based on the user's request.
+        Phase 1: Plan the code to execute by using the LLM to generate a
+        structured `CodeExecutionParams` object.
         """
-        # --- Lazy Load and Configure the Interpreter ---
+        logger.info("Phase 1: Generating code execution plan...")
+        planning_prompt = (
+            "Based on the following user request, your task is to generate a single, "
+            "self-contained code block to be executed by the open-interpreter. "
+            "The code should be self-contained and not require user input. "
+            "You must respond by calling the 'CodeExecutionParams' tool."
+        )
+
+        request = StandardizedLLMRequest(
+            messages=[last_human_message, HumanMessage(content=planning_prompt)],
+            tools=[CodeExecutionParams]
+        )
+
+        response_data = self.llm_adapter.invoke(request)
+        tool_calls = response_data.get("tool_calls", [])
+
+        if not tool_calls or not tool_calls[0].get('args'):
+            logger.error("LLM failed to generate a valid code execution plan. Aborting.")
+            return None
+
+        try:
+            return CodeExecutionParams(**tool_calls[0]['args'])
+        except Exception as e:
+            logger.error(f"Failed to parse LLM tool call into CodeExecutionParams: {e}", exc_info=True)
+            return None
+
+    def _execute_code(self, code_params: CodeExecutionParams) -> str:
+        """
+        Phase 2: Execute the code from the plan using the interpreter library.
+        """
+        logger.info(f"Phase 2: Executing code...\n---\n{code_params.code}\n---")
         try:
             from interpreter import interpreter
             interpreter.auto_run = True
-            interpreter.llm.context_window = 0
+            interpreter.llm.context_window = 0 # We don't want the interpreter's internal LLM to have context
         except ImportError:
             logger.error(
                 "The 'open-interpreter' package is not installed. "
                 "Please add 'open-interpreter' to pyproject.toml and run './scripts/sync-reqs.sh'."
             )
-            return {"error": "Required package 'open-interpreter' is not installed."}
+            return "Error: Required package 'open-interpreter' is not installed."
 
+        interpreter.messages = []  # Clear previous messages
+        response_chunks = interpreter.chat(
+            f"Please execute this {code_params.language} code:\n```{code_params.language}\n{code_params.code}\n```",
+            display=False,
+            stream=True
+        )
+
+        for _ in response_chunks:
+            pass
+
+        outputs = [msg.get('content', '') for msg in interpreter.messages if msg.get('role') == 'computer' and msg.get('type') == 'output' and msg.get('content')]
+        final_output = "\n".join(outputs) if outputs else "Code executed with no output."
+        logger.info(f"Phase 2 Complete. Execution output: {final_output[:500]}...")
+        return final_output
+
+    def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        """
+        Generates and executes code based on the user's request.
+        """
         if not self.llm_adapter:
             raise RuntimeError(
                 "OpenInterpreterSpecialist requires an LLM adapter to generate code. "
@@ -49,49 +99,21 @@ class OpenInterpreterSpecialist(BaseSpecialist):
             )
 
         messages = state.get("messages", [])
-        
-        # --- Phase 1: Plan the Code to Execute ---
-        logger.info("Phase 1: Generating code execution plan...")
-        planning_prompt = (
-            "Based on the following user request and conversation history, your task is to generate a single, "
-            "self-contained code block to be executed by the open-interpreter. "
-            "You must respond by calling the 'CodeExecutionParams' tool."
-        )
-        
-        # Pass the full message history to the planning LLM for context.
-        request = StandardizedLLMRequest(
-            messages=messages + [HumanMessage(content=planning_prompt)],
-            tools=[CodeExecutionParams]
-        )
-        
-        response_data = self.llm_adapter.invoke(request)
-        tool_calls = response_data.get("tool_calls", [])
+        # Find the last human message to use as the basis for the plan.
+        # This prevents the specialist from re-evaluating its own previous AI messages.
+        last_human_message = next((msg for msg in reversed(messages) if isinstance(msg, HumanMessage)), None)
 
-        if not tool_calls or not tool_calls[0].get('args'):
-            logger.error("LLM failed to generate a valid code execution plan. Aborting.")
+        if not last_human_message:
+            logger.error("OpenInterpreterSpecialist could not find a HumanMessage to act on.")
+            return {"error": "OpenInterpreterSpecialist requires a user request to function."}
+
+        # Phase 1: Plan
+        code_params = self._plan_code(last_human_message)
+        if not code_params:
             return {"error": "OpenInterpreterSpecialist's LLM failed to produce a valid code plan."}
 
-        try:
-            code_params = CodeExecutionParams(**tool_calls[0]['args'])
-        except Exception as e:
-            logger.error(f"Failed to parse LLM tool call into CodeExecutionParams: {e}", exc_info=True)
-            return {"error": f"Failed to parse code plan: {e}"}
-
-        logger.info(f"Phase 1 Complete. Plan: execute '{code_params.language}' code.")
-
-        # --- Phase 2: Execute the Code ---
-        logger.info(f"Phase 2: Executing code...\n---\n{code_params.code}\n---")
-        
-        interpreter.messages = [] # Clear previous messages
-        response_chunks = interpreter.chat(f"Please execute this {code_params.language} code:\n```{code_params.language}\n{code_params.code}\n```", display=False, stream=True)
-        
-        for _ in response_chunks:
-            pass
-        
-        outputs = [msg.get('content', '') for msg in interpreter.messages if msg.get('role') == 'computer' and msg.get('type') == 'output' and msg.get('content')]
-        final_output = "\n".join(outputs) if outputs else "Code executed with no output."
-        
-        logger.info(f"Phase 2 Complete. Execution output: {final_output[:500]}...")
+        # Phase 2: Execute
+        final_output = self._execute_code(code_params)
 
         # --- Create a Standardized Response ---
         ai_message = create_llm_message(
@@ -99,9 +121,10 @@ class OpenInterpreterSpecialist(BaseSpecialist):
             llm_adapter=self.llm_adapter,
             content=f"I have executed the following {code_params.language} code:\n\n```\n{code_params.code}\n```\n\n**Result:**\n{final_output}",
         )
-        
+
         return {
             "messages": [ai_message],
             # Add a user-facing summary of the action to the scratchpad.
-            "scratchpad": {"user_response_snippets": [f"Executed code and got the following result:\n\n{final_output}"]}
+            "scratchpad": {"user_response_snippets": [f"Executed code and got the following result:\n\n{final_output}"]},
+            "task_is_complete": True # Signal that the task is done to prevent looping.
         }

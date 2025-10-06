@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "langgraph-agentic-scaffold"
-version = "1.0.0"
+version = "3.2.2"
 description = "A foundational scaffold for building multi-agent systems using LangGraph, featuring a modular 'specialist' architecture."
 readme = "README.md"
 authors = [{ name = "Shane V Cantwell", email = "shane@example.com" }] # Replace with a real email if desired
@@ -27,7 +27,7 @@ dependencies = [
     "langchain>=0.1.20",
     "langgraph>=0.0.48",
     "langchain-openai>=0.1.6",
-    "python-dotenv",
+    "python-dotenv>=1.0.1",
     "PyYAML",
     "jmespath",
     "tenacity",
