@@ -42,8 +42,6 @@ external_agents/*
 !external_agents/.gitkeep
 !external_agents/**/*.py
 
-# --- Agent Notes ---
-docs/agent_scratchpad.md
 runverify.sh
 
 # --- Lock file for unsupervised code execution ---
@@ -52,6 +50,7 @@ workspace/*
 
 
 ui.sh
+runverify.sh
 archives/*
 docs/ADR/*
 proxy/*
