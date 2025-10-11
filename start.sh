@@ -4,14 +4,8 @@
 # Exit immediately if a command exits.
 set -e
 
-# --- ADD THIS SECTION ---
-# Explicitly export proxy variables to ensure they are inherited by all child processes,
-# including those spawned by Uvicorn's reloader.
-export HTTP_PROXY="http://proxy:3128"
-export HTTPS_PROXY="http://proxy:3128"
-export NO_PROXY="localhost,127.0.0.1"
-export no_proxy="localhost,127.0.0.1"
-# ------------------------
+# Trap SIGINT and SIGTERM to gracefully shut down background processes
+trap 'kill $(jobs -p); exit' SIGINT SIGTERM
 
 echo "--- Starting FastAPI server (with reload) ---"
 # Use explicit reload directories to prevent the log file from triggering reloads.

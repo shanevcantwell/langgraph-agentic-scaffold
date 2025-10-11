@@ -1,8 +1,9 @@
 # /docker-compose.yml
-version: '3.8'
+# version: '3.8'
 
 services:
   app:
+    container_name: langgraph-app
     # Build the application image using the Dockerfile in the current directory.
     build:
       context: .
@@ -17,6 +18,7 @@ services:
     environment:
       - HTTP_PROXY=http://proxy:3128
       - HTTPS_PROXY=http://proxy:3128
+      - NO_PROXY=localhost,127.0.0.1
     # This makes the host's services (Ollama, LM Studio) available to the container.
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -29,18 +31,18 @@ services:
       # Map the API and UI ports from the container to your host machine.
       - "8000:8000"
       - "5003:5003"
-    # Run the startup script.
-    command: /bin/bash /app/start.sh
+    command: ["/bin/bash", "/app/start.sh"]
     # Ensure the proxy is running before the app starts.
     depends_on:
       - proxy
     restart: unless-stopped
 
   proxy:
+    container_name: langgraph-proxy
     image: ubuntu/squid:latest
     volumes:
       # Mount our custom, restrictive configuration file into the container.
-      - ./proxy/squid.conf:/etc/squid/squid.conf
+      - ./proxy:/etc/squid
     ports:
       # Optionally expose the proxy port for direct inspection.
       - "3128:3128"
