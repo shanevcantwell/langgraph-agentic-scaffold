@@ -55,3 +55,4 @@ archives/*
 docs/ADR/*
 proxy/*
 !proxy/squid.conf.example
+.continue/*
