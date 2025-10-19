@@ -6,6 +6,9 @@ FROM python:3.12-slim
 # Set the working directory inside the container.
 WORKDIR /app
 
+# Ensure the logs folder is present
+RUN mkdir -p logs
+
 # Declare a build-time argument for the execution mode. Defaults to 'supervised'.
 # Can be overridden during build with --build-arg EXECUTION_MODE=unsupervised
 ARG EXECUTION_MODE=supervised

@@ -1,7 +1,3 @@
-[build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "langgraph-agentic-scaffold"
 version = "3.2.2"
@@ -35,9 +31,10 @@ dependencies = [
     "psycopg2-binary",
     "gradio",
     "open-interpreter",
-    # Add specific LLM provider packages here as needed
     "google-generativeai",
     "inflection",
+    # Add pip-tools as a core dependency to break the bootstrap cycle
+    "pip-tools",
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 
@@ -52,7 +49,6 @@ dev = [
     "pytest-mock",
     "black",
     "ruff",
-    "pip-tools", # For compiling requirements.txt from pyproject.toml
     "typer[all]", # For the command-line interface
     "requests",   # For making HTTP requests from the CLI to the API
     "python-multipart", # For FastAPI file uploads
