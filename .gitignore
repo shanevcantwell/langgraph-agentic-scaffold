@@ -55,7 +55,6 @@ archives/*
 docs/ADR/*
 proxy/*
 !proxy/squid.conf.example
-.continue/*
 audit_manifest.md
 .gitignore
 audit_manifest.md
