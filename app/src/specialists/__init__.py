@@ -1,12 +1,16 @@
-# app/src/specialists/__init__.py
-import importlib
 import logging
 import inflection
+import importlib
 
-# First, import the base class so it's available for other modules and for export.
 from .base import BaseSpecialist
+from .prompt_specialist import PromptSpecialist
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    "BaseSpecialist",
+    "PromptSpecialist",
+]
 
 def get_specialist_class(specialist_name: str, config: dict) -> type:
     """

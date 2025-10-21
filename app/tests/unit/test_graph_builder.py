@@ -170,3 +170,104 @@ def test_graph_builder_raises_error_on_load_prompt_failure(mock_config_loader, m
         # Act & Assert
         with pytest.raises(SpecialistLoadError, match="Could not load specialist 'router_specialist'"):
             GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
+
+@patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
+def test_safe_edges_raises_workflow_error_on_invalid_dest(mock_load_prompt, mock_config_loader, mock_adapter_factory):
+    """Test that _add_safe_conditional_edges raises WorkflowError for an invalid destination."""
+    # Arrange
+    mock_workflow = MagicMock()
+    mock_decider = MagicMock(return_value="invalid_destination")
+    destination_map = {"valid_dest": "valid_dest", "another_valid": "another_valid"}
+
+    # Act & Assert
+    builder = GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
+    with pytest.raises(WorkflowError) as exc_info:
+        builder._add_safe_conditional_edges(mock_workflow, "source_node", mock_decider, destination_map)
+
+    # Verify the error message contains the expected information
+    assert "Routing error from 'source_node'" in str(exc_info.value)
+    assert "invalid_destination" in str(exc_info.value)
+    assert "valid_dest" in str(exc_info.value)
+    assert "another_valid" in str(exc_info.value)
+
+@patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
+def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router(mock_load_prompt, mock_config_loader, mock_adapter_factory):
+    """Test that the router edge uses the safe wrapper method."""
+    # Arrange
+    mock_workflow = MagicMock()
+    mock_decider = MagicMock()
+    mock_config = mock_config_loader.get_config.return_value
+    mock_config['specialists'] = {
+        "router_specialist": {"type": "llm", "llm_config": "test"},
+        "file_specialist": {"type": "procedural"}
+    }
+    mock_config['workflow'] = {"entry_point": "router_specialist"}
+
+    # Act
+    builder = GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
+    builder._wire_hub_and_spoke_edges(mock_workflow)
+
+    # Assert
+    # The call to add_conditional_edges should have been made with the safe_decider function
+    # from _add_safe_conditional_edges, which is a wrapper around the actual decider.
+    # We check that the `add_conditional_edges` method was called with the correct source and map.
+    mock_workflow.add_conditional_edges.assert_called_once()
+    call_args, _ = mock_workflow.add_conditional_edges.call_args
+    assert call_args[0] == "router_specialist"
+    assert call_args[2] == {"file_specialist": "file_specialist", "router_specialist": "router_specialist"}
+
+@patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
+def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_critic(mock_load_prompt, mock_config_loader, mock_adapter_factory):
+    """Test that the critic edge uses the safe wrapper method."""
+    # Arrange
+    mock_workflow = MagicMock()
+    mock_decider = MagicMock()
+    mock_config = mock_config_loader.get_config.return_value
+    mock_config['specialists'] = {
+        "router_specialist": {"type": "llm", "llm_config": "test"},
+        "critic_specialist": {"type": "llm", "llm_config": "test", "revision_target": "router_specialist"}
+    }
+    mock_config['workflow'] = {"entry_point": "router_specialist"}
+
+    # Act
+    builder = GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
+    builder._wire_hub_and_spoke_edges(mock_workflow)
+
+    # Assert
+    # The call to add_conditional_edges should have been made with the safe_decider function
+    # from _add_safe_conditional_edges, which is a wrapper around the actual decider.
+    # We check that the `add_conditional_edges` method was called with the correct source and map.
+    mock_workflow.add_conditional_edges.assert_called_once()
+    call_args, _ = mock_workflow.add_conditional_edges.call_args
+    assert call_args[0] == "critic_specialist"
+    assert call_args[2] == {
+        "router_specialist": "router_specialist",
+        "end_specialist": "end_specialist",
+        "critic_specialist": "critic_specialist"
+    }
+
+@patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
+def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_task_completion(mock_load_prompt, mock_config_loader, mock_adapter_factory):
+    """Test that task completion edges use the safe wrapper method."""
+    # Arrange
+    mock_workflow = MagicMock()
+    mock_decider = MagicMock()
+    mock_config = mock_config_loader.get_config.return_value
+    mock_config['specialists'] = {
+        "router_specialist": {"type": "llm", "llm_config": "test"},
+        "file_specialist": {"type": "procedural"}
+    }
+    mock_config['workflow'] = {"entry_point": "router_specialist"}
+
+    # Act
+    builder = GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
+    builder._wire_hub_and_spoke_edges(mock_workflow)
+
+    # Assert
+    # The call to add_conditional_edges should have been made with the safe_decider function
+    # from _add_safe_conditional_edges, which is a wrapper around the actual decider.
+    # We check that the `add_conditional_edges` method was called with the correct source and map.
+    mock_workflow.add_conditional_edges.assert_called_once()
+    call_args, _ = mock_workflow.add_conditional_edges.call_args
+    assert call_args[0] == "file_specialist"
+    assert call_args[2] == {"end_specialist": "end_specialist", "router_specialist": "router_specialist"}
