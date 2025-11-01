@@ -22,8 +22,10 @@ def test_synthesizer_with_snippets(response_synthesizer_specialist):
 
     initial_state = {
         "messages": [],
+        "routing_history": ["some_specialist", "end_specialist"],
         "scratchpad": {
-            "user_response_snippets": ["Snippet 1.", "Snippet 2."]
+            "user_response_snippets": ["Snippet 1.", "Snippet 2."],
+            "_called_by_end_specialist": True  # Simulate internal call
         }
     }
 
@@ -54,6 +56,7 @@ def test_synthesizer_without_snippets(response_synthesizer_specialist):
     # Arrange
     initial_state = {
         "messages": [],
+        "routing_history": ["router_specialist", "end_specialist"],
         "scratchpad": {"user_response_snippets": []} # No snippets
     }
 

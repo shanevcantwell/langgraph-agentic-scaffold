@@ -98,9 +98,10 @@ class GraphBuilder:
 
                     instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
                 elif name == "end_specialist":
+                    # EndSpecialist owns its internal specialists. Their configs are nested under it.
                     end_specialist_deps = {
-                        "response_synthesizer_specialist": specialists_config.get("response_synthesizer_specialist", {}),
-                        "archiver_specialist": specialists_config.get("archiver_specialist", {}),
+                        "response_synthesizer_specialist": config.get("response_synthesizer_specialist", {}),
+                        "archiver_specialist": config.get("archiver_specialist", {}),
                     }
                     instance = SpecialistClass(specialist_name=name, specialist_config=end_specialist_deps, adapter_factory=self.adapter_factory)
                 else:

@@ -73,17 +73,60 @@ for i in {1..30}; do
         fi
 
         # Validate the JSON response using jq
-        # A successful workflow is defined by the presence of the 'final_user_response.md'
+        # A successful workflow is defined by the presence of the 'archive_report.md'
         # key within the 'artifacts' dictionary. This is the most reliable signal
-        # that the entire termination sequence completed successfully.
-        if echo "$JSON_RESPONSE" | jq -e '.artifacts."final_user_response.md"'; then
-            echo "---"
-            echo "✅ Verification test PASSED: Agent returned a meaningful response and routed successfully."
+        # that the entire 3-stage termination sequence completed successfully.
+        # (EndSpecialist -> ResponseSynthesizer -> Archiver)
+
+        # Extract key diagnostic information
+        ROUTING_HISTORY=$(echo "$JSON_RESPONSE" | jq -r '.routing_history | join(" → ")' 2>/dev/null || echo "N/A")
+        TURN_COUNT=$(echo "$JSON_RESPONSE" | jq -r '.turn_count // "N/A"' 2>/dev/null)
+        HAS_ARCHIVE=$(echo "$JSON_RESPONSE" | jq -e '.artifacts."archive_report.md"' > /dev/null 2>&1 && echo "YES" || echo "NO")
+        HAS_FINAL_RESPONSE=$(echo "$JSON_RESPONSE" | jq -e '.artifacts."final_user_response.md"' > /dev/null 2>&1 && echo "YES" || echo "NO")
+        ERROR_REPORT=$(echo "$JSON_RESPONSE" | jq -r '.error_report // "None"' 2>/dev/null)
+
+        # Find most recent archive file
+        LATEST_ARCHIVE=$(ls -t ./logs/archive/*.md 2>/dev/null | head -1 || echo "None found")
+
+        echo "---"
+        echo "📊 Diagnostic Information:"
+        echo "  🔄 Routing History: $ROUTING_HISTORY"
+        echo "  🔢 Turn Count: $TURN_COUNT"
+        echo "  📦 Archive Report: $HAS_ARCHIVE"
+        echo "  📝 Final Response: $HAS_FINAL_RESPONSE"
+        echo "  📄 Latest Archive File: $LATEST_ARCHIVE"
+        echo "  📋 Server Log: ./logs/agentic_server.log"
+
+        if [ "$ERROR_REPORT" != "None" ]; then
+            echo "  ❌ Error Report Present: YES"
+        fi
+
+        echo ""
+
+        if [ "$HAS_ARCHIVE" == "YES" ]; then
+            echo "✅ Verification test PASSED: Full 3-stage termination sequence completed successfully."
+            echo ""
+            echo "🔍 To view detailed LangSmith trace:"
+            echo "  1. Open https://smith.langchain.com"
+            echo "  2. Navigate to project: $(grep LANGSMITH_PROJECT .env 2>/dev/null | cut -d= -f2 || echo 'pr-whispered-stencil-31')"
+            echo "  3. Find the most recent run matching the routing history above"
             exit 0
         else
-            echo "---"
-            echo "❌ Verification test FAILED: Agent response was not meaningful or routing failed."
-            echo "JSON Response:"
+            echo "❌ Verification test FAILED: Archive report not generated (termination sequence incomplete)."
+            echo ""
+            if [ "$HAS_FINAL_RESPONSE" == "YES" ]; then
+                echo "⚠️  Note: Final response was generated but archiver did not run."
+                echo "   This suggests EndSpecialist or Archiver may have issues."
+            fi
+            echo ""
+            echo "🔍 Debug Information:"
+            echo "  - Check routing history above to see where execution stopped"
+            echo "  - Review server logs: tail -50 ./logs/agentic_server.log"
+            if [ "$LATEST_ARCHIVE" != "None found" ]; then
+                echo "  - Compare with last successful archive: $LATEST_ARCHIVE"
+            fi
+            echo ""
+            echo "Full JSON Response:"
             echo "$JSON_RESPONSE" | jq .
             exit 1
         fi

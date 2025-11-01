@@ -115,18 +115,15 @@ specialists:
   end_specialist:
     type: "procedural"
     description: "A procedural coordinator that executes the final, deterministic termination sequence (e.g., synthesis and archiving)."
-
-  response_synthesizer_specialist:
-    type: "llm"
-    prompt_file: "response_synthesizer_prompt.md"
-    description: "Synthesizes a final, user-facing response from a collection of text snippets accumulated during the workflow."
-
-  archiver_specialist:
-    type: "procedural"
-    archive_path: "./logs/archive"
-    pruning_strategy: "count"
-    pruning_max_count: 50
-    description: "Summarizes the conversation and prepares the final report. This is the final step."
+    # Nested config for internal specialists (no descriptions = not routable)
+    response_synthesizer_specialist:
+      type: "llm"
+      prompt_file: "response_synthesizer_prompt.md"
+    archiver_specialist:
+      type: "procedural"
+      archive_path: "./logs/archive"
+      pruning_strategy: "count"
+      pruning_max_count: 50
 
   prompt_triage_specialist:
     type: "llm"

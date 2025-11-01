@@ -40,10 +40,10 @@ def create_error_message(
         name="error_handler",
         additional_kwargs={"is_error": True},
     )
-    
+
     state_update: Dict[str, Any] = {"messages": [message]}
-    
+
     if recommended_specialists:
         state_update["recommended_specialists"] = recommended_specialists
-        
+
     return state_update

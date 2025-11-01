@@ -26,10 +26,10 @@ def archiver_specialist(tmp_path, initialized_specialist_factory):
 def initial_state():
     return {
         "messages": [],
-        "routing_history": ["start", "end"],
+        "routing_history": ["some_specialist", "end_specialist"],
         "turn_count": 2,
         "artifacts": {"final_user_response.md": "This is the final response."},
-        "scratchpad": {},
+        "scratchpad": {"_called_by_end_specialist": True},  # Simulate internal call
     }
 
 def test_save_report_writes_to_file(archiver_specialist):
