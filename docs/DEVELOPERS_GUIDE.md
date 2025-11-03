@@ -61,11 +61,11 @@ The `GraphOrchestrator` includes a generic loop detection mechanism to halt unpr
 
 Intentional loops, such as the "Generate-and-Critique" cycle, are architected differently. They are implemented using conditional edges in the graph that create a direct `Specialist A -> Specialist B -> Specialist A` sub-graph. Because this sub-loop does not repeatedly pass through the main `RouterSpecialist`, it is not flagged by the generic unproductive loop detector. This is the preferred pattern for creating controlled, stateful cycles.
 
-### 4.3 Pattern: Enforce Centralized Control with Three-Stage Termination
+### 4.3 Pattern: Enforce Centralized Control with Coordinated Completion Sequence
 
-To ensure system stability and predictable behavior, this architecture employs a mandatory **termination sequence**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion or produce final artifacts, which triggers a standardized shutdown process.
+To ensure system stability and predictable behavior, this architecture employs a mandatory **completion sequence**. Functional specialists are forbidden from terminating the graph directly. Instead, they signal task completion or produce final artifacts, which triggers a standardized shutdown process.
 
-This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The termination of the workflow is a deliberate, centralized, and observable event.
+This pattern is critical for ensuring that final housekeeping tasks, such as synthesizing a user-friendly response and generating an archive report, are always executed. The completion of the workflow is a deliberate, centralized, and observable event.
 
 The process is as follows:
 
@@ -75,16 +75,16 @@ The process is as follows:
     *   The `GraphBuilder` configures a conditional edge that checks for the `task_is_complete` flag. When this flag is `True`, graph execution is routed to the `end_specialist` instead of back to the main `router_specialist`.
 
 2.  **Stage 2: Coordinate Finalization (`EndSpecialist`)**
-    *   The `end_specialist`, a procedural coordinator, is invoked. It does not use an LLM for its main logic.
-    *   It internally and deterministically executes the logic of two other specialists in sequence:
-        1.  **Synthesis:** It calls the `response_synthesizer_specialist`'s logic to generate the `final_user_response.md` artifact from any accumulated `user_response_snippets`. If no snippets are found, it intelligently uses the content of the last conversational AI message as the source for the final response.
-        2.  **Archiving:** It then immediately calls the `archiver_specialist`'s logic, passing it the complete, updated state (including the newly synthesized response) to generate the final `archive_report.md`.
+    *   The `end_specialist`, a hybrid coordinator, is invoked. It uses an LLM for response synthesis and procedural logic for archiving.
+    *   As a unified coordinator, it performs finalization atomically:
+        1.  **Synthesis:** It synthesizes the `final_user_response.md` artifact from any accumulated `user_response_snippets` using its LLM adapter. If no snippets are found, it intelligently uses the content of the last conversational AI message as the source for the final response.
+        2.  **Archiving:** It then immediately generates the final `archive_report.md` by invoking its internal archiver component, passing it the complete, updated state (including the newly synthesized response).
 
-3.  **Stage 3: Terminate**
-    *   After the `archiver_specialist` runs (either via the `EndSpecialist` or by being routed to directly), it produces the `archive_report.md` artifact.
-    *   On the next turn, the `RouterSpecialist` performs a pre-LLM check. It sees the `archive_report.md` artifact and deterministically routes to the special `END` node, cleanly terminating the graph.
+3.  **Stage 3: Confirm Completion**
+    *   After the `end_specialist` completes, the `archive_report.md` artifact exists in the state.
+    *   On the next turn, the `RouterSpecialist` performs a pre-LLM check. It sees the `archive_report.md` artifact and deterministically routes to the special `END` node, cleanly completing the graph execution.
 
-This explicit, multi-stage sequence ensures that termination is a robust, observable process, centralizing the finalization logic and preventing premature or disorderly graph exits.
+This explicit, coordinated sequence ensures that completion is a robust, observable process, centralizing the finalization logic and preventing premature or disorderly graph exits.
 
 ### 4.4 Contract: The Adapter Robust Parsing Contract
 

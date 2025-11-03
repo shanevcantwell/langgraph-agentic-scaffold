@@ -75,8 +75,8 @@ for i in {1..30}; do
         # Validate the JSON response using jq
         # A successful workflow is defined by the presence of the 'archive_report.md'
         # key within the 'artifacts' dictionary. This is the most reliable signal
-        # that the entire 3-stage termination sequence completed successfully.
-        # (EndSpecialist -> ResponseSynthesizer -> Archiver)
+        # that the Coordinated Completion Sequence completed successfully.
+        # (Signal → EndSpecialist [synthesis + archive] → Confirm)
 
         # Extract key diagnostic information
         ROUTING_HISTORY=$(echo "$JSON_RESPONSE" | jq -r '.routing_history | join(" → ")' 2>/dev/null || echo "N/A")
@@ -104,7 +104,7 @@ for i in {1..30}; do
         echo ""
 
         if [ "$HAS_ARCHIVE" == "YES" ]; then
-            echo "✅ Verification test PASSED: Full 3-stage termination sequence completed successfully."
+            echo "✅ Verification test PASSED: Coordinated Completion Sequence completed successfully."
             echo ""
             echo "🔍 To view detailed LangSmith trace:"
             echo "  1. Open https://smith.langchain.com"
@@ -112,7 +112,7 @@ for i in {1..30}; do
             echo "  3. Find the most recent run matching the routing history above"
             exit 0
         else
-            echo "❌ Verification test FAILED: Archive report not generated (termination sequence incomplete)."
+            echo "❌ Verification test FAILED: Archive report not generated (completion sequence incomplete)."
             echo ""
             if [ "$HAS_FINAL_RESPONSE" == "YES" ]; then
                 echo "⚠️  Note: Final response was generated but archiver did not run."

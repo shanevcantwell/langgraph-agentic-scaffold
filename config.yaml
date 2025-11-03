@@ -113,13 +113,10 @@ specialists:
     description: "Executes general-purpose shell commands and code (e.g., Python, bash) to perform complex, open-ended tasks like data analysis, web research, or running scripts. Use this for tasks that require more than simple file manipulation."
 
   end_specialist:
-    type: "procedural"
-    description: "A procedural coordinator that executes the final, deterministic termination sequence (e.g., synthesis and archiving)."
-    # Nested config for internal specialists (no descriptions = not routable)
-    response_synthesizer_specialist:
-      type: "llm"
-      prompt_file: "response_synthesizer_prompt.md"
-    archiver_specialist:
+    type: "hybrid"
+    description: "A coordinator that synthesizes a final user response and archives the interaction. Uses an LLM for response synthesis."
+    synthesis_prompt_file: "response_synthesizer_prompt.md"
+    archiver_config:
       type: "procedural"
       archive_path: "./logs/archive"
       pruning_strategy: "count"

@@ -62,7 +62,10 @@ class GraphBuilder:
         binding_key = config.get("llm_config")
         if binding_key:
             system_prompt = ""
-            if prompt_file := config.get("prompt_file"):
+            # EndSpecialist uses synthesis_prompt_file for its internal synthesis
+            if prompt_file := config.get("synthesis_prompt_file"):
+                system_prompt = load_prompt(prompt_file)
+            elif prompt_file := config.get("prompt_file"):
                 system_prompt = load_prompt(prompt_file)
             specialist_instance.llm_adapter = self.adapter_factory.create_adapter(name, system_prompt)
             logger.debug(f"Attached LLM adapter to '{name}' using binding '{binding_key}'.")
@@ -97,13 +100,6 @@ class GraphBuilder:
                         raise NotImplementedError(f"Critique strategy type '{strategy_type}' is not supported.")
 
                     instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
-                elif name == "end_specialist":
-                    # EndSpecialist owns its internal specialists. Their configs are nested under it.
-                    end_specialist_deps = {
-                        "response_synthesizer_specialist": config.get("response_synthesizer_specialist", {}),
-                        "archiver_specialist": config.get("archiver_specialist", {}),
-                    }
-                    instance = SpecialistClass(specialist_name=name, specialist_config=end_specialist_deps, adapter_factory=self.adapter_factory)
                 else:
                     instance = SpecialistClass(specialist_name=name, specialist_config=config)
 
