@@ -99,7 +99,7 @@ specialists:
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"
-    description: "A general-purpose conversational specialist for answering user questions, providing information, and engaging in natural dialogue. Ideal for Q&A, explanations, and straightforward chat interactions that don't require specialized tools."
+    description: "THE PRIMARY SPECIALIST for all user questions and informational queries. Route here WITH INTENT when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. This is your go-to specialist for any question or information request."
 
   prompt_specialist:
     type: "llm"
@@ -109,7 +109,7 @@ specialists:
   default_responder_specialist:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
-    description: "Handles direct, conversational Q&A and simple instructions that do not require file I/O or complex text analysis. This is the default specialist for general conversation or when no specific tool seems necessary. Acts as a fallback."
+    description: "LAST-RESORT FALLBACK ONLY. Use this ONLY when you genuinely cannot determine which specialist is appropriate. NOT for questions (use chat_specialist). NOT for tasks (use task-specific specialists). Only for truly ambiguous inputs like 'ping', 'hello', or when no other specialist matches at all."
 
   # --- Procedural Specialists with External Dependencies ---
   open_interpreter_specialist:
