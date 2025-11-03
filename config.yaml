@@ -96,6 +96,11 @@ specialists:
       text_to_process: "file_specialist"
 
   # --- General & Fallback ---
+  chat_specialist:
+    type: "llm"
+    prompt_file: "chat_prompt.md"
+    description: "A general-purpose conversational specialist for answering user questions, providing information, and engaging in natural dialogue. Ideal for Q&A, explanations, and straightforward chat interactions that don't require specialized tools."
+
   prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
