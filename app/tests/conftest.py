@@ -37,15 +37,22 @@ def mock_config_loader() -> MagicMock:
                 "model": "default_llm",
                 "prompt_template": "router_specialist.md",
             },
-            "response_synthesizer_specialist": {
-                "type": "llm",
+            "end_specialist": {
+                "type": "hybrid",
                 "llm_config": "default_llm",
-                "prompt_file": "response_synthesizer_prompt.md"
+                "synthesis_prompt_file": "response_synthesizer_prompt.md",
+                "archiver_config": {
+                    "type": "procedural",
+                    "archive_path": "./logs/archive",
+                    "pruning_strategy": "count",
+                    "pruning_max_count": 50
+                }
             },
             # Add other specialist configs as needed for default tests
         },
         "specialist_model_bindings": {
             "router_specialist": "default_llm",
+            "end_specialist": "default_llm",
         },
     }
     mock.get_config.return_value = default_config
@@ -125,18 +132,13 @@ def initialized_specialist_factory(
 
         # Step 1: Instantiate the specialist, handling special cases
         if class_name == "EndSpecialist":
-            # For EndSpecialist, we patch the internal `_execute_logic` methods of the classes
-            # it depends on. This allows real instances to be created (passing isinstance checks)
-            # while still mocking the execution logic for test isolation.
-            with patch('app.src.specialists.response_synthesizer_specialist.ResponseSynthesizerSpecialist._execute_logic', return_value={}) as mock_synth_logic, \
-                 patch('app.src.specialists.archiver_specialist.ArchiverSpecialist._execute_logic', return_value={}) as mock_archive_logic:
+            # For EndSpecialist, we patch the archiver's `_execute_logic` method.
+            # EndSpecialist no longer depends on ResponseSynthesizerSpecialist as a separate class.
+            # It performs synthesis inline using its own LLM adapter.
+            with patch('app.src.specialists.archiver_specialist.ArchiverSpecialist._execute_logic', return_value={}) as mock_archive_logic:
                 specialist_instance = SpecialistClass(
                     specialist_name=specialist_name,
-                    specialist_config={
-                        "response_synthesizer_specialist": mock_config_loader.get_config().get("specialists", {}).get("response_synthesizer_specialist", {}),
-                        "archiver_specialist": mock_config_loader.get_config().get("specialists", {}).get("archiver_specialist", {}),
-                    },
-                    adapter_factory=mock_adapter_factory,
+                    specialist_config=specialist_config
                 )
         elif class_name == "CriticSpecialist":
             # CriticSpecialist requires a strategy object at initialization.
