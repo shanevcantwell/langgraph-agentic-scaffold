@@ -54,7 +54,12 @@ def create_ui(api_client: ApiClient):
         
         with gr.Row():
             with gr.Column(scale=2):
-                prompt_input = gr.Textbox(label="Your Prompt", lines=3, placeholder="e.g., Describe the attached image...")
+                prompt_input = gr.Textbox(
+                    label="Your Prompt",
+                    lines=3,
+                    placeholder="e.g., Describe the attached image... (Press Enter to submit, Shift+Enter for new line)",
+                    submit_btn=True
+                )
                 with gr.Row():
                     file_input = gr.File(label="Upload Text File")
                     image_input = gr.Image(type="pil", label="Upload Image")
@@ -77,12 +82,13 @@ def create_ui(api_client: ApiClient):
         submit_handler = handle_submit(
             api_client, status_output, json_output, html_output, image_output, log_output, archive_output
         )
-        
-        submit_button.click(
-            fn=submit_handler,
-            inputs=[prompt_input, file_input, image_input],
-            outputs=[status_output, json_output, html_output, image_output, log_output, archive_output]
-        )
+
+        # Wire up both button click and Enter key submission
+        submit_inputs = [prompt_input, file_input, image_input]
+        submit_outputs = [status_output, json_output, html_output, image_output, log_output, archive_output]
+
+        submit_button.click(fn=submit_handler, inputs=submit_inputs, outputs=submit_outputs)
+        prompt_input.submit(fn=submit_handler, inputs=submit_inputs, outputs=submit_outputs)
     return demo
 
 def main():

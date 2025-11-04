@@ -61,32 +61,9 @@ class ApiClient:
 
                 # The backend now sends Server-Sent Events (SSE) with a JSON payload.
                 # We need to parse these events correctly.
-            
-            # After the stream is complete, we can make a separate call to get the final state.
-            # This is a more robust pattern than trying to parse it from the stream.
-            # For now, we will just yield the final status from the stream.
-            
-            # The final state is no longer sent in the stream. The UI handler will
-            # receive the final status update from the stream itself. We yield an
-            # empty final block to ensure the UI updates correctly on completion.
-            artifacts = {}
-            archive_report = artifacts.get("archive_report.md", "No archive report was generated.")
-            html_content = artifacts.get("html_document.html", "")
-            image_ui_output = None
-            if image_artifact_b64 := artifacts.get("image_artifact_b64"):
-                    try:
-                        img_data = base64.b64decode(image_artifact_b64)
-                        image_ui_output = Image.open(io.BytesIO(img_data))
-                    except Exception as e:
-                        log_history += f"\nError decoding image artifact: {e}"
 
-            yield {
-                "final_state": {},
-                "html": html_content,
-                "image": image_ui_output,
-                "logs": log_history,
-                "archive": archive_report
-            }
+            # The final state with artifacts is now sent by the stream itself
+            # No need to construct it separately - the stream sends all required data
                 
         except Exception as e:
             yield {"status": f"API Error: {e}", "logs": log_history + f"\nERROR: {e}"}
