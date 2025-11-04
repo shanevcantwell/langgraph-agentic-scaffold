@@ -11,7 +11,7 @@ workflow:
   # The maximum number of steps the graph can take before halting. This is a
   # final safeguard against infinite loops.
   recursion_limit: 40
-  critical_specialists: ["router_specialist", "response_synthesizer_specialist", "archiver_specialist"]
+  critical_specialists: ["router_specialist", "archiver_specialist"]
 
 
 # ==============================================================================

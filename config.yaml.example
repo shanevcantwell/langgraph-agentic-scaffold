@@ -28,7 +28,7 @@ workflow:
   # function. If any of these fail to load during startup, the application will
   # exit with an error. This prevents the system from running in a broken state.
   # See ADR-010 for more details.
-  critical_specialists: ["router_specialist", "response_synthesizer_specialist", "archiver_specialist"]
+  critical_specialists: ["router_specialist", "archiver_specialist"]
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION
@@ -56,17 +56,6 @@ specialists:
     requires_artifacts: ["html_artifact"]
     artifact_providers:
       html_artifact: "web_builder"
-
-  # The Response Synthesizer is the second stage of the Three-Stage Termination Pattern.
-  # When a functional specialist signals `task_is_complete: True`, the router should
-  # route to this specialist. It synthesizes a final, user-facing response from the
-  # `user_response` snippets collected during the workflow.
-  # After it runs, the GraphBuilder's graph wiring explicitly routes to the `archiver_specialist`
-  # to complete the termination sequence.
-  response_synthesizer_specialist:
-    type: "llm"
-    prompt_file: "response_synthesizer_prompt.md"
-    description: "Synthesizes a final, user-facing response from a collection of text snippets accumulated during the workflow."
 
   # --- Core Capabilities ---
   web_builder:

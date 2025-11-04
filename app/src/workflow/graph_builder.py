@@ -173,7 +173,7 @@ class GraphBuilder:
         triage_instance = specialists[CoreSpecialist.TRIAGE.value]
         triage_config = configs.get(CoreSpecialist.TRIAGE.value, {})
         base_prompt = load_prompt(triage_config.get("prompt_file", ""))
-        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value, CoreSpecialist.RESPONSE_SYNTHESIZER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value]
+        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value]
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded}
         triage_instance.set_specialist_map(available_specialists)
         specialist_descs = "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])
@@ -207,7 +207,7 @@ class GraphBuilder:
         workflow.add_conditional_edges(router_name, self.orchestrator.route_to_next_specialist, destinations)
 
         for name in self.specialists:
-            if name in [router_name, CoreSpecialist.RESPONSE_SYNTHESIZER.value, CoreSpecialist.ARCHIVER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value]:
+            if name in [router_name, CoreSpecialist.ARCHIVER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value]:
                 continue
             workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name})
 
