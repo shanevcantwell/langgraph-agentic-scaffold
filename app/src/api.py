@@ -86,6 +86,8 @@ async def _stream_formatter(generator):
     This internal generator formats the raw output from the workflow runner
     into the specific JSON structure the Gradio UI expects.
     """
+    accumulated_state = None
+
     async for chunk in generator:
         # The raw stream from LangGraph is a dictionary where keys are node names.
         # We can inspect this to provide real-time status updates.
@@ -97,9 +99,51 @@ async def _stream_formatter(generator):
                 # Yield a UI-compatible status update
                 yield f"data: {json.dumps({'status': status_update})}\n\n"
 
-    # After the main loop, we can yield a final state if needed,
-    # but for now, we just signal completion.
-    yield f"data: {json.dumps({'status': 'Workflow complete.'})}\n\n"
+                # Accumulate state deltas according to GraphState reducer semantics
+                if accumulated_state is None:
+                    accumulated_state = {}
+                    for key, value in node_output.items():
+                        if isinstance(value, list):
+                            accumulated_state[key] = list(value)
+                        elif isinstance(value, dict):
+                            accumulated_state[key] = dict(value)
+                        else:
+                            accumulated_state[key] = value
+                else:
+                    # Merge node_output into accumulated_state following GraphState reducers
+                    for key, value in node_output.items():
+                        if key in ["messages", "routing_history"]:
+                            # operator.add: append to lists
+                            accumulated_state.setdefault(key, []).extend(value if isinstance(value, list) else [value])
+                        elif key in ["artifacts", "scratchpad"]:
+                            # operator.ior: merge dictionaries
+                            accumulated_state.setdefault(key, {}).update(value if isinstance(value, dict) else {})
+                        else:
+                            # No annotation: overwrite with latest value
+                            accumulated_state[key] = value
+
+    # After the main loop, send the accumulated final state with artifacts
+    if accumulated_state:
+        artifacts = accumulated_state.get("artifacts", {})
+        archive_report = artifacts.get("archive_report.md", "")
+        html_content = artifacts.get("html_document.html", "")
+
+        # Build a JSON-safe summary of the final state (not the full state with complex objects)
+        final_state_summary = {
+            "routing_history": accumulated_state.get("routing_history", []),
+            "turn_count": accumulated_state.get("turn_count", 0),
+            "task_is_complete": accumulated_state.get("task_is_complete", False),
+            "artifacts": list(artifacts.keys()) if artifacts else []
+        }
+
+        yield f"data: {json.dumps({
+            'status': 'Workflow complete.',
+            'final_state': final_state_summary,
+            'archive': archive_report,
+            'html': html_content
+        })}\n\n"
+    else:
+        yield f"data: {json.dumps({'status': 'Workflow complete.'})}\n\n"
 
 @app.post("/v1/graph/stream")
 async def stream_graph(request: InvokeRequest):
