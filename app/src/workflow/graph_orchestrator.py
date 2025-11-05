@@ -75,18 +75,40 @@ class GraphOrchestrator:
                     return True
         return False
 
-    def route_to_next_specialist(self, state: GraphState) -> str:
+    def route_to_next_specialist(self, state: GraphState) -> str | list[str]:
+        """
+        Routes from RouterSpecialist to the next specialist(s).
+
+        Can return either:
+        - A single specialist name (str) for normal routing
+        - A list of specialist names (list[str]) for parallel fan-out execution
+
+        Special case: When routing to 'chat_specialist', triggers the tiered chat
+        subgraph (CORE-CHAT-002) by fanning out to both progenitor specialists in parallel.
+        """
         turn_count = state.get("turn_count", 0)
         logger.info(f"--- GraphOrchestrator: Routing from Router (Turn: {turn_count}) ---")
 
         if self._is_unproductive_loop(state):
             return CoreSpecialist.END.value
-        
+
         next_specialist = state.get("next_specialist")
         if not next_specialist:
             logger.error("Routing Error: Router failed to select a next step. Halting.")
             return CoreSpecialist.END.value
-        
+
+        # CORE-CHAT-002: Intercept chat_specialist routing and fan out to progenitors
+        if next_specialist == "chat_specialist":
+            # Check if tiered chat subgraph components are available
+            if ("progenitor_alpha_specialist" in self.specialists and
+                "progenitor_bravo_specialist" in self.specialists and
+                "tiered_synthesizer_specialist" in self.specialists):
+                logger.info("Chat routing detected - fanning out to parallel progenitors (CORE-CHAT-002)")
+                return ["progenitor_alpha_specialist", "progenitor_bravo_specialist"]
+            else:
+                logger.warning("Tiered chat subgraph incomplete - falling back to single chat_specialist")
+                # Fall through to return chat_specialist as-is
+
         return next_specialist
 
     def create_missing_artifact_response(

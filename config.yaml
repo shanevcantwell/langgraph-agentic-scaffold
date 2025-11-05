@@ -96,6 +96,22 @@ specialists:
       text_to_process: "file_specialist"
 
   # --- General & Fallback ---
+
+  # Tiered Chat Subgraph (CORE-CHAT-002) - Multi-Perspective Chat System
+  progenitor_alpha_specialist:
+    type: "llm"
+    prompt_file: "progenitor_alpha_prompt.md"
+    description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
+
+  progenitor_bravo_specialist:
+    type: "llm"
+    prompt_file: "progenitor_bravo_prompt.md"
+    description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
+
+  tiered_synthesizer_specialist:
+    type: "procedural"
+    description: "Combines Alpha and Bravo progenitor responses into a formatted, tiered markdown output. Acts as the join node in the fan-out/join pattern. This is a procedural specialist that does not use an LLM."
+
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"

@@ -1,6 +1,16 @@
 # Test Suite Summary
 
 
+## `app/tests/integration/test_chat_specialist_routing.py`
+
+- **`test_router_invokes_chat_specialist_for_conversational_query`**
+  - *End-to-end test: User asks a question → Router → ChatSpecialist → Response*
+- **`test_chat_specialist_appears_in_router_specialist_map`**
+  - *Simpler test: Verify ChatSpecialist is registered and discoverable by router.*
+
+## `app/tests/integration/test_gradio_integration.py`
+
+
 ## `app/tests/integration/test_live_llm.py`
 
 - **`test_live_gemini_adapter_interaction`**
@@ -66,6 +76,21 @@
   - *Tests that a SUCCESS status can have a None payload.*
 - **`test_web_content_schema_validation`**
   - *Explicitly tests the WebContent schema.*
+
+## `app/tests/unit/test_chat_specialist.py`
+
+- **`test_chat_specialist_initialization`**
+  - *Verifies that ChatSpecialist initializes correctly.*
+- **`test_chat_specialist_processes_simple_question`**
+  - *Tests that ChatSpecialist can answer a simple question.*
+- **`test_chat_specialist_maintains_conversation_context`**
+  - *Tests that ChatSpecialist sends full conversation history to LLM.*
+- **`test_chat_specialist_handles_llm_failure_gracefully`**
+  - *Tests that ChatSpecialist provides a fallback message when LLM fails.*
+- **`test_chat_specialist_creates_proper_message_metadata`**
+  - *Tests that ChatSpecialist creates AIMessage with proper metadata.*
+- **`test_chat_specialist_handles_empty_message_history`**
+  - *Tests that ChatSpecialist handles edge case of empty message history.*
 
 ## `app/tests/unit/test_cli.py`
 
@@ -146,11 +171,17 @@
 ## `app/tests/unit/test_end_specialist.py`
 
 - **`test_end_specialist_initialization`**
-  - *Verifies that the EndSpecialist correctly initializes its internal specialists*
+  - *Verifies that the EndSpecialist correctly initializes its internal components.*
 - **`test_end_specialist_orchestrates_synthesis_and_archiving`**
-  - *Tests that EndSpecialist correctly calls the response synthesizer and then the archiver.*
+  - *Tests that EndSpecialist correctly performs synthesis inline and then calls archiver.*
 - **`test_end_specialist_skips_synthesis_if_final_response_exists`**
   - *Tests that EndSpecialist skips synthesis if a final response already exists in the state.*
+- **`test_end_specialist_synthesizes_from_snippets`**
+  - *Tests that EndSpecialist correctly synthesizes a response when snippets are present.*
+- **`test_end_specialist_handles_empty_snippets_gracefully`**
+  - *Tests that EndSpecialist generates a fallback response when no snippets are available.*
+- **`test_end_specialist_handles_termination_reason`**
+  - *Tests that EndSpecialist uses explicit termination_reason when present*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -208,6 +239,14 @@
   - *Tests that a SpecialistLoadError is raised if a specialist class cannot be imported.*
 - **`test_graph_builder_raises_error_on_load_prompt_failure`**
   - *Tests that a SpecialistLoadError is raised if a prompt file cannot be loaded.*
+- **`test_safe_edges_raises_workflow_error_on_invalid_dest`**
+  - *Test that _add_safe_conditional_edges raises WorkflowError for an invalid destination.*
+- **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router`**
+  - *Test that the router edge uses the safe wrapper method.*
+- **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_critic`**
+  - *Test that the critic edge uses the safe wrapper method.*
+- **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_task_completion`**
+  - *Test that task completion edges use the safe wrapper method.*
 
 ## `app/tests/unit/test_graph_orchestrator.py`
 
@@ -243,6 +282,11 @@
 
 - **`test_import_all_modules`**
   - *A smoke test to ensure all critical modules and specialist modules*
+
+## `app/tests/unit/test_install.py`
+
+- **`test_install_script_creates_venv_and_installs_pytest`**
+  - *Test that install.sh creates a virtual environment and installs pytest.*
 
 ## `app/tests/unit/test_llm_factory.py`
 
@@ -285,6 +329,52 @@
 
 ## `app/tests/unit/test_plan_and_execute_integration.py`
 
+- **`test_plan_and_execute_workflow`**
+  - *Tests the full "Plan and Execute" workflow within the OpenInterpreterSpecialist.*
+- **`test_plan_and_execute_handles_llm_planning_failure`**
+  - *Tests that the specialist correctly handles the case where the LLM fails*
+- **`test_plan_and_execute_handles_interpreter_execution_failure`**
+  - *Tests that the specialist correctly handles a failure in the execution phase.*
+- **`test_plan_and_execute_handles_llm_planning_failure_with_invalid_tool_calls`**
+  - *Tests that the specialist correctly handles a failure in the planning phase*
+
+## `app/tests/unit/test_progenitor_alpha_specialist.py`
+
+- **`test_progenitor_alpha_initialization`**
+  - *Verifies that ProgenitorAlphaSpecialist initializes correctly.*
+- **`test_progenitor_alpha_generates_analytical_response`**
+  - *Tests that ProgenitorAlpha generates an analytical perspective response.*
+- **`test_progenitor_alpha_stores_response_in_artifacts`**
+  - *Tests that ProgenitorAlpha stores response in artifacts.alpha_response.*
+- **`test_progenitor_alpha_does_not_set_task_complete`**
+  - *Tests that ProgenitorAlpha does NOT set task_is_complete (TieredSynthesizer does).*
+- **`test_progenitor_alpha_maintains_conversation_context`**
+  - *Tests that ProgenitorAlpha sends full conversation history to LLM.*
+- **`test_progenitor_alpha_handles_llm_failure_gracefully`**
+  - *Tests that ProgenitorAlpha provides fallback message when LLM fails.*
+- **`test_progenitor_alpha_creates_proper_message_metadata`**
+  - *Tests that ProgenitorAlpha creates AIMessage with proper metadata.*
+- **`test_progenitor_alpha_handles_empty_message_history`**
+  - *Tests that ProgenitorAlpha handles edge case of empty message history.*
+
+## `app/tests/unit/test_progenitor_bravo_specialist.py`
+
+- **`test_progenitor_bravo_initialization`**
+  - *Verifies that ProgenitorBravoSpecialist initializes correctly.*
+- **`test_progenitor_bravo_generates_contextual_response`**
+  - *Tests that ProgenitorBravo generates a contextual perspective response.*
+- **`test_progenitor_bravo_stores_response_in_artifacts`**
+  - *Tests that ProgenitorBravo stores response in artifacts.bravo_response.*
+- **`test_progenitor_bravo_does_not_set_task_complete`**
+  - *Tests that ProgenitorBravo does NOT set task_is_complete (TieredSynthesizer does).*
+- **`test_progenitor_bravo_maintains_conversation_context`**
+  - *Tests that ProgenitorBravo sends full conversation history to LLM.*
+- **`test_progenitor_bravo_handles_llm_failure_gracefully`**
+  - *Tests that ProgenitorBravo provides fallback message when LLM fails.*
+- **`test_progenitor_bravo_creates_proper_message_metadata`**
+  - *Tests that ProgenitorBravo creates AIMessage with proper metadata.*
+- **`test_progenitor_bravo_handles_empty_message_history`**
+  - *Tests that ProgenitorBravo handles edge case of empty message history.*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 
@@ -308,19 +398,6 @@
 - **`test_prompt_triage_no_specialist_map_configured`**
   - *Tests behavior when specialist_map is empty.*
 
-## `app/tests/unit/test_response_synthesizer_specialist.py`
-
-- **`test_synthesizer_with_snippets`**
-  - *Tests that the synthesizer correctly processes snippets from the scratchpad,*
-- **`test_synthesizer_without_snippets`**
-  - *Tests that the synthesizer handles the case where no snippets are present*
-- **`test_synthesizer_with_empty_snippets_list`**
-  - *Tests that the synthesizer handles an empty list of snippets or a list*
-- **`test_synthesizer_handles_llm_invocation_error`**
-  - *Tests that an LLMInvocationError is caught and handled.*
-- **`test_synthesizer_handles_empty_llm_response`**
-  - *Tests that an empty or None response from the LLM is handled gracefully.*
-
 ## `app/tests/unit/test_router_specialist.py`
 
 - **`test_get_available_specialists_no_recommendations`**
@@ -339,6 +416,17 @@
   - *Tests that the router propagates an LLMInvocationError if the adapter fails.*
 - **`test_router_handles_invalid_llm_response`**
   - *Tests that the router self-corrects if the LLM returns an invalid specialist name.*
+
+## `app/tests/unit/test_router_specialist_discovery.py`
+
+- **`test_router_discovers_specialists_from_config`**
+  - *Verifies that RouterSpecialist can discover and route to any specialist*
+- **`test_router_respects_recommended_specialists_filter`**
+  - *Verifies that RouterSpecialist correctly filters available specialists*
+- **`test_router_handles_empty_specialist_map_gracefully`**
+  - *Verifies that RouterSpecialist handles edge case of no available specialists*
+- **`test_router_ignores_specialists_without_descriptions`**
+  - *Verifies that specialists without descriptions are still included in the*
 
 ## `app/tests/unit/test_sentiment_classifier_specialist.py`
 
@@ -401,6 +489,29 @@
   - *Tests that an LLMInvocationError is propagated correctly.*
 - **`test_text_analysis_handles_malformed_llm_response`**
   - *Tests that the specialist raises an error if the LLM response is not valid JSON.*
+
+## `app/tests/unit/test_tiered_synthesizer_specialist.py`
+
+- **`test_tiered_synthesizer_initialization`**
+  - *Verifies that TieredSynthesizerSpecialist initializes correctly.*
+- **`test_tiered_synthesizer_combines_both_responses`**
+  - *Tests full tiered response when both Alpha and Bravo succeed (happy path).*
+- **`test_tiered_synthesizer_handles_alpha_only`**
+  - *Tests graceful degradation when only Alpha succeeds (CORE-CHAT-002.1).*
+- **`test_tiered_synthesizer_handles_bravo_only`**
+  - *Tests graceful degradation when only Bravo succeeds (CORE-CHAT-002.1).*
+- **`test_tiered_synthesizer_raises_error_when_both_missing`**
+  - *Tests that TieredSynthesizer raises error when both progenitors fail.*
+- **`test_tiered_synthesizer_creates_proper_message`**
+  - *Tests that TieredSynthesizer creates AIMessage with status information.*
+- **`test_tiered_synthesizer_handles_empty_string_responses`**
+  - *Tests edge case where responses are empty strings (not None).*
+- **`test_tiered_synthesizer_preserves_markdown_formatting`**
+  - *Tests that TieredSynthesizer preserves markdown formatting in responses.*
+- **`test_tiered_synthesizer_response_format_structure`**
+  - *Tests that the formatted response has proper structure.*
+- **`test_tiered_synthesizer_does_not_add_to_user_response_snippets_if_already_present`**
+  - *Tests that TieredSynthesizer replaces (not appends to) user_response_snippets.*
 
 ## `app/tests/unit/test_web_builder.py`
 
