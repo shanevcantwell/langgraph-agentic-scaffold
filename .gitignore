@@ -53,6 +53,8 @@ ui.sh
 runverify.sh
 archives/*
 docs/ADR/*
+docs/blueprint/*
+docs/roadmap/*
 proxy/*
 !proxy/squid.conf.example
 audit_manifest.md
