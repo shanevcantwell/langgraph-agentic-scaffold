@@ -153,6 +153,221 @@ The system's configuration is a three-tiered hierarchy. Understanding this model
 
 The `docker-compose.yml` file uses explicit container names (`langgraph-app` and `langgraph-proxy`). This is to prevent conflicts with other projects and to make the containers easily identifiable. It is strongly recommended not to change these names, as it can lead to unexpected behavior and orphaned containers.
 
+### 4.7 Pattern: Virtual Coordinator with Parallel Execution (CORE-CHAT-002)
+
+The Virtual Coordinator pattern enables the system to transparently upgrade single-node capabilities into multi-node subgraphs without exposing implementation details to the router. This pattern is exemplified by the **Tiered Chat Subgraph**, which transforms a single chat specialist into a parallel multi-perspective system.
+
+#### 4.7.1 Architectural Overview
+
+**Semantic Separation:**
+- **Router's Perspective:** "The user needs chat capability" → routes to `"chat_specialist"`
+- **Orchestrator's Perspective:** "How do we provide chat?" → intercepts and fans out to parallel progenitors
+- **Separation of Concerns:** Router decides WHAT (capability), Orchestrator decides HOW (implementation)
+
+**Graph Structure When Tiered Chat Enabled:**
+
+```
+User Query
+    ↓
+RouterSpecialist (chooses "chat_specialist")
+    ↓
+GraphOrchestrator.route_to_next_specialist() [INTERCEPTION POINT]
+    ↓
+    ├─→ ProgenitorAlphaSpecialist (Analytical perspective)
+    │
+    └─→ ProgenitorBravoSpecialist (Contextual perspective)
+
+    [Parallel execution - both run simultaneously]
+
+         ↓                    ↓
+         └────────┬───────────┘
+                  ↓
+    TieredSynthesizerSpecialist (combines both)
+                  ↓
+          Check task completion
+                  ↓
+            EndSpecialist
+                  ↓
+               END node
+```
+
+#### 4.7.2 Implementation Details
+
+**Orchestrator Interception (`GraphOrchestrator.route_to_next_specialist()`):**
+
+```python
+def route_to_next_specialist(self, state: GraphState) -> str | list[str]:
+    """
+    Routes from RouterSpecialist to the next specialist(s).
+
+    Can return either:
+    - A single specialist name (str) for normal routing
+    - A list of specialist names (list[str]) for parallel fan-out execution
+    """
+    next_specialist = state.get("next_specialist")
+
+    # CORE-CHAT-002: Intercept chat_specialist routing
+    if next_specialist == "chat_specialist":
+        if self._has_tiered_chat_specialists():
+            logger.info("Chat routing detected - fanning out to parallel progenitors")
+            return ["progenitor_alpha_specialist", "progenitor_bravo_specialist"]
+
+    return next_specialist
+```
+
+**Graph Wiring (Fan-In Pattern):**
+
+```python
+# CRITICAL: Use array syntax for proper fan-in (join node)
+workflow.add_edge(
+    ["progenitor_alpha_specialist", "progenitor_bravo_specialist"],
+    "tiered_synthesizer_specialist"
+)
+```
+
+The array syntax `["node_a", "node_b"]` is essential - it tells LangGraph that the synthesizer node should wait for BOTH predecessors to complete before executing. Without this, the synthesizer would execute twice (once per predecessor).
+
+#### 4.7.3 Graceful Degradation Strategy (CORE-CHAT-002.1)
+
+The TieredSynthesizerSpecialist implements graceful degradation to handle partial failures:
+
+**Response Modes:**
+- `"tiered_full"` - Both progenitors responded successfully (happy path)
+- `"tiered_alpha_only"` - Only ProgenitorAlpha succeeded (Bravo failed)
+- `"tiered_bravo_only"` - Only ProgenitorBravo succeeded (Alpha failed)
+- `"error"` - Complete failure (neither progenitor responded)
+
+**Implementation:**
+
+```python
+alpha_response = state.get("artifacts", {}).get("alpha_response")
+bravo_response = state.get("artifacts", {}).get("bravo_response")
+
+if alpha_response and bravo_response:
+    response_mode = "tiered_full"
+    output = format_both_perspectives(alpha_response, bravo_response)
+elif alpha_response:
+    response_mode = "tiered_alpha_only"
+    output = format_single_perspective("Analytical View", alpha_response)
+    logger.warning("Degraded mode: Bravo perspective unavailable")
+elif bravo_response:
+    response_mode = "tiered_bravo_only"
+    output = format_single_perspective("Contextual View", bravo_response)
+    logger.warning("Degraded mode: Alpha perspective unavailable")
+else:
+    raise ValueError("No progenitor responses available")
+```
+
+#### 4.7.4 Efficiency Optimization: Skip Redundant Synthesis
+
+The TieredSynthesizerSpecialist writes to `artifacts.final_user_response.md` to prevent the EndSpecialist from performing a redundant LLM synthesis call:
+
+```python
+return {
+    "messages": [ai_message],
+    "artifacts": {
+        "response_mode": response_mode,
+        "final_user_response.md": tiered_response  # Skip EndSpecialist synthesis
+    },
+    "scratchpad": {
+        "user_response_snippets": [tiered_response]
+    },
+    "task_is_complete": True
+}
+```
+
+This optimization reduces LLM calls from 3 (Alpha + Bravo + EndSynthesis) to 2 (Alpha + Bravo only).
+
+#### 4.7.5 Model Binding Configuration
+
+The tiered chat architecture is **model-agnostic**. Concrete model bindings are runtime configuration:
+
+**Development (zero API cost):**
+```yaml
+# user_settings.yaml
+specialist_model_bindings:
+  progenitor_alpha_specialist: "lmstudio_specialist"
+  progenitor_bravo_specialist: "lmstudio_specialist"
+```
+
+**Hybrid (mixed cost/quality):**
+```yaml
+specialist_model_bindings:
+  progenitor_alpha_specialist: "gemini_pro"
+  progenitor_bravo_specialist: "lmstudio_specialist"
+```
+
+**Production (PAYG):**
+```yaml
+specialist_model_bindings:
+  progenitor_alpha_specialist: "gemini_pro"
+  progenitor_bravo_specialist: "claude_sonnet"
+```
+
+#### 4.7.6 Observability
+
+**Logging:**
+- INFO level when interception occurs: "Chat routing detected - fanning out to parallel progenitors"
+- WARNING level for degraded modes with failure reasons
+- Structured logging includes `routing_mode` and `response_mode`
+
+**LangSmith Traces:**
+- `routing_history` shows: `["router_specialist", "progenitor_alpha_specialist", "progenitor_bravo_specialist", "tiered_synthesizer_specialist"]`
+- Parallel execution visible in trace timeline (both progenitors run simultaneously)
+- Each specialist's message shows execution status
+
+**Archive Report:**
+- Includes `response_mode` for post-hoc analysis
+- routing_history shows actual execution path
+- Degraded mode warnings included in report
+
+#### 4.7.7 Backward Compatibility
+
+When tiered chat components are NOT configured:
+- Router can still choose "chat_specialist"
+- Orchestrator routes directly to single ChatSpecialist node
+- Standard single-perspective response
+- No progenitor specialists instantiated
+- Zero changes to routing behavior
+
+#### 4.7.8 Configuration in config.yaml
+
+```yaml
+# Tiered Chat Subgraph (CORE-CHAT-002)
+progenitor_alpha_specialist:
+  type: "llm"
+  prompt_file: "progenitor_alpha_prompt.md"
+  description: "Provides analytical, structured perspective for multi-view responses"
+
+progenitor_bravo_specialist:
+  type: "llm"
+  prompt_file: "progenitor_bravo_prompt.md"
+  description: "Provides contextual, intuitive perspective for multi-view responses"
+
+tiered_synthesizer_specialist:
+  type: "procedural"
+  description: "Combines Alpha and Bravo perspectives into formatted markdown output"
+```
+
+**Key Points:**
+- Progenitors are excluded from router's tool schema (internal to subgraph)
+- `chat_specialist` node is skipped when tiered components are present
+- System auto-detects and enables tiered chat when all three specialists configured
+
+#### 4.7.9 Related Patterns
+
+This Virtual Coordinator pattern is similar to the Hybrid Coordinator pattern used by EndSpecialist:
+- EndSpecialist performs inline synthesis (procedural + LLM)
+- TieredSynthesizer performs inline combination (procedural only)
+- Both write to `final_user_response.md` to signal completion
+- Both demonstrate separation between capability declaration and implementation
+
+**References:**
+- ADR CORE-CHAT-002: Tiered Chat Subgraph (Fan-Out)
+- ADR CORE-CHAT-002.1: Graceful Degradation Strategy
+- ADR CORE-CHAT-002.2: Virtual Coordinator Pattern
+- ADR CORE-CHAT-002_FINAL_DECISIONS: Consolidated implementation decisions
+
 ## 5.0 How to Extend the System: Creating Specialists
 
 The primary way to extend the system's capabilities is by adding new specialists. The `CREATING_A_NEW_SPECIALIST.md` document provides a comprehensive, step-by-step tutorial for this process.
