@@ -54,8 +54,12 @@ class ProgenitorBravoSpecialist(BaseSpecialist):
 
         Returns:
             Dictionary containing:
-            - messages: The AI message for graph history
             - artifacts: Contains 'bravo_response' with the generated text
+
+        CRITICAL STATE MANAGEMENT:
+        - Does NOT append to 'messages' - only TieredSynthesizerSpecialist does
+        - This follows the LangGraph pattern for parallel execution (fan-out/join)
+        - Parallel nodes write to temporary storage (artifacts), join nodes write to permanent storage (messages)
 
         Note: Does NOT set task_is_complete - that's the TieredSynthesizer's role
         """
@@ -81,11 +85,13 @@ class ProgenitorBravoSpecialist(BaseSpecialist):
             content=ai_response_content,
         )
 
-        logger.info(f"{self.specialist_name}: Bravo perspective generated successfully.")
+        logger.info(f"{self.specialist_name}: Bravo perspective stored in artifacts (state management pattern for parallel execution).")
 
-        # Store response in artifacts for TieredSynthesizerSpecialist to combine
+        # STATE MANAGEMENT PATTERN FOR PARALLEL EXECUTION:
+        # - Progenitors (parallel nodes) write ONLY to 'artifacts' (temporary storage)
+        # - TieredSynthesizer (join node) reads artifacts and writes to 'messages' (permanent storage)
+        # - This prevents message pollution and enables proper multi-turn cross-referencing
         return {
-            "messages": [ai_message],
             "artifacts": {
                 "bravo_response": ai_response_content
             }
