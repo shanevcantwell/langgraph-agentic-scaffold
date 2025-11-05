@@ -38,11 +38,14 @@ def test_progenitor_alpha_generates_analytical_response(progenitor_alpha):
     # LLM adapter should be called once
     progenitor_alpha.llm_adapter.invoke.assert_called_once_with(ANY)
 
-    # Should return a single AI message
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert result_state["messages"][0].content == mock_response
-    assert result_state["messages"][0].name == "progenitor_alpha_specialist"
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    # Only TieredSynthesizer (join node) appends to messages
+    assert "messages" not in result_state
+
+    # Response should be stored in artifacts only
+    assert "artifacts" in result_state
+    assert "alpha_response" in result_state["artifacts"]
+    assert result_state["artifacts"]["alpha_response"] == mock_response
 
 
 def test_progenitor_alpha_stores_response_in_artifacts(progenitor_alpha):
@@ -124,18 +127,17 @@ def test_progenitor_alpha_handles_llm_failure_gracefully(progenitor_alpha):
     result_state = progenitor_alpha._execute_logic(initial_state)
 
     # Assert
-    # Should still return a message, using the fallback
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert "unable to provide a response" in result_state["messages"][0].content.lower()
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    assert "messages" not in result_state
 
     # Fallback should still be stored in artifacts
     assert "artifacts" in result_state
     assert "alpha_response" in result_state["artifacts"]
+    assert "unable to provide a response" in result_state["artifacts"]["alpha_response"].lower()
 
 
-def test_progenitor_alpha_creates_proper_message_metadata(progenitor_alpha):
-    """Tests that ProgenitorAlpha creates AIMessage with proper metadata."""
+def test_progenitor_alpha_stores_content_in_artifacts(progenitor_alpha):
+    """Tests that ProgenitorAlpha stores response content in artifacts (state management)."""
     # Arrange
     mock_response = "Analytical test response."
     progenitor_alpha.llm_adapter.invoke.return_value = {"text_response": mock_response}
@@ -149,13 +151,13 @@ def test_progenitor_alpha_creates_proper_message_metadata(progenitor_alpha):
     result_state = progenitor_alpha._execute_logic(initial_state)
 
     # Assert
-    ai_message = result_state["messages"][0]
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    assert "messages" not in result_state
 
-    # Should have specialist name in the message
-    assert ai_message.name == "progenitor_alpha_specialist"
-
-    # Should have additional metadata
-    assert "additional_kwargs" in dir(ai_message)
+    # Response should be in artifacts
+    assert "artifacts" in result_state
+    assert "alpha_response" in result_state["artifacts"]
+    assert result_state["artifacts"]["alpha_response"] == mock_response
 
 
 def test_progenitor_alpha_handles_empty_message_history(progenitor_alpha):
@@ -172,8 +174,10 @@ def test_progenitor_alpha_handles_empty_message_history(progenitor_alpha):
     result_state = progenitor_alpha._execute_logic(initial_state)
 
     # Assert
-    # Should still process successfully
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert result_state["messages"][0].content == mock_response
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    assert "messages" not in result_state
+
+    # Should still process successfully and store in artifacts
+    assert "artifacts" in result_state
+    assert "alpha_response" in result_state["artifacts"]
     assert result_state["artifacts"]["alpha_response"] == mock_response

@@ -38,11 +38,14 @@ def test_progenitor_bravo_generates_contextual_response(progenitor_bravo):
     # LLM adapter should be called once
     progenitor_bravo.llm_adapter.invoke.assert_called_once_with(ANY)
 
-    # Should return a single AI message
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert result_state["messages"][0].content == mock_response
-    assert result_state["messages"][0].name == "progenitor_bravo_specialist"
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    # Only TieredSynthesizer (join node) appends to messages
+    assert "messages" not in result_state
+
+    # Response should be stored in artifacts only
+    assert "artifacts" in result_state
+    assert "bravo_response" in result_state["artifacts"]
+    assert result_state["artifacts"]["bravo_response"] == mock_response
 
 
 def test_progenitor_bravo_stores_response_in_artifacts(progenitor_bravo):
@@ -124,18 +127,17 @@ def test_progenitor_bravo_handles_llm_failure_gracefully(progenitor_bravo):
     result_state = progenitor_bravo._execute_logic(initial_state)
 
     # Assert
-    # Should still return a message, using the fallback
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert "unable to provide a response" in result_state["messages"][0].content.lower()
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    assert "messages" not in result_state
 
     # Fallback should still be stored in artifacts
     assert "artifacts" in result_state
     assert "bravo_response" in result_state["artifacts"]
+    assert "unable to provide a response" in result_state["artifacts"]["bravo_response"].lower()
 
 
-def test_progenitor_bravo_creates_proper_message_metadata(progenitor_bravo):
-    """Tests that ProgenitorBravo creates AIMessage with proper metadata."""
+def test_progenitor_bravo_stores_content_in_artifacts(progenitor_bravo):
+    """Tests that ProgenitorBravo stores response content in artifacts (state management)."""
     # Arrange
     mock_response = "Contextual test response."
     progenitor_bravo.llm_adapter.invoke.return_value = {"text_response": mock_response}
@@ -149,13 +151,13 @@ def test_progenitor_bravo_creates_proper_message_metadata(progenitor_bravo):
     result_state = progenitor_bravo._execute_logic(initial_state)
 
     # Assert
-    ai_message = result_state["messages"][0]
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    assert "messages" not in result_state
 
-    # Should have specialist name in the message
-    assert ai_message.name == "progenitor_bravo_specialist"
-
-    # Should have additional metadata
-    assert "additional_kwargs" in dir(ai_message)
+    # Response should be in artifacts
+    assert "artifacts" in result_state
+    assert "bravo_response" in result_state["artifacts"]
+    assert result_state["artifacts"]["bravo_response"] == mock_response
 
 
 def test_progenitor_bravo_handles_empty_message_history(progenitor_bravo):
@@ -172,8 +174,10 @@ def test_progenitor_bravo_handles_empty_message_history(progenitor_bravo):
     result_state = progenitor_bravo._execute_logic(initial_state)
 
     # Assert
-    # Should still process successfully
-    assert len(result_state["messages"]) == 1
-    assert isinstance(result_state["messages"][0], AIMessage)
-    assert result_state["messages"][0].content == mock_response
+    # CRITICAL STATE MANAGEMENT: Progenitors should NOT append to messages
+    assert "messages" not in result_state
+
+    # Should still process successfully and store in artifacts
+    assert "artifacts" in result_state
+    assert "bravo_response" in result_state["artifacts"]
     assert result_state["artifacts"]["bravo_response"] == mock_response
