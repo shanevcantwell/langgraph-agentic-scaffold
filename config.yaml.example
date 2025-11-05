@@ -102,27 +102,57 @@ specialists:
     artifact_providers:
       text_to_process: "file_specialist"
 
+  # --- Conversational & Chat ---
+  # Tiered Chat Subgraph (CORE-CHAT-002) - Multi-Perspective Chat System
+  # When all three specialists below are present, the system automatically enables
+  # parallel multi-perspective responses. The router chooses 'chat_specialist',
+  # which triggers fan-out to both progenitors running simultaneously.
+  progenitor_alpha_specialist:
+    type: "llm"
+    prompt_file: "progenitor_alpha_prompt.md"
+    description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
+
+  progenitor_bravo_specialist:
+    type: "llm"
+    prompt_file: "progenitor_bravo_prompt.md"
+    description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
+
+  tiered_synthesizer_specialist:
+    type: "procedural"
+    description: "Combines Alpha and Bravo progenitor responses into a formatted, tiered markdown output. Acts as the join node in the fan-out/join pattern. This is a procedural specialist that does not use an LLM."
+
+  chat_specialist:
+    type: "llm"
+    prompt_file: "chat_prompt.md"
+    description: "THE PRIMARY SPECIALIST for all user questions and informational queries. Route here WITH INTENT when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. This is your go-to specialist for any question or information request. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
+
   # --- General & Fallback ---
   prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
-    description: "A general-purpose specialist for direct Q&A and instruction following. Use this as a fallback when no other specialist seems appropriate for the user's request."
+    description: "A specialist for advanced prompt engineering tasks. Can be used to generate or refine prompts for other specialists or to analyze prompt structures. Does not terminate the turn."
+
+  default_responder_specialist:
+    type: "llm"
+    prompt_file: "default_responder_prompt.md"
+    description: "LAST-RESORT FALLBACK ONLY. Use this ONLY when you genuinely cannot determine which specialist is appropriate. NOT for questions (use chat_specialist). NOT for tasks (use task-specific specialists). Only for truly ambiguous inputs like 'ping', 'hello', or when no other specialist matches at all."
 
   # --- Procedural Specialists with External Dependencies ---
   
   open_interpreter_specialist:
-    type: "procedural"
-    description: "Executes shell commands and code (Python, etc.) to perform file system operations (list, read, write), data analysis, or web research. This is the primary tool for interacting with the local machine's files and running scripts."
+    type: "hybrid"
+    prompt_file: "open_interpreter_prompt.md"
+    description: "Executes general-purpose shell commands and code (e.g., Python, bash) to perform complex, open-ended tasks like data analysis, web research, or running scripts. Use this for tasks that require more than simple file manipulation."
 
-  archiver_specialist:
-    type: "procedural"
-    archive_path: "./archives" # The directory to save final run reports.
-    # Pruning strategy for the archive directory to prevent it from growing indefinitely.
-    # Options: "none", "count", "size".
-    pruning_strategy: "count"
-    pruning_max_count: 50      # Max number of reports to keep if strategy is "count".
-    # pruning_max_size_mb: 100 # Max total size in MB if strategy is "size".
-    description: "Summarizes the conversation and prepares the final report. This is the final step."
+  end_specialist:
+    type: "hybrid"
+    description: "A coordinator that synthesizes a final user response and archives the interaction. Uses an LLM for response synthesis."
+    synthesis_prompt_file: "response_synthesizer_prompt.md"
+    archiver_config:
+      type: "procedural"
+      archive_path: "./logs/archive"
+      pruning_strategy: "count"
+      pruning_max_count: 50
 
   prompt_triage_specialist:
     type: "llm"

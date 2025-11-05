@@ -51,6 +51,16 @@ specialist_model_bindings:
   open_interpreter_specialist: "gemini_flash"
   end_specialist: "gemini_flash"
 
+  # --- Tiered Chat Subgraph Bindings (CORE-CHAT-002) ---
+  # The tiered chat subgraph uses parallel execution for multi-perspective responses.
+  # You can mix local and cloud models for cost optimization:
+  # - Development: Both progenitors use local models (zero API cost)
+  # - Hybrid: Mix cloud (quality) and local (cost savings)
+  # - Production: Both use premium cloud models (maximum quality)
+  progenitor_alpha_specialist: "gemini_flash"  # Analytical perspective
+  progenitor_bravo_specialist: "lmstudio_specialist"  # Contextual perspective (local for cost savings)
+  # Note: tiered_synthesizer_specialist is procedural and doesn't need a model binding
+
 # --- 3. Set the Default ---
 # The default LLM configuration to use for any specialist that is not
 # explicitly bound above. This must match a key from the providers defined above.
