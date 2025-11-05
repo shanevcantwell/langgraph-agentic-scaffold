@@ -191,7 +191,49 @@ GraphOrchestrator.route_to_next_specialist() [INTERCEPTION POINT]
                END node
 ```
 
-#### 4.7.2 Implementation Details
+#### 4.7.2 Critical State Management Pattern
+
+**CRITICAL:** Progenitor specialists (parallel nodes) must write ONLY to `artifacts`, never to `messages`:
+
+```python
+# ProgenitorAlphaSpecialist - CORRECT
+def _execute_logic(self, state: dict) -> dict:
+    # ... LLM call generates response ...
+
+    # CRITICAL: Write to artifacts only, NOT to messages
+    return {
+        "artifacts": {
+            "alpha_response": ai_response_content
+        }
+        # NO "messages" key!
+    }
+
+# TieredSynthesizerSpecialist - JOIN NODE
+def _execute_logic(self, state: dict) -> dict:
+    # Join node reads artifacts and writes to messages
+    alpha = state["artifacts"]["alpha_response"]
+    bravo = state["artifacts"]["bravo_response"]
+    combined = format_both(alpha, bravo)
+
+    return {
+        "messages": [create_llm_message(..., combined)],
+        "artifacts": {"final_user_response.md": combined},
+        "task_is_complete": True
+    }
+```
+
+**Why This Matters:**
+
+In LangGraph's fan-out/join pattern:
+- **Parallel nodes (fan-out):** Write to temporary storage (`artifacts`)
+- **Join node (fan-in):** Reads artifacts and writes to permanent storage (`messages`)
+
+This prevents message pollution and enables proper multi-turn conversation cross-referencing. Without this pattern, multi-turn conversations would accumulate 4 messages per turn (user, alpha, bravo, synthesizer) instead of 2 (user, synthesizer), causing:
+- 78% token waste (~1600 vs ~900 tokens per turn)
+- Broken cross-referencing (progenitors can't reference each other's past responses)
+- Context pollution in conversation history
+
+#### 4.7.3 Implementation Details
 
 **Orchestrator Interception (`GraphOrchestrator.route_to_next_specialist()`):**
 
@@ -227,7 +269,7 @@ workflow.add_edge(
 
 The array syntax `["node_a", "node_b"]` is essential - it tells LangGraph that the synthesizer node should wait for BOTH predecessors to complete before executing. Without this, the synthesizer would execute twice (once per predecessor).
 
-#### 4.7.3 Graceful Degradation Strategy (CORE-CHAT-002.1)
+#### 4.7.4 Graceful Degradation Strategy (CORE-CHAT-002.1)
 
 The TieredSynthesizerSpecialist implements graceful degradation to handle partial failures:
 
@@ -258,7 +300,7 @@ else:
     raise ValueError("No progenitor responses available")
 ```
 
-#### 4.7.4 Efficiency Optimization: Skip Redundant Synthesis
+#### 4.7.5 Efficiency Optimization: Skip Redundant Synthesis
 
 The TieredSynthesizerSpecialist writes to `artifacts.final_user_response.md` to prevent the EndSpecialist from performing a redundant LLM synthesis call:
 
@@ -278,7 +320,7 @@ return {
 
 This optimization reduces LLM calls from 3 (Alpha + Bravo + EndSynthesis) to 2 (Alpha + Bravo only).
 
-#### 4.7.5 Model Binding Configuration
+#### 4.7.6 Model Binding Configuration
 
 The tiered chat architecture is **model-agnostic**. Concrete model bindings are runtime configuration:
 
@@ -304,7 +346,7 @@ specialist_model_bindings:
   progenitor_bravo_specialist: "claude_sonnet"
 ```
 
-#### 4.7.6 Observability
+#### 4.7.7 Observability
 
 **Logging:**
 - INFO level when interception occurs: "Chat routing detected - fanning out to parallel progenitors"
@@ -321,7 +363,7 @@ specialist_model_bindings:
 - routing_history shows actual execution path
 - Degraded mode warnings included in report
 
-#### 4.7.7 Backward Compatibility
+#### 4.7.8 Backward Compatibility
 
 When tiered chat components are NOT configured:
 - Router can still choose "chat_specialist"
@@ -330,7 +372,7 @@ When tiered chat components are NOT configured:
 - No progenitor specialists instantiated
 - Zero changes to routing behavior
 
-#### 4.7.8 Configuration in config.yaml
+#### 4.7.9 Configuration in config.yaml
 
 ```yaml
 # Tiered Chat Subgraph (CORE-CHAT-002)
@@ -354,19 +396,13 @@ tiered_synthesizer_specialist:
 - `chat_specialist` node is skipped when tiered components are present
 - System auto-detects and enables tiered chat when all three specialists configured
 
-#### 4.7.9 Related Patterns
+#### 4.7.10 Related Patterns
 
 This Virtual Coordinator pattern is similar to the Hybrid Coordinator pattern used by EndSpecialist:
 - EndSpecialist performs inline synthesis (procedural + LLM)
 - TieredSynthesizer performs inline combination (procedural only)
 - Both write to `final_user_response.md` to signal completion
 - Both demonstrate separation between capability declaration and implementation
-
-**References:**
-- ADR CORE-CHAT-002: Tiered Chat Subgraph (Fan-Out)
-- ADR CORE-CHAT-002.1: Graceful Degradation Strategy
-- ADR CORE-CHAT-002.2: Virtual Coordinator Pattern
-- ADR CORE-CHAT-002_FINAL_DECISIONS: Consolidated implementation decisions
 
 ## 5.0 How to Extend the System: Creating Specialists
 

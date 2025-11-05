@@ -104,8 +104,71 @@ To ensure your specialist integrates smoothly and reliably into the system, plea
         *   `return {"artifacts": {"my_report.txt": "This is the content..."}}`
     *   **For private, transient state (e.g., counters):** Write to the `scratchpad` dictionary.
         *   `return {"scratchpad": {"my_specialist_counter": 1}}`
+    *   **For standard specialists:** Return messages to append to conversation history.
+        *   `return {"messages": [ai_message]}`
+    *   **CRITICAL - For parallel execution specialists:** Do NOT return messages key.
+        *   See "Special Case: Parallel Execution Specialists" section below for details.
 *   **Do Not Modify Global State Counters:** The `turn_count` is managed exclusively by the `RouterSpecialist`. Do not attempt to change this value from within your specialist, as it will break the workflow in unpredictable ways.
 *   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (`recommended_specialists`) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows. See the `DEVELOPERS_GUIDE.md` for more details.
+
+### Special Case: Parallel Execution Specialists
+
+When creating specialists that will be executed **in parallel** as part of a fan-out/join pattern (like the progenitors in CORE-CHAT-002), you MUST follow a different state management pattern:
+
+**CRITICAL STATE MANAGEMENT FOR PARALLEL NODES:**
+
+Parallel specialists (nodes before a join node) must write ONLY to `artifacts`, never to `messages`:
+
+```python
+def _execute_logic(self, state: dict) -> dict:
+    """Execute parallel node logic."""
+    # ... generate response ...
+
+    # WRONG - DO NOT DO THIS in parallel nodes:
+    # return {"messages": [ai_message]}
+
+    # CORRECT - Write to artifacts only:
+    return {
+        "artifacts": {
+            "my_response": ai_response_content
+        }
+    }
+```
+
+**Why This Matters:**
+
+In LangGraph's fan-out/join pattern:
+- **Parallel nodes (fan-out):** Write to temporary storage (`artifacts`)
+- **Join node:** Reads artifacts and writes to permanent storage (`messages`)
+
+This prevents message pollution and enables proper multi-turn conversation cross-referencing.
+
+**Example - Tiered Chat Progenitors:**
+
+```python
+# ProgenitorAlphaSpecialist - PARALLEL NODE
+def _execute_logic(self, state: dict) -> dict:
+    # ... LLM call ...
+    return {
+        "artifacts": {"alpha_response": response_content}
+        # NO "messages" key!
+    }
+
+# TieredSynthesizerSpecialist - JOIN NODE
+def _execute_logic(self, state: dict) -> dict:
+    alpha = state["artifacts"]["alpha_response"]
+    bravo = state["artifacts"]["bravo_response"]
+    combined = format_both(alpha, bravo)
+
+    # Join node DOES write to messages
+    return {
+        "messages": [create_llm_message(self.specialist_name, self.llm_adapter, combined)]
+    }
+```
+
+**References:**
+- See `app/src/specialists/progenitor_alpha_specialist.py` for a working example
+- See DEVELOPERS_GUIDE.md Section 4.7 for the Virtual Coordinator pattern
 
 ### Step 2: Create the Prompt File
 
