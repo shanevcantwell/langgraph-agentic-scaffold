@@ -1,3 +1,16 @@
+# Configuration
+# Version: 3.0
+#
+# ==============================================================================
+# DEVELOPER-LEVEL CONFIGURATION
+# This file is the system's blueprint, intended for developers to define the
+# agent's architecture. It should NOT be exposed to or editable by end-users.
+# ==============================================================================
+#
+# This file defines the structure of the agentic system. It is the single
+# source of truth for wiring together providers, models, and specialists.
+# Copy this file to `config.yaml` and customize it for your setup.
+
 # ==============================================================================
 # WORKFLOW CONFIGURATION
 # ==============================================================================
@@ -11,6 +24,10 @@ workflow:
   # The maximum number of steps the graph can take before halting. This is a
   # final safeguard against infinite loops.
   recursion_limit: 40
+  # A list of specialists that are considered essential for the application to
+  # function. If any of these fail to load during startup, the application will
+  # exit with an error. This prevents the system from running in a broken state.
+  # See ADR-010 for more details.
   critical_specialists: ["router_specialist", "archiver_specialist"]
 
 
@@ -21,8 +38,6 @@ workflow:
 # must match the specialist's Python module name (router_specialist.py) and the
 # name passed to super().__init__() in its constructor.
 # ==============================================================================
-# config.yaml
-
 specialists:
   # --- Orchestration & Planning ---
   router_specialist:
@@ -37,40 +52,33 @@ specialists:
 
   critic_specialist:
     type: "llm"
-    prompt_file: "critic_wrapper_prompt.md"
-    description: "A gatekeeper node that runs a configured critique strategy to ensure quality."
-    requires_artifacts: ["html_document.html"]
+    prompt_file: "critic_prompt.md"
+    description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
+    requires_artifacts: ["html_artifact"]
     artifact_providers:
-      html_document.html: "web_builder"
-    conditional_routing: true
-    revision_target: "web_builder"
-    critique_strategy:
-      type: "llm"
-      prompt_file: "critic_prompt.md"
+      html_artifact: "web_builder"
 
   # --- Core Capabilities ---
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
-    description: "Generates or refines a complete HTML document."
-    requires_artifacts:
-      - ["system_plan"]
-      - ["html_document.html", "critique.md"]
+    description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
+    requires_artifacts: ["system_plan", "text_to_process"]
     artifact_providers:
       system_plan: "systems_architect"
-      html_document.html: "web_builder"
-      critique.md: "critic_specialist"
+      text_to_process: "file_specialist"
 
   file_specialist:
-    type: "procedural"
-    description: "A procedural specialist that executes pre-planned, structured tool calls for file modification (e.g., write file, create directory). It does not interpret natural language and cannot list files; it only executes plans from other specialists."
-    root_dir: "./workspace"
+    type: "llm"
+    prompt_file: "file_specialist_prompt.md"
+    description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
+    root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
 
   # --- Data & Analysis ---
   data_extractor_specialist:
     type: "llm"
-    prompt_file: "data_extractor_prompt.md"
-    description: "Extracts structured, machine-readable data from text into a predefined JSON schema. Use ONLY when the desired output is a specific, rigid format (e.g., a list of names, dates, and locations). Requires a 'text_to_process' artifact."
+    prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
+    description: "Extracts structured data from unstructured text based on a Pydantic schema. Requires 'text_to_process' in the state."
     requires_artifacts: ["text_to_process"]
     artifact_providers:
       text_to_process: "file_specialist"
@@ -78,7 +86,7 @@ specialists:
   sentiment_classifier_specialist:
     type: "llm"
     prompt_file: "sentiment_classifier_prompt.md"
-    description: "Classifies the sentiment of a given text as positive, negative, or neutral. Provides analytical metadata, not a final user response."
+    description: "Classifies the sentiment of a given text as positive, negative, or neutral."
 
   data_processor_specialist:
     type: "procedural"
@@ -90,14 +98,16 @@ specialists:
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
-    description: "Performs qualitative analysis on unstructured text. Use for tasks like summarizing, finding themes, or extracting key takeaways that do not fit a rigid schema. Ideal for generating human-readable reports from a provided text artifact."
+    description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
     requires_artifacts: ["text_to_process"]
     artifact_providers:
       text_to_process: "file_specialist"
 
-  # --- General & Fallback ---
-
+  # --- Conversational & Chat ---
   # Tiered Chat Subgraph (CORE-CHAT-002) - Multi-Perspective Chat System
+  # When all three specialists below are present, the system automatically enables
+  # parallel multi-perspective responses. The router chooses 'chat_specialist',
+  # which triggers fan-out to both progenitors running simultaneously.
   progenitor_alpha_specialist:
     type: "llm"
     prompt_file: "progenitor_alpha_prompt.md"
@@ -115,8 +125,9 @@ specialists:
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"
-    description: "THE PRIMARY SPECIALIST for all user questions and informational queries. Route here WITH INTENT when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. This is your go-to specialist for any question or information request."
+    description: "THE PRIMARY SPECIALIST for all user questions and informational queries. Route here WITH INTENT when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. This is your go-to specialist for any question or information request. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
 
+  # --- General & Fallback ---
   prompt_specialist:
     type: "llm"
     prompt_file: "prompt_specialist_prompt.md"
