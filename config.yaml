@@ -30,7 +30,6 @@ workflow:
   # See ADR-010 for more details.
   critical_specialists: ["router_specialist", "archiver_specialist"]
 
-
 # ==============================================================================
 # SPECIALIST CONFIGURATION
 # ==============================================================================
@@ -104,28 +103,80 @@ specialists:
       text_to_process: "file_specialist"
 
   # --- Conversational & Chat ---
-  # Tiered Chat Subgraph (CORE-CHAT-002) - Multi-Perspective Chat System
-  # When all three specialists below are present, the system automatically enables
-  # parallel multi-perspective responses. The router chooses 'chat_specialist',
-  # which triggers fan-out to both progenitors running simultaneously.
+
+  # ==============================================================================
+  # TIERED CHAT SUBGRAPH (CORE-CHAT-002) - Multi-Perspective Chat System
+  # ==============================================================================
+  # This implements a parallel fan-out/join pattern for richer conversational responses.
+  #
+  # HOW IT WORKS:
+  # 1. Router selects 'chat_specialist' for user questions
+  # 2. System automatically dispatches to BOTH progenitors in parallel
+  # 3. Each progenitor generates its perspective independently
+  # 4. Synthesizer combines both perspectives into a tiered markdown response
+  #
+  # BENEFITS:
+  # - Richer, multi-faceted answers (analytical + intuitive perspectives)
+  # - Better cross-referencing in multi-turn conversations
+  # - Graceful degradation if one progenitor fails
+  #
+  # TO ENABLE: Keep all four specialists below uncommented
+  # TO DISABLE: Comment out the three progenitor/synthesizer specialists
+  #             (chat_specialist will work standalone)
+  #
+  # CUSTOMIZATION:
+  # - Edit prompt files to change progenitor personalities/expertise
+  # - Common patterns: (Technical + Creative), (Formal + Casual), (Expert + Beginner)
+  # - See user_settings.yaml for model assignment strategies
+  # ==============================================================================
+
   progenitor_alpha_specialist:
     type: "llm"
     prompt_file: "progenitor_alpha_prompt.md"
     description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
+    # SYSTEM PROMPT: This specialist's LLM receives progenitor_alpha_prompt.md as its
+    # system prompt. Edit this file to define Alpha's personality, expertise, tone,
+    # and approach. Default: analytical/structured/methodical.
+    #
+    # EXAMPLE CUSTOMIZATIONS:
+    # - Technical expert (code-focused, precise terminology)
+    # - Formal academic (citations, research-oriented)
+    # - Beginner-friendly (simple explanations, analogies)
 
   progenitor_bravo_specialist:
     type: "llm"
     prompt_file: "progenitor_bravo_prompt.md"
     description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
+    # SYSTEM PROMPT: This specialist's LLM receives progenitor_bravo_prompt.md as its
+    # system prompt. Edit this file to define Bravo's personality, expertise, tone,
+    # and approach. Default: intuitive/contextual/human-centered.
+    #
+    # EXAMPLE CUSTOMIZATIONS:
+    # - Creative storyteller (metaphors, narratives)
+    # - Casual conversationalist (friendly, approachable)
+    # - Advanced expert (deep technical insights, edge cases)
 
   tiered_synthesizer_specialist:
     type: "procedural"
     description: "Combines Alpha and Bravo progenitor responses into a formatted, tiered markdown output. Acts as the join node in the fan-out/join pattern. This is a procedural specialist that does not use an LLM."
+    # SYSTEM PROMPT: None - this is procedural (no LLM call).
+    # It performs simple markdown formatting of the two progenitor responses.
+    # No prompt file or model binding needed.
 
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"
     description: "THE PRIMARY SPECIALIST for all user questions and informational queries. Route here WITH INTENT when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. This is your go-to specialist for any question or information request. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
+    # SYSTEM PROMPT BEHAVIOR:
+    # - TIERED CHAT ENABLED: This specialist is NEVER directly executed.
+    #   Routing to 'chat_specialist' triggers progenitor fan-out instead.
+    #   The LLM NEVER receives chat_prompt.md - only the progenitor prompts are used.
+    #
+    # - TIERED CHAT DISABLED: This specialist executes normally.
+    #   The LLM receives chat_prompt.md as its system prompt.
+    #   Works as a standard single-perspective chat specialist.
+    #
+    # To disable tiered chat: Comment out the three progenitor/synthesizer specialists above.
 
   # --- General & Fallback ---
   prompt_specialist:

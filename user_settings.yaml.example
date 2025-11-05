@@ -26,6 +26,11 @@ llm_providers:
   lmstudio_specialist:
     type: "lmstudio"
     api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
+
+  # OLLAMA SUPPORT - NOT YET IMPLEMENTED
+  # The Ollama adapter is planned but not currently available.
+  # See app/src/llm/factory.py line 17 for implementation status.
+  # Uncomment the section below once Ollama support is added:
   # ollama_local:
   #   type: "ollama"
   #   api_identifier: "llama3:8b"
@@ -52,14 +57,58 @@ specialist_model_bindings:
   end_specialist: "gemini_flash"
 
   # --- Tiered Chat Subgraph Bindings (CORE-CHAT-002) ---
-  # The tiered chat subgraph uses parallel execution for multi-perspective responses.
-  # You can mix local and cloud models for cost optimization:
-  # - Development: Both progenitors use local models (zero API cost)
-  # - Hybrid: Mix cloud (quality) and local (cost savings)
-  # - Production: Both use premium cloud models (maximum quality)
-  progenitor_alpha_specialist: "gemini_flash"  # Analytical perspective
-  progenitor_bravo_specialist: "lmstudio_specialist"  # Contextual perspective (local for cost savings)
+  # ===========================================================================
+  # PROGENITOR MODEL ASSIGNMENT STRATEGIES
+  # ===========================================================================
+  # The tiered chat subgraph executes both progenitors IN PARALLEL for every
+  # user question. Choose your model assignment based on your priorities:
+  #
+  # STRATEGY 1: COST OPTIMIZATION (Recommended for Development/Testing)
+  # - Use local models (LM Studio) for one or both progenitors
+  # - Zero API costs, but requires local GPU/CPU resources
+  # - Example: Both progenitors use lmstudio_specialist (FREE)
+  # - Note: Ollama is not yet implemented (see llm_providers section above)
+  #
+  # STRATEGY 2: QUALITY OPTIMIZATION (Recommended for Production)
+  # - Use premium cloud models (Gemini Pro, GPT-5) for both progenitors
+  # - Best response quality, but 2x API cost per turn
+  # - Example: Both progenitors use gemini_pro (PREMIUM)
+  #
+  # STRATEGY 3: HYBRID OPTIMIZATION (Recommended for Most Use Cases)
+  # - Mix cloud and local: quality where it matters, cost savings elsewhere
+  # - One progenitor uses cloud (Gemini Flash, GPT-4), one uses local (LM Studio)
+  # - Good balance of quality and cost
+  # - Example below: Alpha=cloud (fast), Bravo=local (free)
+  #
+  # STRATEGY 4: DIFFERENTIATED MODELS (Advanced)
+  # - Assign different cloud models to each progenitor for diverse perspectives
+  # - Example: Alpha=gemini_pro (depth), Bravo=gemini_flash (speed)
+  #
+  # CONFIGURATION TIPS:
+  # - Alpha is typically analytical/structured - consider faster/cheaper models
+  # - Bravo is typically intuitive/contextual - consider higher quality models
+  # - For multi-turn conversations, both progenitors see full history
+  # - Test with local models first, upgrade to cloud for production
+  # ===========================================================================
+
+  progenitor_alpha_specialist: "gemini_flash"  # Analytical perspective (cloud, fast)
+  progenitor_bravo_specialist: "lmstudio_specialist"  # Contextual perspective (local, free)
+
+  # ALTERNATIVE CONFIGURATIONS (uncomment to try):
+  # Both Cloud (Premium Quality):
+  # progenitor_alpha_specialist: "gemini_pro"
+  # progenitor_bravo_specialist: "gemini_pro"
+  #
+  # Both Local (Zero Cost):
+  # progenitor_alpha_specialist: "lmstudio_specialist"
+  # progenitor_bravo_specialist: "lmstudio_specialist"
+  #
+  # Differentiated Cloud (Diverse Perspectives):
+  # progenitor_alpha_specialist: "gemini_flash"  # Speed-optimized
+  # progenitor_bravo_specialist: "gemini_pro"    # Quality-optimized
+
   # Note: tiered_synthesizer_specialist is procedural and doesn't need a model binding
+  # It simply formats the progenitor responses into tiered markdown output.
 
 # --- 3. Set the Default ---
 # The default LLM configuration to use for any specialist that is not
