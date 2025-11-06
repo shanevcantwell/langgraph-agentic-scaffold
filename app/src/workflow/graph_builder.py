@@ -27,7 +27,13 @@ class GraphBuilder:
         self.config = self.config_loader.get_config()
         self.adapter_factory = adapter_factory or AdapterFactory(self.config)
         self.specialists = self._load_and_configure_specialists()
-        self.orchestrator = GraphOrchestrator(self.config, self.specialists)
+
+        # TASK 1.2: Build allowed destinations for route validation
+        # Include all specialists except router (which can't be a routing destination)
+        router_name = CoreSpecialist.ROUTER.value
+        self.allowed_destinations = {name for name in self.specialists if name != router_name}
+
+        self.orchestrator = GraphOrchestrator(self.config, self.specialists, self.allowed_destinations)
 
         workflow_config = self.config.get("workflow", {})
         raw_entry_point = workflow_config.get("entry_point", CoreSpecialist.ROUTER.value)

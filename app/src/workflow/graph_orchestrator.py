@@ -9,7 +9,7 @@ from ..specialists.base import BaseSpecialist
 from ..graph.state import GraphState, Scratchpad
 from ..enums import CoreSpecialist
 from ..utils import state_pruner
-from ..utils.errors import SpecialistError
+from ..utils.errors import SpecialistError, WorkflowError
 from ..utils.report_schema import ErrorReport
 
 logger = logging.getLogger(__name__)
@@ -20,9 +20,10 @@ class GraphOrchestrator:
     This class contains all the decider functions that the compiled graph
     calls to determine the next step in the workflow.
     """
-    def __init__(self, config: Dict[str, Any], specialists: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], specialists: Dict[str, Any], allowed_destinations: set[str] = None):
         self.config = config
         self.specialists = specialists
+        self.allowed_destinations = allowed_destinations or set()
         workflow_config = self.config.get("workflow", {})
         self.max_loop_cycles = workflow_config.get("max_loop_cycles", 3)
         self.min_loop_len = 1
@@ -97,6 +98,16 @@ class GraphOrchestrator:
             logger.error("Routing Error: Router failed to select a next step. Halting.")
             return CoreSpecialist.END.value
 
+        # TASK 1.2: Validate route before execution (fail-fast on invalid routes)
+        if self.allowed_destinations and next_specialist not in self.allowed_destinations:
+            error_msg = (
+                f"Invalid routing destination '{next_specialist}' selected by router. "
+                f"This destination is not a valid node in the graph. "
+                f"Allowed destinations: {sorted(self.allowed_destinations)}"
+            )
+            logger.error(error_msg)
+            raise WorkflowError(error_msg)
+
         # CORE-CHAT-002: Intercept chat_specialist routing and fan out to progenitors
         if next_specialist == "chat_specialist":
             # Check if tiered chat subgraph components are available
@@ -104,7 +115,20 @@ class GraphOrchestrator:
                 "progenitor_bravo_specialist" in self.specialists and
                 "tiered_synthesizer_specialist" in self.specialists):
                 logger.info("Chat routing detected - fanning out to parallel progenitors (CORE-CHAT-002)")
-                return ["progenitor_alpha_specialist", "progenitor_bravo_specialist"]
+                fanout_destinations = ["progenitor_alpha_specialist", "progenitor_bravo_specialist"]
+
+                # TASK 1.2: Validate fanout destinations
+                if self.allowed_destinations:
+                    invalid_fanout = [dest for dest in fanout_destinations if dest not in self.allowed_destinations]
+                    if invalid_fanout:
+                        error_msg = (
+                            f"Invalid fanout routing: destinations {invalid_fanout} are not valid nodes in the graph. "
+                            f"Allowed destinations: {sorted(self.allowed_destinations)}"
+                        )
+                        logger.error(error_msg)
+                        raise WorkflowError(error_msg)
+
+                return fanout_destinations
             else:
                 logger.warning("Tiered chat subgraph incomplete - falling back to single chat_specialist")
                 # Fall through to return chat_specialist as-is
