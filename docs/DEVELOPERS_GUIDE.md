@@ -94,7 +94,124 @@ This explicit, coordinated sequence ensures that completion is a robust, observa
 
 **Implementation:** To ensure consistency and prevent code duplication, all adapters MUST utilize the `_robustly_parse_json_from_text()` helper method provided by the `BaseAdapter` class as a fallback mechanism. An adapter should only return an empty `json_response` if both a direct parse and the robust fallback parse fail. This contract is non-negotiable and is verified by the system's contract tests (`app/tests/llm/test_adapter_contracts.py`).
 
-### 4.5 Architecture: The 3-Tiered Configuration System
+### 4.5 Pattern: MCP (Message-Centric Protocol) for Synchronous Service Calls
+
+**Context:** The system provides two primary communication mechanisms between specialists:
+
+1. **Graph-mediated routing** - Specialists modify GraphState and routing flows through the RouterSpecialist
+2. **Dossier pattern** - Asynchronous, state-mediated workflow handoffs (see ADR-CORE-003/004)
+
+However, neither pattern efficiently handles **synchronous, deterministic service calls** where one specialist needs to invoke a simple function on another specialist (e.g., "Does file X exist?", "What's the current date?").
+
+**MCP (Message-Centric Protocol)** provides synchronous, direct service invocation between specialists, complementing the existing communication patterns.
+
+#### 4.5.1 MCP Architecture Overview
+
+**Per-Graph-Instance Registry:**
+Each `GraphBuilder` creates its own `McpRegistry` instance, ensuring test isolation and supporting concurrent graph execution. Specialists register their service functions during graph initialization.
+
+**Service Registration:**
+```python
+class MySpecialist(BaseSpecialist):
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Optional: Register this specialist's functions as MCP services."""
+        registry.register_service(self.specialist_name, {
+            "my_function": self.my_function,
+            "another_function": self.another_function,
+        })
+
+    def my_function(self, param1: str, param2: int) -> dict:
+        """Service function callable via MCP."""
+        # ... implementation ...
+        return {"result": "data"}
+```
+
+**Service Invocation:**
+```python
+class ConsumerSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        # Synchronous call with automatic error handling
+        result = self.mcp_client.call("my_specialist", "my_function",
+                                      param1="value", param2=42)
+
+        # Fault-tolerant call returning (success, result) tuple
+        success, result = self.mcp_client.call_safe("my_specialist", "my_function",
+                                                     param1="value", param2=42)
+        if success:
+            # ... use result ...
+        else:
+            # ... handle error (result contains error message) ...
+```
+
+#### 4.5.2 When to Use MCP vs Dossier
+
+**Use MCP When:**
+- **Synchronous operations** - Immediate result needed (file existence check, date retrieval)
+- **Deterministic functions** - No LLM involvement, pure logic
+- **Low-latency requirements** - Cannot afford graph routing overhead
+- **Service-oriented calls** - Treating specialist as a utility service
+
+**Examples:**
+- `self.mcp_client.call("file_specialist", "file_exists", path="report.md")` → bool
+- `self.mcp_client.call("datetime_specialist", "get_current_date")` → str
+- `self.mcp_client.call("validation_specialist", "validate_schema", data=..., schema=...)` → bool
+
+**Use Dossier When:**
+- **Asynchronous handoffs** - Specialist-to-specialist workflow transitions
+- **LLM-driven tasks** - Next specialist needs to perform reasoning
+- **State-mediated communication** - Requires graph state transition tracking
+- **Complex workflows** - Multi-step orchestration with routing logic
+
+**Examples:**
+- BuilderSpecialist → CriticSpecialist (review workflow)
+- TriageArchitect → Facilitator (context engineering handoff)
+- ErrorHandler → HumanEscalation (failure recovery)
+
+#### 4.5.3 MCP Configuration
+
+MCP behavior is controlled via `config.yaml`:
+
+```yaml
+mcp:
+  # Toggle LangSmith trace spans for MCP calls
+  tracing_enabled: true
+
+  # Maximum execution time per MCP call (prevents hanging)
+  timeout_seconds: 5
+```
+
+**Timeout Protection:** MCP calls are protected by a configurable timeout (default: 5 seconds) using `signal.alarm()`. Note: This mechanism is Unix-only; Windows support requires threading-based implementation.
+
+**LangSmith Tracing:** When enabled, MCP calls emit trace spans for observability. Gracefully degrades if LangSmith is not installed.
+
+#### 4.5.4 Reference Implementation: FileSpecialist
+
+The `FileSpecialist` demonstrates the **MCP-only pattern**, where a specialist operates exclusively via MCP and never participates in graph routing:
+
+```python
+class FileSpecialist(BaseSpecialist):
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Expose all file operations as MCP services."""
+        registry.register_service(self.specialist_name, {
+            "file_exists": self.file_exists,
+            "read_file": self.read_file,
+            "write_file": self.write_file,
+            "list_files": self.list_files,
+            "create_directory": self.create_directory,
+            "create_zip": self.create_zip,
+        })
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """No-op for MCP-only mode."""
+        logger.warning(f"{self.specialist_name} operates exclusively via MCP")
+        return {}
+```
+
+**Security Note:** FileSpecialist implements path validation using `pathlib.Path.resolve()` and `relative_to()` to prevent directory traversal attacks, providing defense-in-depth alongside container isolation.
+
+**Additional Documentation:** See `ADR-CORE-008_MCP-Architecture.md` for complete architectural details and design decisions.
+
+### 4.6 Architecture: The 3-Tiered Configuration System
 
 The system's configuration is a three-tiered hierarchy. Understanding this model is essential for both running and extending the system. The layers are resolved at startup by the `ConfigLoader`.
 

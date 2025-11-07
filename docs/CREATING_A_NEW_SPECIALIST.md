@@ -170,6 +170,136 @@ def _execute_logic(self, state: dict) -> dict:
 - See `app/src/specialists/progenitor_alpha_specialist.py` for a working example
 - See DEVELOPERS_GUIDE.md Section 4.7 for the Virtual Coordinator pattern
 
+### Optional: Exposing Specialist Functions via MCP
+
+**When to Use MCP:** If your specialist provides **deterministic utility functions** that other specialists might need to call synchronously (e.g., file operations, date/time functions, validation logic), you should expose those functions via MCP (Message-Centric Protocol).
+
+**When NOT to Use MCP:** If your specialist performs LLM-driven reasoning or complex workflows, it should remain graph-routed and not expose MCP services.
+
+#### MCP Service Registration Pattern
+
+To expose your specialist's functions as MCP services, implement the `register_mcp_services()` method:
+
+```python
+# app/src/specialists/datetime_specialist.py
+
+from typing import Dict, Any
+from datetime import datetime
+from .base import BaseSpecialist
+
+class DateTimeSpecialist(BaseSpecialist):
+    """A specialist that provides date/time utility functions via MCP."""
+
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
+
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Register utility functions as MCP services."""
+        registry.register_service(self.specialist_name, {
+            "get_current_date": self.get_current_date,
+            "get_current_time": self.get_current_time,
+            "format_timestamp": self.format_timestamp,
+        })
+
+    # MCP service functions - simple, deterministic methods
+    def get_current_date(self) -> str:
+        """Returns current date in YYYY-MM-DD format."""
+        return datetime.now().strftime("%Y-%m-%d")
+
+    def get_current_time(self) -> str:
+        """Returns current time in HH:MM:SS format."""
+        return datetime.now().strftime("%H:%M:%S")
+
+    def format_timestamp(self, timestamp: int, format_str: str = "%Y-%m-%d %H:%M:%S") -> str:
+        """Formats a Unix timestamp using the specified format string."""
+        return datetime.fromtimestamp(timestamp).strftime(format_str)
+
+    def _execute_logic(self, state: dict) -> dict:
+        """Optional: Can still participate in graph routing if needed."""
+        # This specialist could operate in "MCP-only" mode by making this a no-op
+        return {}
+```
+
+#### Using MCP Services from Other Specialists
+
+Once registered, other specialists can call your MCP services synchronously:
+
+```python
+# app/src/specialists/report_generator_specialist.py
+
+class ReportGeneratorSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        # Synchronous call to DateTimeSpecialist via MCP
+        current_date = self.mcp_client.call("datetime_specialist", "get_current_date")
+
+        report = f"# Report Generated on {current_date}\n\n"
+        # ... rest of report generation ...
+
+        return {"artifacts": {"report.md": report}}
+```
+
+#### MCP-Only Pattern (Advanced)
+
+For specialists that ONLY provide utility services and never participate in graph routing (like `FileSpecialist`), you can make `_execute_logic()` a complete no-op:
+
+```python
+class UtilitySpecialist(BaseSpecialist):
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Register all utility functions."""
+        registry.register_service(self.specialist_name, {
+            "utility_func_1": self.utility_func_1,
+            "utility_func_2": self.utility_func_2,
+        })
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """No-op for MCP-only mode."""
+        logger.warning(f"{self.specialist_name} operates exclusively via MCP")
+        return {}
+
+    def utility_func_1(self, param: str) -> str:
+        """MCP service function."""
+        return f"Processed: {param}"
+
+    def utility_func_2(self, x: int, y: int) -> int:
+        """MCP service function."""
+        return x + y
+```
+
+#### MCP Best Practices
+
+1. **Keep service functions simple** - No LLM calls, no complex state management
+2. **Return serializable data** - Dicts, lists, strings, numbers, bools (no custom objects)
+3. **Handle errors gracefully** - Raise clear exceptions with descriptive messages
+4. **Document parameters** - Use type hints and docstrings for all service functions
+5. **Security considerations** - Validate inputs, especially for file paths or external data
+
+#### Error Handling in MCP Calls
+
+MCP provides two invocation patterns:
+
+```python
+# Raises ValueError on error (use for critical operations)
+result = self.mcp_client.call("service", "function", param="value")
+
+# Returns (success, result) tuple (use for fault-tolerant workflows)
+success, result = self.mcp_client.call_safe("service", "function", param="value")
+if success:
+    # result contains the return value
+else:
+    # result contains the error message string
+```
+
+#### Reference Implementation
+
+See `app/src/specialists/file_specialist.py` for a complete MCP-only specialist implementation with:
+- 6 MCP service functions (file_exists, read_file, write_file, list_files, create_directory, create_zip)
+- Path validation security (prevents directory traversal)
+- Comprehensive test coverage (39 tests)
+
+**Additional Documentation:**
+- See DEVELOPERS_GUIDE.md Section 4.5 for MCP vs Dossier usage guidelines
+- See ADR-CORE-008_MCP-Architecture.md for complete architectural details
+
 ### Step 2: Create the Prompt File
 
 Next, create a new prompt file in the `app/prompts/` directory. This file contains the instructions that will be sent to the Language Model. The filename should be descriptive and match the `prompt_file` key you will set in `config.yaml`.
