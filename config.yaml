@@ -31,6 +31,18 @@ workflow:
   critical_specialists: ["router_specialist", "archiver_specialist"]
 
 # ==============================================================================
+# MCP (MESSAGE-CENTRIC PROTOCOL) CONFIGURATION
+# ==============================================================================
+# MCP enables specialists to call each other's functions directly without routing
+# through the graph. This reduces latency and LLM costs for deterministic operations.
+# ==============================================================================
+mcp:
+  # Toggle LangSmith trace spans for MCP calls (kill switch for tracing overhead)
+  tracing_enabled: true
+  # Maximum execution time per MCP call (prevents hanging on slow operations)
+  timeout_seconds: 5
+
+# ==============================================================================
 # SPECIALIST CONFIGURATION
 # ==============================================================================
 # Define each specialist agent. The key for each specialist (e.g., 'router_specialist')

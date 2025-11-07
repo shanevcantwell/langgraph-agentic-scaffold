@@ -32,3 +32,19 @@ class WorkflowError(Exception):
 class SpecialistLoadError(Exception):
     """Custom exception for errors that occur during specialist loading."""
     pass
+
+class McpError(Exception):
+    """Base exception for MCP (Message-Centric Protocol) related errors."""
+    pass
+
+class McpServiceNotFoundError(McpError):
+    """Raised when requested MCP service doesn't exist in the registry."""
+    pass
+
+class McpFunctionNotFoundError(McpError):
+    """Raised when requested function doesn't exist in the MCP service."""
+    pass
+
+class McpInvocationError(McpError):
+    """Raised when MCP function execution fails."""
+    pass
