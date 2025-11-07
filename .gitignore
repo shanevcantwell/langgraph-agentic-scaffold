@@ -61,3 +61,4 @@ audit_manifest.md
 .gitignore
 audit_manifest.md
 .continue/*
+.claude/CLAUDE.md
