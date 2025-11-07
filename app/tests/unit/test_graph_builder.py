@@ -27,7 +27,7 @@ def test_load_and_configure_specialists(
         "prompt_triage_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_triage.md", "description": "d"},
         "file_specialist": {"type": "procedural", "description": "File ops"},
         "end_specialist": {"type": "procedural"},
-        "response_synthesizer_specialist": {"type": "llm", "llm_config": "gemini-test"},
+        "chat_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_chat.md", "description": "d"},
         "archiver_specialist": {"type": "procedural"},
     }
     mock_config = mock_config_loader.get_config.return_value

@@ -1,10 +1,13 @@
 # app/src/specialists/base.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from ..llm.adapter import BaseAdapter
 from ..utils.errors import SpecialistError
+
+if TYPE_CHECKING:
+    from ..mcp import McpClient, McpRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +21,7 @@ class BaseSpecialist(ABC):
         self.specialist_name = specialist_name
         self.specialist_config = specialist_config
         self.llm_adapter: Optional[BaseAdapter] = None
+        self.mcp_client: Optional['McpClient'] = None  # TASK 2.5: Injected by GraphBuilder
         self.is_enabled = self.specialist_config.get("is_enabled", True)
 
     @abstractmethod
@@ -47,4 +51,25 @@ class BaseSpecialist(ABC):
     def set_specialist_map(self, specialist_map: Dict[str, Any]):
         """Provides the specialist with a map of other available specialists."""
         # Default implementation does nothing.
+        pass
+
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """
+        Optional: Register this specialist's functions as MCP services.
+
+        Override this method in subclasses to expose functions that other
+        specialists can call via McpClient.
+
+        Example:
+            def register_mcp_services(self, registry):
+                registry.register_service(self.specialist_name, {
+                    "file_exists": self._file_exists,
+                    "read_file": self._read_file,
+                    "list_files": self._list_files
+                })
+
+        Args:
+            registry: The McpRegistry instance to register services with
+        """
+        # Default implementation does nothing (specialist doesn't expose MCP services)
         pass

@@ -26,6 +26,11 @@ class GraphBuilder:
         self.config_loader = config_loader or ConfigLoader()
         self.config = self.config_loader.get_config()
         self.adapter_factory = adapter_factory or AdapterFactory(self.config)
+
+        # TASK 2.5: Initialize MCP registry (per-graph-instance for test isolation)
+        from ..mcp import McpRegistry, McpClient
+        self.mcp_registry = McpRegistry(self.config)
+
         self.specialists = self._load_and_configure_specialists()
 
         # TASK 1.2: Build allowed destinations for route validation
@@ -150,6 +155,26 @@ class GraphBuilder:
         for instance in loaded_specialists.values():
             if not instance.llm_adapter:
                 self._attach_llm_adapter(instance)
+
+        # TASK 2.5: Attach MCP client and register services
+        # Do this after all specialists are loaded and configured
+        from ..mcp import McpClient
+        mcp_client = McpClient(self.mcp_registry)
+
+        for instance in loaded_specialists.values():
+            # Attach MCP client to all specialists
+            instance.mcp_client = mcp_client
+
+            # Register MCP services if specialist implements registration method
+            if hasattr(instance, 'register_mcp_services'):
+                try:
+                    instance.register_mcp_services(self.mcp_registry)
+                    logger.debug(f"Registered MCP services for '{instance.specialist_name}'")
+                except Exception as e:
+                    logger.error(
+                        f"Failed to register MCP services for '{instance.specialist_name}': {e}",
+                        exc_info=True
+                    )
 
         return loaded_specialists
 
