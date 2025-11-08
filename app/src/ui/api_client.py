@@ -17,12 +17,12 @@ class ApiClient:
         with open(image_path, "rb") as image_file:
             return base64.b64encode(image_file.read()).decode('utf-8')
 
-    async def invoke_agent_streaming(self, prompt: str, text_file_path: str, image_path: str):
+    async def invoke_agent_streaming(self, prompt: str, text_file_path: str, image_path: str, use_simple_chat: bool = False):
         """
         Calls the streaming FastAPI backend and yields updates for the UI.
         This function is a generator.
         """
-        payload = {"input_prompt": prompt}
+        payload = {"input_prompt": prompt, "use_simple_chat": use_simple_chat}
         log_history = ""
 
         if text_file_path:

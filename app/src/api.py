@@ -70,6 +70,10 @@ class InvokeRequest(BaseModel):
         description="Optional base64-encoded image to be processed.",
         examples=["data:image/png;base64,iVBORw0KGgo..."]
     )
+    use_simple_chat: bool = Field(
+        False,
+        description="If True, use simple chat mode (single ChatSpecialist). If False (default), use tiered chat mode (parallel progenitors)."
+    )
 
 class InvokeResponse(BaseModel):
     final_output: Dict[str, Any] = Field(
@@ -151,7 +155,10 @@ async def stream_graph(request: InvokeRequest):
     try:
         logger.info(f"Received request to stream graph with prompt: '{request.input_prompt}'")
         raw_stream = workflow_runner.run_streaming(
-            goal=request.input_prompt, text_to_process=request.text_to_process, image_to_process=request.image_to_process
+            goal=request.input_prompt,
+            text_to_process=request.text_to_process,
+            image_to_process=request.image_to_process,
+            use_simple_chat=request.use_simple_chat
         )
         return StreamingResponse(
             _stream_formatter(raw_stream),
@@ -166,7 +173,10 @@ def invoke_graph(request: InvokeRequest):
     try:
         logger.info(f"Received sync request to invoke graph with prompt: '{request.input_prompt}'")
         final_state = workflow_runner.run(
-            goal=request.input_prompt, text_to_process=request.text_to_process, image_to_process=request.image_to_process
+            goal=request.input_prompt,
+            text_to_process=request.text_to_process,
+            image_to_process=request.image_to_process,
+            use_simple_chat=request.use_simple_chat
         )
     
         if error_report := final_state.get("error_report"):

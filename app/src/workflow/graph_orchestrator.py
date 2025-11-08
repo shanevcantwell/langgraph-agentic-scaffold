@@ -108,13 +108,20 @@ class GraphOrchestrator:
             logger.error(error_msg)
             raise WorkflowError(error_msg)
 
-        # CORE-CHAT-002: Intercept chat_specialist routing and fan out to progenitors
+        # CORE-CHAT-002: Intercept chat_specialist routing and decide between simple/tiered modes
         if next_specialist == "chat_specialist":
-            # Check if tiered chat subgraph components are available
+            # Check user preference for simple vs tiered chat mode
+            use_simple_chat = state.get("scratchpad", {}).get("use_simple_chat", False)
+
+            if use_simple_chat:
+                logger.info("Simple chat mode requested - routing to single chat_specialist")
+                return "chat_specialist"
+
+            # Default: Use tiered chat if components are available
             if ("progenitor_alpha_specialist" in self.specialists and
                 "progenitor_bravo_specialist" in self.specialists and
                 "tiered_synthesizer_specialist" in self.specialists):
-                logger.info("Chat routing detected - fanning out to parallel progenitors (CORE-CHAT-002)")
+                logger.info("Tiered chat mode (default) - fanning out to parallel progenitors (CORE-CHAT-002)")
                 fanout_destinations = ["progenitor_alpha_specialist", "progenitor_bravo_specialist"]
 
                 # TASK 1.2: Validate fanout destinations
@@ -131,7 +138,7 @@ class GraphOrchestrator:
                 return fanout_destinations
             else:
                 logger.warning("Tiered chat subgraph incomplete - falling back to single chat_specialist")
-                # Fall through to return chat_specialist as-is
+                return "chat_specialist"
 
         return next_specialist
 

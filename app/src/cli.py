@@ -15,7 +15,7 @@ app = typer.Typer(
     invoke_without_command=True,
 )
 
-def _run_invoke(prompt: Optional[str], json_only: bool):
+def _run_invoke(prompt: Optional[str], json_only: bool, simple_chat: bool):
     """Shared logic for the invoke command."""
     if prompt is None:
         if not json_only and sys.stdin.isatty():
@@ -31,9 +31,10 @@ def _run_invoke(prompt: Optional[str], json_only: bool):
     invoke_url = f"{API_BASE_URL}/v1/graph/invoke"
     if not json_only:
         display_prompt = (prompt[:150] + '...') if len(prompt) > 150 else prompt
-        print(f"▶️  Invoking agent via {invoke_url} with prompt: '{display_prompt}'")
+        mode_str = "simple chat" if simple_chat else "tiered chat"
+        print(f"▶️  Invoking agent via {invoke_url} with prompt: '{display_prompt}' ({mode_str} mode)")
 
-    payload = {"input_prompt": prompt}
+    payload = {"input_prompt": prompt, "use_simple_chat": simple_chat}
 
     try:
         response = requests.post(invoke_url, json=payload, timeout=300)
@@ -91,13 +92,18 @@ def invoke(
         "--json-only",
         "-j",
         help="Output only the JSON response, suppressing other messages."
+    )] = False,
+    simple_chat: Annotated[bool, typer.Option(
+        "--simple-chat",
+        "-s",
+        help="Use simple chat mode (single ChatSpecialist). Default is tiered chat mode (parallel progenitors)."
     )] = False
 ):
     """
     Sends a prompt to the agent's /v1/graph/invoke endpoint and prints the final response.
     If no prompt is provided as an argument, it reads multi-line input from stdin until EOF (Ctrl+D).
     """
-    _run_invoke(prompt, json_only)
+    _run_invoke(prompt, json_only, simple_chat)
 
 
 @app.command()
@@ -111,6 +117,11 @@ def stream(
     json_only: Annotated[bool, typer.Option(
         "--json-only", "-j", help="Output only the final JSON state."
     )] = False,
+    simple_chat: Annotated[bool, typer.Option(
+        "--simple-chat",
+        "-s",
+        help="Use simple chat mode (single ChatSpecialist). Default is tiered chat mode (parallel progenitors)."
+    )] = False
 ):
     """
     Connects to the streaming endpoint (/v1/graph/stream) to get real-time logs from the agent.
@@ -131,10 +142,11 @@ def stream(
     stream_url = f"{API_BASE_URL}/v1/graph/stream"
     if not json_only:
         display_prompt = (prompt[:150] + '...') if len(prompt) > 150 else prompt
-        print(f"▶️  Streaming agent via {stream_url} with prompt: '{display_prompt}'")
+        mode_str = "simple chat" if simple_chat else "tiered chat"
+        print(f"▶️  Streaming agent via {stream_url} with prompt: '{display_prompt}' ({mode_str} mode)")
         print("--- Agent Log Stream ---")
 
-    payload = {"input_prompt": prompt}
+    payload = {"input_prompt": prompt, "use_simple_chat": simple_chat}
 
     try: # The payload now includes optional null values.
         with requests.post(stream_url, json=payload, stream=True, timeout=300) as response: # The payload now includes optional null values.

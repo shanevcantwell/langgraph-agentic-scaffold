@@ -106,7 +106,7 @@ class WorkflowRunner:
 
         logger.info("All pre-flight checks passed successfully.")
 
-    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None) -> Dict[str, Any]:
+    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False) -> Dict[str, Any]:
         """
         Executes the workflow with a given goal.
         """
@@ -115,7 +115,7 @@ class WorkflowRunner:
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
             "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
-            "artifacts": {}, "scratchpad": {}, "recommended_specialists": None, "error_report": None
+            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}, "recommended_specialists": None, "error_report": None
         }
         if image_to_process:
             initial_state["artifacts"]["uploaded_image.png"] = image_to_process
@@ -137,7 +137,7 @@ class WorkflowRunner:
                 "messages": [HumanMessage(content=goal)], "turn_count": 0,
             }
 
-    async def run_streaming(self, goal: str, text_to_process: str = None, image_to_process: str = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run_streaming(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Executes the workflow with a given goal and streams back the raw
         LangGraph events. The API layer is responsible for formatting these
@@ -148,7 +148,7 @@ class WorkflowRunner:
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
             "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
-            "artifacts": {}, "scratchpad": {}, "recommended_specialists": None, "error_report": None
+            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}, "recommended_specialists": None, "error_report": None
         }
         if image_to_process:
              initial_state["artifacts"]["uploaded_image.png"] = image_to_process

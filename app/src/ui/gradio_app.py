@@ -12,7 +12,7 @@ def handle_submit(api_client: ApiClient, status_output, json_output, html_output
     Returns a closure for handling the Gradio submit event.
     This structure makes the core logic testable independently of the Gradio UI components.
     """
-    async def _handle_submit_closure(prompt: str, text_file: object, image_file: object):
+    async def _handle_submit_closure(prompt: str, text_file: object, image_file: object, use_simple_chat: bool):
         """Generator function to handle the streaming UI updates."""
         if not prompt.strip():
             yield {status_output: "Please enter a prompt."}
@@ -20,7 +20,7 @@ def handle_submit(api_client: ApiClient, status_output, json_output, html_output
 
         # In modern Gradio, we build the update dictionary dynamically.
         # We use `async for` because invoke_agent_streaming is an async generator.
-        async for update in api_client.invoke_agent_streaming(prompt, text_file, image_file): # text_file and image_file are Gradio file objects
+        async for update in api_client.invoke_agent_streaming(prompt, text_file, image_file, use_simple_chat): # text_file and image_file are Gradio file objects
             ui_update = {}
             if "status" in update:
                 ui_update[status_output] = update["status"]
@@ -63,6 +63,11 @@ def create_ui(api_client: ApiClient):
                 with gr.Row():
                     file_input = gr.File(label="Upload Text File")
                     image_input = gr.Image(type="pil", label="Upload Image")
+                simple_chat_checkbox = gr.Checkbox(
+                    label="Simple Chat Mode",
+                    value=False,
+                    info="Enable for faster, single-perspective responses. Disable (default) for parallel progenitor analysis."
+                )
                 submit_button = gr.Button("▶️ Invoke Agent", variant="primary")
     
             with gr.Column(scale=3):
@@ -84,7 +89,7 @@ def create_ui(api_client: ApiClient):
         )
 
         # Wire up both button click and Enter key submission
-        submit_inputs = [prompt_input, file_input, image_input]
+        submit_inputs = [prompt_input, file_input, image_input, simple_chat_checkbox]
         submit_outputs = [status_output, json_output, html_output, image_output, log_output, archive_output]
 
         submit_button.click(fn=submit_handler, inputs=submit_inputs, outputs=submit_outputs)
