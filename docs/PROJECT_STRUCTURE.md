@@ -75,6 +75,11 @@ This is the main Python package for the application.
     -   `app/src/graph/`: Defines the shared state of the LangGraph.
         -   `app/src/graph/state.py`: Defines the `GraphState` `TypedDict`, which is the central data structure passed between all nodes in the graph. It uses `typing.Annotated` to define how state fields are merged (e.g., append to lists, update dictionaries).
         -   `app/src/graph/nodes.py`: Reserved for graph node definitions.
+    -   `app/src/mcp/`: MCP (Message-Centric Protocol) for synchronous service invocation between specialists.
+        -   `app/src/mcp/schemas.py`: Defines `McpRequest` and `McpResponse` Pydantic models for request/response contracts with auto-generated UUIDs for distributed tracing.
+        -   `app/src/mcp/registry.py`: `McpRegistry` - per-graph-instance service registry with timeout protection and optional LangSmith tracing.
+        -   `app/src/mcp/client.py`: `McpClient` - convenience wrapper providing `call()` (exception-based) and `call_safe()` (tuple-based) invocation patterns.
+        -   `app/src/mcp/__init__.py`: Exports public MCP API (McpRegistry, McpClient, McpRequest, McpResponse).
     -   `app/src/utils/`: Contains shared utilities.
         -   `app/src/utils/config_loader.py`: The `ConfigLoader` class, responsible for loading, validating, and merging `config.yaml` and `user_settings.yaml`.
         -   `app/src/utils/config_schema.py`: The Pydantic models that define the schema for the configuration files, providing a single source of truth for validation.
@@ -104,6 +109,9 @@ This is the main Python package for the application.
         -   `test_imports.py`
         -   `test_llm_factory.py`
         -   `test_lmstudio_adapter.py`
+        -   `test_mcp_client.py`
+        -   `test_mcp_registry.py`
+        -   `test_mcp_schemas.py`
         -   `test_prompt_specialist.py`
         -   `test_response_synthesizer_specialist.py`
         -   `test_router_specialist.py`

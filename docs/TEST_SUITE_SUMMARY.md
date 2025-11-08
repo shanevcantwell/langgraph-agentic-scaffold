@@ -316,6 +316,89 @@
 - **`test_invoke_raises_proxy_error_on_connection_issues`**
   - *Tests that the LMStudio adapter correctly catches various connection-related*
 
+## `app/tests/unit/test_mcp_client.py`
+
+**Total Tests: 24**
+
+- **`test_mcp_client_call_success`**
+  - *Tests successful MCP call with automatic serialization/deserialization.*
+- **`test_mcp_client_call_raises_on_error_status`**
+  - *Tests that call() raises ValueError when response status is "error".*
+- **`test_mcp_client_call_safe_returns_tuple_on_success`**
+  - *Tests call_safe() returns (True, result) on successful call.*
+- **`test_mcp_client_call_safe_returns_tuple_on_error`**
+  - *Tests call_safe() returns (False, error_message) when MCP call fails.*
+- **`test_mcp_client_call_safe_handles_unexpected_exceptions`**
+  - *Tests call_safe() catches and returns (False, error) for unexpected exceptions.*
+- **`test_mcp_client_list_services`**
+  - *Tests list_services() returns service directory from registry.*
+- **`test_mcp_client_call_logs_request_id`**
+  - *Tests that MCP calls log request_id for distributed tracing.*
+- **`test_mcp_client_passes_parameters_correctly`**
+  - *Tests that keyword arguments are correctly serialized into McpRequest.parameters.*
+- **`test_mcp_client_initialization_creates_registry_reference`**
+  - *Tests that McpClient stores reference to McpRegistry.*
+- **Additional tests cover:** Error propagation, parameter validation, response deserialization (15 more tests)
+
+## `app/tests/unit/test_mcp_registry.py`
+
+**Total Tests: 27**
+
+- **`test_mcp_registry_register_service`**
+  - *Tests service registration in McpRegistry.*
+- **`test_mcp_registry_dispatch_success`**
+  - *Tests successful dispatch of McpRequest to registered service function.*
+- **`test_mcp_registry_dispatch_service_not_found`**
+  - *Tests dispatch raises McpServiceNotFoundError for unregistered service.*
+- **`test_mcp_registry_dispatch_function_not_found`**
+  - *Tests dispatch raises McpFunctionNotFoundError for unregistered function.*
+- **`test_mcp_registry_dispatch_timeout_protection`**
+  - *Tests timeout mechanism prevents hanging on long-running MCP calls.*
+- **`test_mcp_registry_dispatch_with_langsmith_tracing`**
+  - *Tests LangSmith trace span creation when tracing_enabled=true.*
+- **`test_mcp_registry_dispatch_without_langsmith_tracing`**
+  - *Tests graceful degradation when tracing_enabled=false.*
+- **`test_mcp_registry_handles_function_exceptions`**
+  - *Tests that exceptions in service functions are caught and returned as error responses.*
+- **`test_mcp_registry_list_services`**
+  - *Tests list_services() returns dictionary of service_name -> function_list.*
+- **`test_mcp_registry_per_graph_instance_isolation`**
+  - *Tests that separate McpRegistry instances don't share service registrations.*
+- **Additional tests cover:** Parameter passing, response construction, error handling (17 more tests)
+
+## `app/tests/unit/test_mcp_schemas.py`
+
+**Total Tests: 18**
+
+- **`test_mcp_request_creation`**
+  - *Tests successful creation of McpRequest with all required fields.*
+- **`test_mcp_request_auto_generates_uuid`**
+  - *Tests that request_id is automatically generated if not provided.*
+- **`test_mcp_request_validation_requires_service_name`**
+  - *Tests Pydantic validation enforces required service_name field.*
+- **`test_mcp_request_validation_requires_function_name`**
+  - *Tests Pydantic validation enforces required function_name field.*
+- **`test_mcp_request_parameters_default_to_empty_dict`**
+  - *Tests that parameters field defaults to empty dictionary.*
+- **`test_mcp_response_creation_success`**
+  - *Tests successful creation of McpResponse with status="success".*
+- **`test_mcp_response_creation_error`**
+  - *Tests creation of McpResponse with status="error" and error_message.*
+- **`test_mcp_response_raise_for_error_raises_on_error_status`**
+  - *Tests raise_for_error() raises ValueError when status="error".*
+- **`test_mcp_response_raise_for_error_noop_on_success`**
+  - *Tests raise_for_error() does nothing when status="success".*
+- **`test_mcp_response_data_can_be_any_type`**
+  - *Tests that data field accepts Any type (dict, list, str, bool, None, etc).*
+- **Additional tests cover:** UUID format validation, error message content, schema evolution (8 more tests)
+
+**MCP Test Coverage Summary:**
+- **Total MCP Tests:** 69 (all passing)
+- **Schema Tests:** 18 tests validating request/response contracts
+- **Registry Tests:** 27 tests covering service registration, dispatch, timeout, tracing
+- **Client Tests:** 24 tests covering call patterns, error handling, service discovery
+- **FileSpecialist Integration:** 39 tests in test_file_specialist.py validate MCP-only pattern
+
 ## `app/tests/unit/test_open_interpreter_specialist.py`
 
 - **`test_open_interpreter_specialist_executes_code_successfully`**
