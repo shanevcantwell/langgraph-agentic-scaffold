@@ -133,11 +133,28 @@ async def _stream_formatter(generator):
         html_content = artifacts.get("html_document.html", "")
 
         # Build a JSON-safe summary of the final state (not the full state with complex objects)
+        scratchpad = accumulated_state.get("scratchpad", {})
+        messages = accumulated_state.get("messages", [])
+
+        # Convert messages to JSON-safe format (just content and role)
+        messages_summary = []
+        for msg in messages:
+            if hasattr(msg, 'content') and hasattr(msg, 'type'):
+                messages_summary.append({
+                    "type": msg.type,
+                    "content": msg.content[:200] + "..." if len(str(msg.content)) > 200 else msg.content
+                })
+
         final_state_summary = {
             "routing_history": accumulated_state.get("routing_history", []),
             "turn_count": accumulated_state.get("turn_count", 0),
             "task_is_complete": accumulated_state.get("task_is_complete", False),
-            "artifacts": list(artifacts.keys()) if artifacts else []
+            "next_specialist": accumulated_state.get("next_specialist"),
+            "recommended_specialists": accumulated_state.get("recommended_specialists"),
+            "error_report": accumulated_state.get("error_report"),
+            "artifacts": list(artifacts.keys()) if artifacts else [],
+            "scratchpad": {k: (v if not isinstance(v, (dict, list)) or len(str(v)) < 500 else f"<{type(v).__name__} with {len(v)} items>") for k, v in scratchpad.items()},
+            "messages_summary": messages_summary
         }
 
         yield f"data: {json.dumps({

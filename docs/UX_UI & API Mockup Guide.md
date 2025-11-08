@@ -1,6 +1,6 @@
 # **UX/UI & API Integration Guide**
 
-# **Version: 2.0**
+# **Version: 3.0**
 
 # **Status: ACTIVE**
 
@@ -8,132 +8,331 @@ This document defines the API contracts and data structures required to build a 
 
 ## **1.0 Core Philosophy: Skinning & Theming**
 
-The backend is headless and exposes a consistent data flow. The front-end's primary role is to provide a "skin" for this flow. This guide enables the creation of diverse themes (e.g., "1970s retro," "cyberpunk terminal," "minimalist clinical," "ADHD-friendly focus mode") by defining the key information that any UI must present to the user.
+The backend is headless and exposes a consistent data flow via Server-Sent Events (SSE). The front-end's primary role is to provide a "skin" for this flow. This guide enables the creation of diverse themes (e.g., "1970s retro," "cyberpunk terminal," "minimalist clinical," "ADHD-friendly focus mode") by defining the key information that any UI must present to the user.
 
 ## **2.0 Conceptual UI Components**
 
-Any user interface for this system is composed of four primary conceptual components that are powered by the backend API.
+Any user interface for this system is composed of three primary conceptual components that are powered by the backend API.
 
 ### **2.1 The Command Bar (User Input)**
 
 The user's entry point for interacting with the agent.
 
-*   **Description:** A simple text input area where the user types their prompt or command.
-*   **API Interaction:** Submitting a prompt triggers a `POST` request to the `/v1/invoke` endpoint.
-*   **API Interaction:** Submitting a prompt triggers a `POST` request to the `/v1/graph/stream` endpoint.
+*   **Description:** A text input area where the user types their prompt, with optional file/image upload capabilities and a simple chat mode toggle.
+*   **API Interaction:** Submitting a prompt triggers a `POST` request to `/v1/graph/stream` (streaming) or `/v1/graph/invoke` (synchronous).
+
 ### **2.2 The Agent Log (Real-time Feedback)**
 
 Provides a live, streaming view of the agent's internal state and actions. This is crucial for user trust and transparency.
 
-*   **Description:** A scrolling log that displays messages from the various specialists as they work. It should feel like watching a team of experts collaborate in a chat room.
-*   **API Interaction:** The UI consumes the `StreamingResponse` from the `/v1/graph/stream` endpoint.
+*   **Description:** A scrolling log that displays status messages as specialists execute (e.g., "Executing specialist: chat_specialist...").
+*   **API Interaction:** The UI consumes the `StreamingResponse` from `/v1/graph/stream` endpoint and displays `status` fields from SSE events.
 
 ### **2.3 The Artifact Display (The Result)**
 
 The area where the final output of the agent's work is presented.
 
-*   **Description:** A flexible component that can render different types of final products. The UI should be able to handle various artifact types gracefully.
-*   **API Interaction:** The final `Artifact` object is delivered as part of the JSON response from the `POST /v1/invoke` endpoint once the entire workflow is complete.
-*   **API Interaction:** The final artifacts are delivered as part of the `FINAL_STATE` message in the stream from `/v1/graph/stream`.
-
-### **2.4 The Settings Panel (User Configuration)**
-
-Allows the user to make choices from a pre-approved list of options, as defined in user\_settings.yaml.
-
-*   **Description:** A panel (modal, sidebar, etc.) where users can customize the agent's behavior for their session.
-*   **API Interaction:** The UI should populate this panel by making a `GET` request to the `/v1/settings` endpoint, which returns a `SettingsConfiguration` object.
+*   **Description:** A flexible component that can render different types of final products (HTML, Markdown, images, archive reports).
+*   **API Interaction:** Final artifacts are delivered in the last SSE event from `/v1/graph/stream` with keys: `final_state`, `archive`, `html`, `image`.
 
 ## **3.0 API Endpoints**
 
 ### **3.1 `POST /v1/graph/invoke`**
 
-*   **Description:** A synchronous, non-streaming endpoint to initiate an agentic workflow. This is primarily for automated testing or simple use cases where a final result is expected without real-time updates.
+*   **Description:** Synchronous, non-streaming endpoint for automated testing or simple use cases where only the final result is needed.
 *   **Request Body:**
     ```json
     {
       "input_prompt": "Your detailed request for the agent goes here.",
       "text_to_process": "(Optional) The content of an uploaded text file.",
-      "image_to_process": "(Optional) A base64-encoded string of an uploaded image."
+      "image_to_process": "(Optional) A base64-encoded string of an uploaded image.",
+      "use_simple_chat": false
     }
     ```
-*   **Success Response (200 OK):** A JSON object containing the final state of the graph.
+*   **Success Response (200 OK):**
+    ```json
+    {
+      "final_output": {
+        "messages": [...],
+        "artifacts": {...},
+        "routing_history": [...],
+        "turn_count": 1,
+        "task_is_complete": true
+      }
+    }
+    ```
 
-### **3.1 `POST /v1/graph/stream`**
+### **3.2 `POST /v1/graph/stream`**
 
-*   **Description:** The primary endpoint for UI interaction. It initiates an agentic workflow and returns a real-time stream of server-sent events (SSE).
+*   **Description:** Primary endpoint for UI interaction. Initiates an agentic workflow and returns real-time Server-Sent Events (SSE).
 *   **Request Body:**
     ```json
     {
       "input_prompt": "Your detailed request for the agent goes here.",
       "text_to_process": "(Optional) The content of an uploaded text file.",
-      "image_to_process": "(Optional) A base64-encoded string of an uploaded image."
+      "image_to_process": "(Optional) A base64-encoded string of an uploaded image.",
+      "use_simple_chat": false
     }
     ```
+*   **Request Fields:**
+    - `input_prompt` (required): User's request to the agent
+    - `text_to_process` (optional): Content from uploaded text file
+    - `image_to_process` (optional): Base64-encoded image string
+    - `use_simple_chat` (optional, default: `false`):
+      - `false`: Tiered chat mode with parallel progenitors (higher quality, slower)
+      - `true`: Simple chat mode with single specialist (faster, single perspective)
 *   **Success Response (200 OK):** A `StreamingResponse` with `media_type="text/event-stream"`.
-    *   The stream consists of newline-delimited strings.
-    *   The final message is a JSON string of the complete `GraphState`, prefixed with `FINAL_STATE::`.
-
-### **3.2 `GET /v1/settings`**
-
-*   **Description:** Retrieves the user-configurable settings as defined by the system's configuration files.
-*   **Request Body:** None.
-*   **Success Response (200 OK):** Returns a `SettingsConfiguration` object.
+*   **Stream Format:** SSE events with format `data: {JSON}\n\n`
 
 ## **4.0 Data Contracts**
 
-### **4.1 `Stream Event` (for `/v1/graph/stream`)**
+### **4.1 Server-Sent Events (SSE) from `/v1/graph/stream`**
 
-The stream is composed of simple, newline-delimited text lines, making it easy to consume. The `ApiClient` in the UI is responsible for parsing these lines and converting them into structured updates for the Gradio components.
+The stream sends JSON objects prefixed with `data: `. Each event can contain any combination of these fields:
 
-```json
-Entering node: router_specialist
-Routing to specialist: file_specialist...
-Finished node: router_specialist
-Entering node: file_specialist
-FileSpecialist action 'ReadFileParams' completed. Status: Successfully read file 'README.md'.
-FINAL_STATE::{"messages": [...], "artifacts": {...}}
+**Status Update Events (during execution):**
 ```
-*   `event_type` (enum): The type of event that occurred.
-*   `specialist_name` (string): The name of the specialist that is currently active.
-*   `status_message` (string): A human-readable message about the current action.
-*   `state_delta` (object): A dictionary containing only the *new keys* that were added or changed in the `GraphState` during this turn. This allows the UI to incrementally build its own view of the state.
+data: {"status": "Executing specialist: router_specialist..."}
+data: {"status": "Executing specialist: chat_specialist..."}
+data: {"status": "Executing specialist: end_specialist..."}
+```
 
-### **4.2 `Artifact` (in final response)**
+These events are sent in real-time as each specialist begins execution. The specialist name follows the pattern `"Executing specialist: <specialist_name>..."`.
 
-The final, user-facing result of the agent's work.
-
-```json
-{
-  "artifact_id": "uuid-5678-efgh",
-  "type": "html" | "json" | "text" | "markdown" | "file_list",
-  "content": "The raw content of the artifact, e.g., an HTML string or a JSON object.",
-  "source_specialist": "web_builder",
-  "metadata": {
-    "title": "1970s Installation Guide",
-    "character_count": 4502
-  }
+**Final Event (workflow complete):**
+```
+data: {
+  "status": "Workflow complete.",
+  "final_state": { ... },
+  "archive": "# Archive Report\n...",
+  "html": "<html>...</html>"
 }
 ```
 
-### **4.3 `SettingsConfiguration` (from `GET /settings`)**
+### **4.1.1 Tracking Active Specialist**
 
-Defines the structure for populating a settings panel in the UI.
+To display the currently-executing specialist in your UI:
+
+```python
+import re
+
+async for update in api_client.invoke_agent_streaming(...):
+    if "status" in update:
+        status_msg = update["status"]
+
+        # Extract specialist name from status message
+        match = re.match(r"Executing specialist: (\w+)\.\.\.", status_msg)
+        if match:
+            current_specialist = match.group(1)
+            # Update UI with current specialist name
+            display_active_specialist(current_specialist)
+
+        # Check for completion
+        if status_msg == "Workflow complete.":
+            clear_active_specialist()
+```
+
+**Example Stream Sequence (Tiered Chat):**
+```
+data: {"status": "Executing specialist: router_specialist..."}
+data: {"status": "Executing specialist: progenitor_alpha_specialist..."}
+data: {"status": "Executing specialist: progenitor_bravo_specialist..."}
+data: {"status": "Executing specialist: tiered_synthesizer_specialist..."}
+data: {"status": "Executing specialist: end_specialist..."}
+data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "html": "..."}
+```
+
+Note: Parallel specialists (progenitor_alpha/bravo) may appear in either order depending on which completes first.
+
+### **4.2 Final State Object**
+
+The `final_state` object in the final SSE event contains:
 
 ```json
 {
-  "schema_version": "1.0",
-  "settings": [
-    {
-      "id": "router_specialist_llm_binding",
-      "label": "Primary Reasoning Model",
-      "description": "Choose the main LLM for routing and complex tasks.",
-      "type": "dropdown",
-      "options": [
-        { "value": "gemini_pro", "label": "Gemini 1.5 Pro (Balanced)" },
-        { "value": "gemini_flash", "label": "Gemini 1.5 Flash (Fast)" }
-      ],
-      "current_value": "gemini_pro"
-    }
+  "routing_history": ["chat_specialist"],
+  "turn_count": 1,
+  "task_is_complete": true,
+  "next_specialist": null,
+  "recommended_specialists": null,
+  "error_report": null,
+  "artifacts": ["response_mode", "final_user_response.md", "archive_report.md"],
+  "scratchpad": {"key": "value"},
+  "messages_summary": [
+    {"type": "human", "content": "User prompt..."},
+    {"type": "ai", "content": "Agent response..."}
   ]
 }
 ```
+
+**Field Descriptions:**
+- `routing_history`: List of specialists executed in order
+- `turn_count`: Number of conversation turns
+- `task_is_complete`: Boolean indicating workflow completion
+- `next_specialist`: Name of next specialist to execute (null if complete)
+- `recommended_specialists`: Router's recommendations (null if not applicable)
+- `error_report`: Error message (null if no errors)
+- `artifacts`: List of artifact keys available (actual artifact content stored separately)
+- `scratchpad`: Transient state data (large items truncated)
+- `messages_summary`: Conversation history with message types and content (truncated to 200 chars)
+
+### **4.3 Artifacts Dictionary**
+
+Artifacts are stored as a dictionary with string keys. Common artifact keys:
+- `archive_report.md`: Markdown report of workflow completion
+- `html_document.html`: Generated HTML content
+- `final_user_response.md`: The main response to the user
+- `response_mode`: Mode used for response generation (e.g., "tiered_full")
+- `alpha_response`, `bravo_response`: Individual progenitor responses (tiered mode)
+
+## **5.0 Using the ApiClient**
+
+The `ApiClient` class (`app/src/ui/api_client.py`) handles all communication with the backend API. It provides a clean async generator interface for consuming SSE streams.
+
+### **5.1 Basic Usage**
+
+```python
+from ui.api_client import ApiClient
+
+# Instantiate the client (connects to localhost:8000 by default)
+api_client = ApiClient()
+
+# Call the streaming API
+async for update in api_client.invoke_agent_streaming(
+    prompt="What is the capital of France?",
+    text_file_path=None,
+    image_path=None,
+    use_simple_chat=False
+):
+    # Handle different update types
+    if "status" in update:
+        print(f"Status: {update['status']}")
+    if "final_state" in update:
+        print(f"Final state: {update['final_state']}")
+    if "archive" in update:
+        print(f"Archive report: {update['archive']}")
+    if "html" in update:
+        print(f"HTML content: {update['html']}")
+```
+
+### **5.2 ApiClient Methods**
+
+**`invoke_agent_streaming(prompt, text_file_path, image_path, use_simple_chat)`**
+- **Returns:** Async generator yielding dictionaries with keys: `status`, `logs`, `final_state`, `html`, `image`, `archive`
+- **Parameters:**
+  - `prompt` (str): User's request
+  - `text_file_path` (str|None): Path to text file or Gradio File object
+  - `image_path` (str|None): Path to image file or Gradio Image object
+  - `use_simple_chat` (bool): Toggle between tiered and simple chat modes
+- **Timeout:** 300 seconds (5 minutes)
+
+**`_encode_image_to_base64(image_path)`**
+- Internal helper method for encoding images
+- Automatically called by `invoke_agent_streaming`
+
+### **5.3 Error Handling**
+
+The ApiClient handles errors gracefully and yields them as update dictionaries:
+
+```python
+async for update in api_client.invoke_agent_streaming(...):
+    if "status" in update and "Error" in update["status"]:
+        # Handle error (file read error, API error, etc.)
+        print(f"Error occurred: {update['status']}")
+        if "logs" in update:
+            print(f"Error logs: {update['logs']}")
+```
+
+### **5.4 Integration with Gradio**
+
+Example handler function for Gradio components:
+
+```python
+import re
+
+async def handle_submit(prompt: str, text_file, image_file, use_simple_chat: bool):
+    """Generator function to handle streaming UI updates."""
+    async for update in api_client.invoke_agent_streaming(
+        prompt, text_file, image_file, use_simple_chat
+    ):
+        ui_update = {}
+
+        if "status" in update:
+            status_msg = update["status"]
+            ui_update[status_output] = status_msg
+
+            # Extract and highlight currently-executing specialist
+            match = re.match(r"Executing specialist: (\w+)\.\.\.", status_msg)
+            if match:
+                specialist_name = match.group(1)
+                ui_update[active_specialist_output] = f"⚙️ {specialist_name}"
+
+            # Clear specialist indicator on completion
+            if status_msg == "Workflow complete.":
+                ui_update[active_specialist_output] = "✅ Complete"
+
+        if "logs" in update:
+            ui_update[log_output] = update["logs"]
+        if "final_state" in update:
+            ui_update[json_output] = update["final_state"]
+        if "html" in update:
+            ui_update[html_output] = update["html"]
+        if "archive" in update:
+            ui_update[archive_output] = update["archive"]
+
+        if ui_update:
+            yield ui_update
+```
+
+**Key Points:**
+- Status messages update in real-time as each specialist executes
+- Use regex to extract specialist name from status for visual indicators
+- Final event contains all artifacts and complete state
+- Gradio components update reactively as dictionary is yielded
+
+See `app/src/ui/gradio_app.py` for a complete working implementation.
+
+## **6.0 Quick Reference**
+
+### **Minimal UI Requirements**
+
+Any UI must handle these core data flows:
+
+1. **Input** → Send POST to `/v1/graph/stream` with `input_prompt` (required) and optional `text_to_process`, `image_to_process`, `use_simple_chat`
+2. **Streaming** → Parse SSE events (`data: {...}`) and extract `status`, `final_state`, `archive`, `html`, `image`
+3. **Real-time Tracking** → Parse status messages (`"Executing specialist: <name>..."`) to show active specialist
+4. **Display** → Show status updates during execution, final state/artifacts on completion
+
+### **Key Files**
+
+- **API Implementation:** `app/src/api.py` - FastAPI endpoints and SSE formatting
+- **API Client:** `app/src/ui/api_client.py` - Client wrapper for SSE consumption
+- **Reference UI:** `app/src/ui/gradio_app.py` - Complete working Gradio implementation
+- **State Schema:** `app/src/graph/state.py` - GraphState TypedDict definition
+
+### **Testing Endpoints**
+
+```bash
+# Test root endpoint
+curl http://localhost:8000/
+
+# Test synchronous invoke
+curl -X POST http://localhost:8000/v1/graph/invoke \
+  -H "Content-Type: application/json" \
+  -d '{"input_prompt": "Hello", "use_simple_chat": true}'
+
+# Test streaming (requires SSE client)
+curl -X POST http://localhost:8000/v1/graph/stream \
+  -H "Content-Type: application/json" \
+  -d '{"input_prompt": "Hello", "use_simple_chat": true}'
+```
+
+### **Common Gotchas**
+
+- **Async Required:** ApiClient uses `async for` - must be called from async context
+- **File Objects:** ApiClient accepts both file paths (str) and Gradio file objects with `.name` attribute
+- **Timeout:** Default 300s timeout may need adjustment for long-running workflows
+- **SSE Format:** Events are `data: {JSON}\n\n` - must strip `data: ` prefix before parsing
+- **Image Encoding:** Images must be base64-encoded strings, not raw bytes
+- **Status Pattern:** Specialist status follows exact format `"Executing specialist: <name>..."` - use regex `r"Executing specialist: (\w+)\.\.\."` to extract name
+- **Parallel Execution:** In tiered mode, progenitor specialists execute in parallel - status events may arrive in any order
