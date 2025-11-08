@@ -189,7 +189,8 @@ class GraphBuilder:
             CoreSpecialist.ROUTER.value,
             "progenitor_alpha_specialist",   # Internal to tiered chat subgraph
             "progenitor_bravo_specialist",   # Internal to tiered chat subgraph
-            "tiered_synthesizer_specialist"  # Internal to tiered chat subgraph
+            "tiered_synthesizer_specialist", # Internal to tiered chat subgraph
+            "file_specialist"                # MCP-only specialist (Task 2.6) - no graph routing
         ]
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded_from_router}
         router_instance.set_specialist_map(available_specialists)
@@ -235,18 +236,9 @@ class GraphBuilder:
             triage_instance.llm_adapter = None
 
     def _add_nodes_to_graph(self, workflow: StateGraph, streaming_callback: Callable[[str], None] = None):
-        # CORE-CHAT-002: Check if tiered chat subgraph is enabled
-        has_tiered_chat = ("progenitor_alpha_specialist" in self.specialists and
-                          "progenitor_bravo_specialist" in self.specialists and
-                          "tiered_synthesizer_specialist" in self.specialists)
-
+        # CORE-CHAT-002: Both simple and tiered chat patterns coexist in graph
+        # Runtime decision in GraphOrchestrator determines which path to use
         for name, instance in self.specialists.items():
-            # CORE-CHAT-002: Skip chat_specialist node if tiered chat is enabled
-            # The routing to "chat_specialist" will trigger fan-out instead
-            if has_tiered_chat and name == "chat_specialist":
-                logger.info(f"Skipping {name} node - tiered chat subgraph enabled (CORE-CHAT-002)")
-                continue
-
             if name == CoreSpecialist.ROUTER.value:
                 workflow.add_node(name, instance.execute)
             else:
@@ -259,18 +251,14 @@ class GraphBuilder:
         # Include all specialists except router itself
         destinations = {name: name for name in self.specialists if name != router_name}
 
-        # CORE-CHAT-002: When tiered chat is enabled, chat_specialist won't be a node
-        # But we need it in destinations so router can "route" to it (triggering fan-out)
-        # Remove it from destinations since it's not a node, but add the fanout targets
+        # CORE-CHAT-002: chat_specialist is now always a node (both patterns coexist)
+        # GraphOrchestrator will decide at runtime whether to use simple or tiered chat
         has_tiered_chat = ("progenitor_alpha_specialist" in self.specialists and
                           "progenitor_bravo_specialist" in self.specialists and
                           "tiered_synthesizer_specialist" in self.specialists)
 
-        if has_tiered_chat and "chat_specialist" in destinations:
-            # Remove chat_specialist from destinations (it's not a node)
-            del destinations["chat_specialist"]
-            # The fanout targets are already in destinations (they're loaded specialists)
-            logger.info("Configured router destinations for tiered chat subgraph (CORE-CHAT-002)")
+        if has_tiered_chat:
+            logger.info("Both simple and tiered chat patterns available - runtime decision in GraphOrchestrator")
 
         workflow.add_conditional_edges(router_name, self.orchestrator.route_to_next_specialist, destinations)
 
@@ -306,6 +294,7 @@ class GraphBuilder:
             ]
 
             # CORE-CHAT-002: Exclude tiered chat subgraph components from standard routing
+            # Note: chat_specialist is NOT excluded - it's a regular specialist that can be used standalone
             if has_tiered_chat:
                 excluded_specialists.extend([
                     "progenitor_alpha_specialist",
