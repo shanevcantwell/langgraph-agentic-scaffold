@@ -187,5 +187,107 @@ def stream(
         sys.exit(1)
 
 
+@app.command()
+def distill(
+    domains: Annotated[Optional[str], typer.Option(
+        "--domains",
+        "-d",
+        help="Comma-separated list of domains to process (default: all configured domains)"
+    )] = None,
+    json_only: Annotated[bool, typer.Option(
+        "--json-only",
+        "-j",
+        help="Output only the JSON response, suppressing other messages."
+    )] = False
+):
+    """
+    Runs the distillation workflow to generate training datasets across knowledge domains.
+
+    This command sends a special prompt to trigger the distillation coordinator specialist,
+    which will:
+    1. Load seed prompts for each domain
+    2. Generate variations of each seed prompt
+    3. Collect teacher model responses for all variations
+    4. Write results to hierarchical JSONL files in ./datasets/
+
+    Note: This is a long-running operation. Each domain may take hours depending on
+    rate limits and number of seeds configured.
+    """
+    # Construct prompt to trigger distillation
+    if domains:
+        prompt = f"Generate distillation training dataset for domains: {domains}"
+        if not json_only:
+            print(f"▶️  Running distillation workflow for domains: {domains}")
+    else:
+        prompt = "Generate distillation training dataset for all configured domains"
+        if not json_only:
+            print("▶️  Running distillation workflow for all configured domains")
+
+    if not json_only:
+        print("⚠️  This is a long-running operation. Progress will be shown below.")
+        print("    Datasets will be written to ./datasets/<domain>/ as they complete.")
+        print("    Press Ctrl+C to cancel (progress will be lost).\n")
+
+    # Use streaming endpoint for real-time progress
+    stream_url = f"{API_BASE_URL}/v1/graph/stream"
+    payload = {"input_prompt": prompt, "use_simple_chat": False}
+
+    try:
+        with requests.post(stream_url, json=payload, stream=True, timeout=86400) as response:  # 24h timeout
+            response.raise_for_status()
+            final_state_json = None
+
+            if not json_only:
+                print("--- Distillation Workflow Progress ---\n")
+
+            for line in response.iter_lines():
+                if line:
+                    decoded_line = line.decode('utf-8').strip()
+                    if decoded_line.startswith("FINAL_STATE::"):
+                        final_state_json = decoded_line.replace("FINAL_STATE::", "", 1)
+                        break
+                    else:
+                        if not json_only:
+                            print(decoded_line)
+
+            if not json_only:
+                print("\n--- Workflow Complete ---\n")
+
+            if final_state_json:
+                final_state = json.loads(final_state_json)
+
+                if json_only:
+                    print(json.dumps(final_state, indent=2))
+                else:
+                    # Extract distillation results
+                    dist_state = final_state.get("distillation_state", {})
+                    completed_paths = dist_state.get("completed_dataset_paths", [])
+                    total_responses = dist_state.get("total_responses_collected_global", 0)
+                    total_errors = dist_state.get("total_errors_global", 0)
+                    duration = dist_state.get("workflow_duration_seconds", 0)
+
+                    print("✅ Distillation workflow completed successfully!\n")
+                    print(f"   Duration: {duration // 3600}h {(duration % 3600) // 60}m")
+                    print(f"   Responses collected: {total_responses}")
+                    print(f"   Errors: {total_errors}")
+                    print(f"\n   Dataset files:")
+                    for path in completed_paths:
+                        print(f"      - {path}")
+            else:
+                if not json_only:
+                    print("❌ Workflow completed without final state", file=sys.stderr)
+                sys.exit(1)
+
+    except requests.exceptions.RequestException as e:
+        if not json_only:
+            print(f"\n❌ Error: Could not connect to the API server at {stream_url}.", file=sys.stderr)
+            print(f"Details: {e}", file=sys.stderr)
+        sys.exit(1)
+    except KeyboardInterrupt:
+        if not json_only:
+            print("\n\n⚠️  Workflow cancelled by user. Progress has been lost.", file=sys.stderr)
+        sys.exit(130)
+
+
 if __name__ == "__main__":
     app()
