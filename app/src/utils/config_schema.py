@@ -6,11 +6,13 @@ from typing import Dict, Literal, Union, Optional, Any
 class LLMProviderConfig(BaseModel):
     """Defines the configuration for a single LLM provider instance."""
 
-    type: Literal["gemini", "lmstudio", "ollama"] = Field( # The adapter type
+    model_config = ConfigDict(extra="allow")  # Allow provider-specific fields (e.g., session_cookies, rate_limit_delay)
+
+    type: Literal["gemini", "lmstudio", "ollama", "gemini_webui"] = Field( # The adapter type
         ..., description="The type of the LLM provider implementation to use."
     )
-    api_identifier: str = Field(
-        ..., description="The specific model identifier for the provider's API (e.g., 'gemini-1.5-pro' or 'local-model/nous-hermes-gguf')."
+    api_identifier: Optional[str] = Field(
+        None, description="The specific model identifier for the provider's API (e.g., 'gemini-1.5-pro' or 'local-model/nous-hermes-gguf'). Not required for all provider types."
     )
     parameters: Optional[Dict[str, Any]] = Field(
         default_factory=dict, description="A dictionary of parameters to pass to the model's API (e.g., max_tokens, temperature)."
