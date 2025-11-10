@@ -32,6 +32,7 @@ dependencies = [
     "gradio",
     "open-interpreter",
     "google-generativeai",
+    "playwright",
     "inflection",
     # Add pip-tools as a core dependency to break the bootstrap cycle
     "pip-tools",

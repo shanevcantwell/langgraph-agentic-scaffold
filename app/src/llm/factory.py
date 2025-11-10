@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Any
 from .adapter import BaseAdapter
 from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
+from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
 from ..specialists.open_interpreter_specialist import OpenInterpreterSpecialist
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 ADAPTER_REGISTRY = {
     "gemini": GeminiAdapter,
     "lmstudio": LMStudioAdapter,
+    "gemini_webui": GeminiWebUIAdapter,  # Web UI adapter for distillation (ADR-DISTILL-006)
     # "ollama": OllamaAdapter, # Example for future extension
 }
 
