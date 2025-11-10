@@ -140,7 +140,57 @@ class GraphOrchestrator:
                 logger.warning("Tiered chat subgraph incomplete - falling back to single chat_specialist")
                 return "chat_specialist"
 
+        # DISTILLATION SUBGRAPH: Virtual coordinator pattern
+        # Router selects "distillation_specialist" (virtual) → map to actual coordinator
+        if next_specialist == "distillation_specialist":
+            if "distillation_coordinator_specialist" in self.specialists:
+                logger.info("Virtual coordinator: routing 'distillation_specialist' → 'distillation_coordinator_specialist'")
+                return "distillation_coordinator_specialist"
+            else:
+                logger.error("Distillation subgraph incomplete - coordinator not found")
+                return CoreSpecialist.END.value
+
         return next_specialist
+
+    def should_continue_expanding(self, state: GraphState) -> str:
+        """
+        Edge function for distillation expansion loop.
+        Checks if more seeds need to be expanded.
+
+        Returns:
+            "distillation_prompt_expander_specialist" if more seeds to expand
+            "distillation_coordinator_specialist" if expansion complete
+        """
+        dist_state = state.get("distillation_state", {})
+        seed_prompts = dist_state.get("seed_prompts", [])
+        expansion_index = dist_state.get("expansion_index", 0)
+
+        if expansion_index < len(seed_prompts):
+            logger.info(f"Distillation: More seeds to expand ({expansion_index}/{len(seed_prompts)}) - continuing expansion")
+            return "distillation_prompt_expander_specialist"
+        else:
+            logger.info(f"Distillation: All seeds expanded ({expansion_index}/{len(seed_prompts)}) - returning to coordinator")
+            return "distillation_coordinator_specialist"
+
+    def should_continue_collecting(self, state: GraphState) -> str:
+        """
+        Edge function for distillation collection loop.
+        Checks if more prompts need teacher responses.
+
+        Returns:
+            "distillation_response_collector_specialist" if more prompts to collect
+            "distillation_coordinator_specialist" if collection complete
+        """
+        dist_state = state.get("distillation_state", {})
+        expanded_prompts = dist_state.get("expanded_prompts", [])
+        collection_index = dist_state.get("collection_index", 0)
+
+        if collection_index < len(expanded_prompts):
+            logger.info(f"Distillation: More prompts to collect ({collection_index}/{len(expanded_prompts)}) - continuing collection")
+            return "distillation_response_collector_specialist"
+        else:
+            logger.info(f"Distillation: All prompts collected ({collection_index}/{len(expanded_prompts)}) - returning to coordinator")
+            return "distillation_coordinator_specialist"
 
     def create_missing_artifact_response(
         self,

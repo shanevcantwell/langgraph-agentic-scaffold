@@ -190,6 +190,70 @@ specialists:
     #
     # To disable tiered chat: Comment out the three progenitor/synthesizer specialists above.
 
+  # ==============================================================================
+  # DISTILLATION SUBGRAPH - Model Distillation Dataset Generation
+  # ==============================================================================
+  # This implements a multi-phase workflow for generating training datasets
+  # by collecting teacher model responses across multiple knowledge domains.
+  #
+  # HOW IT WORKS:
+  # 1. Router selects 'distillation_specialist' (virtual coordinator)
+  # 2. Coordinator loads seeds, orchestrates phases (expansion → collection → persistence)
+  # 3. Expander generates prompt variations from seeds (LLM)
+  # 4. Aggregator deduplicates and promotes variations (procedural)
+  # 5. Collector calls teacher model with retry/rate limiting, writes JSONL (LLM)
+  # 6. Coordinator finalizes domain, moves to next or completes
+  #
+  # PHASES:
+  # - EXPANSION: Generate N variations per seed prompt
+  # - RESPONSE_COLLECTION: Collect teacher model responses with thinking blocks
+  # - PERSISTENCE: Finalize domain dataset files
+  #
+  # NOTE: Expander, Aggregator, and Collector are INTERNAL specialists
+  # (excluded from router's tool schema - not user-accessible)
+  # ==============================================================================
+
+  distillation_coordinator_specialist:
+    type: "procedural"
+    description: "Orchestrates multi-phase distillation workflow across knowledge domains. Virtual name: 'distillation_specialist' (router-accessible)."
+    domains:
+      - "agentic_architecture"
+      - "state_management"
+      - "llm_integration"
+      - "specialist_patterns"
+      - "error_handling"
+      - "testing_strategies"
+      - "communication_patterns"
+      - "observability_debugging"
+    seeds_per_domain: 10  # Start with 10 for smoke test, scale to 25 for production
+    variations_per_seed: 3  # 3 variations per seed (standard for diversity)
+    output_dir: "./datasets"  # Root directory for JSONL output files
+
+  distillation_prompt_expander_specialist:
+    type: "llm"
+    prompt_file: "distillation_expander_prompt.md"
+    description: "INTERNAL: Generates prompt variations from seeds. Not user-accessible (excluded from router)."
+    # NOTE: This specialist is part of the distillation subgraph and should NOT
+    # appear in the router's tool schema. It's invoked by the coordinator only.
+
+  distillation_prompt_aggregator_specialist:
+    type: "procedural"
+    description: "INTERNAL: Aggregates and deduplicates expanded prompts. Not user-accessible (excluded from router)."
+    # NOTE: This specialist is part of the distillation subgraph and should NOT
+    # appear in the router's tool schema. It's invoked by the coordinator only.
+
+  distillation_response_collector_specialist:
+    type: "llm"
+    prompt_file: "distillation_collector_prompt.md"
+    description: "INTERNAL: Collects teacher model responses with retry/rate limiting. Not user-accessible (excluded from router)."
+    inter_request_delay: 20.0  # Seconds between requests (20s base for web UI)
+    inter_request_jitter: 0.2  # Randomness ±20% (16-24s range)
+    retry_attempts: 3  # Max retry attempts per request
+    retry_timeout: 60.0  # Timeout per attempt (seconds)
+    error_tolerance: 0.1  # Max error rate (10%) before halting
+    # NOTE: This specialist is part of the distillation subgraph and should NOT
+    # appear in the router's tool schema. It's invoked by the coordinator only.
+
   # --- General & Fallback ---
   prompt_specialist:
     type: "llm"

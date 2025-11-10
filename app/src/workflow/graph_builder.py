@@ -190,7 +190,11 @@ class GraphBuilder:
             "progenitor_alpha_specialist",   # Internal to tiered chat subgraph
             "progenitor_bravo_specialist",   # Internal to tiered chat subgraph
             "tiered_synthesizer_specialist", # Internal to tiered chat subgraph
-            "file_specialist"                # MCP-only specialist (Task 2.6) - no graph routing
+            "file_specialist",               # MCP-only specialist (Task 2.6) - no graph routing
+            # DISTILLATION SUBGRAPH: Exclude internal specialists from router
+            "distillation_prompt_expander_specialist",   # Internal to distillation subgraph
+            "distillation_prompt_aggregator_specialist", # Internal to distillation subgraph
+            "distillation_response_collector_specialist" # Internal to distillation subgraph
         ]
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded_from_router}
         router_instance.set_specialist_map(available_specialists)
@@ -284,6 +288,44 @@ class GraphBuilder:
                 {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name}
             )
 
+        # DISTILLATION SUBGRAPH: Wire graph-driven iteration pattern
+        # If all components are present, wire the coordinator-driven workflow
+        has_distillation = ("distillation_coordinator_specialist" in self.specialists and
+                           "distillation_prompt_expander_specialist" in self.specialists and
+                           "distillation_prompt_aggregator_specialist" in self.specialists and
+                           "distillation_response_collector_specialist" in self.specialists)
+
+        if has_distillation:
+            # Expansion loop: expander → aggregator → coordinator (checks if more to expand)
+            workflow.add_edge("distillation_prompt_expander_specialist", "distillation_prompt_aggregator_specialist")
+            workflow.add_conditional_edges(
+                "distillation_prompt_aggregator_specialist",
+                self.orchestrator.should_continue_expanding,
+                {
+                    "distillation_prompt_expander_specialist": "distillation_prompt_expander_specialist",  # More seeds
+                    "distillation_coordinator_specialist": "distillation_coordinator_specialist"  # Done expanding
+                }
+            )
+
+            # Collection loop: collector → coordinator (checks if more to collect)
+            workflow.add_conditional_edges(
+                "distillation_response_collector_specialist",
+                self.orchestrator.should_continue_collecting,
+                {
+                    "distillation_response_collector_specialist": "distillation_response_collector_specialist",  # More prompts
+                    "distillation_coordinator_specialist": "distillation_coordinator_specialist"  # Done collecting
+                }
+            )
+
+            # Coordinator routes based on phase and completion status
+            workflow.add_conditional_edges(
+                "distillation_coordinator_specialist",
+                self.orchestrator.check_task_completion,
+                {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name}
+            )
+
+            logger.info("Graph Edge: Added distillation subgraph with graph-driven iteration")
+
         for name in self.specialists:
             # Exclude orchestration specialists and tiered chat subgraph components
             excluded_specialists = [
@@ -300,6 +342,16 @@ class GraphBuilder:
                     "progenitor_alpha_specialist",
                     "progenitor_bravo_specialist",
                     "tiered_synthesizer_specialist"
+                ])
+
+            # DISTILLATION SUBGRAPH: Exclude internal specialists from standard routing
+            # Note: coordinator IS excluded - it's accessed via virtual routing (distillation_specialist)
+            if has_distillation:
+                excluded_specialists.extend([
+                    "distillation_coordinator_specialist",
+                    "distillation_prompt_expander_specialist",
+                    "distillation_prompt_aggregator_specialist",
+                    "distillation_response_collector_specialist"
                 ])
 
             if name in excluded_specialists:
