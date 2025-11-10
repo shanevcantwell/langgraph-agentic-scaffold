@@ -126,9 +126,12 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
         # Load seed prompts for first domain
         seed_prompts = self._load_seeds(first_domain)
 
+        total_expected_responses = len(self.domains) * len(seed_prompts) * self.variations_per_seed
+
         logger.info(
             f"Loaded {len(seed_prompts)} seeds from domain '{first_domain}'. "
-            f"Starting EXPANSION phase."
+            f"Starting EXPANSION phase. "
+            f"Total expected responses across all domains: {total_expected_responses}"
         )
 
         # Initialize distillation_state
@@ -149,9 +152,21 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
                 "completed_dataset_paths": [],
                 "variations_per_seed": self.variations_per_seed,
                 "output_dir": self.output_dir,
+                "workflow_start_time": self.workflow_start_time,
+                "total_domains": len(self.domains),
+                "total_responses_collected_global": 0,  # Across all domains
+                "total_errors_global": 0,  # Across all domains
             },
             "scratchpad": {
-                "next_specialist": "distillation_prompt_expander_specialist"
+                "next_specialist": "distillation_prompt_expander_specialist",
+                "distillation_progress": {
+                    "phase": DistillationPhase.EXPANSION.value,
+                    "current_domain": first_domain,
+                    "domain_progress": f"1/{len(self.domains)}",
+                    "phase_progress": f"0/{len(seed_prompts)} seeds",
+                    "status_message": f"Starting expansion phase for domain '{first_domain}'",
+                    "elapsed_time_seconds": 0,
+                }
             }
         }
 
@@ -169,6 +184,10 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
 
         seed_prompts = dist_state.get("seed_prompts", [])
         expansion_index = dist_state.get("expansion_index", 0)
+        current_domain = dist_state.get("current_domain", "unknown")
+        domain_index = dist_state.get("domain_index", 0)
+        total_domains = dist_state.get("total_domains", len(self.domains))
+        expanded_prompts = dist_state.get("expanded_prompts", [])
 
         if expansion_index < len(seed_prompts):
             # More seeds to expand - route to expander
@@ -176,24 +195,49 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
                 f"EXPANSION phase: {expansion_index}/{len(seed_prompts)} seeds processed. "
                 f"Routing to expander."
             )
+
+            elapsed = time.time() - dist_state.get("workflow_start_time", time.time())
+
             return {
                 "scratchpad": {
-                    "next_specialist": "distillation_prompt_expander_specialist"
+                    "next_specialist": "distillation_prompt_expander_specialist",
+                    "distillation_progress": {
+                        "phase": DistillationPhase.EXPANSION.value,
+                        "current_domain": current_domain,
+                        "domain_progress": f"{domain_index + 1}/{total_domains}",
+                        "phase_progress": f"{expansion_index}/{len(seed_prompts)} seeds",
+                        "status_message": f"Expanding seed {expansion_index + 1}/{len(seed_prompts)} in domain '{current_domain}'",
+                        "elapsed_time_seconds": int(elapsed),
+                        "expanded_prompts_count": len(expanded_prompts),
+                    }
                 }
             }
         else:
             # All seeds expanded - transition to response collection
+            expanded_count = len(expanded_prompts)
             logger.info(
-                f"EXPANSION complete: {expansion_index} seeds expanded. "
+                f"EXPANSION complete: {expansion_index} seeds expanded into {expanded_count} prompts. "
                 f"Transitioning to RESPONSE_COLLECTION phase."
             )
+
+            elapsed = time.time() - dist_state.get("workflow_start_time", time.time())
+
             return {
                 "distillation_state": {
                     "current_phase": DistillationPhase.RESPONSE_COLLECTION.value,
                     "collection_index": 0,  # Reset for collection
                 },
                 "scratchpad": {
-                    "next_specialist": "distillation_response_collector_specialist"
+                    "next_specialist": "distillation_response_collector_specialist",
+                    "distillation_progress": {
+                        "phase": DistillationPhase.RESPONSE_COLLECTION.value,
+                        "current_domain": current_domain,
+                        "domain_progress": f"{domain_index + 1}/{total_domains}",
+                        "phase_progress": f"0/{expanded_count} responses",
+                        "status_message": f"Starting response collection for {expanded_count} prompts in domain '{current_domain}'",
+                        "elapsed_time_seconds": int(elapsed),
+                        "expanded_prompts_count": expanded_count,
+                    }
                 }
             }
 
@@ -211,30 +255,66 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
 
         expanded_prompts = dist_state.get("expanded_prompts", [])
         collection_index = dist_state.get("collection_index", 0)
+        responses_collected = dist_state.get("responses_collected", 0)
+        error_count = dist_state.get("error_count", 0)
+        current_domain = dist_state.get("current_domain", "unknown")
+        domain_index = dist_state.get("domain_index", 0)
+        total_domains = dist_state.get("total_domains", len(self.domains))
 
         if collection_index < len(expanded_prompts):
             # More prompts to collect - route to collector
+            success_rate = (responses_collected / collection_index * 100) if collection_index > 0 else 0
             logger.info(
                 f"RESPONSE_COLLECTION phase: {collection_index}/{len(expanded_prompts)} "
-                f"prompts processed. Routing to collector."
+                f"prompts processed ({responses_collected} successful, {error_count} errors, "
+                f"{success_rate:.1f}% success rate). Routing to collector."
             )
+
+            elapsed = time.time() - dist_state.get("workflow_start_time", time.time())
+
             return {
                 "scratchpad": {
-                    "next_specialist": "distillation_response_collector_specialist"
+                    "next_specialist": "distillation_response_collector_specialist",
+                    "distillation_progress": {
+                        "phase": DistillationPhase.RESPONSE_COLLECTION.value,
+                        "current_domain": current_domain,
+                        "domain_progress": f"{domain_index + 1}/{total_domains}",
+                        "phase_progress": f"{collection_index}/{len(expanded_prompts)} responses",
+                        "status_message": f"Collecting response {collection_index + 1}/{len(expanded_prompts)} in domain '{current_domain}'",
+                        "elapsed_time_seconds": int(elapsed),
+                        "responses_collected": responses_collected,
+                        "error_count": error_count,
+                        "success_rate_percent": round(success_rate, 1),
+                    }
                 }
             }
         else:
             # All prompts collected - transition to persistence
+            success_rate = (responses_collected / len(expanded_prompts) * 100) if len(expanded_prompts) > 0 else 0
             logger.info(
-                f"RESPONSE_COLLECTION complete: {collection_index} responses collected. "
+                f"RESPONSE_COLLECTION complete: {responses_collected}/{len(expanded_prompts)} "
+                f"responses collected ({error_count} errors, {success_rate:.1f}% success rate). "
                 f"Transitioning to PERSISTENCE phase."
             )
+
+            elapsed = time.time() - dist_state.get("workflow_start_time", time.time())
+
             return {
                 "distillation_state": {
                     "current_phase": DistillationPhase.PERSISTENCE.value,
                 },
                 "scratchpad": {
-                    "next_specialist": "distillation_coordinator_specialist"  # Self
+                    "next_specialist": "distillation_coordinator_specialist",  # Self
+                    "distillation_progress": {
+                        "phase": DistillationPhase.PERSISTENCE.value,
+                        "current_domain": current_domain,
+                        "domain_progress": f"{domain_index + 1}/{total_domains}",
+                        "phase_progress": f"{responses_collected}/{len(expanded_prompts)} collected",
+                        "status_message": f"Finalizing domain '{current_domain}' ({responses_collected} responses collected)",
+                        "elapsed_time_seconds": int(elapsed),
+                        "responses_collected": responses_collected,
+                        "error_count": error_count,
+                    }
                 }
             }
 
@@ -253,13 +333,24 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
         current_domain = dist_state.get("current_domain")
         domain_index = dist_state.get("domain_index", 0)
         completed_paths = dist_state.get("completed_dataset_paths", [])
+        responses_collected = dist_state.get("responses_collected", 0)
+        error_count = dist_state.get("error_count", 0)
+        total_responses_global = dist_state.get("total_responses_collected_global", 0)
+        total_errors_global = dist_state.get("total_errors_global", 0)
 
-        logger.info(f"PERSISTENCE phase: Finalizing domain '{current_domain}'")
+        logger.info(
+            f"PERSISTENCE phase: Finalizing domain '{current_domain}' "
+            f"({responses_collected} responses, {error_count} errors)"
+        )
 
         # Finalize domain dataset (placeholder - actual persistence is already done by collector)
         # In future: could rename temp files, write metadata, etc.
         domain_dataset_path = f"{self.output_dir}/{current_domain}/"
         completed_paths.append(domain_dataset_path)
+
+        # Update global counters
+        total_responses_global += responses_collected
+        total_errors_global += error_count
 
         # Check if more domains to process
         next_domain_index = domain_index + 1
@@ -269,11 +360,14 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
             next_domain = self.domains[next_domain_index]
             logger.info(
                 f"Domain '{current_domain}' complete. "
-                f"Moving to next domain: '{next_domain}' ({next_domain_index + 1}/{len(self.domains)})"
+                f"Moving to next domain: '{next_domain}' ({next_domain_index + 1}/{len(self.domains)}). "
+                f"Global stats: {total_responses_global} responses, {total_errors_global} errors"
             )
 
             # Load seeds for next domain
             seed_prompts = self._load_seeds(next_domain)
+
+            elapsed = time.time() - dist_state.get("workflow_start_time", time.time())
 
             return {
                 "distillation_state": {
@@ -288,23 +382,55 @@ class DistillationCoordinatorSpecialist(BaseSpecialist):
                     "error_count": 0,  # Reset for new domain
                     "current_phase": DistillationPhase.EXPANSION.value,
                     "completed_dataset_paths": completed_paths,
+                    "total_responses_collected_global": total_responses_global,
+                    "total_errors_global": total_errors_global,
                 },
                 "scratchpad": {
-                    "next_specialist": "distillation_prompt_expander_specialist"
+                    "next_specialist": "distillation_prompt_expander_specialist",
+                    "distillation_progress": {
+                        "phase": DistillationPhase.EXPANSION.value,
+                        "current_domain": next_domain,
+                        "domain_progress": f"{next_domain_index + 1}/{len(self.domains)}",
+                        "phase_progress": f"0/{len(seed_prompts)} seeds",
+                        "status_message": f"Starting expansion for domain '{next_domain}'",
+                        "elapsed_time_seconds": int(elapsed),
+                        "global_responses_collected": total_responses_global,
+                        "global_errors": total_errors_global,
+                    }
                 }
             }
         else:
             # All domains complete - workflow done
-            duration = time.time() - (self.workflow_start_time or time.time())
+            workflow_start = dist_state.get("workflow_start_time", time.time())
+            duration = time.time() - workflow_start
+            global_success_rate = (total_responses_global / (total_responses_global + total_errors_global) * 100) if (total_responses_global + total_errors_global) > 0 else 0
+
             logger.info(
                 f"=== Distillation Workflow COMPLETE === "
-                f"Processed {len(self.domains)} domains in {duration/3600:.2f} hours"
+                f"Processed {len(self.domains)} domains in {duration/3600:.2f} hours. "
+                f"Total: {total_responses_global} responses collected, {total_errors_global} errors "
+                f"({global_success_rate:.1f}% success rate)"
             )
 
             return {
                 "distillation_state": {
                     "current_phase": "complete",
                     "completed_dataset_paths": completed_paths,
+                    "total_responses_collected_global": total_responses_global,
+                    "total_errors_global": total_errors_global,
+                    "workflow_duration_seconds": int(duration),
+                },
+                "scratchpad": {
+                    "distillation_progress": {
+                        "phase": "complete",
+                        "current_domain": "all",
+                        "domain_progress": f"{len(self.domains)}/{len(self.domains)}",
+                        "status_message": f"Workflow complete: {total_responses_global} responses across {len(self.domains)} domains",
+                        "elapsed_time_seconds": int(duration),
+                        "global_responses_collected": total_responses_global,
+                        "global_errors": total_errors_global,
+                        "success_rate_percent": round(global_success_rate, 1),
+                    }
                 },
                 "task_is_complete": True
             }
