@@ -13,6 +13,7 @@ import json
 from typing import Dict, Any, List, Optional
 
 from langchain_core.messages import HumanMessage
+from tenacity import retry, stop_after_attempt, wait_exponential, RetryError
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
@@ -95,10 +96,10 @@ class DistillationPromptExpanderSpecialist(BaseSpecialist):
             variations_count=variations_per_seed
         )
 
-        # Call LLM to generate variations
+        # Call LLM to generate variations with retry logic
         try:
             variations = self._call_llm_for_variations(formatted_prompt)
-            logger.info(f"Successfully generated {len(variations)} variations")
+            logger.info(f"Successfully generated {len(variations)} variations for seed {expansion_index + 1}")
 
             # Return variations in artifacts (progenitor pattern)
             return {
@@ -107,18 +108,43 @@ class DistillationPromptExpanderSpecialist(BaseSpecialist):
                 }
             }
 
-        except (json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Failed to parse LLM response as JSON: {e}", exc_info=True)
+        except RetryError as e:
+            logger.error(
+                f"Failed to expand seed {expansion_index + 1} after multiple retries: {e}",
+                exc_info=True
+            )
             # Return empty batch on failure - aggregator will handle empty batches
+            # This allows workflow to continue even if some seeds fail to expand
             return {
                 "artifacts": {
                     "expanded_prompts_batch": []
-                }
+                },
+                "error": f"Failed to expand seed after retries: {e}"
             }
 
+        except (json.JSONDecodeError, ValueError, Exception) as e:
+            logger.error(
+                f"Unexpected error expanding seed {expansion_index + 1}: {e}",
+                exc_info=True
+            )
+            # Return empty batch on failure
+            return {
+                "artifacts": {
+                    "expanded_prompts_batch": []
+                },
+                "error": f"Expansion error: {e}"
+            }
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=30),
+        reraise=True
+    )
     def _call_llm_for_variations(self, formatted_prompt: str) -> List[str]:
         """
-        Call LLM to generate prompt variations.
+        Call LLM to generate prompt variations with retry logic.
+
+        Retries up to 3 times with exponential backoff for transient failures.
 
         Args:
             formatted_prompt: The complete prompt with seed and instructions
@@ -127,17 +153,24 @@ class DistillationPromptExpanderSpecialist(BaseSpecialist):
             List of variation strings
 
         Raises:
-            json.JSONDecodeError: If LLM response is not valid JSON
-            ValueError: If JSON structure is invalid
+            json.JSONDecodeError: If LLM response is not valid JSON after retries
+            ValueError: If JSON structure is invalid after retries
+            Exception: For other LLM failures after retries
         """
+        logger.debug("Calling LLM for prompt variations")
+
         # Create LLM request
         request = StandardizedLLMRequest(
             messages=[HumanMessage(content=formatted_prompt)]
         )
 
         # Invoke LLM
-        response_data = self.llm_adapter.invoke(request)
-        text_response = response_data.get("text_response", "")
+        try:
+            response_data = self.llm_adapter.invoke(request)
+            text_response = response_data.get("text_response", "")
+        except Exception as e:
+            logger.warning(f"LLM invocation failed (will retry): {e}")
+            raise  # Re-raise for tenacity retry
 
         # Parse JSON response
         try:
@@ -145,18 +178,29 @@ class DistillationPromptExpanderSpecialist(BaseSpecialist):
             parsed = json.loads(text_response)
         except json.JSONDecodeError:
             # Fallback: extract JSON from markdown code blocks
-            parsed = self._extract_json_from_text(text_response)
+            try:
+                parsed = self._extract_json_from_text(text_response)
+            except json.JSONDecodeError as e:
+                logger.warning(f"JSON parsing failed (will retry): {e}")
+                raise  # Re-raise for tenacity retry
 
+        # Validate structure
         if not isinstance(parsed, dict):
-            raise ValueError(f"Expected JSON object, got {type(parsed)}")
+            error_msg = f"Expected JSON object, got {type(parsed)}"
+            logger.warning(f"Invalid response structure (will retry): {error_msg}")
+            raise ValueError(error_msg)
 
         variations = parsed.get("variations", [])
         if not isinstance(variations, list):
-            raise ValueError(f"'variations' must be a list, got {type(variations)}")
+            error_msg = f"'variations' must be a list, got {type(variations)}"
+            logger.warning(f"Invalid variations structure (will retry): {error_msg}")
+            raise ValueError(error_msg)
 
         if not variations:
-            logger.warning("LLM returned empty variations list")
+            logger.warning("LLM returned empty variations list (will retry)")
+            raise ValueError("Empty variations list returned")
 
+        logger.debug(f"Successfully parsed {len(variations)} variations from LLM response")
         return variations
 
     def _extract_json_from_text(self, text: str) -> Dict[str, Any]:
