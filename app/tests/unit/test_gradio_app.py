@@ -54,10 +54,10 @@ async def test_handle_submit_processes_stream_correctly(mock_ui_components):
 
     # Act
     # The closure returns an async generator, which we consume.
-    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None, False)]
 
     # Assert
-    mock_api_client.invoke_agent_streaming.assert_called_once_with("test prompt", None, None)
+    mock_api_client.invoke_agent_streaming.assert_called_once_with("test prompt", None, None, False)
     assert len(yielded_updates) == 3
     assert yielded_updates[0] == {mock_ui_components["status_output"]: "Processing...", mock_ui_components["log_output"]: "Log 1\n"} # First yield
     assert yielded_updates[1] == {mock_ui_components["log_output"]: "Log 1\nLog 2\n"} # Second yield
@@ -88,7 +88,7 @@ async def test_handle_submit_handles_api_error(mock_ui_components):
     )
 
     # Act
-    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None, False)]
 
     # Assert
     assert len(yielded_updates) == 1
@@ -113,7 +113,7 @@ async def test_handle_submit_handles_all_output_types(mock_ui_components):
     )
 
     # Act
-    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None, False)]
 
     # Assert
     assert len(yielded_updates) == 1
@@ -140,7 +140,7 @@ async def test_handle_submit_handles_empty_stream_data(mock_ui_components):
     )
 
     # Act
-    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("test prompt", None, None, False)]
 
     # Assert
     # The first two yields should produce empty dicts, which are filtered out.
@@ -157,7 +157,7 @@ async def test_handle_submit_with_no_prompt(mock_ui_components):
     )
 
     # Act
-    yielded_updates = [item async for item in handle_submit_fn("", None, None)]
+    yielded_updates = [item async for item in handle_submit_fn("", None, None, False)]
 
     # Assert
     mock_api_client.invoke_agent_streaming.assert_not_called()

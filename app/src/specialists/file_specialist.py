@@ -15,12 +15,16 @@ class FileSpecialist(BaseSpecialist):
     A procedural specialist that provides file system operations via MCP.
 
     This specialist exposes functions for directory creation, file reading/writing,
-    and archive operations. All operations are scoped to a root directory for safety.
+    append operations, file renaming/deletion, and archive operations.
+    All operations are scoped to a root directory for safety.
 
     MCP Services Exposed:
     - file_exists(path: str) -> bool
     - read_file(path: str) -> str
     - write_file(path: str, content: str) -> str
+    - append_to_file(path: str, content: str, create_dirs: bool = True) -> str
+    - rename_file(old_path: str, new_path: str) -> str
+    - delete_file(path: str) -> str
     - list_files(path: str) -> List[str]
     - create_directory(path: str) -> str
     - create_zip(source_path: str, destination_path: str) -> str
@@ -222,6 +226,121 @@ class FileSpecialist(BaseSpecialist):
         except Exception as e:
             raise SpecialistError(f"Error creating directory '{path}': {e}")
 
+    def append_to_file(self, path: str, content: str, create_dirs: bool = True) -> str:
+        """
+        Append content to a file, optionally creating parent directories and file if necessary.
+
+        This method supports atomic file creation by only creating directories when
+        content is successfully buffered and ready to write.
+
+        Args:
+            path: Path to file (relative to root_dir or absolute)
+            content: Content to append (string)
+            create_dirs: If True, creates parent directories atomically during write (default: True)
+
+        Returns:
+            Success message
+
+        Raises:
+            SpecialistError: If path validation fails or write error occurs
+        """
+        try:
+            validated_path = self._validate_path(path)
+
+            # Create parent directories if requested
+            if create_dirs:
+                validated_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Append content (mode='a' for append)
+            with validated_path.open('a', encoding='utf-8') as f:
+                f.write(content)
+
+            msg = f"Successfully appended to file: {path} ({len(content)} chars)"
+            logger.info(msg)
+            return msg
+
+        except SpecialistError:
+            raise
+        except Exception as e:
+            raise SpecialistError(f"Error appending to file '{path}': {e}")
+
+    def rename_file(self, old_path: str, new_path: str) -> str:
+        """
+        Rename or move a file atomically.
+
+        This is useful for temp-to-final file transitions during dataset finalization.
+
+        Args:
+            old_path: Current file path (relative to root_dir or absolute)
+            new_path: New file path (relative to root_dir or absolute)
+
+        Returns:
+            Success message
+
+        Raises:
+            SpecialistError: If source doesn't exist or rename fails
+        """
+        try:
+            validated_old = self._validate_path(old_path)
+            validated_new = self._validate_path(new_path)
+
+            if not validated_old.exists():
+                raise SpecialistError(f"Source file not found: {old_path}")
+
+            if not validated_old.is_file():
+                raise SpecialistError(f"Source path is not a file: {old_path}")
+
+            # Create parent directory for new path if needed
+            validated_new.parent.mkdir(parents=True, exist_ok=True)
+
+            # Atomic rename/move
+            validated_old.rename(validated_new)
+
+            msg = f"Successfully renamed file: {old_path} -> {new_path}"
+            logger.info(msg)
+            return msg
+
+        except SpecialistError:
+            raise
+        except Exception as e:
+            raise SpecialistError(f"Error renaming file '{old_path}' to '{new_path}': {e}")
+
+    def delete_file(self, path: str) -> str:
+        """
+        Delete a file.
+
+        This is useful for cleanup of temporary files and error logs.
+
+        Args:
+            path: Path to file to delete (relative to root_dir or absolute)
+
+        Returns:
+            Success message
+
+        Raises:
+            SpecialistError: If file doesn't exist or deletion fails
+        """
+        try:
+            validated_path = self._validate_path(path)
+
+            if not validated_path.exists():
+                raise SpecialistError(f"File not found: {path}")
+
+            if not validated_path.is_file():
+                raise SpecialistError(f"Path is not a file: {path}")
+
+            # Delete file
+            validated_path.unlink()
+
+            msg = f"Successfully deleted file: {path}"
+            logger.info(msg)
+            return msg
+
+        except SpecialistError:
+            raise
+        except Exception as e:
+            raise SpecialistError(f"Error deleting file '{path}': {e}")
+
     def create_zip(self, source_path: str, destination_path: str) -> str:
         """
         Create a zip archive from a source directory.
@@ -275,11 +394,14 @@ class FileSpecialist(BaseSpecialist):
             "file_exists": self.file_exists,
             "read_file": self.read_file,
             "write_file": self.write_file,
+            "append_to_file": self.append_to_file,
+            "rename_file": self.rename_file,
+            "delete_file": self.delete_file,
             "list_files": self.list_files,
             "create_directory": self.create_directory,
             "create_zip": self.create_zip,
         })
-        logger.info(f"Registered 6 MCP services for {self.specialist_name}")
+        logger.info(f"Registered 9 MCP services for {self.specialist_name}")
 
     # ==========================================================================
     # Graph Execution (No-op for MCP-only mode)

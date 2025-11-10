@@ -68,16 +68,14 @@ async def test_invoke_agent_streaming_success(api_client, mock_httpx_client):
     updates = [update async for update in api_client.invoke_agent_streaming("test prompt", None, None)]
 
     # Assert
-    assert len(updates) == 4 # 3 from stream, 1 final empty block
+    assert len(updates) == 3 # 3 from stream (no final empty block after refactor)
     assert updates[0] == {"status": "Processing..."}
     assert updates[1] == {"logs": "Log 1"}
     assert updates[2] == {"final_state": {"status": "complete"}, "html": "<h1>Hello</h1>", "archive": "Report"}
-    # The last update is the final empty block from the client
-    assert updates[3]["final_state"] == {}
 
     # Verify the mock was called correctly
     mock_client.stream.assert_called_once_with(
-        "POST", "http://127.0.0.1:8000/v1/graph/stream", json={'input_prompt': 'test prompt'}
+        "POST", "http://127.0.0.1:8000/v1/graph/stream", json={'input_prompt': 'test prompt', 'use_simple_chat': False}
     )
 
 @pytest.mark.asyncio
@@ -127,8 +125,8 @@ async def test_invoke_agent_streaming_handles_malformed_json(api_client, mock_ht
     updates = [update async for update in api_client.invoke_agent_streaming("test", None, None)]
 
     # Assert
-    # The error is logged, and the final empty block is also yielded.
-    assert len(updates) == 2
+    # The error is logged (no final empty block after refactor).
+    assert len(updates) == 1
     assert "[UI-CLIENT-ERROR]" in updates[0]["logs"]
     assert "Failed to parse JSON" in updates[0]["logs"]
 
@@ -154,8 +152,8 @@ async def test_invoke_agent_streaming_handles_image_decoding(api_client, mock_ht
     updates = [update async for update in api_client.invoke_agent_streaming("test", None, None)]
 
     # Assert
-    # The client's only job is to yield the data it receives.
-    assert len(updates) == 2 # 1 from stream, 1 final empty block
+    # The client's only job is to yield the data it receives (no final empty block after refactor).
+    assert len(updates) == 1 # 1 from stream
     assert updates[0] == {"image_artifact_b64": img_b64}
 
 @pytest.mark.asyncio

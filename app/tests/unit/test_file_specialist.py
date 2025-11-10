@@ -379,10 +379,13 @@ class TestMcpIntegration:
         functions = call_args[0][1]
 
         assert service_name == file_specialist_instance.specialist_name
-        assert len(functions) == 6
+        assert len(functions) == 9
         assert "file_exists" in functions
         assert "read_file" in functions
         assert "write_file" in functions
+        assert "append_to_file" in functions
+        assert "rename_file" in functions
+        assert "delete_file" in functions
         assert "list_files" in functions
         assert "create_directory" in functions
         assert "create_zip" in functions

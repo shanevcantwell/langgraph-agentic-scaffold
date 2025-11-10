@@ -78,7 +78,7 @@ def test_invoke_graph_sync(client):
     # Assert
     assert response.status_code == 200
     assert response.json() == {"final_output": {"status": "success"}}
-    api.workflow_runner.run.assert_called_once_with(goal="test prompt", text_to_process=None, image_to_process=None)
+    api.workflow_runner.run.assert_called_once_with(goal="test prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
 
 def test_invoke_graph_sync_handles_runner_error(client, mocker):
     """Tests that the sync endpoint returns a 500 if the runner fails."""
@@ -116,7 +116,7 @@ async def test_stream_graph_async(client):
     # We check that the formatter correctly processed our mock dicts into status updates
     assert 'data: {"status": "Executing specialist: router_specialist..."}' in response.text
     assert 'data: {"status": "Executing specialist: file_specialist..."}' in response.text
-    api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None)
+    api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
 
 @pytest.mark.asyncio
 async def test_stream_graph_async_handles_runner_error(client, mocker):

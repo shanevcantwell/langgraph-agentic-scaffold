@@ -133,7 +133,7 @@ async def test_gradio_handle_submit_integration():
     # Test with a simple prompt
     updates = []
     try:
-        async for update in submit_handler("ping", None, None):
+        async for update in submit_handler("ping", None, None, False):
             updates.append(update)
             # Limit iterations for test performance
             if len(updates) > 20:

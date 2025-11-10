@@ -7,8 +7,45 @@ from langchain_core.messages import BaseMessage
 
 class Dossier(TypedDict):
     recipient: str
-    payload_key: str 
-    message: Optional[str] 
+    payload_key: str
+    message: Optional[str]
+
+class DistillationState(TypedDict):
+    """
+    State for federated distillation workflows.
+
+    Manages multi-phase distillation across knowledge domains with graph-driven iteration.
+    See ADR-DISTILL-002 for complete state management patterns.
+    """
+
+    # Domain iteration
+    domains: List[str]                       # e.g., ["agentic_architecture", "devenv_tooling", ...]
+    current_domain: str                      # e.g., "agentic_architecture"
+    domain_index: int                        # 0-based index in domains list
+
+    # Prompt management
+    seed_prompts: List[str]                  # Current domain's seed prompts (loaded once per domain)
+    expanded_prompts: List[str]              # Accumulated variations for current domain
+
+    # Iteration tracking (graph-driven iteration via conditional edges)
+    expansion_index: int                     # Index of next seed to expand
+    collection_index: int                    # Index of next prompt to collect
+
+    # Progress tracking
+    seeds_processed: int                     # Total seeds expanded so far
+    responses_collected: int                 # Total responses collected so far (successful only)
+    error_count: int                         # Total errors across all phases
+
+    # Phase control
+    current_phase: str                       # "expansion" | "response_collection" | "persistence"
+
+    # File tracking
+    temp_dataset_path: Optional[str]         # Path to temp JSONL file being written
+    completed_dataset_paths: List[str]       # Paths to finalized domain datasets
+
+    # Configuration (from coordinator config or user input)
+    variations_per_seed: int                 # e.g., 3
+    output_dir: str                          # e.g., "/workspace/datasets" 
 
 class Artifacts(BaseModel):
     """A Pydantic model for all possible artifacts generated during a workflow."""
@@ -59,3 +96,9 @@ class GraphState(TypedDict):
     # migration to the `artifacts` or `scratchpad` dictionaries in the future.
     recommended_specialists: Optional[List[str]]
     error_report: Optional[str]
+
+    # --- Distillation Workflow State ---
+    # State for federated distillation workflows.
+    # Uses operator.ior reducer to merge dictionary updates from specialists.
+    # See ADR-DISTILL-002 for complete state management patterns.
+    distillation_state: Annotated[Optional[DistillationState], operator.ior]

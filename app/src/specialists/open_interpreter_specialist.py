@@ -56,7 +56,9 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         try:
             return CodeExecutionParams(**tool_calls[0]['args'])
         except Exception as e:
-            logger.error(f"Failed to parse LLM tool call into CodeExecutionParams: {e}", exc_info=True)
+            error_msg = f"Failed to parse LLM tool call into CodeExecutionParams: {e}"
+            logger.error(error_msg, exc_info=True)
+            self._planning_error = error_msg  # Store for use in error response
             return None
 
     def _execute_code(self, code_params: CodeExecutionParams) -> str:
@@ -110,12 +112,21 @@ class OpenInterpreterSpecialist(BaseSpecialist):
             return {"error": "OpenInterpreterSpecialist requires a user request to function."}
 
         # Phase 1: Plan
+        self._planning_error = None  # Reset any previous error
         code_params = self._plan_code(last_human_message)
         if not code_params:
-            return {"error": "OpenInterpreterSpecialist's LLM failed to produce a valid code plan."}
+            error_msg = "OpenInterpreterSpecialist's LLM failed to produce a valid code plan."
+            if hasattr(self, '_planning_error') and self._planning_error:
+                error_msg += f" {self._planning_error}"
+            return {"error": error_msg}
 
         # Phase 2: Execute
-        final_output = self._execute_code(code_params)
+        try:
+            final_output = self._execute_code(code_params)
+        except Exception as e:
+            error_msg = f"Execution failed: {str(e)}"
+            logger.error(f"Code execution error: {error_msg}")
+            return {"error": error_msg}
 
         # --- Create a Standardized Response ---
         ai_message = create_llm_message(
