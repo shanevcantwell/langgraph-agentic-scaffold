@@ -13,6 +13,7 @@ API_BASE_URL = "http://127.0.0.1:8000"
 app = typer.Typer(
     help="A command-line interface for interacting with the agentic system.",
     invoke_without_command=True,
+    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
 
 @app.callback()
