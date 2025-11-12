@@ -1,6 +1,6 @@
 # app/src/llm/factory.py
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, List, Tuple
 from .adapter import BaseAdapter
 from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
 from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
@@ -19,9 +19,75 @@ ADAPTER_REGISTRY = {
     # "ollama": OllamaAdapter, # Example for future extension
 }
 
+# --- Provider Dependency Requirements ---
+# Maps provider types to their optional dependencies and installation instructions
+PROVIDER_DEPENDENCIES = {
+    "gemini_webui": {
+        "packages": ["playwright"],
+        "check": lambda: _check_playwright_available(),
+        "install_cmd": "pip install playwright && playwright install chromium",
+        "description": "Playwright (for browser automation to extract thinking blocks)"
+    },
+}
+
+def _check_playwright_available() -> bool:
+    """Check if Playwright is installed and browsers are available."""
+    try:
+        from playwright.sync_api import sync_playwright
+        # Try to verify browser installation
+        with sync_playwright() as p:
+            # Just checking if chromium executable exists
+            return True
+    except ImportError:
+        return False
+    except Exception:
+        # Playwright installed but browsers not installed
+        return False
+
 class AdapterFactory:
     def __init__(self, full_config: Dict[str, Any]):
         self.full_config = full_config
+
+    def validate_provider_dependencies(self) -> List[Tuple[str, str, str]]:
+        """
+        Validate that all bound providers have their required dependencies installed.
+
+        Returns:
+            List of tuples (provider_key, provider_type, error_message) for missing dependencies
+        """
+        missing_deps = []
+
+        # Get all bound providers (those actually being used by specialists)
+        bound_providers = set()
+        for specialist_name, specialist_config in self.full_config.get("specialists", {}).items():
+            if specialist_config.get("type") in ["llm", "hybrid"]:
+                binding_key = specialist_config.get("llm_config")
+                if binding_key:
+                    bound_providers.add(binding_key)
+
+        # Check each bound provider
+        for provider_key in bound_providers:
+            provider_config = self.full_config.get("llm_providers", {}).get(provider_key)
+            if not provider_config:
+                continue
+
+            provider_type = provider_config.get("type")
+
+            # Check if this provider type has dependency requirements
+            if provider_type in PROVIDER_DEPENDENCIES:
+                dep_info = PROVIDER_DEPENDENCIES[provider_type]
+
+                # Run the availability check
+                if not dep_info["check"]():
+                    error_msg = (
+                        f"Provider '{provider_key}' (type: {provider_type}) requires {dep_info['description']} "
+                        f"but it is not available.\n"
+                        f"   Install with: {dep_info['install_cmd']}"
+                    )
+                    missing_deps.append((provider_key, provider_type, error_msg))
+                    logger.warning(error_msg)
+
+        return missing_deps
 
     def create_adapter(self, specialist_name: str, system_prompt: str) -> BaseAdapter | None:
         """

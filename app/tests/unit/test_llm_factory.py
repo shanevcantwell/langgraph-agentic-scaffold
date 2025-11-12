@@ -84,3 +84,73 @@ def test_factory_returns_none_for_unknown_provider_type(adapter_factory):
     """Tests that the factory returns None if the provider 'type' is not in the registry."""
     adapter = adapter_factory.create_adapter("unknown_provider_type_specialist", "system prompt")
     assert adapter is None
+
+# ==============================================================================
+# Provider Dependency Validation Tests
+# ==============================================================================
+
+@pytest.fixture
+def config_with_gemini_webui():
+    """Config with gemini_webui provider bound to a specialist."""
+    return {
+        "specialists": {
+            "distillation_specialist": {
+                "type": "llm",
+                "llm_config": "gemini_webui_provider"
+            },
+            "normal_specialist": {
+                "type": "llm",
+                "llm_config": "gemini_provider"
+            }
+        },
+        "llm_providers": {
+            "gemini_webui_provider": {"type": "gemini_webui", "session_cookies": "./cookies.json"},
+            "gemini_provider": {"type": "gemini", "api_identifier": "gemini-pro"},
+        }
+    }
+
+@patch('app.src.llm.factory._check_playwright_available')
+def test_validate_dependencies_detects_missing_playwright(mock_check, config_with_gemini_webui):
+    """Tests that validation detects missing Playwright for gemini_webui provider."""
+    mock_check.return_value = False  # Playwright not available
+
+    factory = AdapterFactory(config_with_gemini_webui)
+    missing_deps = factory.validate_provider_dependencies()
+
+    assert len(missing_deps) == 1
+    provider_key, provider_type, error_msg = missing_deps[0]
+    assert provider_key == "gemini_webui_provider"
+    assert provider_type == "gemini_webui"
+    assert "Playwright" in error_msg
+    assert "pip install playwright" in error_msg
+
+@patch('app.src.llm.factory._check_playwright_available')
+def test_validate_dependencies_passes_when_playwright_available(mock_check, config_with_gemini_webui):
+    """Tests that validation passes when Playwright is available."""
+    mock_check.return_value = True  # Playwright available
+
+    factory = AdapterFactory(config_with_gemini_webui)
+    missing_deps = factory.validate_provider_dependencies()
+
+    assert len(missing_deps) == 0
+
+def test_validate_dependencies_ignores_unbound_providers():
+    """Tests that validation only checks providers that are actually bound to specialists."""
+    config = {
+        "specialists": {
+            "normal_specialist": {
+                "type": "llm",
+                "llm_config": "gemini_provider"
+            }
+        },
+        "llm_providers": {
+            "gemini_provider": {"type": "gemini", "api_identifier": "gemini-pro"},
+            "gemini_webui_provider": {"type": "gemini_webui"},  # Defined but not bound
+        }
+    }
+
+    factory = AdapterFactory(config)
+    missing_deps = factory.validate_provider_dependencies()
+
+    # Should be empty since gemini_webui is not bound to any specialist
+    assert len(missing_deps) == 0
