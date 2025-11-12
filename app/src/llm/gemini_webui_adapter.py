@@ -427,7 +427,7 @@ class GeminiWebUIAdapter(BaseAdapter):
 
     def __del__(self):
         """Cleanup browser resources"""
-        if self.browser:
+        if hasattr(self, 'browser') and self.browser:
             self.browser.close()
-        if self.playwright:
+        if hasattr(self, 'playwright') and self.playwright:
             self.playwright.stop()
