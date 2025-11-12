@@ -38,6 +38,7 @@ class ApiClient:
                 payload["image_to_process"] = self._encode_image_to_base64(image_path.name)
             except Exception as e:
                 yield {"status": f"Error reading image: {e}"}
+                return
 
         try: # Use httpx.AsyncClient for non-blocking streaming
             async with httpx.AsyncClient(timeout=300.0) as client:

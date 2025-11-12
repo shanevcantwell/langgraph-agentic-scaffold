@@ -28,12 +28,12 @@ VEGAS_CSS = """
     height: 100%;
     background: linear-gradient(
         rgba(18, 16, 16, 0) 50%,
-        rgba(0, 0, 0, 0.25) 50%
+        rgba(0, 0, 0, 0.1) 50%
     );
-    background-size: 100% 4px;
+    background-size: 100% 6px;
     z-index: 999;
     pointer-events: none;
-    animation: scanline 8s linear infinite;
+    animation: scanline 18s linear infinite;
 }
 
 @keyframes scanline {
@@ -262,8 +262,8 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
         """Generator function to handle the streaming UI updates."""
         nonlocal turn_count
 
-        if not prompt.strip():
-            yield {status_output: "⚠ ERROR: EMPTY PROMPT DETECTED"}
+        if not prompt.strip() and not text_file and not image_file:
+            yield {status_output: "⚠ ERROR: PROVIDE PROMPT OR FILE"}
             return
 
         turn_count += 1
@@ -283,14 +283,17 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
             if "logs" in update:
                 ui_update[latency_display] = "042"  # Mock latency in ms
 
-            # Track specialist routing
+            # Track specialist activity
             if "logs" in update:
                 log_text = update["logs"]
-                # Extract specialist names from logs (simple heuristic)
-                if "→" in log_text or "Routing to" in log_text:
-                    specialist_log.append(log_text.split('\n')[-2] if '\n' in log_text else log_text)
-                    ticker_text = "\n".join(specialist_log[-10:])  # Last 10 entries
-                    ui_update[specialist_ticker] = ticker_text
+                # Extract specialist execution and routing events
+                if "---" in log_text or "→" in log_text or "Routing to" in log_text:
+                    # Get the last meaningful line
+                    lines = [l.strip() for l in log_text.split('\n') if l.strip()]
+                    if lines:
+                        specialist_log.append(lines[-1])
+                        ticker_text = "\n".join(specialist_log[-15:])  # Last 15 entries
+                        ui_update[specialist_ticker] = ticker_text
 
                 ui_update[log_output] = log_text
 
@@ -314,6 +317,18 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
             # Update archive report
             if "archive" in update:
                 ui_update[archive_output] = update["archive"]
+
+            # Show error report if present
+            if "error" in update or "error_report" in update:
+                error_msg = update.get("error", "Unknown error")
+                error_report = update.get("error_report", "")
+
+                # Show error in status
+                ui_update[status_output] = f"❌ ERROR: {error_msg}"
+
+                # Show full error report in archive tab
+                if error_report:
+                    ui_update[archive_output] = f"## ❌ Error Report\n\n{error_report}"
 
             if ui_update:
                 yield ui_update
@@ -344,7 +359,7 @@ def create_ui(api_client: ApiClient):
 
                 with gr.Row():
                     file_input = gr.File(label="📄 TEXT FILE STAGING")
-                    image_input = gr.Image(type="pil", label="🖼️ IMAGE FILE STAGING")
+                    image_input = gr.Image(type="filepath", label="🖼️ IMAGE FILE STAGING")
 
                 simple_chat_checkbox = gr.Checkbox(
                     label="SIMPLE CHAT MODE",

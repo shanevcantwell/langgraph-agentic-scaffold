@@ -1,27 +1,27 @@
 # app/src/ui/gradio_lassi.py
 """
 L.A.S.S.I. UI - LangGraph-Agentic-Scaffold Selected Interface
-A clean, soft, and eye-relaxing "Mango Yogurt" theme.
+Dark mode with warm glowing mango accents.
 """
 import gradio as gr
 import argparse
 import html
 from .api_client import ApiClient
 
-# --- CSS for "Mango Yogurt" Theme ---
+# --- CSS for Mango Lassi Theme (Dark Mode) ---
 LASSI_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap');
 
 /* === Base & Color Palette === */
 :root {
-    --bg-color: #4D382A; /* Dim Mango (Replaced #FAF7F5) */
-    --card-bg: #FFFFFF;
-    --primary-accent: #FFAB70; /* Soft Mango */
-    --primary-accent-dark: #F08A4B;
-    --secondary-accent: #D4E2D4; /* Soft Pistachio Green */
-    --text-color: #4A4A4A; /* Warm Dark Gray */
-    --text-color-light: #7B7B7B;
-    --border-color: #EAEAEA;
+    --bg-color: #1A1410; /* Deep Mango Brown */
+    --card-bg: #2A1F16;
+    --primary-accent: #FF9F40; /* Glowing Mango */
+    --primary-accent-dark: #FFB366;
+    --secondary-accent: #3D2A1A; /* Rich Brown */
+    --text-color: #F5E6D3; /* Cream (high contrast on dark) */
+    --text-color-light: #C9A882;
+    --border-color: #4D3820;
     --font-ui: 'Lato', sans-serif;
 }
 
@@ -35,9 +35,9 @@ LASSI_CSS = """
 /* === Layout & Cards === */
 .gradio-container .panel { /* Base for gr.Group */
     background: var(--card-bg) !important;
-    border: 1px solid var(--border-color) !important;
+    border: 2px solid var(--border-color) !important;
     border-radius: 16px !important;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
+    box-shadow: 0 0 20px rgba(255, 159, 64, 0.1) !important;
 }
 
 /* === Headers === */
@@ -53,10 +53,11 @@ LASSI_CSS = """
     grid-template-columns: 1fr 1fr;
     gap: 16px;
     background: var(--card-bg) !important;
-    border: 1px solid var(--border-color) !important;
+    border: 2px solid var(--border-color) !important;
     border-radius: 16px !important;
     padding: 16px !important;
     margin-bottom: 16px !important;
+    box-shadow: 0 0 20px rgba(255, 159, 64, 0.15) !important;
 }
 .readout { text-align: left; }
 .readout-label {
@@ -70,16 +71,17 @@ LASSI_CSS = """
 .readout-value {
     font-size: 2.5rem !important;
     font-weight: 700 !important;
-    color: var(--primary-accent-dark) !important;
+    color: var(--primary-accent) !important;
     line-height: 1 !important;
+    text-shadow: 0 0 15px rgba(255, 159, 64, 0.6) !important;
 }
 
 /* === Input Fields === */
 .gradio-container textarea,
 .gradio-container input[type="text"] {
-    background: #FDFDFD !important;
+    background: var(--card-bg) !important;
     color: var(--text-color) !important;
-    border: 1px solid var(--border-color) !important;
+    border: 2px solid var(--border-color) !important;
     border-radius: 12px !important;
     font-size: 1rem !important;
     font-family: var(--font-ui) !important;
@@ -87,28 +89,28 @@ LASSI_CSS = """
 .gradio-container textarea:focus,
 .gradio-container input[type="text"]:focus {
     border-color: var(--primary-accent) !important;
-    box-shadow: 0 0 5px rgba(255, 171, 112, 0.5) !important;
+    box-shadow: 0 0 10px rgba(255, 159, 64, 0.5) !important;
 }
 
 /* === Buttons === */
 .gradio-container button.gradio-button.primary {
     background: var(--primary-accent) !important;
-    color: var(--card-bg) !important;
+    color: #1A1410 !important;
     border: none !important;
     border-radius: 12px !important;
     font-size: 1.1rem !important;
     font-weight: 700 !important;
     transition: all 0.2s ease !important;
-    box-shadow: 0 2px 8px rgba(240, 138, 75, 0.3) !important;
+    box-shadow: 0 0 20px rgba(255, 159, 64, 0.4) !important;
 }
 .gradio-container button.gradio-button.primary:hover {
     background: var(--primary-accent-dark) !important;
-    box-shadow: 0 4px 12px rgba(240, 138, 75, 0.4) !important;
+    box-shadow: 0 0 30px rgba(255, 179, 102, 0.6) !important;
     transform: translateY(-2px) !important;
 }
 .gradio-container button.gradio-button.primary:active {
     transform: translateY(0) !important;
-    box-shadow: 0 2px 8px rgba(240, 138, 75, 0.3) !important;
+    box-shadow: 0 0 20px rgba(255, 159, 64, 0.4) !important;
 }
 
 /* === Tabs === */
@@ -122,8 +124,9 @@ LASSI_CSS = """
     border-radius: 0 !important;
 }
 .gradio-container .tab-nav button.selected {
-    color: var(--primary-accent-dark) !important;
-    border-bottom-color: var(--primary-accent-dark) !important;
+    color: var(--primary-accent) !important;
+    border-bottom-color: var(--primary-accent) !important;
+    text-shadow: 0 0 10px rgba(255, 159, 64, 0.5) !important;
 }
 
 /* === Checkboxes === */
@@ -139,16 +142,16 @@ LASSI_CSS = """
 
 /* === File Upload === */
 .gradio-container .file-preview {
-    background: var(--bg-color) !important;
-    border: 2px dashed var(--border-color) !important;
+    background: var(--card-bg) !important;
+    border: 2px dashed var(--primary-accent) !important;
     border-radius: 12px !important;
-    color: var(--text-color-light) !important;
+    color: var(--text-color) !important;
 }
 
 /* === JSON/Markdown Output === */
 .gradio-container .json-holder,
 .gradio-container .markdown {
-    background: var(--bg-color) !important;
+    background: var(--card-bg) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 12px !important;
     padding: 12px !important;
@@ -158,15 +161,16 @@ LASSI_CSS = """
     font-size: 1rem !important;
 }
 .gradio-container .markdown pre {
-    background: #F0F0F0 !important;
+    background: var(--secondary-accent) !important;
     border: 1px solid var(--border-color) !important;
     color: var(--text-color) !important;
 }
 .gradio-container .markdown code {
-    background: #F0F0F0 !important;
-    color: var(--primary-accent-dark) !important;
+    background: var(--secondary-accent) !important;
+    color: var(--primary-accent) !important;
     border-radius: 4px !important;
     padding: 2px 6px !important;
+    border: 1px solid var(--border-color) !important;
 }
 """
 
@@ -212,13 +216,17 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
             if "logs" in update:
                 ui_update[latency_display] = "42" # Mock
 
-            # Track specialist routing
+            # Track specialist activity
             if "logs" in update:
                 log_text = update["logs"]
-                if "→" in log_text or "Routing to" in log_text:
-                    specialist_log.append(log_text.split('\n')[-2] if '\n' in log_text else log_text)
-                    ticker_text = "\n".join(specialist_log[-10:])
-                    ui_update[specialist_ticker] = ticker_text
+                # Extract specialist execution and routing events
+                if "---" in log_text or "→" in log_text or "Routing to" in log_text:
+                    # Get the last meaningful line
+                    lines = [l.strip() for l in log_text.split('\n') if l.strip()]
+                    if lines:
+                        specialist_log.append(lines[-1])
+                        ticker_text = "\n".join(specialist_log[-15:])  # Last 15 entries
+                        ui_update[specialist_ticker] = ticker_text
                 ui_update[log_output] = log_text
 
             # Update final state
@@ -236,6 +244,18 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
             if "archive" in update:
                 ui_update[archive_output] = update["archive"]
 
+            # Show error report if present
+            if "error" in update or "error_report" in update:
+                error_msg = update.get("error", "Unknown error")
+                error_report = update.get("error_report", "")
+
+                # Show error in status
+                ui_update[status_output] = f"❌ ERROR: {error_msg}"
+
+                # Show full error report in archive tab
+                if error_report:
+                    ui_update[archive_output] = f"## ❌ Error Report\n\n{error_report}"
+
             if ui_update:
                 yield ui_update
         
@@ -245,7 +265,7 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
 
 
 def create_ui(api_client: ApiClient):
-    """Creates the L.A.S.S.I. Gradio UI with a clean, soft theme."""
+    """Creates the L.A.S.S.I. Gradio UI with dark mode and glowing mango accents."""
     with gr.Blocks(theme=gr.themes.Soft(), title="L.A.S.S.I. Interface", css=LASSI_CSS) as demo:
 
         # Header
@@ -275,7 +295,7 @@ def create_ui(api_client: ApiClient):
                     gr.Markdown("### 📂 File Staging")
                     with gr.Row():
                         file_input = gr.File(label="Upload Text File")
-                        image_input = gr.Image(type="pil", label="Upload Image")
+                        image_input = gr.Image(type="filepath", label="Upload Image")
 
             # === RIGHT COLUMN: Agent Output & Monitors ===
             with gr.Column(scale=3):
