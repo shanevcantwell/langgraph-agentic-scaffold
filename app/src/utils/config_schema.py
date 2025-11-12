@@ -82,6 +82,12 @@ class RootConfig(BaseModel):
 class UserSettings(BaseModel):
     """The root model for the user_settings.yaml file."""
 
+    # UI Configuration
+    ui_module: Optional[str] = Field(
+        default="gradio_app",
+        description="UI module to load (filename without .py extension). Available: 'gradio_app' (standard), 'gradio_lassie' (retro terminal)."
+    )
+
     # This is now the authoritative source for defining and naming LLM provider configurations.
     llm_providers: Optional[Dict[str, LLMProviderConfig]] = Field(
         default_factory=dict,
