@@ -14,7 +14,7 @@ LASSI_CSS = """
 
 /* === Base & Color Palette === */
 :root {
-    --bg-color: #FAF7F5; /* Soft Cream (Yogurt) */
+    --bg-color: #4D382A; /* Dim Mango (Replaced #FAF7F5) */
     --card-bg: #FFFFFF;
     --primary-accent: #FFAB70; /* Soft Mango */
     --primary-accent-dark: #F08A4B;
@@ -33,7 +33,7 @@ LASSI_CSS = """
 }
 
 /* === Layout & Cards === */
-.gradio-container .panel { /* Base for gr.Box */
+.gradio-container .panel { /* Base for gr.Group */
     background: var(--card-bg) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 16px !important;
@@ -288,7 +288,7 @@ def create_ui(api_client: ApiClient):
                         with gr.Column(elem_classes="readout"):
                             gr.Markdown('<div class="readout-label">Latency (ms)</div>', elem_classes="readout-label")
                             latency_display = gr.Textbox(value="0", show_label=False, interactive=False, elem_classes="readout-value")
-
+                
                 with gr.Group():
                     gr.Markdown("### Monitor")
                     status_output = gr.Textbox(label="Current Status", interactive=False)
@@ -298,7 +298,7 @@ def create_ui(api_client: ApiClient):
                         interactive=False
                     )
                     log_output = gr.Textbox(label="Agent Log", lines=8, interactive=False)
-
+                
                 with gr.Group():
                     gr.Markdown("### 📦 Artifacts")
                     with gr.Tabs():
