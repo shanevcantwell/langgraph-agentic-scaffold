@@ -7,6 +7,100 @@ import os
 import html
 from .api_client import ApiClient
 
+# --- Pip-Boy M-II Theme CSS ---
+PIPBOY_CSS = """
+/* Import Fonts */
+@import url('https://fonts.googleapis.com/css2?family=VT323&family=Oswald:wght@400;700&display=swap');
+
+/* Pip-Boy theme - only applies when .pipboy-theme class is present */
+.pipboy-theme {
+    --bg-color: #1a1a1a;
+    --screen-bg: #0a1a0a;
+    --screen-text: #00e021;
+    --screen-text-glow: 0 0 5px var(--screen-text);
+    --glow-color: #00ff41;
+    --glow-shadow: 0 0 5px var(--glow-color), 0 0 10px var(--glow-color);
+    --accent-color: #008a12;
+    --accent-light: #a0c0a0;
+    --font-ui: 'Oswald', sans-serif;
+    --font-screen: 'VT323', monospace;
+
+    /* Gradio overrides */
+    --body-background-fill: var(--bg-color) !important;
+    --body-text-color: var(--accent-light) !important;
+    --input-background-fill: var(--screen-bg) !important;
+    --input-border-color: var(--accent-color) !important;
+    --input-text-color: var(--screen-text) !important;
+    --button-primary-background-fill: var(--accent-color) !important;
+    --button-primary-background-fill-hover: var(--glow-color) !important;
+    --button-primary-text-color: var(--bg-color) !important;
+    --panel-background-fill: #2a2a2a !important;
+}
+
+.pipboy-theme h1, .pipboy-theme h2 {
+    color: var(--glow-color) !important;
+    text-shadow: var(--glow-shadow) !important;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-family: var(--font-ui) !important;
+}
+
+.pipboy-theme .crt-screen,
+.pipboy-theme textarea,
+.pipboy-theme .prose {
+    background: var(--screen-bg) !important;
+    color: var(--screen-text) !important;
+    font-family: var(--font-screen) !important;
+    font-size: 1.1rem !important;
+    border: 3px solid #000 !important;
+    border-radius: 10px !important;
+    box-shadow: inset 0 0 15px #000 !important;
+    text-shadow: var(--screen-text-glow) !important;
+    position: relative;
+}
+
+/* CRT scanline effect */
+.pipboy-theme textarea::before {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0; left: 0; bottom: 0; right: 0;
+    background: linear-gradient(rgba(0, 255, 65, 0.1) 50%, transparent 50%);
+    background-size: 100% 3px;
+    animation: scanlines 10s linear infinite;
+    pointer-events: none;
+    z-index: 10;
+}
+
+@keyframes scanlines {
+    from { background-position: 0 0; }
+    to { background-position: 0 90px; }
+}
+
+.pipboy-theme button {
+    font-family: var(--font-ui) !important;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Theme toggle styling */
+.theme-toggle {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 1000;
+    background: rgba(0,0,0,0.7);
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #666;
+}
+
+.theme-toggle label {
+    color: #fff !important;
+    font-size: 0.9rem;
+}
+"""
+
 def handle_submit(api_client: ApiClient, status_output, json_output, html_output, image_output, log_output, archive_output):
     """
     Returns a closure for handling the Gradio submit event.
@@ -48,10 +142,19 @@ def handle_submit(api_client: ApiClient, status_output, json_output, html_output
 
 def create_ui(api_client: ApiClient):
     """Creates the Gradio UI and wires up the components."""
-    with gr.Blocks(theme=gr.themes.Soft(), title="Agentic System UI") as demo:
+    with gr.Blocks(theme=gr.themes.Soft(), title="Agentic System UI", css=PIPBOY_CSS) as demo:
+        # Theme toggle
+        with gr.Row(elem_classes="theme-toggle"):
+            theme_toggle = gr.Radio(
+                choices=["Standard", "Pip-Boy M-II"],
+                value="Standard",
+                label="UI Theme",
+                interactive=True,
+            )
+
         gr.Markdown("# Agentic System Testing UI")
         gr.Markdown("Interact with the agent by providing a prompt and optional files.")
-        
+
         with gr.Row():
             with gr.Column(scale=2):
                 prompt_input = gr.Textbox(
@@ -94,6 +197,27 @@ def create_ui(api_client: ApiClient):
 
         submit_button.click(fn=submit_handler, inputs=submit_inputs, outputs=submit_outputs)
         prompt_input.submit(fn=submit_handler, inputs=submit_inputs, outputs=submit_outputs)
+
+        # Wire up theme toggle
+        theme_toggle.change(
+            fn=None,
+            inputs=[theme_toggle],
+            outputs=None,
+            js="""
+            (theme) => {
+                const container = document.querySelector('.gradio-container');
+                if (theme === 'Pip-Boy M-II') {
+                    container.classList.add('pipboy-theme');
+                    document.title = 'L.A.S. Interface - Pip-Boy M-II';
+                } else {
+                    container.classList.remove('pipboy-theme');
+                    document.title = 'Agentic System UI';
+                }
+                return null;
+            }
+            """
+        )
+
     return demo
 
 def main():
