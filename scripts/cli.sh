@@ -17,9 +17,20 @@ fi
 
 # Create an array to hold the arguments for the python script
 args=()
-# Iterate over all arguments passed to this shell script
+
+# Smart default command logic:
+# If first arg is not a known command (invoke, stream, distill) and not a flag (starts with -),
+# prepend "invoke" to make bare prompts work
+if [ $# -gt 0 ]; then
+    first_arg="$1"
+    if [[ "$first_arg" != "invoke" && "$first_arg" != "stream" && "$first_arg" != "distill" && "$first_arg" != -* ]]; then
+        # First argument is not a command or flag, so default to invoke
+        args+=("invoke")
+    fi
+fi
+
+# Add all original arguments
 for arg in "$@"; do
-    # Add each argument to the array, preserving quotes
     args+=("$arg")
 done
 

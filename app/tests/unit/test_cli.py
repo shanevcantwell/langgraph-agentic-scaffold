@@ -144,3 +144,15 @@ def test_cli_stream_no_prompt(mock_requests):
     result = runner.invoke(app, ["stream"], input="")
     assert result.exit_code == 1
     assert "Error: Prompt is empty." in result.stderr
+
+# ==============================================================================
+# NOTE: Default Command Behavior Tests
+# ==============================================================================
+# The default command behavior (bare arguments defaulting to 'invoke') is
+# implemented in the shell wrapper script (scripts/cli.sh), not in the Python
+# CLI itself. These tests verify the Python CLI works correctly when called
+# with explicit commands, which is how the shell wrapper calls it.
+#
+# To test the shell wrapper behavior, run integration tests:
+#   ./scripts/cli.sh "Tell me about Olde Boston Bulldogges."
+#   ./scripts/cli.sh invoke "Tell me about Olde Boston Bulldogges."

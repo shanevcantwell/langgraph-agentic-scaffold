@@ -9,44 +9,10 @@ from typing import Optional
 
 API_BASE_URL = "http://127.0.0.1:8000"
 
-# The main callback is now only for the --json-only flag and default command logic.
+# Create app without any special settings - simpler approach
 app = typer.Typer(
     help="A command-line interface for interacting with the agentic system.",
-    invoke_without_command=True,
-    context_settings={"allow_extra_args": True, "ignore_unknown_options": True},
 )
-
-@app.callback()
-def main(
-    ctx: typer.Context,
-    json_only: Annotated[bool, typer.Option(
-        "--json-only",
-        "-j",
-        help="Output only the JSON response, suppressing other messages."
-    )] = False,
-    simple_chat: Annotated[bool, typer.Option(
-        "--simple-chat",
-        "-s",
-        help="Use simple chat mode (single ChatSpecialist). Default is tiered chat mode (parallel progenitors)."
-    )] = False
-):
-    """
-    Main callback that handles default command routing.
-    If no subcommand is provided, route to invoke command with remaining args.
-    """
-    # If a subcommand was invoked, let it handle execution
-    if ctx.invoked_subcommand is not None:
-        return
-
-    # No subcommand provided - default to invoke
-    # Get the prompt from remaining args
-    prompt = None
-    if ctx.args:
-        # Join all remaining arguments as the prompt
-        prompt = " ".join(ctx.args)
-
-    # Call invoke logic directly
-    _run_invoke(prompt, json_only, simple_chat)
 
 def _run_invoke(prompt: Optional[str], json_only: bool, simple_chat: bool):
     """Shared logic for the invoke command."""
