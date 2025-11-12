@@ -12,7 +12,10 @@ echo "--- Starting FastAPI server (with reload) ---"
 # Watch the 'app' directory for changes, but exclude the 'logs' directory.
 uvicorn app.src.api:app --host 0.0.0.0 --port 8000 --reload \
 --reload-dir app \
---reload-exclude "logs/*" --log-config log_config.yaml &
+--reload-exclude "logs/*" \
+--reload-exclude "*.pyc" \
+--reload-exclude "__pycache__/*" \
+--log-config log_config.yaml &
 
 echo "--- Starting Gradio UI server ---"
 python -m app.src.ui --port 5003 &

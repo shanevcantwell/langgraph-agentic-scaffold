@@ -45,23 +45,23 @@ RUN useradd --create-home appuser
 # This ensures that executables installed by pip (like uvicorn) are found.
 ENV PATH="/home/appuser/.local/bin:${PATH}"
 
-# Switch to the non-root user.
-USER appuser
-
-# Copy all project files into the working directory.
+# Copy all project files into the working directory (as root, then chown).
 COPY --chown=appuser:appuser . .
+
+# Install Python dependencies as root (needed for Playwright system deps)
+RUN pip install --no-cache-dir -e '.[dev]'
+
+# Install Playwright browsers with system dependencies (must be run as root)
+# This installs Chromium and its system-level dependencies
+RUN python -m playwright install --with-deps chromium
+
+# NOW switch to the non-root user for runtime.
+USER appuser
 
 # Conditionally create the execution mode lock file based on the build argument.
 RUN if [ "$EXECUTION_MODE" = "unsupervised" ]; then \
     touch .unsupervised_execution.lock; \
     fi
-
-# Now, install Python dependencies from pyproject.toml.
-RUN pip install --no-cache-dir -e '.[dev]'
-
-# Install Playwright browsers (required for GeminiWebUIAdapter)
-# Use --with-deps flag to install browser dependencies
-RUN python -m playwright install --with-deps chromium
 
 # Make the startup script executable.
 RUN chmod +x start.sh
