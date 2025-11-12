@@ -1,6 +1,6 @@
-# app/src/ui/gradio_lassie.py
+# app/src/ui/gradio_vegas.py
 """
-LASSIE UI - LangGraph-Agentic-Scaffold Selected Interface Extension
+VEGAS UI - LangGraph-Agentic-Scaffold Selected Interface
 Retro terminal UI with NIXIE readouts and CRT effects
 """
 import gradio as gr
@@ -8,7 +8,7 @@ import argparse
 import html
 from .api_client import ApiClient
 
-LASSIE_CSS = """
+VEGAS_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
 /* === Base Terminal Styling === */
@@ -254,7 +254,7 @@ LASSIE_CSS = """
 
 def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_display, specialist_ticker, log_output, json_output, html_output, image_output, archive_output):
     """
-    Returns a closure for handling the Gradio submit event with LASSIE UI updates.
+    Returns a closure for handling the Gradio submit event with VEGAS UI updates.
     """
     turn_count = 0
 
@@ -322,12 +322,12 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
 
 
 def create_ui(api_client: ApiClient):
-    """Creates the LASSIE Gradio UI with retro terminal styling."""
-    with gr.Blocks(theme=gr.themes.Monochrome(), title="L.A.S. Interface - LASSIE Terminal", css=LASSIE_CSS) as demo:
+    """Creates the VEGAS Gradio UI with retro terminal styling."""
+    with gr.Blocks(theme=gr.themes.Monochrome(), title="LAS VEGAS Terminal", css=VEGAS_CSS) as demo:
 
         # Header
-        gr.Markdown("# 🖥️ L.A.S.S.I.E. TERMINAL")
-        gr.Markdown("**LangGraph-Agentic-Scaffold Selected Interface Extension**")
+        gr.Markdown("# 🖥️ V.E.G.A.S. TERMINAL")
+        gr.Markdown("**Visual Agentic-Scaffold**")
         gr.Markdown("```SYSTEM STATUS: OPERATIONAL | CLEARANCE LEVEL: ALPHA```")
 
         with gr.Row():
@@ -415,8 +415,8 @@ def create_ui(api_client: ApiClient):
 
 
 def main():
-    """Parses command-line arguments and launches the LASSIE Gradio app."""
-    parser = argparse.ArgumentParser(description="LASSIE UI for the Agentic System")
+    """Parses command-line arguments and launches the VEGAS Gradio app."""
+    parser = argparse.ArgumentParser(description="VEGAS UI for the Agentic System")
     parser.add_argument(
         "--port",
         type=int,
@@ -428,7 +428,7 @@ def main():
     api_client = ApiClient()
     demo = create_ui(api_client)
 
-    print(f"🖥️  Launching L.A.S.S.I.E. Terminal on port {args.port}...")
+    print(f"🖥️  Launching V.E.G.A.S. Terminal on port {args.port}...")
     demo.launch(server_port=args.port, server_name="0.0.0.0")
 
 
