@@ -27,6 +27,19 @@ class GraphBuilder:
         self.config = self.config_loader.get_config()
         self.adapter_factory = adapter_factory or AdapterFactory(self.config)
 
+        # Validate provider dependencies before attempting to load specialists
+        missing_deps = self.adapter_factory.validate_provider_dependencies()
+        if missing_deps:
+            logger.warning("="*80)
+            logger.warning("OPTIONAL DEPENDENCIES MISSING")
+            logger.warning("="*80)
+            for provider_key, provider_type, error_msg in missing_deps:
+                logger.warning(error_msg)
+            logger.warning("="*80)
+            logger.warning("Specialists bound to these providers will fail to initialize.")
+            logger.warning("To fix: Install missing dependencies or rebind specialists to other providers.")
+            logger.warning("="*80)
+
         # TASK 2.5: Initialize MCP registry (per-graph-instance for test isolation)
         from ..mcp import McpRegistry, McpClient
         self.mcp_registry = McpRegistry(self.config)

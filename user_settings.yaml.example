@@ -114,3 +114,8 @@ specialist_model_bindings:
 # The default LLM configuration to use for any specialist that is not
 # explicitly bound above. This must match a key from the providers defined above.
 default_llm_config: "gemini_flash"
+
+# Standard clean UI (default)
+ui_module: "gradio_app"     # most basic sample UI
+# ui_module: "gradio_vegas"   # retro scifi terminal UI
+# ui_module: "gradio_lassi"   # mango yogurt drink UI

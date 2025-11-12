@@ -68,6 +68,9 @@ specialists:
     requires_artifacts: ["html_artifact"]
     artifact_providers:
       html_artifact: "web_builder"
+    critique_strategy:
+      type: "llm"
+      prompt_file: "critic_prompt.md"
 
   # --- Core Capabilities ---
   web_builder:
