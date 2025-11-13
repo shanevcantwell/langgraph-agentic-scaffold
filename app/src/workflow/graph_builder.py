@@ -340,13 +340,14 @@ class GraphBuilder:
             logger.info("Graph Edge: Added distillation subgraph with graph-driven iteration")
 
         for name in self.specialists:
-            # Exclude orchestration specialists and tiered chat subgraph components
+            # Exclude orchestration specialists and subgraph components from hub-and-spoke routing
+            # Excluded specialists have custom edge wiring defined elsewhere in this method
             excluded_specialists = [
-                router_name,
-                CoreSpecialist.ARCHIVER.value,
-                CoreSpecialist.END.value,
-                CoreSpecialist.CRITIC.value,
-                "web_builder"  # Part of web_builder ↔ critic subgraph
+                router_name,  # Core orchestration - not routed
+                CoreSpecialist.ARCHIVER.value,  # Termination specialist - not routed
+                CoreSpecialist.END.value,  # Final node - not routed
+                CoreSpecialist.CRITIC.value,  # Has custom conditional edge (after_critique_decider)
+                "web_builder"  # ADR-CORE-012: Part of web_builder ↔ critic generate-critique-refine subgraph
             ]
 
             # CORE-CHAT-002: Exclude tiered chat subgraph components from standard routing
@@ -387,11 +388,18 @@ class GraphBuilder:
                 }
             )
 
-            # WEB_BUILDER ↔ CRITIC SUBGRAPH: Direct edge from web_builder to critic
-            # This creates a tight generate-critique-refine loop without router intervention
+            # ADR-CORE-012: WEB_BUILDER ↔ CRITIC SUBGRAPH
+            # Creates a tight generate-critique-refine loop without router intervention:
+            #   1. Router → web_builder (generates UI)
+            #   2. web_builder → critic_specialist (direct edge - reviews UI)
+            #   3. critic_specialist → after_critique_decider:
+            #      - REVISE → web_builder (refine based on feedback)
+            #      - ACCEPT → check_task_completion → END
+            # This bypasses the router for efficiency and prevents false loop detection.
+            # CRITICAL: web_builder MUST be excluded from hub-and-spoke routing (line 350)
             if "web_builder" in self.specialists:
                 workflow.add_edge("web_builder", CoreSpecialist.CRITIC.value)
-                logger.info("Graph Edge: Added direct edge web_builder → critic_specialist (generate-critique subgraph)")
+                logger.info("Graph Edge: Added direct edge web_builder → critic_specialist (ADR-CORE-012 subgraph)")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)

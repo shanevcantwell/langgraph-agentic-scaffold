@@ -62,10 +62,41 @@ This is where the agent's behavior and control flow are defined. The system uses
 
 The system uses explicit, high-priority conditional edges for specific, well-defined sub-workflows, bypassing the main router for efficiency.
 
-*   **The "Generate-and-Critique" Loop:**
-    *   An edge is added from the `critic_specialist` to the `GraphOrchestrator.after_critique_decider` function.
-    *   If the critic's decision is `REVISE`, the graph is routed directly to the configured `revision_target` (e.g., `web_builder`), creating a tight, efficient refinement loop.
-    *   If the decision is `ACCEPT`, it routes to the standard `check_task_completion` function to begin the termination sequence.
+*   **The "Generate-and-Critique" Loop (ADR-CORE-012):**
+
+    Creates a **bidirectional subgraph** for iterative refinement:
+
+    ```
+    Router → web_builder → critic_specialist
+                ↑              ↓
+                └── REVISE ────┘
+                    ACCEPT → check_task_completion → END
+    ```
+
+    **Key Components:**
+    1. **Direct Edge:** `web_builder → critic_specialist` (bypasses router)
+    2. **Exclusion:** `web_builder` excluded from hub-and-spoke routing
+    3. **Conditional Edge:** `critic_specialist → after_critique_decider`
+    4. **Config:** `critic_specialist.revision_target: "web_builder"`
+
+    **Flow:**
+    - Router routes to `web_builder` (generates initial UI)
+    - `web_builder` completes → **directly** to `critic_specialist` (no router hop)
+    - `critic_specialist` reviews artifact → `after_critique_decider`
+    - **REVISE** → routes back to `web_builder` (refine based on feedback)
+    - **ACCEPT** → routes to `check_task_completion` (begin termination)
+
+    **Critical Configuration:**
+    ```yaml
+    critic_specialist:
+      revision_target: "web_builder"  # MUST match generator specialist
+    ```
+
+    **Why This Pattern:**
+    - ✅ **Efficiency:** 66% fewer hops (1 edge vs 3 per iteration)
+    - ✅ **Prevents False Loop Detection:** Valid refinement cycles don't trigger loop detection
+    - ✅ **Architectural Clarity:** Intent is explicit in code and config
+    - ⚠️ **Regression Risk:** Lost across LLM context windows - well documented now
 
 *   **The Termination Sequence:**
     *   The `end_specialist` is the designated finalizer. A direct, non-conditional edge is wired from the `end_specialist` node to the special `END` node of the graph. This guarantees that once the finalizer runs, the workflow terminates cleanly.

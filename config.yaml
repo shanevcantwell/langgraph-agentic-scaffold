@@ -65,6 +65,9 @@ specialists:
     type: "llm"
     prompt_file: "critic_prompt.md"
     description: "Analyzes a UI artifact and provides a critique for improvement. It is a key part of the refinement loop."
+    # ADR-CORE-012: revision_target defines where REVISE decisions route in the generate-critique-refine subgraph
+    # CRITICAL: Must match the specialist that generates the artifact being critiqued (web_builder)
+    # Setting this to "router_specialist" breaks the subgraph and creates unproductive loops
     revision_target: "web_builder"
     requires_artifacts: ["ui_artifact"]
     artifact_providers:
