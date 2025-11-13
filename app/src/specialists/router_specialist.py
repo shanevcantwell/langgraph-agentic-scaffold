@@ -97,14 +97,21 @@ class RouterSpecialist(BaseSpecialist):
 
             if is_specialist_dependency:
                 # This is a specialist stating a hard dependency requirement
-                recommendation_context = f"\n\n**CRITICAL - SPECIALIST DEPENDENCY REQUIREMENT**:\nThe '{recommending_specialist}' specialist CANNOT proceed without required artifacts from: {', '.join(recommended_specialists)}.\n\n**YOU MUST route to one of these specialists to satisfy this dependency.** Do NOT route back to '{recommending_specialist}' until the dependency is resolved."
+                # Format: If only one dependency, be explicit about routing to it
+                if len(recommended_specialists) == 1:
+                    target = recommended_specialists[0]
+                    recommendation_context = f"\n\n🚨 **BLOCKING DEPENDENCY - IMMEDIATE ACTION REQUIRED** 🚨\n\nThe '{recommending_specialist}' specialist has FAILED and CANNOT proceed.\n\n**REQUIRED ACTION:** You MUST route to '{target}' next.\n**REASON:** '{recommending_specialist}' requires artifacts that ONLY '{target}' can provide.\n**FORBIDDEN:** Do NOT route to '{recommending_specialist}' again until '{target}' has executed successfully.\n\nThis is a HARD DEPENDENCY, not a suggestion. Routing to any other specialist will cause the same failure."
+                else:
+                    recommendation_context = f"\n\n🚨 **BLOCKING DEPENDENCY - IMMEDIATE ACTION REQUIRED** 🚨\n\nThe '{recommending_specialist}' specialist has FAILED and CANNOT proceed.\n\n**REQUIRED ACTION:** You MUST route to ONE of these specialists next: {', '.join(recommended_specialists)}\n**REASON:** '{recommending_specialist}' requires artifacts that only these specialists can provide.\n**FORBIDDEN:** Do NOT route to '{recommending_specialist}' again until the dependency is satisfied.\n\nThis is a HARD DEPENDENCY, not a suggestion."
                 logger.warning(f"Specialist '{recommending_specialist}' has HARD DEPENDENCY on: {recommended_specialists}")
             else:
                 # This is from triage - treat as advisory suggestion
                 recommendation_context = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
                 logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
 
-        contextual_prompt_addition = f"Based on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}{recommendation_context}"
+        # Put CRITICAL dependency requirements FIRST, before specialist list
+        # This ensures LLM sees it before making a decision
+        contextual_prompt_addition = f"{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
