@@ -86,7 +86,7 @@ specialists:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
     description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
-    root_dir: "./workspace" # Defaults to a 'workspace' folder in the project root.
+    root_dir: "${WORKSPACE_PATH:-workspace}" # Workspace path from .env (defaults to 'workspace')
 
   # --- Data & Analysis ---
   data_extractor_specialist:

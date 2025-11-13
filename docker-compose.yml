@@ -26,7 +26,8 @@ services:
       # Mount the project directory for live code changes during development.
       - .:/app
       # Create a named volume for the agent's persistent "walled garden" workspace.
-      - app_workspace:/app/workspace
+      # Path is configured via WORKSPACE_PATH in .env (defaults to "workspace")
+      - app_workspace:/app/${WORKSPACE_PATH:-workspace}
     ports:
       # Map the API and UI ports from the container to your host machine.
       - "8000:8000"
