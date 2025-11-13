@@ -52,7 +52,8 @@ class WebBuilder(BaseSpecialist):
             "artifacts": {
                 "html_document.html": web_content.html_document
             },
-            "recommended_specialists": ["critic_specialist"]
+            "recommended_specialists": ["critic_specialist"],
+            "routing_history": [self.specialist_name]  # ADR-CORE-012: Track direct-edge subgraph execution
         }
 
         return updated_state

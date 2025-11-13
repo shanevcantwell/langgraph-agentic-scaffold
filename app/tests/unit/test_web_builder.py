@@ -30,6 +30,9 @@ def test_web_builder_generates_html(specialist):
     assert result_state["artifacts"]["html_document.html"] == mock_response["html_document"]
     # It should always recommend the critic to review its work.
     assert result_state["recommended_specialists"] == ["critic_specialist"]
+    # It should track itself in routing history for archive reports.
+    assert "routing_history" in result_state
+    assert result_state["routing_history"] == ["web_builder"]
 
 def test_web_builder_handles_llm_invocation_error(specialist):
     """Tests that an LLMInvocationError is propagated correctly."""

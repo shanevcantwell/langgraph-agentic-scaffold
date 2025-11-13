@@ -340,14 +340,13 @@ class GraphBuilder:
             logger.info("Graph Edge: Added distillation subgraph with graph-driven iteration")
 
         for name in self.specialists:
-            # Exclude orchestration specialists and subgraph components from hub-and-spoke routing
-            # Excluded specialists have custom edge wiring defined elsewhere in this method
+            # Exclude orchestration nodes and subgraph components from hub-and-spoke routing
             excluded_specialists = [
-                router_name,  # Core orchestration - not routed
-                CoreSpecialist.ARCHIVER.value,  # Termination specialist - not routed
-                CoreSpecialist.END.value,  # Final node - not routed
-                CoreSpecialist.CRITIC.value,  # Has custom conditional edge (after_critique_decider)
-                "web_builder"  # ADR-CORE-012: Part of web_builder ↔ critic generate-critique-refine subgraph
+                router_name,
+                CoreSpecialist.ARCHIVER.value,
+                CoreSpecialist.END.value,
+                CoreSpecialist.CRITIC.value,
+                "web_builder"  # ADR-CORE-012
             ]
 
             # CORE-CHAT-002: Exclude tiered chat subgraph components from standard routing

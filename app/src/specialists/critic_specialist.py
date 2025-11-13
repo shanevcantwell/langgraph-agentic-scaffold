@@ -52,7 +52,8 @@ class CriticSpecialist(BaseSpecialist):
         updated_state = {
             "messages": [ai_message],
             "artifacts": {"critique.md": critique_text},
-            "scratchpad": {"critique_decision": critique.decision}
+            "scratchpad": {"critique_decision": critique.decision},
+            "routing_history": [self.specialist_name]  # ADR-CORE-012: Track direct-edge subgraph execution
         }
 
         if critique.decision == "REVISE" and self.revision_target:
