@@ -76,14 +76,31 @@ class RouterSpecialist(BaseSpecialist):
         available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in current_specialists.items()]
         tools_list_str = "\n".join(available_tools_desc)
 
-        # Check for triage recommendations (advisory, not restrictive)
+        # Check for specialist recommendations (could be from triage or from another specialist)
         recommended_specialists = state.get("recommended_specialists")
-        triage_advisory = ""
-        if recommended_specialists:
-            triage_advisory = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
-            logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
+        routing_history = state.get("routing_history", [])
+        recommendation_context = ""
 
-        contextual_prompt_addition = f"Based on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}{triage_advisory}"
+        if recommended_specialists:
+            # Determine if this is a triage suggestion or a specialist dependency
+            # If the last specialist in routing_history (not router) made this recommendation,
+            # treat it as a required dependency, not advisory
+            last_non_router_specialist = None
+            for spec in reversed(routing_history):
+                if spec != "router_specialist" and spec != "prompt_triage_specialist":
+                    last_non_router_specialist = spec
+                    break
+
+            # If we just came from a specialist (not triage), this is likely a dependency requirement
+            if last_non_router_specialist and len(routing_history) >= 2 and routing_history[-2] != "prompt_triage_specialist":
+                recommendation_context = f"\n\n**IMPORTANT - SPECIALIST DEPENDENCY REQUIREMENT**:\nThe '{last_non_router_specialist}' specialist requires artifacts from the following specialist(s) before it can proceed: {', '.join(recommended_specialists)}.\nYou should route to one of these specialists to satisfy the dependency, unless you have a strong reason to believe the dependency can be resolved differently."
+                logger.info(f"Specialist '{last_non_router_specialist}' requested dependencies: {recommended_specialists}")
+            else:
+                # This is from triage - treat as advisory
+                recommendation_context = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
+                logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
+
+        contextual_prompt_addition = f"Based on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}{recommendation_context}"
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
