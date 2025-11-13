@@ -83,20 +83,24 @@ class RouterSpecialist(BaseSpecialist):
 
         if recommended_specialists:
             # Determine if this is a triage suggestion or a specialist dependency
-            # If the last specialist in routing_history (not router) made this recommendation,
-            # treat it as a required dependency, not advisory
-            last_non_router_specialist = None
-            for spec in reversed(routing_history):
-                if spec != "router_specialist" and spec != "prompt_triage_specialist":
-                    last_non_router_specialist = spec
-                    break
+            # Check if the last specialist that ran (excluding router/triage) is making this recommendation
+            is_specialist_dependency = False
+            recommending_specialist = None
 
-            # If we just came from a specialist (not triage), this is likely a dependency requirement
-            if last_non_router_specialist and len(routing_history) >= 2 and routing_history[-2] != "prompt_triage_specialist":
-                recommendation_context = f"\n\n**IMPORTANT - SPECIALIST DEPENDENCY REQUIREMENT**:\nThe '{last_non_router_specialist}' specialist requires artifacts from the following specialist(s) before it can proceed: {', '.join(recommended_specialists)}.\nYou should route to one of these specialists to satisfy the dependency, unless you have a strong reason to believe the dependency can be resolved differently."
-                logger.info(f"Specialist '{last_non_router_specialist}' requested dependencies: {recommended_specialists}")
+            if routing_history:
+                # Find the last specialist that ran (not router, not triage)
+                for spec in reversed(routing_history):
+                    if spec not in ["router_specialist", "prompt_triage_specialist"]:
+                        recommending_specialist = spec
+                        is_specialist_dependency = True
+                        break
+
+            if is_specialist_dependency:
+                # This is a specialist stating a hard dependency requirement
+                recommendation_context = f"\n\n**CRITICAL - SPECIALIST DEPENDENCY REQUIREMENT**:\nThe '{recommending_specialist}' specialist CANNOT proceed without required artifacts from: {', '.join(recommended_specialists)}.\n\n**YOU MUST route to one of these specialists to satisfy this dependency.** Do NOT route back to '{recommending_specialist}' until the dependency is resolved."
+                logger.warning(f"Specialist '{recommending_specialist}' has HARD DEPENDENCY on: {recommended_specialists}")
             else:
-                # This is from triage - treat as advisory
+                # This is from triage - treat as advisory suggestion
                 recommendation_context = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
                 logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
 
