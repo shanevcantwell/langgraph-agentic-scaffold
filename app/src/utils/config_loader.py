@@ -2,6 +2,7 @@
 import yaml
 import os
 import logging
+import re
 from pydantic import ValidationError
 
 import copy
@@ -59,6 +60,9 @@ class ConfigLoader:
                     return None
                 raise ConfigError(f"Configuration file is empty: {file_path}")
 
+            # Substitute environment variables before validation
+            raw_config = self._substitute_env_vars(raw_config)
+
             validated_config = schema_model(**raw_config)
             logger.debug(f"Successfully validated configuration file: {file_path}")
             return validated_config.model_dump()
@@ -78,6 +82,47 @@ class ConfigLoader:
             msg = f"Configuration validation failed for '{file_path}':\n{e}"
             logger.error(msg)
             raise ConfigError(msg) from e
+
+    def _substitute_env_vars(self, config: dict) -> dict:
+        """
+        Recursively substitute environment variables in config values.
+
+        Supports two syntaxes:
+        - ${VAR_NAME}: Required env var (raises error if not set)
+        - ${VAR_NAME:-default_value}: Optional env var with default
+
+        Examples:
+            "${WORKSPACE_PATH}" -> os.getenv("WORKSPACE_PATH") or error
+            "${WORKSPACE_PATH:-workspace}" -> os.getenv("WORKSPACE_PATH") or "workspace"
+        """
+        if isinstance(config, dict):
+            return {key: self._substitute_env_vars(value) for key, value in config.items()}
+        elif isinstance(config, list):
+            return [self._substitute_env_vars(item) for item in config]
+        elif isinstance(config, str):
+            # Pattern matches ${VAR_NAME} or ${VAR_NAME:-default}
+            pattern = r'\$\{([A-Z_][A-Z0-9_]*?)(?::-(.*?))?\}'
+
+            def replacer(match):
+                var_name = match.group(1)
+                default_value = match.group(2)
+
+                env_value = os.getenv(var_name)
+
+                if env_value is not None:
+                    return env_value
+                elif default_value is not None:
+                    logger.debug(f"Environment variable '{var_name}' not set, using default: '{default_value}'")
+                    return default_value
+                else:
+                    raise ConfigError(
+                        f"Required environment variable '{var_name}' is not set. "
+                        f"Please add it to your .env file or provide a default value using ${{VAR_NAME:-default}}."
+                    )
+
+            return re.sub(pattern, replacer, config)
+        else:
+            return config
 
     def _resolve_provider_env_vars(self, providers: dict):
         """
