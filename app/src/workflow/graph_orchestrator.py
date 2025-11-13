@@ -9,7 +9,7 @@ from ..specialists.base import BaseSpecialist
 from ..graph.state import GraphState, Scratchpad
 from ..enums import CoreSpecialist
 from ..utils import state_pruner
-from ..utils.errors import SpecialistError, WorkflowError
+from ..utils.errors import SpecialistError, WorkflowError, RateLimitError
 from ..utils.report_schema import ErrorReport
 
 logger = logging.getLogger(__name__)
@@ -253,6 +253,13 @@ class GraphOrchestrator:
                     logger.warning(f"Specialist '{specialist_name}' returned a 'turn_count'. This is not allowed and will be ignored.")
                     del update["turn_count"]
                 return update
+            except RateLimitError as e:
+                # Rate limit errors are FATAL - halt workflow immediately (fail-fast pattern)
+                logger.error(f"Rate limit exceeded in specialist '{specialist_name}': {e}")
+                raise WorkflowError(
+                    f"Rate limit exceeded for specialist '{specialist_name}'. "
+                    f"Please wait before retrying. Error: {e}"
+                ) from e
             except (SpecialistError, Exception) as e:
                 logger.error(f"Caught unhandled exception from specialist '{specialist_name}': {e}", exc_info=True)
                 tb_str = traceback.format_exc()
