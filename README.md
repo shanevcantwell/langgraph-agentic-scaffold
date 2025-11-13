@@ -29,7 +29,7 @@ This scaffold provides a well-defined architecture designed for reliability, sca
 
 ### Core Architecture Patterns
 
-  * **API-First Design:** The system is exposed via a FastAPI web server with Gradio UIs, providing clean, modern interfaces for interaction and integration.
+  * **API-First Design:** The system is exposed via a FastAPI web server with sample Gradio UIs, providing clean, modern interfaces for interaction and integration.
 
   * **Configuration-Driven:** The entire agentic system—specialists, models, and prompts—is defined in configuration files. The system's structure does not depend on changing Python code.
 
