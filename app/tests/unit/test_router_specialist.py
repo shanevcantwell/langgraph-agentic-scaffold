@@ -31,7 +31,12 @@ def test_get_available_specialists_no_recommendations(router_specialist):
     assert len(available) == 2
 
 def test_get_available_specialists_with_recommendations(router_specialist):
-    """Tests that the specialist list is filtered by recommendations."""
+    """Tests that the specialist list is NOT filtered by recommendations (advisory mode).
+
+    As of ADR-CORE-011, triage recommendations are advisory, not restrictive.
+    The router always receives the full specialist list, with recommendations
+    provided as context in the LLM prompt (see _get_llm_choice).
+    """
     # Arrange
     router_specialist.set_specialist_map({
         "spec1": {"desc": "d1"},
@@ -41,11 +46,11 @@ def test_get_available_specialists_with_recommendations(router_specialist):
     state = {"recommended_specialists": ["spec1", "spec3"]}
     # Act
     available = router_specialist._get_available_specialists(state)
-    # Assert
+    # Assert: ALL specialists are available, regardless of recommendations
     assert "spec1" in available
+    assert "spec2" in available  # Not filtered out
     assert "spec3" in available
-    assert "spec2" not in available
-    assert len(available) == 2
+    assert len(available) == 3  # All 3 specialists present
 
 def test_handle_llm_failure_fallback_priority(router_specialist):
     """Tests the fallback logic when the LLM fails to make a decision."""

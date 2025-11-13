@@ -33,12 +33,13 @@ class RouterSpecialist(BaseSpecialist):
         logger.info(f"Router now aware of all specialist configurations.")
 
     def _get_available_specialists(self, state: Dict[str, Any]) -> Dict[str, Dict]:
-        """Determines the list of specialists available for routing in the current turn."""
-        recommended_specialists = state.get("recommended_specialists")
-        if recommended_specialists:
-            available = {name: self.specialist_map[name] for name in recommended_specialists if name in self.specialist_map}
-            logger.info(f"Filtering router choices based on Triage recommendations: {list(available.keys())}")
-            return available
+        """Returns the full list of specialists available for routing.
+
+        NOTE: This always returns the COMPLETE specialist map. Triage recommendations
+        are provided as advisory context in the LLM prompt (see _get_llm_choice),
+        but do NOT restrict the router's choices. This prevents triage errors from
+        blocking correct routing decisions.
+        """
         return self.specialist_map
 
     def _handle_llm_failure(self) -> Dict[str, Any]:
@@ -68,13 +69,22 @@ class RouterSpecialist(BaseSpecialist):
         current_specialists = self._get_available_specialists(state)
 
         if not current_specialists:
-            logger.warning("Router has no specialists to choose from after filtering. Ending workflow.")
+            logger.warning("Router has no specialists to choose from. Ending workflow.")
             return {"next_specialist": END, "content": "No specialists available to route to. Ending workflow."}
 
+        # Build the list of all available specialists
         available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in current_specialists.items()]
         tools_list_str = "\n".join(available_tools_desc)
-        contextual_prompt_addition = f"Based on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
-        
+
+        # Check for triage recommendations (advisory, not restrictive)
+        recommended_specialists = state.get("recommended_specialists")
+        triage_advisory = ""
+        if recommended_specialists:
+            triage_advisory = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
+            logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
+
+        contextual_prompt_addition = f"Based on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}{triage_advisory}"
+
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
         request = StandardizedLLMRequest(messages=final_messages, tools=[Route], force_tool_call=True)
@@ -84,7 +94,7 @@ class RouterSpecialist(BaseSpecialist):
         next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist') if tool_calls and tool_calls[0].get('args') else None
         if not next_specialist_from_llm:
             return self._handle_llm_failure()
-        
+
         validated_choice = self._validate_llm_choice(next_specialist_from_llm, list(current_specialists.keys()))
         content = f"Routing to specialist: {validated_choice}"
         return {"next_specialist": validated_choice, "tool_calls": tool_calls, "content": content}
