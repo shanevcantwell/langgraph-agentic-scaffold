@@ -524,6 +524,36 @@ The system's configuration is a three-tiered hierarchy. Understanding this model
 
 3.  **Result:** At runtime, the `GraphBuilder` will instantiate the `router_specialist` and, seeing the binding in `user_settings.yaml`, will configure it to use the `my_strong_model` provider. The `web_builder` specialist, having no specific binding, will fall back to using the `my_fast_model` provider as defined by `default_llm_config`.
 
+**Environment Variable Interpolation:**
+
+Configuration files support environment variable substitution using the `${VAR_NAME}` syntax. This allows for single-source-of-truth configuration in `.env` files.
+
+**Supported Syntax:**
+- `${VAR_NAME}`: Required environment variable (raises error if not set)
+- `${VAR_NAME:-default_value}`: Optional environment variable with fallback default
+
+**Example - Workspace Path Coordination:**
+
+```yaml
+# config.yaml
+specialists:
+  file_specialist:
+    root_dir: "${WORKSPACE_PATH:-workspace}"
+```
+
+```bash
+# .env
+WORKSPACE_PATH=workspace
+```
+
+```yaml
+# docker-compose.yml
+volumes:
+  - app_workspace:/app/${WORKSPACE_PATH:-workspace}
+```
+
+This pattern ensures the FileSpecialist sandbox boundary, ConfigLoader path validation, and Docker volume mount all coordinate through a single definition in `.env`. Without env var interpolation, these three layers would be independent sources of truth that could drift out of sync.
+
 ### 4.6 Container Naming Convention
 
 The `docker-compose.yml` file uses explicit container names (`langgraph-app` and `langgraph-proxy`). This is to prevent conflicts with other projects and to make the containers easily identifiable. It is strongly recommended not to change these names, as it can lead to unexpected behavior and orphaned containers.
