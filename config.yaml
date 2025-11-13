@@ -76,7 +76,7 @@ specialists:
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
-    description: "Takes a 'system_plan' artifact and generates a self-contained HTML (including js and svg) or python (such as for gradio) document based on it. Requires a 'system_plan' to be present in the state."
+    description: "Builds or modifies web UIs (HTML/CSS/JS or Gradio Python). Can work from a 'system_plan' artifact OR from attached code files. Use this for creating new UIs, rewriting UI themes, or modifying existing web applications."
     requires_artifacts: ["system_plan", "text_to_process"]
     artifact_providers:
       system_plan: "systems_architect"
@@ -85,7 +85,7 @@ specialists:
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
-    description: "Performs file system operations like read, write, and list directories using a Pydantic schema. Write operations are protected by a safety lock."
+    description: "Performs file system operations (read, write, list, move, delete) using structured commands. Use this when the user explicitly requests file manipulation, not for analyzing or processing file contents (use text_analysis_specialist instead)."
     root_dir: "${WORKSPACE_PATH:-workspace}" # Workspace path from .env (defaults to 'workspace')
 
   # --- Data & Analysis ---
@@ -112,7 +112,7 @@ specialists:
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
-    description: "Analyzes, summarizes, or extracts information from a block of text. Use this after text has been retrieved by another specialist."
+    description: "Analyzes, summarizes, or extracts specific information from documents or text blocks. Use this for analytical tasks on text content (e.g., 'summarize this document', 'extract key points', 'analyze this code structure'). For conversational questions about text, use chat_specialist instead."
     requires_artifacts: ["text_to_process"]
     artifact_providers:
       text_to_process: "file_specialist"
@@ -181,7 +181,7 @@ specialists:
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"
-    description: "THE PRIMARY SPECIALIST for all user questions and informational queries. Route here WITH INTENT when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. This is your go-to specialist for any question or information request. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
+    description: "Handles conversational questions and informational queries. Use this when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. For tasks that require action (building, analyzing, modifying), use task-specific specialists instead. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
     # SYSTEM PROMPT BEHAVIOR:
     # - TIERED CHAT ENABLED: This specialist is NEVER directly executed.
     #   Routing to 'chat_specialist' triggers progenitor fan-out instead.
@@ -266,7 +266,7 @@ specialists:
   default_responder_specialist:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
-    description: "LAST-RESORT FALLBACK ONLY. Use this ONLY when you genuinely cannot determine which specialist is appropriate. NOT for questions (use chat_specialist). NOT for tasks (use task-specific specialists). Only for truly ambiguous inputs like 'ping', 'hello', or when no other specialist matches at all."
+    description: "SYSTEM FALLBACK - NOT FOR TRIAGE RECOMMENDATION. Handles edge cases like greetings ('hello', 'ping') or genuinely ambiguous inputs. The triage specialist should NEVER recommend this - let the router select it automatically when no other specialist fits."
 
   # --- Procedural Specialists with External Dependencies ---
   open_interpreter_specialist:
