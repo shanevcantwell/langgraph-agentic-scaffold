@@ -345,7 +345,8 @@ class GraphBuilder:
                 router_name,
                 CoreSpecialist.ARCHIVER.value,
                 CoreSpecialist.END.value,
-                CoreSpecialist.CRITIC.value
+                CoreSpecialist.CRITIC.value,
+                "web_builder"  # Part of web_builder ↔ critic subgraph
             ]
 
             # CORE-CHAT-002: Exclude tiered chat subgraph components from standard routing
@@ -385,6 +386,12 @@ class GraphBuilder:
                     CoreSpecialist.CRITIC.value: CoreSpecialist.CRITIC.value # Add self to prevent default looping
                 }
             )
+
+            # WEB_BUILDER ↔ CRITIC SUBGRAPH: Direct edge from web_builder to critic
+            # This creates a tight generate-critique-refine loop without router intervention
+            if "web_builder" in self.specialists:
+                workflow.add_edge("web_builder", CoreSpecialist.CRITIC.value)
+                logger.info("Graph Edge: Added direct edge web_builder → critic_specialist (generate-critique subgraph)")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)

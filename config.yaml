@@ -65,6 +65,7 @@ specialists:
     type: "llm"
     prompt_file: "critic_prompt.md"
     description: "Analyzes a UI artifact and provides a critique for improvement. It is a key part of the refinement loop."
+    revision_target: "web_builder"
     requires_artifacts: ["ui_artifact"]
     artifact_providers:
       ui_artifact: "web_builder"
