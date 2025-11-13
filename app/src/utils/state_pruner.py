@@ -65,7 +65,7 @@ def generate_success_report(report_data: SuccessReport) -> str:
             # Skip the final response artifact as it's displayed prominently elsewhere.
             if key == "final_user_response.md":
                 continue
-            content_preview = str(value)[:1000] + "..." if len(str(value)) > 1000 else str(value)
+            content_preview = str(value)  # Display full artifact content (no truncation)
             artifacts_str += f"### 📄 {key}\n\n```\n{content_preview}\n```\n\n"
     if not artifacts_str:
         artifacts_str = "No additional artifacts were generated."
