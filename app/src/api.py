@@ -98,10 +98,18 @@ async def _stream_formatter(generator):
         for node_name, node_output in chunk.items():
             # When a specialist node is invoked, its output is nested under its name.
             # We can use this event to send a status update to the UI.
-            if isinstance(node_output, dict) and "messages" in node_output:
-                status_update = f"Executing specialist: {node_name}..."
-                # Yield a UI-compatible status update
-                yield f"data: {json.dumps({'status': status_update})}\n\n"
+            if isinstance(node_output, dict):
+                # Check for errors first
+                if "error" in node_output or "error_report" in node_output:
+                    error_msg = node_output.get("error", "Unknown error")
+                    error_report = node_output.get("error_report", "")
+                    # Stream error immediately
+                    yield f"data: {json.dumps({'error': error_msg, 'error_report': error_report})}\n\n"
+
+                if "messages" in node_output:
+                    status_update = f"Executing specialist: {node_name}..."
+                    # Yield a UI-compatible status update
+                    yield f"data: {json.dumps({'status': status_update})}\n\n"
 
                 # Accumulate state deltas according to GraphState reducer semantics
                 if accumulated_state is None:

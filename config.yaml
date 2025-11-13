@@ -64,10 +64,10 @@ specialists:
   critic_specialist:
     type: "llm"
     prompt_file: "critic_prompt.md"
-    description: "Analyzes an HTML artifact and provides a critique for improvement. It is a key part of the refinement loop."
-    requires_artifacts: ["html_artifact"]
+    description: "Analyzes a UI artifact and provides a critique for improvement. It is a key part of the refinement loop."
+    requires_artifacts: ["ui_artifact"]
     artifact_providers:
-      html_artifact: "web_builder"
+      ui_artifact: "web_builder"
     critique_strategy:
       type: "llm"
       prompt_file: "critic_prompt.md"
@@ -76,7 +76,7 @@ specialists:
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
-    description: "Takes a 'system_plan' artifact and generates a self-contained HTML document based on it. Requires a 'system_plan' to be present in the state."
+    description: "Takes a 'system_plan' artifact and generates a self-contained HTML (including js and svg) or python (such as for gradio) document based on it. Requires a 'system_plan' to be present in the state."
     requires_artifacts: ["system_plan", "text_to_process"]
     artifact_providers:
       system_plan: "systems_architect"
