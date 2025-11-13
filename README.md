@@ -25,17 +25,55 @@ The mission is to provide a clear, maintainable, and testable template for const
 
 ## Architectural Highlights
 
-This scaffold provides a well-defined architecture designed for reliability and scalability.
+This scaffold provides a well-defined architecture designed for reliability, scalability, and resilience.
 
-  * **API-First Design:** The system is exposed via a FastAPI web server, providing a clean, modern interface for interaction and integration.
-  * **Configuration-Driven:** The entire agentic system including specialists, models, and prompts, is defined in a central `config.yaml`. The system's structure is not dependent on changing any Python code.
-  * **First-Class Observability:** Integrated with LangSmith out of the box. The architecture includes the necessary hooks to provide detailed, hierarchical traces of every agentic run, which is essential for debugging complex, multi-step interactions.
-  * **Decoupled Adapter Pattern:** Specialists are decoupled from the underlying LLM clients. They request a pre-configured "adapter" by name, allowing you to swap LLM providers (Gemini, OpenAI, Ollama, etc.) in the config file without touching the specialist's business logic.
-  * **Semantic Routing:** A `Triage` specialist recommends relevant tools, allowing the main `Router` to make faster and more accurate routing decisions.
-  * **Parallel Execution & Multi-Perspective Responses:** Supports LangGraph fan-out/fan-in patterns for concurrent specialist execution. The optional Tiered Chat Subgraph provides multi-perspective responses by running analytical and contextual specialists in parallel, with graceful degradation when components fail.
-  * **Schema-Enforced Reliability:** Utilizes Pydantic models to define "hard contracts" for LLM outputs, dramatically reducing runtime errors and validation boilerplate.
-  * **Robust Termination Sequence:** Implements a mandatory three-stage finalization process, ensuring every workflow concludes with a predictable and observable shutdown sequence for enhanced reliability.
-  * **Layered Configuration Model:** Utilizes a powerful three-tiered configuration system (`.env`, `config.yaml`, `user_settings.yaml`) that separates secrets, core architecture, and user preferences for clean customization.
+### Core Architecture Patterns
+
+  * **API-First Design:** The system is exposed via a FastAPI web server with Gradio UIs, providing clean, modern interfaces for interaction and integration.
+
+  * **Configuration-Driven:** The entire agentic system—specialists, models, and prompts—is defined in configuration files. The system's structure does not depend on changing Python code.
+
+  * **Three-Tiered Configuration System:**
+    - **Tier 1 (`.env`)**: Secrets and environment-specific settings (API keys, connection URLs)
+    - **Tier 2 (`config.yaml`)**: Architectural blueprint defining all possible components (committed to git)
+    - **Tier 3 (`user_settings.yaml`)**: Model bindings and runtime configuration (git-ignored)
+    - **Environment Variable Interpolation**: Supports `${VAR_NAME}` and `${VAR_NAME:-default}` syntax for single-source-of-truth configuration
+
+  * **MCP (Message-Centric Protocol):** Synchronous, direct service invocation between specialists with timeout controls and LangSmith tracing. Enables specialists to call each other's functions without routing through the graph, reducing latency and LLM costs.
+
+  * **Virtual Coordinator Pattern:** Transparent upgrade from single-node capabilities to multi-node subgraphs. The Router chooses WHAT capability is needed, while the Orchestrator decides HOW to implement it. Exemplified by the Tiered Chat Subgraph.
+
+  * **Tiered Chat Subgraph (CORE-CHAT-002):** Production-ready multi-perspective chat with:
+    - Parallel execution of analytical and contextual specialists (ProgenitorAlpha/Bravo)
+    - Fan-out/fan-in graph pattern with proper state management
+    - Graceful degradation when components fail
+    - 39 comprehensive tests ensuring reliability
+
+### Reliability & Observability
+
+  * **Fail-Fast Validation:**
+    - Startup validation prevents running in partially-functional state
+    - Route validation eliminates silent infinite-loop bugs
+    - System terminates loudly with actionable error messages
+
+  * **First-Class Observability:** Integrated with LangSmith out of the box. FastAPI `lifespan` manager ensures buffered traces are sent before exit. Essential for debugging complex multi-agent interactions.
+
+  * **Schema-Enforced Reliability:** Pydantic models define "hard contracts" for LLM outputs, dramatically reducing runtime errors and validation boilerplate.
+
+  * **Robust Termination Sequence:** Mandatory three-stage finalization (specialist signals completion → EndSpecialist synthesizes → Router archives) ensures predictable shutdown.
+
+### Developer Experience
+
+  * **Decoupled Adapter Pattern:** Specialists request pre-configured "adapters" by name, allowing you to swap LLM providers (Gemini, OpenAI, LM Studio, etc.) without touching business logic.
+
+  * **Model-Agnostic Architecture:** All model bindings are runtime configuration. Develop with local models, deploy with cloud APIs—no code changes required.
+
+  * **Comprehensive Documentation:**
+    - Developer's Guide (architecture, patterns, best practices)
+    - Specialist Creation Guide (step-by-step tutorial)
+    - Integration Test Guide (testing patterns and examples)
+    - Graph Construction Guide (subgraph patterns)
+
   * **Modern Python Tooling:** Uses `pyproject.toml` and `pip-tools` to ensure reproducible and reliable builds for both production and development.
 
 ## ⚠️ A Critical Note on Security
@@ -148,11 +186,45 @@ If you prefer not to use Docker, you can set up a local Python virtual environme
     python -m app.src.ui --port 5003
     ```
 
-## For Developers: Debugging and Observability
+## For Developers: Documentation & Next Steps
 
-This repository is designed for serious development. Debugging complex, multi-agent interactions with `print` statements is insufficient. We strongly recommend using **LangSmith** for observability.
+This scaffold is designed for serious agentic system development with comprehensive documentation:
 
-For detailed instructions on how to enable LangSmith tracing and other architectural best practices, please see the **[Developer's Guide](https://www.google.com/search?q=./docs/DEVELOPERS_GUIDE.md)**.
+### Essential Reading
+
+  * **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)**: Complete architecture overview, LangSmith setup, configuration system, and architectural patterns (Virtual Coordinator, MCP, Tiered Chat)
+  * **[Creating a New Specialist](./docs/CREATING_A_NEW_SPECIALIST.md)**: Step-by-step tutorial for adding custom specialists
+  * **[Integration Test Guide](./docs/INTEGRATION_TEST_GUIDE.md)**: Patterns and examples for writing integration tests
+  * **[Graph Construction Guide](./docs/GRAPH_CONSTRUCTION_GUIDE.md)**: Subgraph patterns and workflow composition
+
+### Observability (Critical for Development)
+
+Debugging complex multi-agent interactions with `print` statements is insufficient. This scaffold integrates with **LangSmith** out of the box for:
+  * Visual tracing of every run (hierarchical specialist execution)
+  * State inspection at each step
+  * Error isolation with red highlighting
+  * Token count and latency tracking
+
+**Setup**: Add LangSmith credentials to `.env` and ensure the FastAPI `lifespan` manager is present (see Developer's Guide Section 3.2).
+
+### Current Status
+
+**Maturity**: Alpha / Active Development
+**Roadmap Progress**: 20% complete (6.5/32 tasks)
+**Test Coverage**: 395 tests (371 passing, comprehensive coverage for core features)
+
+**Production-Ready Features:**
+- Tiered Chat Subgraph (39 tests)
+- MCP Infrastructure (69 tests)
+- Fail-Fast Validation (startup + routing)
+- FileSpecialist with sandbox security
+
+**In Development:**
+- Circuit breaker system
+- Dossier communication pattern
+- Hybrid routing engine (reflexive + declarative + probabilistic)
+
+See [roadmap documentation](../design-docs/agentic-scaffold/01_BLUEPRINTS/) for detailed implementation status and architectural vision.
 
 ## License
 
