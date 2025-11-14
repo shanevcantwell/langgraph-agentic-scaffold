@@ -109,7 +109,9 @@ To ensure your specialist integrates smoothly and reliably into the system, plea
     *   **CRITICAL - For parallel execution specialists:** Do NOT return messages key.
         *   See "Special Case: Parallel Execution Specialists" section below for details.
 *   **Do Not Modify Global State Counters:** The `turn_count` is managed exclusively by the `RouterSpecialist`. Do not attempt to change this value from within your specialist, as it will break the workflow in unpredictable ways.
-*   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (`recommended_specialists`) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows. See the `DEVELOPERS_GUIDE.md` for more details.
+*   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (scratchpad-based routing recommendations) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows.
+    *   **Note (Task 2.7):** `recommended_specialists` has moved to `scratchpad`. Use `return {"scratchpad": {"recommended_specialists": [...]}}` pattern.
+    *   See `DEVELOPERS_GUIDE.md` Section 2.1 for state management migration details.
 
 ### Special Case: Parallel Execution Specialists
 
@@ -297,8 +299,9 @@ See `app/src/specialists/file_specialist.py` for a complete MCP-only specialist 
 - Comprehensive test coverage (39 tests)
 
 **Additional Documentation:**
-- See DEVELOPERS_GUIDE.md Section 4.5 for MCP vs Dossier usage guidelines
-- See ADR-CORE-008_MCP-Architecture.md for complete architectural details
+- See DEVELOPERS_GUIDE.md Section 2.1 for state management and breaking changes
+- See ADR-CORE-008_MCP-Architecture.md for complete MCP details
+- **Note:** Dossier pattern (ADR-CORE-003) is **OBSOLETE** - Use MCP for synchronous service calls
 
 ### Step 2: Create the Prompt File
 

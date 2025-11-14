@@ -16,6 +16,68 @@ The system is composed of several agent types with a clear separation of concern
 3.  **Structural Orchestrator (`GraphBuilder`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
 
 The system also includes a robust set of custom exceptions (e.g., `ProxyError`, `SafetyFilterError`, `RateLimitError`) to provide clear, actionable error messages instead of generic failures, which is critical for debugging agentic workflows.
+
+## 2.1 BREAKING CHANGE: State Purge (Nov 14, 2025)
+
+**Task 2.7 Migration:** Deprecated specialist-specific fields have been removed from root `GraphState` and migrated to `scratchpad` to enforce architectural purity (ADR-CORE-004).
+
+### What Changed
+
+The following fields have been **REMOVED** from root GraphState:
+- `Dossier` TypedDict (obsolete - superseded by MCP)
+- `text_to_process` in Artifacts model (redundant - use artifacts dict directly)
+- `recommended_specialists` at root level → **moved to scratchpad**
+- `error_report` at root level → **moved to scratchpad**
+
+### Migration Pattern
+
+```python
+# ❌ OLD (before Task 2.7)
+def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    # Read
+    next_specialist = state.get("recommended_specialists")
+    error = state.get("error_report")
+
+    # Write
+    return {
+        "recommended_specialists": ["file_specialist"],
+        "error_report": "Something failed"
+    }
+
+# ✅ NEW (after Task 2.7)
+def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    # Read
+    scratchpad = state.get("scratchpad", {})
+    next_specialist = scratchpad.get("recommended_specialists")
+    error = scratchpad.get("error_report")
+
+    # Write
+    return {
+        "scratchpad": {
+            "recommended_specialists": ["file_specialist"],
+            "error_report": "Something failed"
+        }
+    }
+```
+
+### Rationale
+
+**Architectural Purity (ADR-CORE-004):**
+- Root GraphState = core orchestration only (messages, routing_history, turn_count, etc.)
+- Scratchpad = transient specialist communication signals
+- Moving `recommended_specialists` and `error_report` to scratchpad enforces proper state management hygiene
+
+**Dossier Obsolescence:**
+- The Dossier pattern (ADR-CORE-003) has been **superseded by MCP** (ADR-CORE-008)
+- Use `McpClient` for synchronous service calls instead of async Dossier handoffs
+- Direct edges + artifacts pattern for workflow handoffs (ADR-CORE-012)
+
+### Impact
+
+- **Breaking Change:** All code accessing these fields must update to scratchpad pattern
+- **Test Coverage:** 440+ tests passing with new structure
+- **Documentation:** See commits `2adcf94`, `d40f43f`, `e011646` for complete migration
+
 ## 3.0 Observability with LangSmith (Essential for Development)
 
 For any non-trivial workflow, observability is not optional. The complexity of multi-agent systems makes debugging with logs alone extremely difficult. This scaffold is architected for seamless integration with LangSmith.
