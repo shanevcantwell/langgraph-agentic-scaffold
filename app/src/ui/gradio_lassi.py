@@ -185,6 +185,7 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
     async def _handle_submit_closure(prompt: str, text_file: object, image_file: object, use_simple_chat: bool):
         """Generator function to handle the streaming UI updates."""
         nonlocal turn_count
+        import time
 
         if not prompt.strip() and not text_file and not image_file:
             yield {status_output: "Please provide a prompt or a file to begin."}
@@ -192,46 +193,88 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
 
         turn_count += 1
         specialist_log = []
-        log_text = ""
+        status_log = []
 
-        # Reset UI
-        yield {
-            status_output: "► Invoking Agent...",
-            turn_counter: str(turn_count).zfill(2),
-            latency_display: "0",
-            specialist_ticker: "---",
-            log_output: "---",
-            archive_output: "...",
-            json_output: {}
-        }
+        # Timing tracking
+        workflow_start_time = time.time()
+        current_specialist = None
+        specialist_start_time = None
+        last_update_time = time.time()
+
+        # Initial status
+        status_log.append("► READY")
 
         async for update in api_client.invoke_agent_streaming(prompt, text_file, image_file, use_simple_chat):
             ui_update = {}
+            current_time = time.time()
 
-            # Update status
+            # Update status with accumulation
             if "status" in update:
-                ui_update[status_output] = f"► {update['status']}"
+                status_text = update['status']
 
-            # Mock latency
-            if "logs" in update:
-                ui_update[latency_display] = "42" # Mock
+                # Detect workflow state transitions
+                if "complete" in status_text.lower() or "workflow complete" in status_text.lower():
+                    elapsed = current_time - workflow_start_time
+                    status_log.append(f"► PROCESSING COMPLETE ({elapsed:.1f}s total)")
+                else:
+                    status_log.append(f"► PROCESSING: {status_text}")
 
-            # Track specialist activity
+                # Show last 10 status messages
+                ui_update[status_output] = "\n".join(status_log[-10:])
+
+            # Update turn counter
+            ui_update[turn_counter] = str(turn_count).zfill(2)
+
+            # Calculate and update latency (time since last update)
+            elapsed_ms = int((current_time - last_update_time) * 1000)
+            ui_update[latency_display] = str(min(elapsed_ms, 999)).zfill(3)
+            last_update_time = current_time
+
+            # Track specialist activity with timing
             if "logs" in update:
                 log_text = update["logs"]
-                # Extract specialist execution and routing events
-                if "---" in log_text or "→" in log_text or "Routing to" in log_text:
-                    # Get the last meaningful line
+
+                # Detect specialist execution (from streaming_callback in safe_executor)
+                if "Entering node:" in log_text:
+                    # New specialist starting - log previous specialist's time if exists
+                    if current_specialist and specialist_start_time:
+                        specialist_elapsed = current_time - specialist_start_time
+                        specialist_log.append(f"  {current_specialist} ({specialist_elapsed:.2f}s)")
+
+                    # Extract new specialist name
+                    for line in log_text.split('\n'):
+                        if "Entering node:" in line:
+                            specialist_name = line.split("Entering node:")[-1].strip()
+                            current_specialist = specialist_name
+                            specialist_start_time = current_time
+                            specialist_log.append(f"► {specialist_name}")
+                            break
+
+                # Also track routing decisions for context
+                elif "---" in log_text or "→" in log_text or "Routing to" in log_text:
                     lines = [l.strip() for l in log_text.split('\n') if l.strip()]
                     if lines:
-                        specialist_log.append(lines[-1])
-                        ticker_text = "\n".join(specialist_log[-15:])  # Last 15 entries
-                        ui_update[specialist_ticker] = ticker_text
+                        # Don't duplicate if it's already in the log
+                        last_line = lines[-1]
+                        if not specialist_log or specialist_log[-1] != last_line:
+                            specialist_log.append(f"  {last_line}")
+
+                # Update ticker (last 15 entries)
+                ticker_text = "\n".join(specialist_log[-15:])
+                ui_update[specialist_ticker] = ticker_text
+
                 ui_update[log_output] = log_text
 
             # Update final state
             if "final_state" in update:
                 ui_update[json_output] = update["final_state"]
+
+                # Finalize last specialist timing
+                if current_specialist and specialist_start_time:
+                    specialist_elapsed = current_time - specialist_start_time
+                    specialist_log.append(f"  {current_specialist} ({specialist_elapsed:.2f}s)")
+                    ui_update[specialist_ticker] = "\n".join(specialist_log[-15:])
+
             if "html" in update:
                 html_content = update["html"]
                 if html_content:
@@ -249,8 +292,10 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
                 error_msg = update.get("error", "Unknown error")
                 error_report = update.get("error_report", "")
 
-                # Show error in status
-                ui_update[status_output] = f"❌ ERROR: {error_msg}"
+                # Accumulate error in status log
+                elapsed = current_time - workflow_start_time
+                status_log.append(f"❌ ERROR: {error_msg} ({elapsed:.1f}s)")
+                ui_update[status_output] = "\n".join(status_log[-10:])
 
                 # Show full error report in archive tab
                 if error_report:
