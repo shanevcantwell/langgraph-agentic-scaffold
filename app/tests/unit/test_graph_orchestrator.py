@@ -54,12 +54,13 @@ def test_safe_executor_handles_specialist_exception(orchestrator_instance):
 
     # Assert
     assert "error" in result
-    assert "error_report" in result
+    # Task 2.7: error_report moved to scratchpad
+    assert "scratchpad" in result and "error_report" in result["scratchpad"]
     assert isinstance(result["error"], str)
     assert "failing_specialist" in result["error"]
-    assert isinstance(result["error_report"], str)
-    assert "Traceback" in result["error_report"]
-    assert "Something went wrong!" in result["error_report"]
+    assert isinstance(result["scratchpad"]["error_report"], str)
+    assert "Traceback" in result["scratchpad"]["error_report"]
+    assert "Something went wrong!" in result["scratchpad"]["error_report"]
 
 def test_safe_executor_handles_generic_exception(orchestrator_instance):
     """
@@ -79,8 +80,9 @@ def test_safe_executor_handles_generic_exception(orchestrator_instance):
 
     # Assert
     assert "error" in result
-    assert "error_report" in result
-    assert "A generic error" in result["error_report"]
+    # Task 2.7: error_report moved to scratchpad
+    assert "scratchpad" in result and "error_report" in result["scratchpad"]
+    assert "A generic error" in result["scratchpad"]["error_report"]
 
 def test_safe_executor_success_path(orchestrator_instance):
     """Tests the safe_executor for a successful, non-error execution."""
@@ -97,7 +99,9 @@ def test_safe_executor_success_path(orchestrator_instance):
     result = safe_executor(initial_state)
 
     # Assert
-    assert result == {"artifacts": {"new_artifact.txt": "success"}}
+    # Task 2.7: safe_executor now adds routing_history centrally
+    assert result["artifacts"] == {"new_artifact.txt": "success"}
+    assert result["routing_history"] == ["test_specialist"]
     mock_specialist.execute.assert_called_once_with(initial_state)
 
 def test_safe_executor_blocks_execution_on_missing_artifact(orchestrator_instance):

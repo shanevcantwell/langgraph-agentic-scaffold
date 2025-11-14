@@ -43,7 +43,8 @@ def create_error_message(
 
     state_update: Dict[str, Any] = {"messages": [message]}
 
+    # Task 2.7: recommended_specialists moved to scratchpad
     if recommended_specialists:
-        state_update["recommended_specialists"] = recommended_specialists
+        state_update["scratchpad"] = {"recommended_specialists": recommended_specialists}
 
     return state_update
