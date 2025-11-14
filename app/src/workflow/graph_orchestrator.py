@@ -42,11 +42,31 @@ class GraphOrchestrator:
         else:
             return CoreSpecialist.ROUTER.value
 
+    def after_web_builder(self, state: GraphState) -> str:
+        """
+        Conditional edge after web_builder (ADR-CORE-012 subgraph).
+        Only route to critic if web_builder succeeded.
+        If blocked by safe_executor, return to router for dependency resolution.
+        """
+        # Check if web_builder was blocked (safe_executor set recommended_specialists)
+        if state.get("recommended_specialists"):
+            logger.info("after_web_builder: web_builder blocked - returning to router for dependency resolution")
+            return CoreSpecialist.ROUTER.value
+
+        # Check if web_builder produced its artifact
+        if state.get("artifacts", {}).get("html_document.html"):
+            logger.info("after_web_builder: web_builder succeeded - routing to critic for review")
+            return CoreSpecialist.CRITIC.value
+
+        # Fallback to router if no artifact produced
+        logger.warning("after_web_builder: web_builder did not produce artifact - returning to router")
+        return CoreSpecialist.ROUTER.value
+
     def check_task_completion(self, state: GraphState) -> str:
         if state.get("task_is_complete"):
             logger.info(f"--- GraphOrchestrator: Task completion signal received. Routing to {CoreSpecialist.END.value}. ---")
             return CoreSpecialist.END.value
-        
+
         if self._is_unproductive_loop(state):
             return CoreSpecialist.END.value
 
@@ -208,7 +228,9 @@ class GraphOrchestrator:
             f"I recommend running the following specialist(s) first: {', '.join(recommended_specialists)}."
         )
         ai_message = AIMessage(content=content, name=specialist_name)
-        return {"messages": [ai_message], "recommended_specialists": recommended_specialists}
+        result = {"messages": [ai_message], "recommended_specialists": recommended_specialists}
+        logger.warning(f"create_missing_artifact_response returning: recommended_specialists={recommended_specialists}")
+        return result
 
     def create_safe_executor(self, specialist_instance: BaseSpecialist, streaming_callback: Callable[[str], None] = None) -> Callable[[GraphState], Dict[str, Any]]:
         """

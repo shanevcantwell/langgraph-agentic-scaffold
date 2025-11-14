@@ -396,9 +396,10 @@ class GraphBuilder:
             #      - ACCEPT → check_task_completion → END
             # This bypasses the router for efficiency and prevents false loop detection.
             # CRITICAL: web_builder MUST be excluded from hub-and-spoke routing (line 350)
+            # Uses conditional edge to check if web_builder succeeded before routing to critic
             if "web_builder" in self.specialists:
-                workflow.add_edge("web_builder", CoreSpecialist.CRITIC.value)
-                logger.info("Graph Edge: Added direct edge web_builder → critic_specialist (ADR-CORE-012 subgraph)")
+                workflow.add_conditional_edges("web_builder", self.orchestrator.after_web_builder)
+                logger.info("Graph Edge: Added conditional edge web_builder → [critic_specialist|router] (ADR-CORE-012 subgraph)")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)

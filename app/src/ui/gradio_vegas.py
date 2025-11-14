@@ -358,8 +358,8 @@ def create_ui(api_client: ApiClient):
                 )
 
                 with gr.Row():
-                    file_input = gr.File(label="📄 TEXT FILE STAGING")
-                    image_input = gr.Image(type="filepath", label="🖼️ IMAGE FILE STAGING")
+                    file_input = gr.File(label="📄 TEXT FILE STAGING", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)
+                    image_input = gr.Image(type="filepath", label="🖼️ IMAGE FILE STAGING", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)
 
                 simple_chat_checkbox = gr.Checkbox(
                     label="SIMPLE CHAT MODE",

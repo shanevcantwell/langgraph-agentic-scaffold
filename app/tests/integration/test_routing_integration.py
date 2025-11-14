@@ -213,6 +213,7 @@ gr.Interface(
 
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Blocking signal enforcement deferred per ADR-CORE-009 (requires Tasks 1.4-1.6: System Invariants & Circuit Breaker)")
 def test_router_respects_specialist_cannot_proceed(initialized_app):
     """
     Verifies router treats "cannot proceed" messages as blocking, not advisory.

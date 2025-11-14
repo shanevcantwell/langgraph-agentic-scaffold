@@ -22,13 +22,12 @@ llm_providers:
   # that the server is loading.
   lmstudio_router:
     type: "lmstudio"
-    api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
+    api_identifier: "gpt-oss-20b"   # Tested to be excellent router when prompted well
   lmstudio_specialist:
     type: "lmstudio"
     api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
 
-  # OLLAMA SUPPORT - NOT YET IMPLEMENTED
-  # The Ollama adapter is planned but not currently available.
+  # OLLAMA SUPPORT - Use https://github.com/shanevcantwell/ollama-shim  # The Ollama adapter is planned but not currently available.
   # See app/src/llm/factory.py line 17 for implementation status.
   # Uncomment the section below once Ollama support is added:
   # ollama_local:

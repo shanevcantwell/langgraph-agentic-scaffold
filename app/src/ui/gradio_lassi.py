@@ -294,8 +294,8 @@ def create_ui(api_client: ApiClient):
                 with gr.Group():
                     gr.Markdown("### 📂 File Staging")
                     with gr.Row():
-                        file_input = gr.File(label="Upload Text File")
-                        image_input = gr.Image(type="filepath", label="Upload Image")
+                        file_input = gr.File(label="Upload Text File", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)
+                        image_input = gr.Image(type="filepath", label="Upload Image", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)
 
             # === RIGHT COLUMN: Agent Output & Monitors ===
             with gr.Column(scale=3):

@@ -61,8 +61,8 @@ def create_ui(api_client: ApiClient):
                     submit_btn=True
                 )
                 with gr.Row():
-                    file_input = gr.File(label="Upload Text File")
-                    image_input = gr.Image(type="pil", label="Upload Image")
+                    file_input = gr.File(label="Upload Text File", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)
+                    image_input = gr.Image(type="pil", label="Upload Image", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)
                 simple_chat_checkbox = gr.Checkbox(
                     label="Simple Chat Mode",
                     value=False,
