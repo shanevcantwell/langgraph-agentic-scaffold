@@ -28,11 +28,10 @@ def test_web_builder_generates_html(specialist):
     specialist.llm_adapter.invoke.assert_called_once()
     # It should place the generated HTML into the artifacts.
     assert result_state["artifacts"]["html_document.html"] == mock_response["html_document"]
-    # It should always recommend the critic to review its work.
-    assert result_state["recommended_specialists"] == ["critic_specialist"]
-    # It should track itself in routing history for archive reports.
-    assert "routing_history" in result_state
-    assert result_state["routing_history"] == ["web_builder"]
+    # It should always recommend the critic to review its work (Task 2.7: moved to scratchpad).
+    assert result_state["scratchpad"]["recommended_specialists"] == ["critic_specialist"]
+    # Task 2.7: routing_history is now tracked centrally by GraphOrchestrator.safe_executor, not by specialists
+    assert "routing_history" not in result_state
 
 def test_web_builder_handles_llm_invocation_error(specialist):
     """Tests that an LLMInvocationError is propagated correctly."""

@@ -51,8 +51,9 @@ def test_text_analysis_without_text_self_correction(text_analysis_specialist):
 
     # Assert
     text_analysis_specialist.llm_adapter.invoke.assert_not_called()  # LLM should not be called
-    assert "recommended_specialists" in result_state
-    assert result_state["recommended_specialists"] == ["file_specialist"]
+    # Task 2.7: recommended_specialists moved to scratchpad
+    assert "scratchpad" in result_state and "recommended_specialists" in result_state["scratchpad"]
+    assert result_state["scratchpad"]["recommended_specialists"] == ["file_specialist"]
     assert isinstance(result_state["messages"][0], AIMessage)
     assert "I cannot run because there is no text to process" in result_state["messages"][0].content
 
@@ -67,8 +68,9 @@ def test_text_analysis_with_empty_text_input(text_analysis_specialist, text_inpu
 
     # Assert
     text_analysis_specialist.llm_adapter.invoke.assert_not_called()
-    assert "recommended_specialists" in result_state
-    assert result_state["recommended_specialists"] == ["file_specialist"]
+    # Task 2.7: recommended_specialists moved to scratchpad
+    assert "scratchpad" in result_state and "recommended_specialists" in result_state["scratchpad"]
+    assert result_state["scratchpad"]["recommended_specialists"] == ["file_specialist"]
 
 def test_text_analysis_handles_llm_invocation_error(text_analysis_specialist):
     """Tests that an LLMInvocationError is propagated correctly."""
