@@ -101,7 +101,9 @@ async def _stream_formatter(generator):
             if isinstance(node_output, dict):
                 # Emit status update for EVERY specialist execution (not just message-emitting ones)
                 status_update = f"Executing specialist: {node_name}..."
-                yield f"data: {json.dumps({'status': status_update})}\n\n"
+                # ALSO send "Entering node:" format for UI timing tracking
+                logs_update = f"Entering node: {node_name}"
+                yield f"data: {json.dumps({'status': status_update, 'logs': logs_update})}\n\n"
 
                 # Check for errors
                 if "error" in node_output or "error_report" in node_output:
