@@ -7,6 +7,7 @@ from app.src.workflow.graph_orchestrator import GraphOrchestrator
 from app.src.specialists.base import BaseSpecialist
 from app.src.utils.errors import SpecialistError, WorkflowError
 from app.src.enums import CoreSpecialist
+from app.src.graph.state_factory import create_test_state
 
 @pytest.fixture
 def orchestrator_instance():
@@ -118,7 +119,7 @@ def test_safe_executor_blocks_execution_on_missing_artifact(orchestrator_instanc
     }
 
     safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
-    initial_state = {"messages": [], "turn_count": 1, "artifacts": {}}
+    initial_state = create_test_state(turn_count=1)
 
     # Act
     result = safe_executor(initial_state)
@@ -147,7 +148,7 @@ def test_create_missing_artifact_response_format(orchestrator_instance):
 
 def test_route_to_next_specialist_normal_route(orchestrator_instance):
     """Tests that the function returns the correct specialist name from the state."""
-    state = {"next_specialist": "file_specialist", "turn_count": 1}
+    state = create_test_state(next_specialist="file_specialist", turn_count=1)
     result = orchestrator_instance.route_to_next_specialist(state)
     assert result == "file_specialist"
 
@@ -192,7 +193,7 @@ def test_route_to_next_specialist_allows_non_loop(orchestrator_instance):
 
 def test_route_to_next_specialist_handles_no_route(orchestrator_instance):
     """Tests that the function routes to END if the router fails to provide a next step."""
-    state = {"next_specialist": None, "turn_count": 1}
+    state = create_test_state(next_specialist=None, turn_count=1)
     result = orchestrator_instance.route_to_next_specialist(state)
     assert result == CoreSpecialist.END.value
 
@@ -206,10 +207,10 @@ def test_route_validation_blocks_invalid_destination(orchestrator_with_allowed_d
     This is TASK 1.2: Fail-fast on unknown graph routes.
     """
     # Arrange: Router selects a destination that doesn't exist in the graph
-    state = {
-        "next_specialist": "nonexistent_specialist",
-        "turn_count": 1
-    }
+    state = create_test_state(
+        next_specialist="nonexistent_specialist",
+        turn_count=1
+    )
 
     # Act & Assert: Should raise WorkflowError immediately
     with pytest.raises(WorkflowError) as exc_info:
@@ -227,10 +228,10 @@ def test_route_validation_allows_valid_destination(orchestrator_with_allowed_des
     and validation doesn't interfere with normal operation.
     """
     # Arrange: Router selects a valid destination
-    state = {
-        "next_specialist": "file_specialist",
-        "turn_count": 1
-    }
+    state = create_test_state(
+        next_specialist="file_specialist",
+        turn_count=1
+    )
 
     # Act: Should complete successfully without raising
     result = orchestrator_with_allowed_destinations.route_to_next_specialist(state)
@@ -244,10 +245,10 @@ def test_route_validation_allows_chat_specialist_fanout(orchestrator_with_allowe
     and correctly fans out to progenitors, with validation of fanout destinations.
     """
     # Arrange: Router selects chat_specialist, which triggers fanout
-    state = {
-        "next_specialist": "chat_specialist",
-        "turn_count": 1
-    }
+    state = create_test_state(
+        next_specialist="chat_specialist",
+        turn_count=1
+    )
 
     # Act: Should fan out to progenitors
     result = orchestrator_with_allowed_destinations.route_to_next_specialist(state)
@@ -265,10 +266,10 @@ def test_route_validation_blocks_invalid_fanout_destination(orchestrator_with_al
     # This simulates a misconfiguration where fanout targets aren't loaded
     orchestrator_with_allowed_destinations.allowed_destinations.remove("progenitor_bravo_specialist")
 
-    state = {
-        "next_specialist": "chat_specialist",
-        "turn_count": 1
-    }
+    state = create_test_state(
+        next_specialist="chat_specialist",
+        turn_count=1
+    )
 
     # Act & Assert: Should raise WorkflowError for invalid fanout
     with pytest.raises(WorkflowError) as exc_info:
@@ -289,10 +290,10 @@ def test_route_validation_disabled_when_no_allowed_destinations():
     specialists = {}
     orchestrator = GraphOrchestrator(config, specialists, allowed_destinations=None)
 
-    state = {
-        "next_specialist": "any_specialist",  # Could be invalid, but no validation
-        "turn_count": 1
-    }
+    state = create_test_state(
+        next_specialist="any_specialist",  # Could be invalid, but no validation
+        turn_count=1
+    )
 
     # Act: Should not raise, validation is disabled
     result = orchestrator.route_to_next_specialist(state)

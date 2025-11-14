@@ -2,6 +2,7 @@ import os
 import pytest
 from unittest.mock import patch, MagicMock, mock_open
 from app.src.specialists.archiver_specialist import ArchiverSpecialist
+from app.src.graph.state_factory import create_test_state
 
 @pytest.fixture
 def archiver_specialist(tmp_path, initialized_specialist_factory):
@@ -24,13 +25,12 @@ def archiver_specialist(tmp_path, initialized_specialist_factory):
 
 @pytest.fixture
 def initial_state():
-    return {
-        "messages": [],
-        "routing_history": ["some_specialist", "end_specialist"],
-        "turn_count": 2,
-        "artifacts": {"final_user_response.md": "This is the final response."},
-        "scratchpad": {"_called_by_end_specialist": True},  # Simulate internal call
-    }
+    return create_test_state(
+        routing_history=["some_specialist", "end_specialist"],
+        turn_count=2,
+        artifacts={"final_user_response.md": "This is the final response."},
+        scratchpad={"_called_by_end_specialist": True}  # Simulate internal call
+    )
 
 def test_save_report_writes_to_file(archiver_specialist):
     """Tests that _save_report correctly writes content to a file."""

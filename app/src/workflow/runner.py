@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from ..utils.errors import ConfigError
 from ..graph.state import GraphState
+from ..graph.state_factory import create_initial_state
 from .graph_builder import GraphBuilder
 
 logger = logging.getLogger(__name__)
@@ -112,15 +113,12 @@ class WorkflowRunner:
         """
         logger.info(f"--- Starting workflow for goal: '{goal}' ---")
 
-        initial_state: GraphState = {
-            "messages": [HumanMessage(content=goal, name="user")],
-            "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
-            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}  # Task 2.7: recommended_specialists/error_report moved to scratchpad
-        }
-        if image_to_process:
-            initial_state["artifacts"]["uploaded_image.png"] = image_to_process
-        if text_to_process:
-            initial_state["artifacts"]["text_to_process"] = text_to_process
+        initial_state: GraphState = create_initial_state(
+            goal=goal,
+            text_to_process=text_to_process,
+            image_to_process=image_to_process,
+            use_simple_chat=use_simple_chat
+        )
 
         try:
             final_state = self.app.invoke(initial_state, config={"recursion_limit": self.recursion_limit})
@@ -145,15 +143,12 @@ class WorkflowRunner:
         """
         logger.info(f"--- Starting streaming workflow for goal: '{goal}' ---")
 
-        initial_state: GraphState = {
-            "messages": [HumanMessage(content=goal, name="user")],
-            "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
-            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}  # Task 2.7: recommended_specialists/error_report moved to scratchpad
-        }
-        if image_to_process:
-             initial_state["artifacts"]["uploaded_image.png"] = image_to_process
-        if text_to_process:
-            initial_state["artifacts"]["text_to_process"] = text_to_process
+        initial_state: GraphState = create_initial_state(
+            goal=goal,
+            text_to_process=text_to_process,
+            image_to_process=image_to_process,
+            use_simple_chat=use_simple_chat
+        )
 
         try:
             async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):

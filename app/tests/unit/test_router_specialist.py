@@ -7,6 +7,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.router_specialist import RouterSpecialist
 from app.src.utils.errors import LLMInvocationError
 from app.src.enums import CoreSpecialist
+from app.src.graph.state_factory import create_test_state
 
 @pytest.fixture
 def router_specialist(initialized_specialist_factory):
@@ -91,17 +92,17 @@ def test_router_stage_3_termination_logic(router_specialist):
     """
     # Arrange
     router_specialist.set_specialist_map({CoreSpecialist.ARCHIVER.value: {"description": "Archives things"}})
-    state_after_archiver = {
-        "messages": [
+    state_after_archiver = create_test_state(
+        messages=[
             HumanMessage(content="Do the thing."),
             AIMessage(
                 content="Archive report generated.", name=CoreSpecialist.ARCHIVER.value
             ),
         ],
-        "turn_count": 3,
-        "routing_history": ["some_other_specialist", CoreSpecialist.ARCHIVER.value],
-        "artifacts": {"archive_report.md": "This is the final report."}
-    }
+        turn_count=3,
+        routing_history=["some_other_specialist", CoreSpecialist.ARCHIVER.value],
+        artifacts={"archive_report.md": "This is the final report."}
+    )
 
     # Act - Stage 3
     result = router_specialist._execute_logic(state_after_archiver)
@@ -123,13 +124,11 @@ def test_router_normal_llm_routing(router_specialist):
         "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_123"}]
     }
 
-    initial_state = {
-        "messages": [HumanMessage(content="Please read my_file.txt")],
-        "turn_count": 1,
-        "routing_history": [],
-        "task_is_complete": False,
-
-    }
+    initial_state = create_test_state(
+        messages=[HumanMessage(content="Please read my_file.txt")],
+        turn_count=1,
+        task_is_complete=False
+    )
 
     # Act
     result = router_specialist._execute_logic(initial_state)
