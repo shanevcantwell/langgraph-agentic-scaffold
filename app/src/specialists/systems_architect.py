@@ -49,6 +49,6 @@ class SystemsArchitect(BaseSpecialist):
         updated_state = {
             "messages": [new_message],
             "artifacts": {"system_plan": plan.dict()},
-            "recommended_specialists": ["web_builder"]
+            "scratchpad": {"recommended_specialists": ["web_builder"]}  # Task 2.7: moved to scratchpad
         }
         return updated_state

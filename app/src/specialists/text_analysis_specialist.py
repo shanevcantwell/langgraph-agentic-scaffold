@@ -28,8 +28,8 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 llm_adapter=self.llm_adapter,
                 content="I cannot run because there is no text to process. The 'file_specialist' should probably run first to load a file into context."
             )
-            # Recommend a specialist that can provide the missing artifact
-            return {"messages": [ai_message], "recommended_specialists": ["file_specialist"]}
+            # Recommend a specialist that can provide the missing artifact (Task 2.7: moved to scratchpad)
+            return {"messages": [ai_message], "scratchpad": {"recommended_specialists": ["file_specialist"]}}
 
         contextual_messages = messages + [HumanMessage(content=f"Please perform the requested analysis on the following text:\n\n---\n{text_to_process}\n---")]
 

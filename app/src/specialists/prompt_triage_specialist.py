@@ -36,7 +36,7 @@ class PromptTriageSpecialist(BaseSpecialist):
 
         if not self.specialist_map:
             logger.error("Triage specialist has no specialist map configured. Cannot make recommendations.")
-            return {"recommended_specialists": []}
+            return {"scratchpad": {"recommended_specialists": []}}  # Task 2.7: moved to scratchpad
 
         # Use a tool call to enforce structured output based on the dynamic prompt
         # configured by the GraphBuilder.
@@ -69,6 +69,8 @@ class PromptTriageSpecialist(BaseSpecialist):
         # message to the history, as this can confuse downstream specialists.
         # It only updates the state with its recommendations.
         return {
-            "recommended_specialists": recommendations,
-            "triage_recommendations": recommendations,  # Persist for final report
+            "scratchpad": {
+                "recommended_specialists": recommendations,  # Task 2.7: moved to scratchpad
+                "triage_recommendations": recommendations   # Persist for final report
+            }
         }

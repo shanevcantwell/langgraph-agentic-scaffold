@@ -313,7 +313,7 @@ class GraphOrchestrator:
                 # Ensure failed executions are also tracked for observability
                 return {
                     "error": f"Specialist '{specialist_name}' failed. See report for details.",
-                    "error_report": markdown_report,
+                    "scratchpad": {"error_report": markdown_report},  # Task 2.7: moved to scratchpad
                     "routing_history": [routing_entry]
                 }
 

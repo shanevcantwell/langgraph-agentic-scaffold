@@ -77,7 +77,8 @@ class RouterSpecialist(BaseSpecialist):
         tools_list_str = "\n".join(available_tools_desc)
 
         # Check for specialist recommendations (could be from triage or from another specialist)
-        recommended_specialists = state.get("recommended_specialists")
+        # Task 2.7: recommended_specialists moved to scratchpad
+        recommended_specialists = state.get("scratchpad", {}).get("recommended_specialists")
         routing_history = state.get("routing_history", [])
         recommendation_context = ""
 
@@ -161,6 +162,6 @@ class RouterSpecialist(BaseSpecialist):
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
-            "recommended_specialists": None, # Always consume recommendations after the router has run.
+            "scratchpad": {"recommended_specialists": None},  # Task 2.7: Consume recommendations after routing
             # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }

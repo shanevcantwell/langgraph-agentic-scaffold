@@ -58,7 +58,7 @@ class CriticSpecialist(BaseSpecialist):
 
         if critique.decision == "REVISE" and self.revision_target:
             logger.info(f"Critique decision is REVISE. Recommending return to '{self.revision_target}'.")
-            updated_state["recommended_specialists"] = [self.revision_target]
+            updated_state["scratchpad"]["recommended_specialists"] = [self.revision_target]  # Task 2.7: moved to scratchpad
         else: # ACCEPT
             logger.info(f"Critique decision is ACCEPT. Signaling task completion to the Router.")
             updated_state["task_is_complete"] = True

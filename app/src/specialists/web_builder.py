@@ -52,7 +52,7 @@ class WebBuilder(BaseSpecialist):
             "artifacts": {
                 "html_document.html": web_content.html_document
             },
-            "recommended_specialists": ["critic_specialist"],
+            "scratchpad": {"recommended_specialists": ["critic_specialist"]},  # Task 2.7: moved to scratchpad
             # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }
 

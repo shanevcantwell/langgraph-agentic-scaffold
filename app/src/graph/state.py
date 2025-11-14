@@ -5,11 +5,6 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from pydantic import BaseModel, ConfigDict
 from langchain_core.messages import BaseMessage
 
-class Dossier(TypedDict):
-    recipient: str
-    payload_key: str
-    message: Optional[str]
-
 class DistillationState(TypedDict):
     """
     State for federated distillation workflows.
@@ -56,13 +51,22 @@ class Artifacts(BaseModel):
     system_plan: Optional[Dict[str, Any]] = None
     critique_md: Optional[str] = None
     html_document_html: Optional[str] = None
-    text_to_process: Optional[str] = None
+    # text_to_process REMOVED: Already handled via artifacts dict (runner.py puts file content in artifacts["text_to_process"])
     text_analysis_report_md: Optional[str] = None
     json_artifact: Optional[Dict[str, Any]] = None
     uploaded_image_png: Optional[str] = None
 
 class Scratchpad(BaseModel):
-    """A Pydantic model for all transient data used during a workflow."""
+    """
+    A Pydantic model for all transient data used during a workflow.
+
+    Transient fields moved from root GraphState (per ADR-CORE-004 and Task 2.7):
+    - recommended_specialists: Optional[List[str]] - Routing recommendations from specialists/triage
+    - error_report: Optional[str] - Error details from failed specialist executions
+
+    These fields are accessed via state["scratchpad"].get("field_name") and set via
+    update["scratchpad"] = {"field_name": value} to work with LangGraph's ior reducer.
+    """
     model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
 
     user_response_snippets: List[str] = []
@@ -91,11 +95,11 @@ class GraphState(TypedDict):
     artifacts: Annotated[Dict[str, Any], operator.ior]
     scratchpad: Annotated[Dict[str, Any], operator.ior]
 
-    # --- Specialist-Specific State ---
-    # These fields are used by specific specialists and are candidates for
-    # migration to the `artifacts` or `scratchpad` dictionaries in the future.
-    recommended_specialists: Optional[List[str]]
-    error_report: Optional[str]
+    # --- Specialist-Specific State REMOVED (Task 2.7: State Purge) ---
+    # The following fields have been MIGRATED to scratchpad (see Scratchpad model above):
+    #   - recommended_specialists: Optional[List[str]] → scratchpad["recommended_specialists"]
+    #   - error_report: Optional[str] → scratchpad["error_report"]
+    # This enforces architectural purity per ADR-CORE-004.
 
     # --- Distillation Workflow State ---
     # State for federated distillation workflows.

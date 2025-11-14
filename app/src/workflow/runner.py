@@ -115,7 +115,7 @@ class WorkflowRunner:
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
             "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
-            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}, "recommended_specialists": None, "error_report": None
+            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}  # Task 2.7: recommended_specialists/error_report moved to scratchpad
         }
         if image_to_process:
             initial_state["artifacts"]["uploaded_image.png"] = image_to_process
@@ -148,7 +148,7 @@ class WorkflowRunner:
         initial_state: GraphState = {
             "messages": [HumanMessage(content=goal, name="user")],
             "routing_history": [], "turn_count": 0, "task_is_complete": False, "next_specialist": None,
-            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}, "recommended_specialists": None, "error_report": None
+            "artifacts": {}, "scratchpad": {"use_simple_chat": use_simple_chat}  # Task 2.7: recommended_specialists/error_report moved to scratchpad
         }
         if image_to_process:
              initial_state["artifacts"]["uploaded_image.png"] = image_to_process
