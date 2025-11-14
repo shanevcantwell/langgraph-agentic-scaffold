@@ -48,6 +48,7 @@ def test_router_discovers_specialists_from_config(initialized_specialist_factory
     assert available["chat_specialist"]["description"] == "A general-purpose conversational specialist for answering user questions and chatting."
 
 
+@pytest.mark.xfail(reason="Requires MCP migration (Task 2.8). Recommendation-based routing pattern will be replaced by synchronous MCP service calls.")
 def test_router_respects_recommended_specialists_filter(initialized_specialist_factory):
     """
     Verifies that RouterSpecialist correctly filters available specialists

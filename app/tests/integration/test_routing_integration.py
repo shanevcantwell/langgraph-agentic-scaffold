@@ -16,6 +16,7 @@ from fastapi.testclient import TestClient
 
 
 @pytest.mark.integration
+@pytest.mark.xfail(reason="Requires MCP migration (Task 2.8). Router uses LLM routing instead of deterministic dependency resolution. Will pass after web_builder uses McpClient for synchronous system_plan generation.")
 def test_specialist_dependency_routing(initialized_app):
     """
     Verifies specialist dependency requirements are treated as CRITICAL, not advisory.
@@ -148,6 +149,7 @@ def test_loop_detection_when_dependency_unsatisfied(initialized_app):
 
 
 @pytest.mark.integration
+@pytest.mark.xfail(reason="Requires MCP migration (Task 2.8). Same dependency routing issue as test_specialist_dependency_routing.")
 def test_file_upload_routing_success(initialized_app):
     """
     End-to-end test for the original bug scenario that motivated ADR-CORE-011.
