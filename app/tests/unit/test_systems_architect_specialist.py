@@ -46,8 +46,9 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     assert result_state["artifacts"]["system_plan"]["plan_summary"] == mock_plan_summary # This is a dict now
     assert "Generate HTML" in result_state["artifacts"]["system_plan"]["execution_steps"]
 
-    assert "recommended_specialists" in result_state
-    assert result_state["recommended_specialists"] == ["web_builder"]
+    # Task 2.7: recommended_specialists moved to scratchpad
+    assert "recommended_specialists" in result_state["scratchpad"]
+    assert result_state["scratchpad"]["recommended_specialists"] == ["web_builder"]
 
 def test_systems_architect_handles_no_json_response(systems_architect_specialist):
     """Tests that the specialist raises an error if LLM returns no JSON response."""

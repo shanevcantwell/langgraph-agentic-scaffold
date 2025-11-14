@@ -93,8 +93,9 @@ def test_sentiment_classifier_no_human_message_to_analyze(sentiment_classifier_s
     # Act & Assert
     result_state = sentiment_classifier_specialist._execute_logic(initial_state)
     assert "I cannot run because there is no text to analyze" in result_state["messages"][0].content
-    assert "recommended_specialists" in result_state
-    assert result_state["recommended_specialists"] == ["default_responder_specialist"]
+    # Task 2.7: recommended_specialists moved to scratchpad
+    assert "scratchpad" in result_state and "recommended_specialists" in result_state["scratchpad"]
+    assert result_state["scratchpad"]["recommended_specialists"] == ["default_responder_specialist"]
 
 def test_sentiment_classifier_uses_last_human_message(sentiment_classifier_specialist):
     """Tests that the specialist specifically analyzes the last HumanMessage."""

@@ -38,10 +38,10 @@ def test_prompt_triage_recommends_specialists_from_llm(prompt_triage_specialist)
     assert isinstance(called_request, StandardizedLLMRequest)
     assert TriageRecommendations in called_request.tools
 
-    assert "recommended_specialists" in result_state
-    assert result_state["recommended_specialists"] == mock_recommendations
-    assert "triage_recommendations" in result_state
-    assert result_state["triage_recommendations"] == mock_recommendations
+    # Task 2.7: recommended_specialists and triage_recommendations moved to scratchpad
+    assert "scratchpad" in result_state
+    assert result_state["scratchpad"]["recommended_specialists"] == mock_recommendations
+    assert result_state["scratchpad"]["triage_recommendations"] == mock_recommendations
     assert "messages" not in result_state # Triage should not add conversational messages
 
 def test_prompt_triage_falls_back_to_default_responder_on_no_tool_call(prompt_triage_specialist):
@@ -56,8 +56,9 @@ def test_prompt_triage_falls_back_to_default_responder_on_no_tool_call(prompt_tr
 
     # Assert
     prompt_triage_specialist.llm_adapter.invoke.assert_called_once()
-    assert result_state["recommended_specialists"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
-    assert result_state["triage_recommendations"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
+    # Task 2.7: fields moved to scratchpad
+    assert result_state["scratchpad"]["recommended_specialists"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
+    assert result_state["scratchpad"]["triage_recommendations"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
 
 def test_prompt_triage_filters_invalid_recommendations(prompt_triage_specialist):
     """Tests that the specialist filters out recommendations not in its map."""
@@ -74,8 +75,9 @@ def test_prompt_triage_filters_invalid_recommendations(prompt_triage_specialist)
     result_state = prompt_triage_specialist._execute_logic(initial_state)
 
     # Assert
-    assert result_state["recommended_specialists"] == ["file_specialist", "web_builder"]
-    assert result_state["triage_recommendations"] == ["file_specialist", "web_builder"]
+    # Task 2.7: fields moved to scratchpad
+    assert result_state["scratchpad"]["recommended_specialists"] == ["file_specialist", "web_builder"]
+    assert result_state["scratchpad"]["triage_recommendations"] == ["file_specialist", "web_builder"]
 
 def test_prompt_triage_handles_empty_recommendations_list(prompt_triage_specialist):
     """Tests fallback to default_responder when LLM returns an empty list of recommendations."""
@@ -91,8 +93,9 @@ def test_prompt_triage_handles_empty_recommendations_list(prompt_triage_speciali
     result_state = prompt_triage_specialist._execute_logic(initial_state)
 
     # Assert
-    assert result_state["recommended_specialists"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
-    assert result_state["triage_recommendations"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
+    # Task 2.7: fields moved to scratchpad
+    assert result_state["scratchpad"]["recommended_specialists"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
+    assert result_state["scratchpad"]["triage_recommendations"] == [CoreSpecialist.DEFAULT_RESPONDER.value]
 
 def test_prompt_triage_no_specialist_map_configured(initialized_specialist_factory):
     """Tests behavior when specialist_map is empty."""
@@ -107,4 +110,5 @@ def test_prompt_triage_no_specialist_map_configured(initialized_specialist_facto
 
     # Assert
     specialist.llm_adapter.invoke.assert_not_called() # LLM should not be called
-    assert result_state["recommended_specialists"] == []
+    # Task 2.7: fields moved to scratchpad
+    assert result_state["scratchpad"]["recommended_specialists"] == []

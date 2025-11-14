@@ -62,17 +62,18 @@ def test_artifact_required_validation_missing_artifact():
     assert "text_to_process" in message_content, \
         "Message should mention the missing artifact name"
 
-    # Should recommend the provider
-    assert "recommended_specialists" in result, \
+    # Should recommend the provider (Task 2.7: recommended_specialists moved to scratchpad)
+    scratchpad = result.get("scratchpad", {})
+    assert "recommended_specialists" in scratchpad, \
         "Should recommend specialist that can provide the artifact"
 
-    assert "file_specialist" in result["recommended_specialists"], \
+    assert "file_specialist" in scratchpad["recommended_specialists"], \
         "Should recommend file_specialist as the provider"
 
     print("\n✓ Required artifact validation works correctly")
     print(f"  ✓ Missing artifact detected: text_to_process")
     print(f"  ✓ Clear error message generated")
-    print(f"  ✓ Provider recommendation: {result['recommended_specialists']}")
+    print(f"  ✓ Provider recommendation: {scratchpad['recommended_specialists']}")
 
 
 @pytest.mark.integration

@@ -56,9 +56,10 @@ def test_critic_specialist_accepts_and_completes_task(critic_specialist):
     assert "scratchpad" in result_state
     assert result_state["scratchpad"]["critique_decision"] == "ACCEPT"
     assert result_state["task_is_complete"] is True
-    assert "recommended_specialists" not in result_state
-    assert "routing_history" in result_state
-    assert result_state["routing_history"] == ["critic_specialist"]
+    # Task 2.7: recommended_specialists moved to scratchpad, should not be present for ACCEPT decision
+    assert "recommended_specialists" not in result_state.get("scratchpad", {})
+    # Task 2.7: routing_history now tracked centrally by GraphOrchestrator.safe_executor
+    assert "routing_history" not in result_state
 
 def test_critic_specialist_revises_and_recommends_target(critic_specialist):
     """Tests that the specialist recommends revision and a target specialist."""
@@ -82,11 +83,12 @@ def test_critic_specialist_revises_and_recommends_target(critic_specialist):
     assert "Critique complete. Decision: REVISE" in result_state["messages"][0].content
     assert "**Points for Improvement:**\n- Fix this.\n- Fix that." in result_state["artifacts"]["critique.md"]
     assert result_state["scratchpad"]["critique_decision"] == "REVISE"
-    assert "recommended_specialists" in result_state
-    assert result_state["recommended_specialists"] == ["web_builder"]
+    # Task 2.7: recommended_specialists moved to scratchpad
+    assert "recommended_specialists" in result_state["scratchpad"]
+    assert result_state["scratchpad"]["recommended_specialists"] == ["web_builder"]
     assert "task_is_complete" not in result_state # Should not be set to True
-    assert "routing_history" in result_state
-    assert result_state["routing_history"] == ["critic_specialist"]
+    # Task 2.7: routing_history now tracked centrally by GraphOrchestrator.safe_executor
+    assert "routing_history" not in result_state
 
 def test_critic_specialist_handles_strategy_failure(critic_specialist):
     """Tests that the specialist handles unrecoverable failure from its strategy."""
