@@ -243,6 +243,12 @@ class GraphOrchestrator:
         artifact_providers = specialist_config.get("artifact_providers", {})
 
         def safe_executor(state: GraphState) -> Dict[str, Any]:
+            # CENTRALIZED ROUTING HISTORY TRACKING
+            # All specialist executions are tracked here for complete observability.
+            # This ensures progenitors, subgraph nodes, and all specialists appear in Archive reports.
+            routing_entry = specialist_name
+            logger.debug(f"safe_executor: Tracking execution of '{specialist_name}'")
+
             if required_artifacts:
                 is_conditional = isinstance(required_artifacts[0], list)
                 if is_conditional:
@@ -271,6 +277,16 @@ class GraphOrchestrator:
                         logger.debug(f"System prompt for '{specialist_name}':\n---PROMPT---\n{specialist_instance.llm_adapter.system_prompt}\n---ENDPROMPT---")
 
                 update = specialist_instance.execute(state)
+
+                # CENTRALIZED ROUTING HISTORY TRACKING (post-execution)
+                # Remove any routing_history that specialist tried to add (enforces centralization)
+                if "routing_history" in update:
+                    logger.warning(f"Specialist '{specialist_name}' returned routing_history - ignoring (centralized tracking enforced)")
+                    del update["routing_history"]
+
+                # Add centralized routing history entry
+                update["routing_history"] = [routing_entry]
+
                 if "turn_count" in update:
                     logger.warning(f"Specialist '{specialist_name}' returned a 'turn_count'. This is not allowed and will be ignored.")
                     del update["turn_count"]
@@ -293,6 +309,12 @@ class GraphOrchestrator:
                     pruned_state=pruned_state
                 )
                 markdown_report = state_pruner.generate_report(report_data)
-                return {"error": f"Specialist '{specialist_name}' failed. See report for details.", "error_report": markdown_report}
+                # CENTRALIZED ROUTING HISTORY TRACKING (error case)
+                # Ensure failed executions are also tracked for observability
+                return {
+                    "error": f"Specialist '{specialist_name}' failed. See report for details.",
+                    "error_report": markdown_report,
+                    "routing_history": [routing_entry]
+                }
 
         return safe_executor

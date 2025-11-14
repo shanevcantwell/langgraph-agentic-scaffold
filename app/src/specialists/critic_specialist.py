@@ -53,7 +53,7 @@ class CriticSpecialist(BaseSpecialist):
             "messages": [ai_message],
             "artifacts": {"critique.md": critique_text},
             "scratchpad": {"critique_decision": critique.decision},
-            "routing_history": [self.specialist_name]  # ADR-CORE-012: Track direct-edge subgraph execution
+            # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }
 
         if critique.decision == "REVISE" and self.revision_target:

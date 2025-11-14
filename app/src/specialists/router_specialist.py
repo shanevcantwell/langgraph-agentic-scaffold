@@ -162,5 +162,5 @@ class RouterSpecialist(BaseSpecialist):
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
             "recommended_specialists": None, # Always consume recommendations after the router has run.
-            "routing_history": [next_specialist_name]
+            # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }

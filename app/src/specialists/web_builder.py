@@ -53,7 +53,7 @@ class WebBuilder(BaseSpecialist):
                 "html_document.html": web_content.html_document
             },
             "recommended_specialists": ["critic_specialist"],
-            "routing_history": [self.specialist_name]  # ADR-CORE-012: Track direct-edge subgraph execution
+            # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }
 
         return updated_state
