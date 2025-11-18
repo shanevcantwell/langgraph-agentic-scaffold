@@ -40,6 +40,29 @@ class InvariantMonitor:
             
         except InvariantViolationError as e:
             logger.error(f"Invariant violation detected at stage '{stage}': {e}")
-            # In the future (Task 1.6), we might trigger stabilization actions here.
-            # For now, we just re-raise to halt execution.
-            raise
+            
+            # Determine the type of violation for action mapping
+            violation_type = "unknown_violation"
+            error_msg = str(e)
+            if "Missing required state key" in error_msg or "must be a" in error_msg:
+                violation_type = "structural_integrity_violated"
+            elif "Max turn count exceeded" in error_msg:
+                violation_type = "max_turn_count_exceeded"
+            elif "Detected" in error_msg and "loop" in error_msg:
+                violation_type = "loop_detected"
+
+            # Get configured action
+            stabilization_actions = self.workflow_config.get("stabilization_actions", {})
+            action = stabilization_actions.get(violation_type, "HALT") # Default to HALT
+
+            logger.warning(f"Circuit Breaker triggered! Violation: {violation_type}, Action: {action}")
+
+            # For now, we only support HALT by re-raising the exception.
+            # Future actions (ROUTE_TO_HUMAN) would be handled by returning a directive 
+            # to the orchestrator instead of raising.
+            if action == "HALT":
+                raise
+            else:
+                # Fallback for unimplemented actions
+                logger.warning(f"Action '{action}' not yet implemented. Defaulting to HALT.")
+                raise

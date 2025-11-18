@@ -25,6 +25,18 @@ class WorkflowConfig(BaseModel):
     entry_point: str = Field(
         ..., description="The name of the specialist that serves as the entry point for the graph."
     )
+    max_loop_cycles: int = Field(
+        default=3, description="The number of times a short sequence of specialists can repeat before the workflow is halted."
+    )
+    recursion_limit: int = Field(
+        default=40, description="The maximum number of steps the graph can take before halting."
+    )
+    critical_specialists: list[str] = Field(
+        default_factory=list, description="A list of specialists that are considered essential for the application to function."
+    )
+    stabilization_actions: Optional[Dict[str, str]] = Field(
+        default_factory=dict, description="Maps invariant violations to stabilization actions (e.g., 'max_turn_count_exceeded': 'HALT')."
+    )
 
 
 class BaseSpecialistConfig(BaseModel):
