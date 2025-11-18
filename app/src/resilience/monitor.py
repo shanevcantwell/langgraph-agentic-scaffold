@@ -3,7 +3,7 @@ from typing import Dict, Any
 from langsmith import traceable
 from app.src.graph.state import GraphState
 from app.src.resilience.invariants import check_state_structure, check_max_turn_count, check_loop_detection
-from app.src.utils.errors import InvariantViolationError
+from app.src.utils.errors import InvariantViolationError, CircuitBreakerTriggered
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ class InvariantMonitor:
             stage: A label for the execution stage (e.g., "pre-execution", "post-execution").
         
         Raises:
-            InvariantViolationError: If any invariant is violated.
+            CircuitBreakerTriggered: If an invariant is violated and an action is triggered.
         """
         try:
             # 1. Structural Integrity
@@ -57,12 +57,5 @@ class InvariantMonitor:
 
             logger.warning(f"Circuit Breaker triggered! Violation: {violation_type}, Action: {action}")
 
-            # For now, we only support HALT by re-raising the exception.
-            # Future actions (ROUTE_TO_HUMAN) would be handled by returning a directive 
-            # to the orchestrator instead of raising.
-            if action == "HALT":
-                raise
-            else:
-                # Fallback for unimplemented actions
-                logger.warning(f"Action '{action}' not yet implemented. Defaulting to HALT.")
-                raise
+            # Raise the circuit breaker exception with the determined action
+            raise CircuitBreakerTriggered(action=action, reason=str(e), violation_type=violation_type)
