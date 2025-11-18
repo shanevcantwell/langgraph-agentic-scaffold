@@ -49,6 +49,19 @@ services:
       - "3128:3128"
     restart: unless-stopped
 
+  web-ui:
+    container_name: vegas-terminal
+    build:
+      context: ./web-ui
+    ports:
+      - "3000:3000"
+    environment:
+      - API_URL=http://app:8000
+      - PORT=3000
+    depends_on:
+      - app
+    restart: unless-stopped
+
 volumes:
   # Define the named volume for persistent storage.
   app_workspace:
