@@ -52,3 +52,11 @@ class McpInvocationError(McpError):
 class InvariantViolationError(Exception):
     """Raised when a system invariant is violated."""
     pass
+
+class CircuitBreakerTriggered(Exception):
+    """Raised when the InvariantMonitor triggers a stabilization action."""
+    def __init__(self, action: str, reason: str, violation_type: str):
+        self.action = action
+        self.reason = reason
+        self.violation_type = violation_type
+        super().__init__(f"Circuit Breaker Triggered: {action} due to {violation_type}. Reason: {reason}")

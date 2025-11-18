@@ -1,6 +1,7 @@
 # src/workflow/runner.py
 import logging
 import json
+import uuid
 from datetime import datetime
 from typing import Dict, Any, AsyncGenerator
 
@@ -150,8 +151,13 @@ class WorkflowRunner:
             use_simple_chat=use_simple_chat
         )
 
+        # Generate a unique run_id for this execution to enable trace tracking
+        run_id = uuid.uuid4()
+        # Yield the run_id immediately so the client can start tracking traces
+        yield {"run_id": str(run_id)}
+
         try:
-            async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit}):
+            async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit, "run_id": run_id}):
                 yield event
             logger.info("--- Streaming workflow complete. ---")
         except Exception as e:

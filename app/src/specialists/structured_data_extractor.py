@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 class StructuredDataExtractor(BaseSpecialist):
     """
     A specialist that extracts structured data from text using a provided Pydantic model.
+
+    Configuration:
+    - The extraction schema (Pydantic model) and target artifact name must be passed
+      via the 'scratchpad' in the state before invoking this specialist.
+    - scratchpad['extraction_schema']: Type[BaseModel]
+    - scratchpad['target_artifact_name']: str
     """
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
