@@ -174,10 +174,17 @@ class RouterSpecialist(BaseSpecialist):
 
         logger.info(f"Router decision: Routing to {next_specialist_name} (Type: {routing_type})")
 
+        # TASK 3.3: Initialize parallel_tasks state if routing to multiple specialists
+        parallel_tasks_update = []
+        if isinstance(next_specialist_name, list) and len(next_specialist_name) > 1:
+            parallel_tasks_update = next_specialist_name
+            logger.info(f"Router initiating parallel execution for: {parallel_tasks_update}")
+
         return {
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
             "scratchpad": {"recommended_specialists": None},  # Task 2.7: Consume recommendations after routing
+            "parallel_tasks": parallel_tasks_update, # Task 3.3: Initialize barrier
             # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }

@@ -72,6 +72,18 @@ class GraphOrchestrator:
         if self._is_unproductive_loop(state):
             return CoreSpecialist.END.value
 
+        # TASK 3.3: Result Aggregation (Barrier Logic)
+        # Check if there are still active parallel tasks.
+        # If so, terminate this branch (return END) to wait for others.
+        # If not, proceed to Router (aggregation complete).
+        parallel_tasks = state.get("parallel_tasks", [])
+        if parallel_tasks:
+            logger.info(f"--- GraphOrchestrator: Parallel tasks pending {parallel_tasks}. Terminating branch to wait for completion. ---")
+            # We return END to terminate this specific branch of execution.
+            # LangGraph will keep the workflow alive as long as other branches are running.
+            # When the LAST branch finishes, parallel_tasks will be empty, and it will route to ROUTER.
+            return CoreSpecialist.END.value
+
         logger.info("--- GraphOrchestrator: Task not complete. Returning to Router. ---")
         return CoreSpecialist.ROUTER.value
 
@@ -134,6 +146,27 @@ class GraphOrchestrator:
                 )
                 logger.error(error_msg)
                 raise WorkflowError(error_msg)
+
+        # TASK 3.3: Result Aggregation (Scatter-Gather Synchronization)
+        # If routing to multiple specialists, initialize the parallel_tasks list in state.
+        # This allows check_task_completion to act as a barrier/join node.
+        if isinstance(next_specialist, list) and len(next_specialist) > 1:
+            logger.info(f"Initializing parallel execution barrier for: {next_specialist}")
+            # We can't update state directly here (this is an edge function).
+            # However, the RouterSpecialist (which just ran) could have set this if it knew.
+            # Since it didn't, we rely on the fact that check_task_completion will see the
+            # parallel_tasks state if we can somehow inject it.
+            #
+            # CRITICAL LIMITATION: Edge functions cannot update state.
+            #
+            # Workaround: We assume the RouterSpecialist (or the node that called this)
+            # has ALREADY set 'parallel_tasks' in the state if it intended parallel execution.
+            # But RouterSpecialist is generic.
+            #
+            # Alternative: We accept that we cannot set state here.
+            # The 'parallel_tasks' field in GraphState must be set by the Router node itself.
+            # We need to update RouterSpecialist._execute_logic to set this field.
+            pass
 
         # CORE-CHAT-002: Intercept chat_specialist routing and decide between simple/tiered modes
         # Note: This logic currently only applies if chat_specialist is the ONLY destination.
@@ -299,6 +332,12 @@ class GraphOrchestrator:
 
                 # Add centralized routing history entry
                 update["routing_history"] = [routing_entry]
+
+                # TASK 3.3: Result Aggregation (Barrier Update)
+                # Remove this specialist from the active parallel tasks list.
+                # This signals completion to the barrier logic in check_task_completion.
+                # Note: The reducer for 'parallel_tasks' handles removal if a string is passed.
+                update["parallel_tasks"] = specialist_name
 
                 if "turn_count" in update:
                     logger.warning(f"Specialist '{specialist_name}' returned a 'turn_count'. This is not allowed and will be ignored.")

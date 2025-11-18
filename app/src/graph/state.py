@@ -76,6 +76,21 @@ class Scratchpad(BaseModel):
     web_builder_iteration: Optional[int] = None
     termination_reason: Optional[str] = None
 
+def reduce_parallel_tasks(current: List[str], update: List[str] | str) -> List[str]:
+    """
+    Reducer for managing active parallel tasks.
+    - If update is a list, it REPLACES the current list (initialization).
+    - If update is a string, it REMOVES that string from the current list (completion).
+    """
+    if isinstance(update, list):
+        return update
+    if isinstance(update, str):
+        if update in current:
+            new_list = current.copy()
+            new_list.remove(update)
+            return new_list
+    return current
+
 class GraphState(TypedDict):
     """
     Defines the shared state that is passed between all nodes in the graph.
@@ -88,6 +103,10 @@ class GraphState(TypedDict):
     turn_count: int
     task_is_complete: bool
     next_specialist: Optional[str]
+    
+    # --- Parallel Execution State (Task 3.3) ---
+    # Tracks currently active parallel tasks for scatter-gather synchronization.
+    parallel_tasks: Annotated[List[str], reduce_parallel_tasks]
 
     # --- Generic State Management ---
     # Use `artifacts` for significant data outputs such as complete files or image base64,
