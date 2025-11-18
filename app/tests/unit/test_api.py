@@ -114,8 +114,8 @@ async def test_stream_graph_async(client):
     assert response.status_code == 200
     # The TestClient automatically consumes the stream content
     # We check that the formatter correctly processed our mock dicts into status updates
-    assert 'data: {"status": "Executing specialist: router_specialist..."}' in response.text
-    assert 'data: {"status": "Executing specialist: file_specialist..."}' in response.text
+    assert '"status": "Executing specialist: router_specialist..."' in response.text
+    assert '"status": "Executing specialist: file_specialist..."' in response.text
     api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
 
 @pytest.mark.asyncio

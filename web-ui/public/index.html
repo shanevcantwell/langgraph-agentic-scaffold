@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>V.E.G.A.S. TERMINAL</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+    <div class="scanline"></div>
+    <div class="crt-overlay"></div>
+    
+    <div class="container">
+        <header>
+            <h1>🖥️ V.E.G.A.S. TERMINAL</h1>
+            <div class="subtitle">Visual Agentic-Scaffold</div>
+            <div class="system-status">SYSTEM STATUS: OPERATIONAL | CLEARANCE LEVEL: ALPHA</div>
+        </header>
+
+        <div class="main-grid">
+            <!-- LEFT COLUMN -->
+            <div class="left-col">
+                <section class="panel command-panel">
+                    <h3>⌨️ COMMAND BAR</h3>
+                    <textarea id="promptInput" placeholder="█ ENTER DIRECTIVE... (ENTER: EXECUTE | SHIFT+ENTER: NEW LINE)"></textarea>
+                    
+                    <div class="controls">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="simpleChatMode">
+                            <span class="checkmark"></span>
+                            SIMPLE CHAT MODE
+                        </label>
+                        <button id="executeBtn">▶️ EXECUTE</button>
+                    </div>
+                </section>
+
+                <section class="panel readouts-panel">
+                    <h3>📊 SYSTEM READOUTS</h3>
+                    <div class="nixie-row">
+                        <div class="nixie-box">
+                            <div class="label">TURN COUNT</div>
+                            <div class="value" id="turnCount">000</div>
+                        </div>
+                        <div class="nixie-box">
+                            <div class="label">LATENCY (MS)</div>
+                            <div class="value" id="latency">000</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="panel routing-panel">
+                    <h3>🔀 SPECIALIST ROUTING LOG</h3>
+                    <div class="ticker-box" id="routingLog">
+                        <!-- Routing entries will appear here -->
+                    </div>
+                </section>
+            </div>
+
+            <!-- RIGHT COLUMN -->
+            <div class="right-col">
+                <section class="panel status-panel">
+                    <h3>📡 SYSTEM STATUS</h3>
+                    <div class="status-box" id="systemStatus">
+                        <div class="status-line">► READY</div>
+                    </div>
+                </section>
+
+                <section class="panel trace-panel">
+                    <h3>📜 EXECUTION TRACE (REAL-TIME)</h3>
+                    <div class="trace-box" id="executionTrace">
+                        <!-- LangSmith Traces will appear here -->
+                    </div>
+                </section>
+
+                <section class="panel artifacts-panel">
+                    <h3>📦 ARTIFACTS</h3>
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="html">🌐 RENDERED HTML</button>
+                        <button class="tab-btn" data-tab="json">⚙️ FINAL STATE</button>
+                        <button class="tab-btn" data-tab="archive">🗄️ ARCHIVE</button>
+                    </div>
+                    <div class="tab-content active" id="tab-html">
+                        <div class="placeholder">NO HTML RENDERED</div>
+                    </div>
+                    <div class="tab-content" id="tab-json">
+                        <pre id="jsonOutput">{}</pre>
+                    </div>
+                    <div class="tab-content" id="tab-archive">
+                        <div id="archiveOutput" class="markdown-body"></div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

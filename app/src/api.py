@@ -93,6 +93,11 @@ async def _stream_formatter(generator):
     accumulated_state = None
 
     async for chunk in generator:
+        # Check for run_id chunk (emitted first)
+        if "run_id" in chunk:
+            yield f"data: {json.dumps({'run_id': chunk['run_id']})}\n\n"
+            continue
+
         # The raw stream from LangGraph is a dictionary where keys are node names.
         # We can inspect this to provide real-time status updates.
         for node_name, node_output in chunk.items():
@@ -176,6 +181,23 @@ async def _stream_formatter(generator):
         })}\n\n"
     else:
         yield f"data: {json.dumps({'status': 'Workflow complete.'})}\n\n"
+
+@app.get("/v1/traces/{run_id}")
+async def get_run_trace(run_id: str):
+    """
+    Fetches the LangSmith trace tree for a specific run ID.
+    This allows the frontend to visualize the execution details in real-time.
+    """
+    if not langsmith_client:
+        raise HTTPException(status_code=503, detail="LangSmith client not initialized")
+    
+    try:
+        # Fetch all runs associated with this trace ID (run_id is used as trace_id in runner)
+        runs = list(langsmith_client.list_runs(trace_id=run_id))
+        return {"runs": [r.dict() for r in runs]}
+    except Exception as e:
+        logger.error(f"Failed to fetch traces for run {run_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/v1/graph/stream")
 async def stream_graph(request: InvokeRequest):
