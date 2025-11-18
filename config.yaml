@@ -28,7 +28,13 @@ workflow:
   # function. If any of these fail to load during startup, the application will
   # exit with an error. This prevents the system from running in a broken state.
   # See ADR-010 for more details.
-  critical_specialists: ["router_specialist", "archiver_specialist"]
+  critical_specialists: ["router_specialist", "end_specialist"]
+  # Maps invariant violations to stabilization actions.
+  # Supported actions: "HALT", "ROUTE_TO_ERROR_HANDLER"
+  stabilization_actions:
+    max_turn_count_exceeded: "HALT"
+    loop_detected: "HALT"
+    structural_integrity_violated: "HALT"
 
 # ==============================================================================
 # MCP (MESSAGE-CENTRIC PROTOCOL) CONFIGURATION
