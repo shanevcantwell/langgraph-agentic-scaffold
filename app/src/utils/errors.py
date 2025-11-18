@@ -48,3 +48,7 @@ class McpFunctionNotFoundError(McpError):
 class McpInvocationError(McpError):
     """Raised when MCP function execution fails."""
     pass
+
+class InvariantViolationError(Exception):
+    """Raised when a system invariant is violated."""
+    pass

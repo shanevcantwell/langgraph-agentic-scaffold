@@ -11,6 +11,7 @@ from ..enums import CoreSpecialist
 from ..utils import state_pruner
 from ..utils.errors import SpecialistError, WorkflowError, RateLimitError
 from ..utils.report_schema import ErrorReport
+from ..resilience.monitor import InvariantMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class GraphOrchestrator:
         workflow_config = self.config.get("workflow", {})
         self.max_loop_cycles = workflow_config.get("max_loop_cycles", 3)
         self.min_loop_len = 1
+        self.invariant_monitor = InvariantMonitor(self.config)
 
     def after_critique_decider(self, state: GraphState) -> str:
         decision = state.get("scratchpad", {}).get("critique_decision")
@@ -248,6 +250,10 @@ class GraphOrchestrator:
             # This ensures progenitors, subgraph nodes, and all specialists appear in Archive reports.
             routing_entry = specialist_name
             logger.debug(f"safe_executor: Tracking execution of '{specialist_name}'")
+
+            # TASK 1.5: Invariant Monitoring (Pre-Execution)
+            # Fail-fast if the system is in an invalid state before executing the specialist.
+            self.invariant_monitor.check_invariants(state, stage=f"pre-execution:{specialist_name}")
 
             if required_artifacts:
                 is_conditional = isinstance(required_artifacts[0], list)

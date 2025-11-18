@@ -74,7 +74,11 @@ This is the main Python package for the application.
         -   `app/src/llm/lmstudio_adapter.py`: LM Studio LLM adapter.
     -   `app/src/graph/`: Defines the shared state of the LangGraph.
         -   `app/src/graph/state.py`: Defines the `GraphState` `TypedDict`, which is the central data structure passed between all nodes in the graph. It uses `typing.Annotated` to define how state fields are merged (e.g., append to lists, update dictionaries).
+        -   `app/src/graph/state_factory.py`: Factory for creating properly structured `GraphState` objects for runtime and testing.
         -   `app/src/graph/nodes.py`: Reserved for graph node definitions.
+    -   `app/src/resilience/`: Contains the system's resilience and stability components.
+        -   `invariants.py`: Defines the formal rules (State Integrity and Execution Constraints) that constitute a healthy system state.
+        -   `monitor.py`: The `InvariantMonitor` service that acts as a circuit breaker, checking invariants before every specialist execution.
     -   `app/src/mcp/`: MCP (Message-Centric Protocol) for synchronous service invocation between specialists.
         -   `app/src/mcp/schemas.py`: Defines `McpRequest` and `McpResponse` Pydantic models for request/response contracts with auto-generated UUIDs for distributed tracing.
         -   `app/src/mcp/registry.py`: `McpRegistry` - per-graph-instance service registry with timeout protection and optional LangSmith tracing.

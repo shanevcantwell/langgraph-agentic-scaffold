@@ -871,47 +871,34 @@ This Virtual Coordinator pattern is similar to the Hybrid Coordinator pattern us
 - Both write to `final_user_response.md` to signal completion
 - Both demonstrate separation between capability declaration and implementation
 
-## 5.0 How to Extend the System: Creating Specialists
+### 4.8 Pattern: Resilience Layer (Invariants & Monitor)
 
-The primary way to extend the system's capabilities is by adding new specialists. The `CREATING_A_NEW_SPECIALIST.md` document provides a comprehensive, step-by-step tutorial for this process.
+**Context:** In complex agentic systems, "silent failures" (e.g., infinite loops, malformed state, context corruption) are common and often catastrophic. Relying solely on the LLM to self-correct is insufficient.
 
-Please refer to it for:
-*   Creating a standard, LLM-based specialist.
-*   Creating an advanced, procedural specialist.
-*   Best practices for state management and agentic robustness patterns.
+**Solution:** The system implements a dedicated **Resilience Layer** that enforces formal system invariants at the code level, acting as a circuit breaker to fail fast and loudly when the system enters an invalid state.
 
-## 6.0 Unit Testing Principles
+#### 4.8.1 The Invariant Monitor
 
-The project has a centralized, fixture-based testing architecture to ensure that unit tests are robust, maintainable, and easy to write. This approach eliminates brittle, ad-hoc mocks and provides a consistent way to test specialists in isolation.
-To ensure `pytest` can always find the project's root and the central `conftest.py` file, a `pytest.ini` is placed in the `app/tests/` directory. This file sets `rootdir = ../..`, which is critical for allowing tests to be run directly from within an IDE or from any subdirectory.
- 
-### 6.1 The Centralized Fixture Architecture (`conftest.py`)
+The `InvariantMonitor` (`app/src/resilience/monitor.py`) is a service that runs *before* every specialist execution. It checks a set of formal rules defined in `app/src/resilience/invariants.py`.
 
-All core architectural components are mocked centrally in `app/tests/conftest.py`. This provides a single source of truth for test dependencies. Key fixtures include `mock_config_loader` and `mock_adapter_factory`.
+**Key Invariants:**
+1.  **Structural Integrity:** Ensures `GraphState` contains all required keys (`messages`, `artifacts`, `scratchpad`, etc.) and correct types.
+2.  **Max Turn Count:** Prevents runaway execution by enforcing a hard limit on total turns.
+3.  **Loop Detection:** Detects both immediate loops (`A -> A -> A`) and 2-step cycles (`A -> B -> A -> B`) to prevent unproductive infinite loops.
 
-### 6.2 The `initialized_specialist_factory` (Canonical Fixture)
+#### 4.8.2 Integration Point
 
-The cornerstone of the testing strategy is the `initialized_specialist_factory` fixture. This is a factory function that returns a fully initialized specialist instance with all its core dependencies (like the LLM adapter) already mocked.
+The monitor is integrated directly into the `GraphOrchestrator`'s `create_safe_executor` wrapper. This ensures that **no specialist** can execute if the system is in an invalid state.
 
-**This is the canonical way to get a specialist instance for testing.**
-
-**Example Usage:**
 ```python
-# in app/tests/unit/test_my_new_specialist.py
-
-def test_my_logic(initialized_specialist_factory):
-    # Get a ready-to-test instance of your specialist
-    my_specialist = initialized_specialist_factory("MyNewSpecialist")
-    
-    # The specialist's LLM adapter is already a mock
-    my_specialist.llm_adapter.invoke.return_value = {"text_response": "mocked LLM output"}
-    
-    # ... proceed with your test logic ...
+# GraphOrchestrator.create_safe_executor
+def safe_executor(state: GraphState) -> Dict[str, Any]:
+    # ...
+    # Fail-fast if the system is in an invalid state
+    self.invariant_monitor.check_invariants(state, stage=f"pre-execution:{specialist_name}")
+    # ...
 ```
 
-### 6.3 Mandatory Policy for New Tests
+#### 4.8.3 Observability
 
-1.  **MUST use the `initialized_specialist_factory`:** All new unit tests for specialists **must** use this fixture to obtain the specialist instance under test.
-2.  **MUST NOT implement local mocks:** New tests **must not** create their own local mocks for core components like `ConfigLoader`, `AdapterFactory`, or the LLM adapter. Rely on the centralized fixtures to provide these.
-
-Adhering to these principles is mandatory to prevent architectural drift and ensure the long-term stability and maintainability of the test suite.
+The `InvariantMonitor` is instrumented with LangSmith tracing (`@traceable`). In the LangSmith UI, you will see `InvariantMonitor.check_invariants` calls as "tool" runs within the trace, allowing you to verify that checks are passing (or see exactly why they failed).
