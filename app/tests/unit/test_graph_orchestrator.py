@@ -48,7 +48,14 @@ def test_safe_executor_handles_specialist_exception(orchestrator_instance):
     mock_specialist.execute.side_effect = SpecialistError("Something went wrong!")
 
     safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
-    initial_state = {"messages": [], "routing_history": ["start"]}
+    initial_state = {
+        "messages": [],
+        "routing_history": ["start"],
+        "turn_count": 0,
+        "task_is_complete": False,
+        "artifacts": {},
+        "scratchpad": {}
+    }
 
     # Act
     result = safe_executor(initial_state)
@@ -74,7 +81,14 @@ def test_safe_executor_handles_generic_exception(orchestrator_instance):
     mock_specialist.execute.side_effect = ValueError("A generic error")
 
     safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
-    initial_state = {"messages": [], "routing_history": ["start"]}
+    initial_state = {
+        "messages": [],
+        "routing_history": ["start"],
+        "turn_count": 0,
+        "task_is_complete": False,
+        "artifacts": {},
+        "scratchpad": {}
+    }
 
     # Act
     result = safe_executor(initial_state)
@@ -94,7 +108,14 @@ def test_safe_executor_success_path(orchestrator_instance):
     mock_specialist.execute.return_value = {"artifacts": {"new_artifact.txt": "success"}}
 
     safe_executor = orchestrator_instance.create_safe_executor(mock_specialist)
-    initial_state = {"artifacts": {}}
+    initial_state = {
+        "artifacts": {},
+        "messages": [],
+        "routing_history": [],
+        "turn_count": 0,
+        "task_is_complete": False,
+        "scratchpad": {}
+    }
 
     # Act
     result = safe_executor(initial_state)
@@ -144,7 +165,7 @@ def test_create_missing_artifact_response_format(orchestrator_instance):
         recommended_specialists=["provider_specialist"]
     )
     # Assert
-    assert response["recommended_specialists"] == ["provider_specialist"]
+    assert response["scratchpad"]["recommended_specialists"] == ["provider_specialist"]
 
 def test_route_to_next_specialist_normal_route(orchestrator_instance):
     """Tests that the function returns the correct specialist name from the state."""

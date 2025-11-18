@@ -9,7 +9,7 @@ from ..specialists.base import BaseSpecialist
 from ..graph.state import GraphState, Scratchpad
 from ..enums import CoreSpecialist
 from ..utils import state_pruner
-from ..utils.errors import SpecialistError, WorkflowError, RateLimitError
+from ..utils.errors import SpecialistError, WorkflowError, RateLimitError, CircuitBreakerTriggered
 from ..utils.report_schema import ErrorReport
 from ..resilience.monitor import InvariantMonitor
 
@@ -30,7 +30,23 @@ class GraphOrchestrator:
         self.min_loop_len = 1
         self.invariant_monitor = InvariantMonitor(self.config)
 
+    def _check_stabilization_action(self, state: GraphState) -> str | None:
+        """
+        Checks if a stabilization action (Circuit Breaker) has been triggered.
+        Returns the target specialist name if an action is present, else None.
+        """
+        action = state.get("scratchpad", {}).get("stabilization_action")
+        if action == "ROUTE_TO_ERROR_HANDLER":
+            logger.warning("Stabilization action 'ROUTE_TO_ERROR_HANDLER' detected. Forcing route to 'error_handling_specialist'.")
+            return "error_handling_specialist"
+        return None
+
     def after_critique_decider(self, state: GraphState) -> str:
+        # Check for stabilization action first
+        stabilization_target = self._check_stabilization_action(state)
+        if stabilization_target:
+            return stabilization_target
+
         decision = state.get("scratchpad", {}).get("critique_decision")
         logger.info(f"--- GraphOrchestrator: After Critique. Decision: {decision} ---")
         critic_config = self.config.get("specialists", {}).get(CoreSpecialist.CRITIC.value, {})
@@ -50,8 +66,13 @@ class GraphOrchestrator:
         Only route to critic if web_builder succeeded.
         If blocked by safe_executor, return to router for dependency resolution.
         """
+        # Check for stabilization action first
+        stabilization_target = self._check_stabilization_action(state)
+        if stabilization_target:
+            return stabilization_target
+
         # Check if web_builder was blocked (safe_executor set recommended_specialists)
-        if state.get("recommended_specialists"):
+        if state.get("scratchpad", {}).get("recommended_specialists"):
             logger.info("after_web_builder: web_builder blocked - returning to router for dependency resolution")
             return CoreSpecialist.ROUTER.value
 
@@ -121,6 +142,11 @@ class GraphOrchestrator:
         Special case: When routing to 'chat_specialist', triggers the tiered chat
         subgraph (CORE-CHAT-002) by fanning out to both progenitor specialists in parallel.
         """
+        # Check for stabilization action first
+        stabilization_target = self._check_stabilization_action(state)
+        if stabilization_target:
+            return stabilization_target
+
         turn_count = state.get("turn_count", 0)
         logger.info(f"--- GraphOrchestrator: Routing from Router (Turn: {turn_count}) ---")
 
@@ -270,7 +296,10 @@ class GraphOrchestrator:
             f"I recommend running the following specialist(s) first: {', '.join(recommended_specialists)}."
         )
         ai_message = AIMessage(content=content, name=specialist_name)
-        result = {"messages": [ai_message], "recommended_specialists": recommended_specialists}
+        result = {
+            "messages": [ai_message],
+            "scratchpad": {"recommended_specialists": recommended_specialists}
+        }
         logger.warning(f"create_missing_artifact_response returning: recommended_specialists={recommended_specialists}")
         return result
 
@@ -293,7 +322,27 @@ class GraphOrchestrator:
 
             # TASK 1.5: Invariant Monitoring (Pre-Execution)
             # Fail-fast if the system is in an invalid state before executing the specialist.
-            self.invariant_monitor.check_invariants(state, stage=f"pre-execution:{specialist_name}")
+            try:
+                self.invariant_monitor.check_invariants(state, stage=f"pre-execution:{specialist_name}")
+            except CircuitBreakerTriggered as cbt:
+                logger.error(f"Circuit Breaker Triggered in '{specialist_name}': {cbt}")
+                
+                if cbt.action == "HALT":
+                    raise WorkflowError(f"System Halted by Circuit Breaker: {cbt.reason}") from cbt
+                
+                elif cbt.action == "ROUTE_TO_ERROR_HANDLER":
+                    # Return a state update that forces routing to the error handler
+                    # The decider functions (route_to_next_specialist, etc.) will pick this up.
+                    return {
+                        "scratchpad": {
+                            "stabilization_action": "ROUTE_TO_ERROR_HANDLER",
+                            "error_report": f"Circuit Breaker Triggered: {cbt.violation_type}. Reason: {cbt.reason}"
+                        },
+                        "routing_history": [routing_entry] # Log that we attempted this node
+                    }
+                else:
+                    # Default to HALT for unknown actions
+                    raise WorkflowError(f"System Halted by Circuit Breaker (Unknown Action '{cbt.action}'): {cbt.reason}") from cbt
 
             if required_artifacts:
                 is_conditional = isinstance(required_artifacts[0], list)
