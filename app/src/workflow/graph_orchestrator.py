@@ -121,16 +121,23 @@ class GraphOrchestrator:
             return CoreSpecialist.END.value
 
         # TASK 1.2: Validate route before execution (fail-fast on invalid routes)
-        if self.allowed_destinations and next_specialist not in self.allowed_destinations:
-            error_msg = (
-                f"Invalid routing destination '{next_specialist}' selected by router. "
-                f"This destination is not a valid node in the graph. "
-                f"Allowed destinations: {sorted(self.allowed_destinations)}"
-            )
-            logger.error(error_msg)
-            raise WorkflowError(error_msg)
+        # TASK 3.1: Support parallel routing (list of specialists)
+        destinations_to_validate = next_specialist if isinstance(next_specialist, list) else [next_specialist]
+        
+        if self.allowed_destinations:
+            invalid_destinations = [dest for dest in destinations_to_validate if dest not in self.allowed_destinations]
+            if invalid_destinations:
+                error_msg = (
+                    f"Invalid routing destination(s) '{invalid_destinations}' selected by router. "
+                    f"These destinations are not valid nodes in the graph. "
+                    f"Allowed destinations: {sorted(self.allowed_destinations)}"
+                )
+                logger.error(error_msg)
+                raise WorkflowError(error_msg)
 
         # CORE-CHAT-002: Intercept chat_specialist routing and decide between simple/tiered modes
+        # Note: This logic currently only applies if chat_specialist is the ONLY destination.
+        # If chat_specialist is part of a parallel group, we assume simple mode or need to refactor.
         if next_specialist == "chat_specialist":
             # Check user preference for simple vs tiered chat mode
             use_simple_chat = state.get("scratchpad", {}).get("use_simple_chat", False)

@@ -16,9 +16,9 @@ class Route(BaseModel):
     # By changing from a dynamic Enum to a simple string, we generate a much simpler
     # JSON schema. This helps bypass potential bugs in the LLM server's grammar
     # engine, which can be sensitive to complex schemas with enum constraints.
-    next_specialist: str = Field(
+    next_specialist: List[str] = Field(
         ...,
-        description="The specialist to route to next. Must be one of the AVAILABLE SPECIALISTS listed in the prompt."
+        description="The specialist(s) to route to next. Can be a single specialist or multiple for parallel execution. Must be from the AVAILABLE SPECIALISTS listed in the prompt."
     )
 
 class RouterSpecialist(BaseSpecialist):
@@ -56,8 +56,24 @@ class RouterSpecialist(BaseSpecialist):
             content = "Router failed to select a valid next specialist and no fallback handlers are available. Routing to EndSpecialist."
         return {"next_specialist": next_specialist, "tool_calls": [], "content": content}
 
-    def _validate_llm_choice(self, llm_choice: str, valid_options: List[str]) -> str:
+    def _validate_llm_choice(self, llm_choice: str | List[str], valid_options: List[str]) -> str | List[str]:
         """Ensures the LLM's choice is a valid, available specialist."""
+        if isinstance(llm_choice, list):
+            validated_list = []
+            for choice in llm_choice:
+                if choice in valid_options:
+                    validated_list.append(choice)
+                else:
+                    logger.warning(f"Router LLM returned an invalid specialist in list: '{choice}'. Valid options are {valid_options}.")
+            
+            if not validated_list:
+                logger.warning("All choices in the list were invalid. Falling back to DefaultResponder.")
+                return CoreSpecialist.DEFAULT_RESPONDER.value
+            
+            if len(validated_list) == 1:
+                return validated_list[0]
+            return validated_list
+
         if llm_choice not in valid_options:
             logger.warning(f"Router LLM returned an invalid specialist: '{llm_choice}'. Valid options are {valid_options}. Falling back to DefaultResponder.")
             return CoreSpecialist.DEFAULT_RESPONDER.value
