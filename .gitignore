@@ -62,3 +62,5 @@ finetuning_data*.json*
 run_finetune.sh
 scripts/create_finetuning_data.py
 scripts/prepare_qlora_data.py
+config.yaml
+.*
