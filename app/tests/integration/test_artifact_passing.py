@@ -41,7 +41,11 @@ def test_artifact_required_validation_missing_artifact():
     # Create state WITHOUT the required artifact
     state = {
         "messages": [HumanMessage(content="Extract data")],
-        "artifacts": {}  # Missing text_to_process
+        "artifacts": {},  # Missing text_to_process
+        "turn_count": 0,
+        "routing_history": [],
+        "task_is_complete": False,
+        "scratchpad": {}
     }
 
     # --- Act ---
@@ -122,7 +126,11 @@ def test_artifact_passing_simple_producer_consumer():
         # Initial state
         state = {
             "messages": [HumanMessage(content="Process file data")],
-            "artifacts": {}
+            "artifacts": {},
+            "turn_count": 0,
+            "routing_history": [],
+            "task_is_complete": False,
+            "scratchpad": {}
         }
 
         # --- Act ---
@@ -233,7 +241,11 @@ def test_artifact_chain_three_specialists():
             "artifacts": {
                 # Web builder also needs text_to_process - provide it
                 "text_to_process": "Content for the webpage"
-            }
+            },
+            "turn_count": 0,
+            "routing_history": [],
+            "task_is_complete": False,
+            "scratchpad": {}
         }
 
         # --- Act ---
@@ -332,7 +344,11 @@ def test_conditional_artifacts_any_of():
     # --- Act & Assert: Neither artifact present ---
     state_empty = {
         "messages": [HumanMessage(content="Test")],
-        "artifacts": {}
+        "artifacts": {},
+        "turn_count": 0,
+        "routing_history": [],
+        "task_is_complete": False,
+        "scratchpad": {}
     }
 
     result_empty = safe_executor(state_empty)
@@ -342,7 +358,11 @@ def test_conditional_artifacts_any_of():
     # --- Act & Assert: Only artifact_a present (need both) ---
     state_partial = {
         "messages": [HumanMessage(content="Test")],
-        "artifacts": {"artifact_a": "data_a"}
+        "artifacts": {"artifact_a": "data_a"},
+        "turn_count": 0,
+        "routing_history": [],
+        "task_is_complete": False,
+        "scratchpad": {}
     }
 
     result_partial = safe_executor(state_partial)
@@ -355,7 +375,11 @@ def test_conditional_artifacts_any_of():
         "artifacts": {
             "artifact_a": "data_a",
             "artifact_b": "data_b"
-        }
+        },
+        "turn_count": 0,
+        "routing_history": [],
+        "task_is_complete": False,
+        "scratchpad": {}
     }
 
     result_full = safe_executor(state_full)
@@ -394,7 +418,11 @@ def test_artifact_cleanup_not_leaked():
         # Run 1: Produce artifact
         state_run1 = {
             "messages": [HumanMessage(content="Run 1")],
-            "artifacts": {}
+            "artifacts": {},
+            "turn_count": 0,
+            "routing_history": [],
+            "task_is_complete": False,
+            "scratchpad": {}
         }
 
         result_run1 = executor(state_run1)
@@ -403,7 +431,11 @@ def test_artifact_cleanup_not_leaked():
         # Run 2: Fresh state (simulates new workflow invocation)
         state_run2 = {
             "messages": [HumanMessage(content="Run 2")],
-            "artifacts": {}  # Fresh, empty artifacts
+            "artifacts": {},  # Fresh, empty artifacts
+            "turn_count": 0,
+            "routing_history": [],
+            "task_is_complete": False,
+            "scratchpad": {}
         }
 
         # --- Assert ---

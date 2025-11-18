@@ -78,7 +78,9 @@ def test_tiered_chat_full_mode_end_to_end():
             "messages": [HumanMessage(content="What is Python?")],
             "artifacts": {},
             "scratchpad": {},
-            "task_is_complete": False
+            "task_is_complete": False,
+            "turn_count": 0,
+            "routing_history": []
         }
 
         # --- Act: Run the workflow ---
@@ -185,7 +187,9 @@ def test_tiered_chat_graceful_degradation_alpha_only():
             "messages": [HumanMessage(content="Test question")],
             "artifacts": {},
             "scratchpad": {},
-            "task_is_complete": False
+            "task_is_complete": False,
+            "turn_count": 0,
+            "routing_history": []
         }
 
         # --- Act ---
@@ -267,7 +271,9 @@ def test_tiered_chat_graceful_degradation_bravo_only():
             "messages": [HumanMessage(content="Test question")],
             "artifacts": {},
             "scratchpad": {},
-            "task_is_complete": False
+            "task_is_complete": False,
+            "turn_count": 0,
+            "routing_history": []
         }
 
         # --- Act ---
@@ -395,7 +401,9 @@ def test_tiered_chat_state_management_pattern():
             "artifacts": {},
             "scratchpad": {},
             "task_is_complete": False,
-            "recommended_specialists": None  # Explicitly set to None to prevent filtering
+            "recommended_specialists": None,  # Explicitly set to None to prevent filtering
+            "turn_count": 0,
+            "routing_history": []
         }
 
         # --- Act ---
@@ -487,7 +495,9 @@ def test_tiered_chat_simple_mode_bypass():
             "artifacts": {},
             "scratchpad": {"use_simple_chat": True},  # KEY: Request simple mode
             "task_is_complete": False,
-            "recommended_specialists": None  # Explicitly set to None to prevent filtering
+            "recommended_specialists": None,  # Explicitly set to None to prevent filtering
+            "turn_count": 0,
+            "routing_history": []
         }
 
         # --- Act ---
