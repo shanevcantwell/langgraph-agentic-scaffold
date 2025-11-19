@@ -4,8 +4,8 @@ const API_BASE = '/v1'; // Proxied by server.js
 const promptInput = document.getElementById('promptInput');
 const executeBtn = document.getElementById('executeBtn');
 const simpleChatMode = document.getElementById('simpleChatMode');
-const turnCountEl = document.getElementById('turnCount');
-const latencyEl = document.getElementById('latency');
+// const turnCountEl = document.getElementById('turnCount'); // Removed
+// const latencyEl = document.getElementById('latency'); // Removed
 const routingLogEl = document.getElementById('routingLog');
 const systemStatusEl = document.getElementById('systemStatus');
 const traceTabsEl = document.getElementById('traceTabs');
@@ -126,8 +126,11 @@ async function executeWorkflow() {
     jsonOutputEl.textContent = '{}';
     document.getElementById('tab-html').innerHTML = '<div class="placeholder">PROCESSING...</div>';
     
+    // Reset Specialist Grid
+    document.querySelectorAll('.spec-node').forEach(el => el.classList.remove('active'));
+    
     turnCount++;
-    turnCountEl.textContent = String(turnCount).padStart(3, '0');
+    // turnCountEl.textContent = String(turnCount).padStart(3, '0'); // Removed
     startTime = Date.now();
     lastUpdateTime = startTime;
 
@@ -194,7 +197,7 @@ async function executeWorkflow() {
 function handleStreamEvent(event) {
     const now = Date.now();
     const latency = now - lastUpdateTime;
-    latencyEl.textContent = String(Math.min(latency, 999)).padStart(3, '0');
+    // latencyEl.textContent = String(Math.min(latency, 999)).padStart(3, '0'); // Removed
     lastUpdateTime = now;
 
     // Handle AgUiEvent structure
@@ -325,6 +328,64 @@ function addRoutingEntry(node) {
     // Deactivate previous
     const prev = routingLogEl.lastElementChild.previousElementSibling;
     if (prev) prev.classList.remove('active');
+
+    // Update Specialist Grid
+    updateSpecialistGrid(node);
+}
+
+function updateSpecialistGrid(nodeName) {
+    // Deactivate all
+    document.querySelectorAll('.spec-node').forEach(el => el.classList.remove('active'));
+    
+    // Activate current if exists
+    const el = document.getElementById(`node-${nodeName}`);
+    if (el) {
+        el.classList.add('active');
+    }
+}
+
+// Add Copy/Fullscreen Toolbars after rendering
+const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+        if (mutation.addedNodes.length) {
+            addToolbarsToPreBlocks();
+        }
+    });
+});
+
+observer.observe(executionTraceEl, { childList: true, subtree: true });
+observer.observe(jsonOutputEl.parentElement, { childList: true, subtree: true }); // Observe tab-json content
+
+function addToolbarsToPreBlocks() {
+    document.querySelectorAll('pre').forEach(pre => {
+        if (pre.querySelector('.code-toolbar')) return; // Already added
+
+        const toolbar = document.createElement('div');
+        toolbar.className = 'code-toolbar';
+
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'toolbar-btn';
+        copyBtn.textContent = 'COPY';
+        copyBtn.onclick = () => {
+            navigator.clipboard.writeText(pre.textContent.replace('COPYFULLSCREEN', '').trim());
+            copyBtn.textContent = 'COPIED!';
+            setTimeout(() => copyBtn.textContent = 'COPY', 2000);
+        };
+
+        const fullBtn = document.createElement('button');
+        fullBtn.className = 'toolbar-btn';
+        fullBtn.textContent = 'FULLSCREEN';
+        fullBtn.onclick = () => {
+            modalBody.innerHTML = `<pre>${pre.innerHTML}</pre>`;
+            // Re-add toolbars to the modal content
+            setTimeout(addToolbarsToPreBlocks, 100); 
+            zoomModal.style.display = 'block';
+        };
+
+        toolbar.appendChild(copyBtn);
+        toolbar.appendChild(fullBtn);
+        pre.appendChild(toolbar);
+    });
 }
 
 function startTracePolling(runId) {
