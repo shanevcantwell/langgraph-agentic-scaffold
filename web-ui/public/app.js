@@ -8,11 +8,7 @@ const turnCountEl = document.getElementById('turnCount');
 const latencyEl = document.getElementById('latency');
 const routingLogEl = document.getElementById('routingLog');
 const systemStatusEl = document.getElementById('systemStatus');
-const executionTraceEl = document.getElementById('executionTrace');
-const jsonOutputEl = document.getElementById('jsonOutput');
-const archiveOutputEl = document.getElementById('archiveOutput');
-const tabBtns = document.querySelectorAll('.tab-btn');
-const tabContents = document.querySelectorAll('.tab-content');
+const traceTabsEl = document.getElementById('traceTabs');
 
 // File Upload Elements
 const fileInput = document.getElementById('fileInput');
@@ -21,7 +17,7 @@ const clearFileBtn = document.getElementById('clearFileBtn');
 const fileNameEl = document.getElementById('fileName');
 
 // Zoom Modal Elements
-const zoomBtn = document.getElementById('zoomBtn');
+// const zoomBtn = document.getElementById('zoomBtn'); // Removed
 const zoomModal = document.getElementById('zoomModal');
 const closeModal = document.querySelector('.close-modal');
 const modalBody = document.getElementById('modal-body');
@@ -90,10 +86,12 @@ function updateFileUI(name) {
 }
 
 // Zoom Modal Logic
+/*
 zoomBtn.addEventListener('click', () => {
     modalBody.innerHTML = archiveOutputEl.innerHTML;
     zoomModal.style.display = 'block';
 });
+*/
 
 closeModal.addEventListener('click', () => {
     zoomModal.style.display = 'none';
@@ -121,11 +119,11 @@ async function executeWorkflow() {
     // Reset UI
     promptInput.disabled = true;
     executeBtn.disabled = true;
-    systemStatusEl.innerHTML = '<div class="status-line">► INITIALIZING...</div>';
+    systemStatusEl.innerHTML = '► INITIALIZING...';
     routingLogEl.innerHTML = '';
-    executionTraceEl.innerHTML = '';
+    executionTraceEl.innerHTML = '<div class="placeholder">WAITING FOR MISSION DATA...</div>';
+    traceTabsEl.innerHTML = '';
     jsonOutputEl.textContent = '{}';
-    archiveOutputEl.innerHTML = '';
     document.getElementById('tab-html').innerHTML = '<div class="placeholder">PROCESSING...</div>';
     
     turnCount++;
@@ -205,7 +203,7 @@ function handleStreamEvent(event) {
     if (event.run_id && !currentRunId) {
         currentRunId = event.run_id;
         logStatus(`► RUN ID: ${currentRunId}`);
-        startTracePolling(currentRunId);
+        // startTracePolling(currentRunId); // Disabled in favor of Mission Report
     }
 
     const data = event.data || {};
@@ -234,8 +232,7 @@ function handleStreamEvent(event) {
         case 'error':
             logStatus(`❌ ERROR: ${data.error}`);
             if (data.error_report) {
-                archiveOutputEl.innerHTML = `<h2>❌ Error Report</h2><pre>${data.error_report}</pre>`;
-                document.querySelector('[data-tab="archive"]').click();
+                renderMissionReport(`## ❌ Error Report\n\n${data.error_report}`);
             }
             break;
 
@@ -254,7 +251,7 @@ function handleStreamEvent(event) {
             }
 
             if (data.archive) {
-                archiveOutputEl.innerHTML = marked.parse(data.archive);
+                renderMissionReport(data.archive);
             }
             break;
             
@@ -264,11 +261,58 @@ function handleStreamEvent(event) {
 }
 
 function logStatus(msg) {
-    const div = document.createElement('div');
-    div.className = 'status-line';
-    div.textContent = msg;
-    systemStatusEl.appendChild(div);
-    systemStatusEl.scrollTop = systemStatusEl.scrollHeight;
+    systemStatusEl.textContent = msg;
+}
+
+function renderMissionReport(markdown) {
+    if (!markdown) return;
+
+    // Split by H2 headers (## )
+    // We use a regex that matches the start of a line, ##, space, and captures the title
+    const sections = markdown.split(/^## /gm);
+    
+    traceTabsEl.innerHTML = '';
+    executionTraceEl.innerHTML = '';
+
+    let firstTabBtn = null;
+
+    sections.forEach((section, index) => {
+        if (!section.trim()) return; // Skip empty sections (often the first split if file starts with ##)
+
+        // The split consumes the "## ", so we need to extract the title from the first line
+        const lines = section.split('\n');
+        const title = lines.shift().trim();
+        const content = lines.join('\n');
+
+        if (!title) return;
+
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn';
+        btn.textContent = title;
+        
+        btn.onclick = () => {
+            // Deactivate all
+            document.querySelectorAll('#traceTabs .tab-btn').forEach(b => b.classList.remove('active'));
+            // Activate this
+            btn.classList.add('active');
+            // Render content
+            executionTraceEl.innerHTML = marked.parse(content);
+        };
+
+        traceTabsEl.appendChild(btn);
+
+        if (!firstTabBtn) {
+            firstTabBtn = btn;
+        }
+    });
+
+    // Activate first tab by default
+    if (firstTabBtn) {
+        firstTabBtn.click();
+    } else {
+        // Fallback if no sections found
+        executionTraceEl.innerHTML = marked.parse(markdown);
+    }
 }
 
 function addRoutingEntry(node) {

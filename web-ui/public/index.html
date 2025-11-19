@@ -77,26 +77,22 @@
                 </section>
 
                 <section class="panel trace-panel">
-                    <h3>📜 EXECUTION TRACE (REAL-TIME)</h3>
+                    <h3>📜 MISSION REPORT</h3>
+                    <div class="tabs" id="traceTabs">
+                        <!-- Dynamic tabs will be injected here -->
+                    </div>
                     <div class="trace-box" id="executionTrace">
-                        <!-- LangSmith Traces will appear here -->
+                        <div class="placeholder">WAITING FOR MISSION DATA...</div>
                     </div>
                 </section>
 
                 <section class="panel artifacts-panel">
                     <h3>📦 ARTIFACTS</h3>
                     <div class="tabs">
-                        <button class="tab-btn active" data-tab="archive">🗄️ ARCHIVE</button>
-                        <button class="tab-btn" data-tab="html">🌐 RENDERED HTML</button>
+                        <button class="tab-btn active" data-tab="html">🌐 RENDERED HTML</button>
                         <button class="tab-btn" data-tab="json">⚙️ FINAL STATE</button>
                     </div>
-                    <div class="tab-content active" id="tab-archive">
-                        <div style="text-align: right; margin-bottom: 5px;">
-                            <button id="zoomBtn" style="font-size: 0.8em; background: transparent; border: 1px solid var(--crt-green); color: var(--crt-green); cursor: pointer;">[+] ZOOM ENHANCE</button>
-                        </div>
-                        <div id="archiveOutput" class="markdown-body"></div>
-                    </div>
-                    <div class="tab-content" id="tab-html">
+                    <div class="tab-content active" id="tab-html">
                         <div class="placeholder">NO HTML RENDERED</div>
                     </div>
                     <div class="tab-content" id="tab-json">
