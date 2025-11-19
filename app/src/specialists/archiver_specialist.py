@@ -1,6 +1,9 @@
 # app/src/specialists/archiver_specialist.py
 import logging
 import os
+import shutil
+import json
+import uuid
 from datetime import datetime
 from typing import Dict, Any, List
 
@@ -10,6 +13,7 @@ from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..utils import state_pruner
 from .schemas._archiver import SuccessReport
+from .schemas._manifest import AtomicManifest, ArtifactManifest
 from ..enums import CoreSpecialist
 
 logger = logging.getLogger(__name__)
@@ -18,8 +22,8 @@ logger = logging.getLogger(__name__)
 class ArchiverSpecialist(BaseSpecialist):
     """
     A procedural specialist responsible for summarizing the final state of the
-    graph into a markdown report and saving it to a file. It is the final
-    step in a successful workflow.
+    graph into an Atomic Archival Package (.zip) and saving it.
+    It is the final step in a successful workflow.
     """
 
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
@@ -33,13 +37,12 @@ class ArchiverSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Generates a final report from the state, saves it, and crucially,
-        returns the report content in the state to signal completion to the router.
+        Generates a final report, creates an Atomic Archival Package (.zip),
+        and returns the package path.
         """
-        logger.info(f"--- Archiver: Preparing final report. ---")
+        logger.info(f"--- Archiver: Preparing Atomic Archival Package. ---")
 
-        # Prune the state to get a clean conversation summary, but use the
-        # original, full state for the report's artifacts.
+        # Prune the state to get a clean conversation summary
         pruned_state = state_pruner.prune_state(state)
 
         final_user_response = state.get("artifacts", {}).get("final_user_response.md", "No final response was generated.")
@@ -53,23 +56,96 @@ class ArchiverSpecialist(BaseSpecialist):
 
         markdown_report = state_pruner.generate_success_report(report_data)
 
-        self._save_report(markdown_report)
+        # Create Atomic Archival Package
+        package_path = self._create_atomic_package(state, markdown_report)
         self._prune_archive()
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter, # Will be None, but helper handles it
-            content="Final report has been generated and the workflow is complete.",
+            content=f"Workflow complete. Atomic Archival Package created at: {package_path}",
         )
 
-        # Preserve existing artifacts (like final_user_response.md) and add the new one.
-        updated_artifacts = state.get("artifacts", {}).copy()
-        updated_artifacts["archive_report.md"] = markdown_report
+        # CRITICAL FIX for UI Crash (Unterminated string in JSON):
+        # We replace the heavy artifacts in the returned state with just the package path
+        # and the final response. This prevents massive JSON payloads from crashing the UI.
+        safe_artifacts = {
+            "final_user_response.md": final_user_response,
+            "archive_report.md": markdown_report,
+            "archive_package_path": package_path
+        }
 
         return {
             "messages": [ai_message],
-            "artifacts": updated_artifacts,
+            "artifacts": safe_artifacts, # Replaces the heavy artifacts dict
         }
+
+    def _create_atomic_package(self, state: Dict[str, Any], report_md: str) -> str:
+        """
+        Creates a self-contained .zip package with manifest, artifacts, and report.
+        Returns the absolute path to the .zip file.
+        """
+        run_id = str(uuid.uuid4())
+        timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+        package_name = f"run_{timestamp}_{run_id[:8]}"
+        package_dir = os.path.join(self.archive_dir, package_name)
+        
+        os.makedirs(package_dir, exist_ok=True)
+
+        try:
+            # 1. Write Report
+            with open(os.path.join(package_dir, "report.md"), "w", encoding="utf-8") as f:
+                f.write(report_md)
+
+            # 2. Write Artifacts
+            artifacts = state.get("artifacts", {})
+            artifact_manifests = []
+            
+            for key, content in artifacts.items():
+                # Skip if content is not string/bytes (e.g. dicts)
+                if not isinstance(content, (str, bytes)):
+                    logger.warning(f"Skipping artifact '{key}' - unsupported type {type(content)}")
+                    continue
+                
+                # Sanitize filename
+                safe_filename = "".join(c for c in key if c.isalnum() or c in "._- ")
+                file_path = os.path.join(package_dir, safe_filename)
+                
+                mode = "wb" if isinstance(content, bytes) else "w"
+                encoding = None if isinstance(content, bytes) else "utf-8"
+                
+                with open(file_path, mode, encoding=encoding) as f:
+                    f.write(content)
+                
+                artifact_manifests.append(ArtifactManifest(
+                    filename=safe_filename,
+                    original_key=key,
+                    content_type="application/octet-stream" if isinstance(content, bytes) else "text/plain",
+                    size_bytes=os.path.getsize(file_path)
+                ))
+
+            # 3. Create Manifest
+            manifest = AtomicManifest(
+                run_id=run_id,
+                routing_history=state.get("routing_history", []),
+                artifacts=artifact_manifests,
+                final_response_generated=bool(state.get("artifacts", {}).get("final_user_response.md")),
+                termination_reason=state.get("scratchpad", {}).get("termination_reason", "success")
+            )
+            
+            with open(os.path.join(package_dir, "manifest.json"), "w", encoding="utf-8") as f:
+                f.write(manifest.model_dump_json(indent=2))
+
+            # 4. Zip Package
+            zip_path = shutil.make_archive(package_dir, 'zip', package_dir)
+            logger.info(f"Created Atomic Archival Package: {zip_path}")
+            
+            return zip_path
+
+        finally:
+            # Cleanup temp dir
+            if os.path.exists(package_dir):
+                shutil.rmtree(package_dir)
 
     def _summarize_conversation(self, messages: List[Dict[str, Any]]) -> str:
         """Creates a concise, human-readable summary of the agentic workflow for the report."""

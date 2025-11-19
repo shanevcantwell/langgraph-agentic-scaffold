@@ -6,6 +6,7 @@ from typing import Dict, Any, Union, List
 
 from .base import BaseSpecialist
 from app.src.utils.errors import SpecialistError
+from .schemas._manifest import AtomicManifest
 
 logger = logging.getLogger(__name__)
 
@@ -380,6 +381,34 @@ class FileSpecialist(BaseSpecialist):
         except Exception as e:
             raise SpecialistError(f"Error creating zip from '{source_path}': {e}")
 
+    def create_manifest(self, path: str, data: Dict[str, Any]) -> str:
+        """
+        Create a manifest.json file from the provided data.
+        Validates against AtomicManifest schema.
+
+        Args:
+            path: Path to write manifest.json (relative to root_dir or absolute)
+            data: Dictionary containing manifest data
+
+        Returns:
+            Success message
+
+        Raises:
+            SpecialistError: If validation fails or write fails
+        """
+        try:
+            # Validate against schema
+            manifest = AtomicManifest(**data)
+            
+            # Serialize to JSON
+            json_content = manifest.model_dump_json(indent=2)
+            
+            # Write file using existing write_file logic (handles path validation)
+            return self.write_file(path, json_content)
+
+        except Exception as e:
+            raise SpecialistError(f"Error creating manifest at '{path}': {e}")
+
     # ==========================================================================
     # MCP Registration
     # ==========================================================================
@@ -400,8 +429,9 @@ class FileSpecialist(BaseSpecialist):
             "list_files": self.list_files,
             "create_directory": self.create_directory,
             "create_zip": self.create_zip,
+            "create_manifest": self.create_manifest,
         })
-        logger.info(f"Registered 9 MCP services for {self.specialist_name}")
+        logger.info(f"Registered 10 MCP services for {self.specialist_name}")
 
     # ==========================================================================
     # Graph Execution (No-op for MCP-only mode)

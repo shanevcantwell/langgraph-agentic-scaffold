@@ -17,7 +17,7 @@
 # Define the entry point for the graph. Defaults to 'router_specialist'.
 # ==============================================================================
 workflow:
-  entry_point: "prompt_triage_specialist"
+  entry_point: "triage_architect"
   # The number of times a short sequence of specialists can repeat before the
   # workflow is halted to prevent unproductive loops.
   max_loop_cycles: 3
@@ -266,6 +266,28 @@ specialists:
     error_tolerance: 0.1  # Max error rate (10%) before halting
     # NOTE: This specialist is part of the distillation subgraph and should NOT
     # appear in the router's tool schema. It's invoked by the coordinator only.
+
+  # --- Context Engineering Ecosystem ---
+  triage_architect:
+    type: "llm"
+    prompt_file: "triage_architect_prompt.md"
+    description: "Analyzes the user's request and creates a structured 'ContextPlan' to gather necessary information (Research, Read File, Summarize) before the main workflow begins."
+
+  researcher_specialist:
+    type: "llm"
+    prompt_file: "researcher_prompt.md"
+    description: "Performs web searches to gather real-time information. Can be called by TriageArchitect or Router."
+
+  summarizer_specialist:
+    type: "llm"
+    prompt_file: "summarizer_prompt.md"
+    description: "Distills large text artifacts into concise summaries. Requires 'text_to_process' artifact."
+    requires_artifacts: ["text_to_process"]
+
+  facilitator_specialist:
+    type: "procedural"
+    description: "Orchestrates the execution of a ContextPlan by calling Researcher, FileSpecialist, and Summarizer via MCP."
+    requires_artifacts: ["context_plan"]
 
   # --- General & Fallback ---
   prompt_specialist:

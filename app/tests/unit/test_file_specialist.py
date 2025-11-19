@@ -316,6 +316,57 @@ class TestCreateZip:
         assert "escapes root directory" in str(exc_info.value)
 
 
+class TestCreateManifest:
+    """Test suite for create_manifest MCP service function."""
+
+    def test_create_manifest_creates_valid_json(self, file_specialist_instance, tmp_path):
+        """Test that create_manifest creates a valid JSON file."""
+        manifest_data = {
+            "run_id": "test-run-123",
+            "final_response_generated": True,
+            "termination_reason": "success",
+            "routing_history": ["node1", "node2"],
+            "artifacts": []
+        }
+        
+        result = file_specialist_instance.create_manifest("manifest.json", manifest_data)
+        
+        manifest_file = tmp_path / "manifest.json"
+        assert manifest_file.exists()
+        assert "Successfully wrote file" in result
+        
+        # Verify content
+        import json
+        content = json.loads(manifest_file.read_text())
+        assert content["run_id"] == "test-run-123"
+        assert content["timestamp"] is not None # Should be auto-generated
+
+    def test_create_manifest_validates_schema(self, file_specialist_instance):
+        """Test that create_manifest raises error for invalid data."""
+        invalid_data = {
+            "run_id": "test-run-123",
+            # Missing required fields like final_response_generated
+        }
+        
+        with pytest.raises(SpecialistError) as exc_info:
+            file_specialist_instance.create_manifest("manifest.json", invalid_data)
+            
+        assert "Error creating manifest" in str(exc_info.value)
+
+    def test_create_manifest_rejects_path_escape(self, file_specialist_instance):
+        """Test that create_manifest rejects directory traversal."""
+        data = {
+            "run_id": "test",
+            "final_response_generated": True,
+            "termination_reason": "success"
+        }
+        
+        with pytest.raises(SpecialistError) as exc_info:
+            file_specialist_instance.create_manifest("../../manifest.json", data)
+            
+        assert "escapes root directory" in str(exc_info.value)
+
+
 # ==============================================================================
 # Group 2: Path Validation Tests
 # ==============================================================================
@@ -379,7 +430,7 @@ class TestMcpIntegration:
         functions = call_args[0][1]
 
         assert service_name == file_specialist_instance.specialist_name
-        assert len(functions) == 9
+        assert len(functions) == 10
         assert "file_exists" in functions
         assert "read_file" in functions
         assert "write_file" in functions
@@ -389,6 +440,7 @@ class TestMcpIntegration:
         assert "list_files" in functions
         assert "create_directory" in functions
         assert "create_zip" in functions
+        assert "create_manifest" in functions
 
 
 # ==============================================================================
