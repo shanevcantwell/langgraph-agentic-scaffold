@@ -1,5 +1,6 @@
 # app/tests/unit/test_api.py
 import pytest
+import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.src.utils.errors import WorkflowError
 
@@ -32,7 +33,6 @@ async def mock_streaming_gen(*args, **kwargs):
     yield {"file_specialist": {"messages": ["wrote a file"]}}
 
 @pytest.fixture
-@pytest.mark.asyncio
 async def client():
     """
     Provides a FastAPI TestClient. This fixture handles the async lifespan
@@ -43,7 +43,6 @@ async def client():
             yield c
 
 @pytest.fixture(autouse=True)
-@pytest.mark.asyncio
 async def reset_mocks(client, mocker):  # Depend on client to ensure lifespan has run
     """Reset mocks before each test to ensure isolation."""
     mock_graph_builder_instance.reset_mock()
@@ -137,3 +136,40 @@ async def test_stream_graph_async_invalid_input(client):
     """Tests that the stream endpoint returns a 422 for invalid input."""
     response = client.post("/v1/graph/stream", json={"wrong_key": "value", "text_to_process": None, "image_to_process": None})
     assert response.status_code == 422 # Unprocessable Entity
+
+@pytest.mark.asyncio
+async def test_stream_graph_events_async(client):
+    """Tests the standardized /v1/graph/stream/events endpoint."""
+    payload = {
+        "input_prompt": "test standard stream",
+        "text_to_process": None,
+        "image_to_process": None
+    }
+
+    # Act
+    response = client.post("/v1/graph/stream/events", json=payload)
+
+    # Assert
+    assert response.status_code == 200
+    
+    # Parse SSE lines to verify structure robustly
+    lines = response.text.strip().split('\n\n')
+    found_status = False
+    found_router = False
+    found_file = False
+    
+    for line in lines:
+        if line.startswith("data: "):
+            data = json.loads(line[6:])
+            if data.get("type") == "status_update":
+                found_status = True
+            if data.get("source") == "router_specialist":
+                found_router = True
+            if data.get("source") == "file_specialist":
+                found_file = True
+                
+    assert found_status
+    assert found_router
+    assert found_file
+    
+    api.workflow_runner.run_streaming.assert_called_once_with(goal="test standard stream", text_to_process=None, image_to_process=None, use_simple_chat=False)

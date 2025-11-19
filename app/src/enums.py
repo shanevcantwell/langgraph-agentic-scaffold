@@ -17,3 +17,4 @@ class CoreSpecialist(str, Enum):
     CRITIC = "critic_specialist"
     DEFAULT_RESPONDER = "default_responder_specialist"
     END = "end_specialist"
+    TRIAGE_ARCHITECT = "triage_architect"

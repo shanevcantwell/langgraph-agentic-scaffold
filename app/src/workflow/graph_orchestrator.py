@@ -13,6 +13,8 @@ from ..utils.errors import SpecialistError, WorkflowError, RateLimitError, Circu
 from ..utils.report_schema import ErrorReport
 from ..resilience.monitor import InvariantMonitor
 
+from ..interface.context_schema import ContextPlan
+
 logger = logging.getLogger(__name__)
 
 class GraphOrchestrator:
@@ -29,6 +31,27 @@ class GraphOrchestrator:
         self.max_loop_cycles = workflow_config.get("max_loop_cycles", 3)
         self.min_loop_len = 1
         self.invariant_monitor = InvariantMonitor(self.config)
+
+    def check_triage_outcome(self, state: GraphState) -> str:
+        """
+        Decides next step after TriageArchitect.
+        If ContextPlan has actions -> Facilitator.
+        Else -> Router.
+        """
+        artifacts = state.get("artifacts", {})
+        context_plan_data = artifacts.get("context_plan")
+        
+        if context_plan_data:
+            try:
+                plan = ContextPlan(**context_plan_data)
+                if plan.actions:
+                    logger.info(f"Triage produced plan with {len(plan.actions)} actions. Routing to Facilitator.")
+                    return "facilitator_specialist"
+            except Exception as e:
+                logger.error(f"Failed to parse ContextPlan in check_triage_outcome: {e}")
+        
+        logger.info("Triage produced no actions. Routing to Router.")
+        return CoreSpecialist.ROUTER.value
 
     def _check_stabilization_action(self, state: GraphState) -> str | None:
         """

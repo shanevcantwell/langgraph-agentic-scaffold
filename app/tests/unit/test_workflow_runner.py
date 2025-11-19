@@ -109,8 +109,9 @@ async def test_workflow_runner_run_streaming(mock_graph_builder):
     runner.app.astream.assert_called_once()
     
     # The runner now yields the raw events from LangGraph's astream.
-    # The mock generator yields two events.
-    assert len(streamed_results) == 2
-    assert "node1" in streamed_results[0]
-    assert "node2" in streamed_results[1]
-    assert "final_user_response.md" in streamed_results[1]["node2"]["artifacts"]
+    # The mock generator yields two events, plus the initial run_id event.
+    assert len(streamed_results) == 3
+    assert "run_id" in streamed_results[0]
+    assert "node1" in streamed_results[1]
+    assert "node2" in streamed_results[2]
+    assert "final_user_response.md" in streamed_results[2]["node2"]["artifacts"]

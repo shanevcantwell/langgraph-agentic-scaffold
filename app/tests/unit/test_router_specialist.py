@@ -82,6 +82,27 @@ def test_validate_llm_choice(router_specialist):
     choice = router_specialist._validate_llm_choice("invalid_spec", valid_options)
     assert choice == CoreSpecialist.DEFAULT_RESPONDER.value
 
+def test_validate_llm_choice_list(router_specialist):
+    """Tests validation when LLM returns a list of specialists (Scatter-Gather)."""
+    valid_options = ["spec1", "spec2", "spec3"]
+
+    # Case 1: All valid
+    choice = router_specialist._validate_llm_choice(["spec1", "spec2"], valid_options)
+    assert choice == ["spec1", "spec2"]
+
+    # Case 2: Mixed valid/invalid (should filter invalid)
+    choice = router_specialist._validate_llm_choice(["spec1", "invalid_spec"], valid_options)
+    assert choice == "spec1" # Returns string because only 1 valid item remains
+
+    # Case 3: Single valid item in list (should return string)
+    # This is an optimization in the router to avoid overhead if only 1 task
+    choice = router_specialist._validate_llm_choice(["spec1"], valid_options)
+    assert choice == "spec1"
+
+    # Case 4: All invalid (fallback)
+    choice = router_specialist._validate_llm_choice(["invalid1", "invalid2"], valid_options)
+    assert choice == CoreSpecialist.DEFAULT_RESPONDER.value
+
 
 # --- Integration-Style Tests for _execute_logic ---
 

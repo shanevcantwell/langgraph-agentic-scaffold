@@ -16,6 +16,8 @@ import gradio as gr
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
 from langsmith import Client
+from .interface.translator import AgUiTranslator
+
 langsmith_client: Optional[Client] = None
 logger = logging.getLogger(__name__)
 
@@ -243,3 +245,34 @@ def invoke_graph(request: InvokeRequest):
     except WorkflowError as e:
         logger.error(f"Workflow execution error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow execution error: {e}")
+
+async def _standard_stream_formatter(generator):
+    """
+    Formats the raw output into standardized AG-UI events (SSE).
+    """
+    translator = AgUiTranslator()
+    async for event in translator.translate(generator):
+        # Convert Pydantic model to JSON string
+        yield f"data: {event.model_dump_json()}\n\n"
+
+@app.post("/v1/graph/stream/events")
+async def stream_graph_events(request: InvokeRequest):
+    """
+    Streams the workflow execution using the standardized AG-UI event schema.
+    This endpoint exposes the AgUiEmitter's output using Server-Sent Events (SSE).
+    """
+    try:
+        logger.info(f"Received request to stream standardized events with prompt: '{request.input_prompt}'")
+        raw_stream = workflow_runner.run_streaming(
+            goal=request.input_prompt,
+            text_to_process=request.text_to_process,
+            image_to_process=request.image_to_process,
+            use_simple_chat=request.use_simple_chat
+        )
+        return StreamingResponse(
+            _standard_stream_formatter(raw_stream),
+            media_type="text/event-stream",
+        )
+    except WorkflowError as e:
+        logger.error(f"Workflow streaming error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")

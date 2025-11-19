@@ -49,7 +49,11 @@ class GraphBuilder:
         # TASK 1.2: Build allowed destinations for route validation
         # Include all specialists except router (which can't be a routing destination)
         router_name = CoreSpecialist.ROUTER.value
-        self.allowed_destinations = {name for name in self.specialists if name != router_name}
+        mcp_only_specialists = ["researcher_specialist", "summarizer_specialist"]
+        self.allowed_destinations = {
+            name for name in self.specialists 
+            if name != router_name and name not in mcp_only_specialists
+        }
 
         self.orchestrator = GraphOrchestrator(self.config, self.specialists, self.allowed_destinations)
 
@@ -158,6 +162,12 @@ class GraphBuilder:
         if CoreSpecialist.TRIAGE.value in loaded_specialists:
             self._configure_triage(loaded_specialists, all_configs)
 
+        # --- Context Engineering Ecosystem ---
+        # TriageArchitect is now a distinct specialist from prompt_triage_specialist
+        if "triage_architect" in loaded_specialists:
+            # No special configuration needed for now, uses standard prompt loading
+            pass
+
         # Now that all specialists, including router/triage, have their final
         # configurations, iterate through and attach adapters. This loop will
         # only attach adapters to specialists that don't already have one.
@@ -204,6 +214,8 @@ class GraphBuilder:
             "progenitor_bravo_specialist",   # Internal to tiered chat subgraph
             "tiered_synthesizer_specialist", # Internal to tiered chat subgraph
             "file_specialist",               # MCP-only specialist (Task 2.6) - no graph routing
+            "researcher_specialist",         # MCP-only specialist (Task 5.2) - no graph routing
+            "summarizer_specialist",         # MCP-only specialist (Task 5.3) - no graph routing
             # DISTILLATION SUBGRAPH: Exclude internal specialists from router
             "distillation_prompt_expander_specialist",   # Internal to distillation subgraph
             "distillation_prompt_aggregator_specialist", # Internal to distillation subgraph
@@ -255,7 +267,14 @@ class GraphBuilder:
     def _add_nodes_to_graph(self, workflow: StateGraph, streaming_callback: Callable[[str], None] = None):
         # CORE-CHAT-002: Both simple and tiered chat patterns coexist in graph
         # Runtime decision in GraphOrchestrator determines which path to use
+        
+        # MCP-only specialists that should not be graph nodes
+        mcp_only_specialists = ["researcher_specialist", "summarizer_specialist"]
+
         for name, instance in self.specialists.items():
+            if name in mcp_only_specialists:
+                continue
+
             if name == CoreSpecialist.ROUTER.value:
                 workflow.add_node(name, instance.execute)
             else:
@@ -263,10 +282,14 @@ class GraphBuilder:
 
     def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
         router_name = CoreSpecialist.ROUTER.value
+        mcp_only_specialists = ["researcher_specialist", "summarizer_specialist"]
 
         # Build destinations dict for router conditional edges
         # Include all specialists except router itself
-        destinations = {name: name for name in self.specialists if name != router_name}
+        destinations = {
+            name: name for name in self.specialists 
+            if name != router_name and name not in mcp_only_specialists
+        }
 
         # CORE-CHAT-002: chat_specialist is now always a node (both patterns coexist)
         # GraphOrchestrator will decide at runtime whether to use simple or tiered chat
@@ -339,6 +362,25 @@ class GraphBuilder:
 
             logger.info("Graph Edge: Added distillation subgraph with graph-driven iteration")
 
+        # CONTEXT ENGINEERING SUBGRAPH
+        # TriageArchitect -> [Facilitator | Router]
+        # Facilitator -> Router
+        if "triage_architect" in self.specialists:
+            workflow.add_conditional_edges(
+                "triage_architect",
+                self.orchestrator.check_triage_outcome,
+                {
+                    "facilitator_specialist": "facilitator_specialist",
+                    router_name: router_name
+                }
+            )
+            logger.info("Graph Edge: Added TriageArchitect conditional edge")
+
+        if "facilitator_specialist" in self.specialists:
+            # Facilitator always routes to Router after execution
+            workflow.add_edge("facilitator_specialist", router_name)
+            logger.info("Graph Edge: Added Facilitator -> Router edge")
+
         for name in self.specialists:
             # Exclude orchestration nodes and subgraph components from hub-and-spoke routing
             excluded_specialists = [
@@ -346,7 +388,11 @@ class GraphBuilder:
                 CoreSpecialist.ARCHIVER.value,
                 CoreSpecialist.END.value,
                 CoreSpecialist.CRITIC.value,
-                "web_builder"  # ADR-CORE-012
+                "web_builder",  # ADR-CORE-012
+                "triage_architect", # Context Engineering
+                "facilitator_specialist", # Context Engineering
+                "researcher_specialist", # MCP-only
+                "summarizer_specialist" # MCP-only
             ]
 
             # CORE-CHAT-002: Exclude tiered chat subgraph components from standard routing
