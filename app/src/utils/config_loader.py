@@ -25,7 +25,16 @@ class ConfigLoader:
             cls._instance._load_and_merge_configs()
         return cls._instance
 
-    def _load_and_merge_configs(self):
+    def reload(self, overrides: dict = None):
+        """
+        Forces a reload of the configuration from disk, optionally applying runtime overrides.
+        This is used for dynamic LLM switching without restarting the server.
+        """
+        logger.info("Reloading configuration...")
+        ConfigLoader._merged_config = None
+        self._load_and_merge_configs(overrides)
+
+    def _load_and_merge_configs(self, overrides: dict = None):
         """Loads, validates, and merges the blueprint and user settings."""
         if ConfigLoader._merged_config is not None:
             return
@@ -37,6 +46,11 @@ class ConfigLoader:
         if user_settings is None:
             user_settings = UserSettings().model_dump()
             logger.info(f"User settings file not found at {USER_SETTINGS_FILE}. Proceeding with defaults.")
+
+        # Apply runtime overrides to user_settings (in-memory only)
+        if overrides:
+            logger.info(f"Applying runtime configuration overrides: {overrides}")
+            user_settings.update(overrides)
 
         # Merge the configurations
         merged_config = self._merge_configs(blueprint_config, user_settings) if blueprint_config else {}

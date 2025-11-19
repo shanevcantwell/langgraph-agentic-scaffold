@@ -69,7 +69,17 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         try:
             from interpreter import interpreter
             interpreter.auto_run = True
-            interpreter.llm.context_window = 0 # We don't want the interpreter's internal LLM to have context
+            
+            # Configure interpreter to use the same LLM as the specialist
+            # This fixes the issue where it defaults to OpenAI with missing API keys
+            if self.llm_adapter:
+                interpreter.llm.api_base = self.llm_adapter.api_base
+                interpreter.llm.api_key = self.llm_adapter.api_key or "not-needed"
+                interpreter.llm.model = self.llm_adapter.model_name or "openai/gpt-4-turbo"
+                interpreter.llm.max_tokens = getattr(self.llm_adapter, 'max_tokens', 4096)
+                # We explicitly do NOT set context_window to 0 anymore, as it might break token counting.
+                # Instead, we rely on clearing messages to manage context.
+                
         except ImportError:
             logger.error(
                 "The 'open-interpreter' package is not installed. "

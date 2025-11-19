@@ -121,6 +121,25 @@ The process is as follows:
 
 This explicit, coordinated sequence ensures that completion is a robust, observable process, centralizing the finalization logic and preventing premature or disorderly graph exits.
 
+### 3.5 Pattern: Hybrid Specialist Configuration (Open Interpreter)
+
+**Context:** Some specialists, like `OpenInterpreterSpecialist`, rely on external libraries (`open-interpreter`) that have their own internal LLM handling logic. This can lead to configuration drift where the library tries to use default settings (e.g., OpenAI GPT-4) instead of the application's configured LLM.
+
+**Solution:** The specialist implementation must explicitly bridge the application's `LLMAdapter` configuration to the external library's configuration at runtime.
+
+**Implementation:**
+In `OpenInterpreterSpecialist._execute_code`, we explicitly inject the adapter's settings into the interpreter instance before execution:
+
+```python
+if self.llm_adapter:
+    interpreter.llm.api_base = self.llm_adapter.api_base
+    interpreter.llm.api_key = self.llm_adapter.api_key or "not-needed"
+    interpreter.llm.model = self.llm_adapter.model_name or "openai/gpt-4-turbo"
+    interpreter.llm.max_tokens = getattr(self.llm_adapter, 'max_tokens', 4096)
+```
+
+This ensures that `open-interpreter` respects the local model bindings defined in `user_settings.yaml` (e.g., `lmstudio_specialist`), preventing accidental API calls to cloud providers when local execution is intended.
+
 ## 4.0 Pattern: Virtual Coordinator with Parallel Execution (CORE-CHAT-002)
 
 The Virtual Coordinator pattern enables the system to transparently upgrade single-node capabilities into multi-node subgraphs without exposing implementation details to the router. This pattern is exemplified by the **Tiered Chat Subgraph**, which transforms a single chat specialist into a parallel multi-perspective system.

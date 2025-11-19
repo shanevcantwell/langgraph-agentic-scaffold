@@ -58,6 +58,28 @@ class WorkflowRunner:
         self.app = self.builder.build() # Build a non-streaming version for sync calls
         logger.info("WorkflowRunner initialized with compiled graph.")
 
+    def reload(self, overrides: Dict[str, Any] = None):
+        """
+        Reloads the workflow configuration and rebuilds the graph.
+        This allows for dynamic switching of LLM providers without restarting the server.
+        """
+        logger.info("Reloading WorkflowRunner...")
+        from ..utils.config_loader import ConfigLoader
+        
+        # Reload configuration with overrides
+        ConfigLoader().reload(overrides)
+        
+        # Re-initialize builder with new config
+        self.builder = GraphBuilder()
+        self.config = self.builder.config
+        self.specialists = self.builder.specialists
+        
+        # Re-run checks and build
+        self._perform_pre_flight_checks()
+        self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
+        self.app = self.builder.build()
+        logger.info("WorkflowRunner successfully reloaded.")
+
     def _perform_pre_flight_checks(self):
         """
         Performs critical environment checks before the application is fully wired.

@@ -84,10 +84,72 @@ class InvokeResponse(BaseModel):
         description="The final output from the graph's END state."
     )
 
+class ConfigUpdateRequest(BaseModel):
+    default_llm_config: Optional[str] = Field(
+        None,
+        description="The key of the LLM provider to set as default (e.g., 'lmstudio_router', 'gemini_pro')."
+    )
+
 # --- API Endpoints ---
 @app.get("/")
 def read_root():
     return {"status": "API is running"}
+
+@app.get("/v1/system/llm-providers")
+def get_llm_providers():
+    """
+    Returns a list of available LLM providers and the current default.
+    """
+    if not workflow_runner:
+        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
+    
+    config = workflow_runner.config
+    providers = config.get("llm_providers", {})
+    default_config = config.get("workflow", {}).get("default_llm_config")
+    
+    # Return a simplified list for the UI
+    provider_list = []
+    for key, data in providers.items():
+        provider_list.append({
+            "key": key,
+            "type": data.get("type"),
+            "model": data.get("model_name", "Unknown"),
+            "is_default": key == default_config
+        })
+        
+    return {
+        "providers": provider_list,
+        "current_default": default_config
+    }
+
+@app.post("/v1/system/config")
+def update_system_config(request: ConfigUpdateRequest):
+    """
+    Updates the system configuration at runtime.
+    Currently supports switching the default LLM provider.
+    """
+    if not workflow_runner:
+        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
+    
+    overrides = {}
+    if request.default_llm_config:
+        # Validate that the provider exists
+        current_config = workflow_runner.config
+        if request.default_llm_config not in current_config.get("llm_providers", {}):
+            raise HTTPException(status_code=400, detail=f"Provider '{request.default_llm_config}' not found in configuration.")
+        
+        overrides["default_llm_config"] = request.default_llm_config
+        
+    if overrides:
+        try:
+            workflow_runner.reload(overrides)
+            return {"status": "Configuration updated and workflow reloaded", "overrides": overrides}
+        except Exception as e:
+            logger.error(f"Failed to reload workflow: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to reload workflow: {str(e)}")
+    
+    return {"status": "No changes requested"}
+
 async def _stream_formatter(generator):
     """
     This internal generator formats the raw output from the workflow runner
