@@ -37,7 +37,7 @@ let loadedFile = null; // { content: string, type: 'text' | 'image' }
 // Event Listeners
 executeBtn.addEventListener('click', executeWorkflow);
 promptInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
         executeWorkflow();
     }
