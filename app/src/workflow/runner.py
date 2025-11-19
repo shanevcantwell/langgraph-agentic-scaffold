@@ -10,6 +10,7 @@ from langchain_core.messages import messages_to_dict
 from pydantic import BaseModel
 
 from ..utils.errors import ConfigError
+from ..utils.cancellation_manager import CancellationManager
 from ..graph.state import GraphState
 from ..graph.state_factory import create_initial_state
 from .graph_builder import GraphBuilder
@@ -158,6 +159,11 @@ class WorkflowRunner:
 
         try:
             async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit, "run_id": run_id}):
+                # Check for cancellation request
+                if CancellationManager.is_cancelled(str(run_id)):
+                    logger.warning(f"Run {run_id} was cancelled by user request.")
+                    yield {"error": "Mission aborted by user.", "scratchpad": {"error_report": "## Mission Aborted\n\nThe user manually cancelled this mission."}}
+                    break
                 yield event
             logger.info("--- Streaming workflow complete. ---")
         except Exception as e:
@@ -165,3 +171,6 @@ class WorkflowRunner:
             # Create a serializable error message
             error_message_dict = {"error": f"Workflow failed catastrophically: {str(e)}"}
             yield {"error_report": error_message_dict}
+        finally:
+            # Cleanup cancellation state
+            CancellationManager.clear_cancellation(str(run_id))

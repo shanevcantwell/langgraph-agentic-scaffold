@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 import gradio as gr
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
+from .utils.cancellation_manager import CancellationManager
 from langsmith import Client
 from .interface.translator import AgUiTranslator
 
@@ -200,6 +201,15 @@ async def get_run_trace(run_id: str):
     except Exception as e:
         logger.error(f"Failed to fetch traces for run {run_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/v1/graph/cancel/{run_id}")
+async def cancel_run(run_id: str):
+    """
+    Requests cancellation of a running workflow.
+    """
+    logger.info(f"Received cancellation request for run_id: {run_id}")
+    CancellationManager.request_cancellation(run_id)
+    return {"status": "Cancellation requested"}
 
 @app.post("/v1/graph/stream")
 async def stream_graph(request: InvokeRequest):

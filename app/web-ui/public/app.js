@@ -3,6 +3,7 @@ const API_BASE = '/v1'; // Proxied by server.js
 // DOM Elements
 const promptInput = document.getElementById('promptInput');
 const executeBtn = document.getElementById('executeBtn');
+const cancelBtn = document.getElementById('cancelBtn');
 const simpleChatMode = document.getElementById('simpleChatMode');
 // const turnCountEl = document.getElementById('turnCount'); // Removed
 // const latencyEl = document.getElementById('latency'); // Removed
@@ -22,6 +23,10 @@ const zoomModal = document.getElementById('zoomModal');
 const closeModal = document.querySelector('.close-modal');
 const modalBody = document.getElementById('modal-body');
 
+// Artifact Tabs
+const tabBtns = document.querySelectorAll('.artifacts-panel .tab-btn');
+const tabContents = document.querySelectorAll('.artifacts-panel .tab-content');
+
 // State
 let currentRunId = null;
 let tracePollInterval = null;
@@ -32,6 +37,7 @@ let loadedFile = null; // { content: string, type: 'text' | 'image' }
 
 // Event Listeners
 executeBtn.addEventListener('click', executeWorkflow);
+cancelBtn.addEventListener('click', cancelWorkflow);
 promptInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
@@ -119,6 +125,11 @@ async function executeWorkflow() {
     // Reset UI
     promptInput.disabled = true;
     executeBtn.disabled = true;
+    executeBtn.style.display = 'none';
+    cancelBtn.style.display = 'inline-block';
+    cancelBtn.disabled = false;
+    cancelBtn.textContent = '⏹️ ABORT';
+    
     systemStatusEl.innerHTML = '► INITIALIZING...';
     routingLogEl.innerHTML = '';
     executionTraceEl.innerHTML = '<div class="placeholder">WAITING FOR MISSION DATA...</div>';
@@ -129,6 +140,7 @@ async function executeWorkflow() {
     // Reset Specialist Grid
     document.querySelectorAll('.spec-node').forEach(el => el.classList.remove('active'));
     
+    currentRunId = null;
     turnCount++;
     // turnCountEl.textContent = String(turnCount).padStart(3, '0'); // Removed
     startTime = Date.now();
@@ -186,11 +198,39 @@ async function executeWorkflow() {
     } finally {
         promptInput.disabled = false;
         executeBtn.disabled = false;
+        executeBtn.style.display = 'inline-block';
+        cancelBtn.style.display = 'none';
         promptInput.value = '';
         promptInput.focus();
         stopTracePolling();
         
         // Clear file after send? Maybe keep it? Let's keep it for now, user can clear manually.
+    }
+}
+
+async function cancelWorkflow() {
+    if (!currentRunId) return;
+    
+    cancelBtn.disabled = true;
+    cancelBtn.textContent = 'ABORTING...';
+    logStatus('► SENDING ABORT SIGNAL...');
+    
+    try {
+        const res = await fetch(`${API_BASE}/graph/cancel/${currentRunId}`, {
+            method: 'POST'
+        });
+        if (res.ok) {
+            logStatus('► ABORT SIGNAL RECEIVED. TERMINATING...');
+        } else {
+            logStatus('❌ ABORT FAILED');
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = '⏹️ ABORT';
+        }
+    } catch (e) {
+        console.error("Cancel error:", e);
+        logStatus('❌ ABORT ERROR');
+        cancelBtn.disabled = false;
+        cancelBtn.textContent = '⏹️ ABORT';
     }
 }
 
@@ -216,7 +256,7 @@ function handleStreamEvent(event) {
             logStatus(`► WORKFLOW STARTED`);
             break;
 
-        case 'status':
+        case 'status_update':
             if (data.status) {
                 logStatus(`► ${data.status}`);
             }
@@ -246,10 +286,14 @@ function handleStreamEvent(event) {
                 jsonOutputEl.textContent = JSON.stringify(data.final_state, null, 2);
             }
 
-            // HTML rendering removed in favor of Mission Dossier
+            // Removed legacy HTML rendering
+            // if (data.html) { ... }
 
             if (data.archive) {
                 renderMissionReport(data.archive);
+                // Also render to the Artifacts panel if needed, but Mission Report panel is primary now.
+                // If we want it in the Artifacts panel too:
+                document.getElementById('archiveOutput').innerHTML = marked.parse(data.archive);
             }
             break;
             

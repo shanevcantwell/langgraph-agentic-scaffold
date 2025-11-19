@@ -52,12 +52,15 @@ services:
   web-ui:
     container_name: vegas-terminal
     build:
-      context: ./web-ui
+      context: ./app/web-ui
     ports:
       - "3000:3000"
     environment:
       - API_URL=http://app:8000
       - PORT=3000
+    volumes:
+      - ./app/web-ui:/app
+      - /app/node_modules
     depends_on:
       - app
     restart: unless-stopped
