@@ -26,6 +26,15 @@
                     <h3>⌨️ COMMAND BAR</h3>
                     <textarea id="promptInput" placeholder="█ ENTER DIRECTIVE... (ENTER: EXECUTE | SHIFT+ENTER: NEW LINE)"></textarea>
                     
+                    <!-- File Upload Section -->
+                    <div class="upload-section" style="margin: 10px 0; border: 1px dashed var(--crt-green); padding: 8px;">
+                        <div style="margin-bottom: 5px; font-size: 0.8em; color: var(--crt-green);">📂 DATA INJECTION</div>
+                        <input type="file" id="fileInput" style="display: none;">
+                        <button id="uploadBtn" style="font-size: 0.8em; padding: 2px 8px; background: transparent; border: 1px solid var(--crt-green); color: var(--crt-green); cursor: pointer;">SELECT FILE</button>
+                        <span id="fileName" style="margin-left: 10px; font-size: 0.8em; opacity: 0.7;">NO DATA LOADED</span>
+                        <button id="clearFileBtn" style="display: none; margin-left: 10px; font-size: 0.8em; padding: 2px 8px; color: #ff4444; border: 1px solid #ff4444; background: transparent; cursor: pointer;">CLEAR</button>
+                    </div>
+
                     <div class="controls">
                         <label class="checkbox-container">
                             <input type="checkbox" id="simpleChatMode">
@@ -77,21 +86,33 @@
                 <section class="panel artifacts-panel">
                     <h3>📦 ARTIFACTS</h3>
                     <div class="tabs">
-                        <button class="tab-btn active" data-tab="html">🌐 RENDERED HTML</button>
+                        <button class="tab-btn active" data-tab="archive">🗄️ ARCHIVE</button>
+                        <button class="tab-btn" data-tab="html">🌐 RENDERED HTML</button>
                         <button class="tab-btn" data-tab="json">⚙️ FINAL STATE</button>
-                        <button class="tab-btn" data-tab="archive">🗄️ ARCHIVE</button>
                     </div>
-                    <div class="tab-content active" id="tab-html">
+                    <div class="tab-content active" id="tab-archive">
+                        <div style="text-align: right; margin-bottom: 5px;">
+                            <button id="zoomBtn" style="font-size: 0.8em; background: transparent; border: 1px solid var(--crt-green); color: var(--crt-green); cursor: pointer;">[+] ZOOM ENHANCE</button>
+                        </div>
+                        <div id="archiveOutput" class="markdown-body"></div>
+                    </div>
+                    <div class="tab-content" id="tab-html">
                         <div class="placeholder">NO HTML RENDERED</div>
                     </div>
                     <div class="tab-content" id="tab-json">
                         <pre id="jsonOutput">{}</pre>
                     </div>
-                    <div class="tab-content" id="tab-archive">
-                        <div id="archiveOutput" class="markdown-body"></div>
-                    </div>
                 </section>
             </div>
+        </div>
+    </div>
+
+    <!-- Zoom Modal -->
+    <div id="zoomModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 style="color: var(--crt-green); border-bottom: 1px solid var(--crt-green); padding-bottom: 10px;">ARCHIVE REPORT [FULL VIEW]</h2>
+            <div id="modal-body" class="markdown-body" style="color: var(--crt-green);"></div>
         </div>
     </div>
 

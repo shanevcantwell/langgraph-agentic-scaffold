@@ -215,3 +215,67 @@ iframe { width: 100%; height: 100%; border: none; }
 ::-webkit-scrollbar-track { background: #000; }
 ::-webkit-scrollbar-thumb { background: var(--secondary-color); }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary-color); }
+
+/* Markdown Content */
+.markdown-body img {
+    max-width: 100%;
+    height: auto;
+    border: 1px solid var(--secondary-color);
+}
+
+.markdown-body pre {
+    background: #222;
+    padding: 10px;
+    overflow-x: auto;
+    border: 1px solid var(--secondary-color);
+}
+
+.markdown-body code {
+    font-family: 'Courier New', Courier, monospace;
+    background: #222;
+    padding: 2px 4px;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+    border-bottom: 1px solid var(--secondary-color);
+    padding-bottom: 5px;
+    margin-top: 20px;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.9);
+    backdrop-filter: blur(5px);
+}
+
+.modal-content {
+    background-color: #000;
+    margin: 2% auto;
+    padding: 20px;
+    border: 2px solid var(--primary-color);
+    width: 90%;
+    height: 90%;
+    overflow: auto;
+    position: relative;
+    box-shadow: 0 0 20px rgba(51, 255, 51, 0.2);
+}
+
+.close-modal {
+    color: var(--primary-color);
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close-modal:hover {
+    color: #fff;
+    text-shadow: 0 0 10px var(--primary-color);
+}
