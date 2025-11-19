@@ -21,12 +21,25 @@ class TriageArchitect(BaseSpecialist):
 
         # 1. Get user input
         messages = state.get("messages", [])
-        if not messages:
-            logger.warning("TriageArchitect received no messages.")
-            return {}
-            
-        user_input = messages[-1].content
         
+        # Find the last HumanMessage to ensure we are processing the user's actual request,
+        # not a routing instruction from the Router (which is an AIMessage).
+        user_input = None
+        for msg in reversed(messages):
+            if isinstance(msg, HumanMessage):
+                user_input = msg.content
+                break
+        
+        if not user_input:
+            # Fallback: If no HumanMessage is found (unlikely), use the last message content
+            # but log a warning.
+            if messages:
+                logger.warning("TriageArchitect could not find a HumanMessage. Using last message content.")
+                user_input = messages[-1].content
+            else:
+                logger.warning("TriageArchitect received no messages.")
+                return {}
+            
         # 2. Build Prompt
         prompt_file = self.specialist_config.get("prompt_file")
         if prompt_file:

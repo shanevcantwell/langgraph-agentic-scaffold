@@ -18,7 +18,8 @@ services:
     environment:
       - HTTP_PROXY=http://proxy:3128
       - HTTPS_PROXY=http://proxy:3128
-      - NO_PROXY=localhost,127.0.0.1
+      # Exclude internal docker services from the proxy to prevent routing loops
+      - NO_PROXY=localhost,127.0.0.1,app,web-ui,proxy,langgraph-app,vegas-terminal,host.docker.internal
     # This makes the host's services (Ollama, LM Studio) available to the container.
     extra_hosts:
       - "host.docker.internal:host-gateway"

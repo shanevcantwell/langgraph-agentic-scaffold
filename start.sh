@@ -7,6 +7,13 @@ set -e
 # Trap SIGINT and SIGTERM to gracefully shut down background processes
 trap 'kill $(jobs -p); exit' SIGINT SIGTERM
 
+echo "--- Running Connectivity Verification ---"
+python -m app.src.utils.verify_connectivity
+if [ $? -ne 0 ]; then
+    echo "❌ Connectivity check failed. Exiting."
+    exit 1
+fi
+
 echo "--- Starting FastAPI server (with reload) ---"
 # Use explicit reload directories to prevent the log file from triggering reloads.
 # Watch the 'app' directory for changes, but exclude the 'logs' directory.

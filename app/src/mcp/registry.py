@@ -207,17 +207,26 @@ class McpRegistry:
         Raises:
             TimeoutError: If execution exceeds timeout
         """
-        # Set up timeout signal handler (Unix only)
-        # Note: This won't work on Windows, would need threading.Timer instead
-        old_handler = signal.signal(signal.SIGALRM, timeout_handler)
-        signal.alarm(self.timeout_seconds)
-
+        # Attempt to set up timeout signal handler (Unix only)
+        # This will fail if we are not in the main thread (e.g. running under Uvicorn/FastAPI threads)
         try:
-            result = function(**parameters)
-            signal.alarm(0)  # Cancel alarm
-            return result
-        finally:
-            signal.signal(signal.SIGALRM, old_handler)  # Restore old handler
+            old_handler = signal.signal(signal.SIGALRM, timeout_handler)
+            signal.alarm(self.timeout_seconds)
+            
+            try:
+                result = function(**parameters)
+                signal.alarm(0)  # Cancel alarm
+                return result
+            finally:
+                signal.signal(signal.SIGALRM, old_handler)  # Restore old handler
+                
+        except ValueError as e:
+            if "signal only works in main thread" in str(e):
+                logger.warning(f"MCP timeout disabled: Running in a secondary thread. Executing '{function.__name__}' without timeout protection.")
+                # Execute without timeout
+                return function(**parameters)
+            else:
+                raise e
 
     def _wrap_with_tracing(self, function: Callable, request: McpRequest) -> Callable:
         """

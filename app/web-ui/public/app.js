@@ -10,6 +10,8 @@ const simpleChatMode = document.getElementById('simpleChatMode');
 const routingLogEl = document.getElementById('routingLog');
 const systemStatusEl = document.getElementById('systemStatus');
 const traceTabsEl = document.getElementById('traceTabs');
+const executionTraceEl = document.getElementById('executionTrace');
+const jsonOutputEl = document.getElementById('jsonOutput');
 
 // File Upload Elements
 const fileInput = document.getElementById('fileInput');
@@ -34,10 +36,11 @@ let turnCount = 0;
 let startTime = 0;
 let lastUpdateTime = 0;
 let loadedFile = null; // { content: string, type: 'text' | 'image' }
+let abortController = null; // Controller for the fetch request
 
 // Event Listeners
 executeBtn.addEventListener('click', executeWorkflow);
-cancelBtn.addEventListener('click', cancelWorkflow);
+cancelBtn.addEventListener('click', handleAbort); // Changed to handleAbort
 promptInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
@@ -162,12 +165,31 @@ async function executeWorkflow() {
         }
     }
 
+    // Create new AbortController for this request
+    abortController = new AbortController();
+    let isTimeout = false;
+    const CONNECTION_TIMEOUT_MS = 15000; // 15 seconds to establish connection
+
+    // Start connection timeout
+    const timeoutId = setTimeout(() => {
+        isTimeout = true;
+        if (abortController) abortController.abort();
+    }, CONNECTION_TIMEOUT_MS);
+
     try {
         const response = await fetch(`${API_BASE}/graph/stream/events`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload),
+            signal: abortController.signal
         });
+
+        // Connection established, clear timeout
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -194,7 +216,19 @@ async function executeWorkflow() {
         }
 
     } catch (error) {
-        logStatus(`❌ ERROR: ${error.message}`);
+        clearTimeout(timeoutId); // Ensure timeout is cleared on error
+        
+        if (error.name === 'AbortError') {
+            if (isTimeout) {
+                logStatus('❌ CONNECTION TIMED OUT');
+                renderMissionReport('## ❌ Connection Timed Out\n\nThe server failed to respond within 15 seconds.\n\n**Possible Causes:**\n1. The backend is hanging while trying to contact an LLM.\n2. The Proxy is blocking an outgoing connection.\n3. The local LLM (LM Studio) is not running or is unresponsive.');
+            } else {
+                logStatus('► MISSION ABORTED BY USER');
+                renderMissionReport('## Mission Aborted\n\nThe user manually cancelled this mission.');
+            }
+        } else {
+            logStatus(`❌ ERROR: ${error.message}`);
+        }
     } finally {
         promptInput.disabled = false;
         executeBtn.disabled = false;
@@ -203,36 +237,46 @@ async function executeWorkflow() {
         promptInput.value = '';
         promptInput.focus();
         stopTracePolling();
+        abortController = null;
         
         // Clear file after send? Maybe keep it? Let's keep it for now, user can clear manually.
     }
 }
 
-async function cancelWorkflow() {
-    if (!currentRunId) return;
-    
-    cancelBtn.disabled = true;
-    cancelBtn.textContent = 'ABORTING...';
-    logStatus('► SENDING ABORT SIGNAL...');
-    
-    try {
-        const res = await fetch(`${API_BASE}/graph/cancel/${currentRunId}`, {
-            method: 'POST'
-        });
-        if (res.ok) {
-            logStatus('► ABORT SIGNAL RECEIVED. TERMINATING...');
-        } else {
-            logStatus('❌ ABORT FAILED');
-            cancelBtn.disabled = false;
-            cancelBtn.textContent = '⏹️ ABORT';
+async function handleAbort() {
+    // 1. Abort the client-side fetch immediately to free up the browser connection
+    if (abortController) {
+        abortController.abort();
+    }
+
+    // 2. Attempt to notify the backend to stop processing (best effort)
+    if (currentRunId) {
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'ABORTING...';
+        logStatus('► SENDING ABORT SIGNAL...');
+        
+        try {
+            // Use a short timeout for the cancel request so it doesn't hang if the server is busy
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000);
+            
+            const res = await fetch(`${API_BASE}/graph/cancel/${currentRunId}`, {
+                method: 'POST',
+                signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            
+            if (res.ok) {
+                console.log('Backend cancellation confirmed');
+            }
+        } catch (e) {
+            console.warn("Backend cancellation request failed (likely due to connection limit or timeout):", e);
         }
-    } catch (e) {
-        console.error("Cancel error:", e);
-        logStatus('❌ ABORT ERROR');
-        cancelBtn.disabled = false;
-        cancelBtn.textContent = '⏹️ ABORT';
     }
 }
+
+// Removed old cancelWorkflow function
+// async function cancelWorkflow() { ... }
 
 function handleStreamEvent(event) {
     const now = Date.now();
