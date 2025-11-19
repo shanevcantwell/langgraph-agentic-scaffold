@@ -52,9 +52,9 @@ This scaffold provides a well-defined architecture designed for reliability, sca
 ### Reliability & Observability
 
   * **Fail-Fast Validation:**
-    - Startup validation prevents running in partially-functional state
-    - Route validation eliminates silent infinite-loop bugs
-    - System terminates loudly with actionable error messages
+    - **Connectivity Check:** Startup script (`verify_connectivity.py`) validates internet access and LLM provider reachability *before* the application starts. Prevents "zombie" containers that look healthy but can't work.
+    - **Route Validation:** Eliminates silent infinite-loop bugs by validating graph edges at build time.
+    - **System Invariants:** Runtime monitor enforces structural integrity and prevents invalid state transitions.
 
   * **First-Class Observability:** Integrated with LangSmith out of the box. FastAPI `lifespan` manager ensures buffered traces are sent before exit. Essential for debugging complex multi-agent interactions.
 
@@ -108,13 +108,18 @@ Using Docker is the recommended way to run this project. It provides a secure, s
 
       * Copy the example environment file: `cp .env.example .env`
       * Edit the new `.env` file to add your API keys (e.g., `GOOGLE_API_KEY`, `LANGSMITH_API_KEY`).
-      * **Crucially**, to connect to local model servers (like LM Studio or Ollama) running on your host machine, you must use the special `host.docker.internal` hostname.
+      * **Crucially**, to connect to local model servers (like LM Studio or Ollama) running on your host machine:
+        1. Use the special `host.docker.internal` hostname in your URLs.
+        2. Ensure `host.docker.internal` is added to your `NO_PROXY` environment variable if you are behind a corporate proxy or using the included Squid proxy.
       * Copy the proxy configuration: `cp proxy/squid.conf.example proxy/squid.conf`
         ```dotenv
         # .env
         # Use host.docker.internal to connect from the container to services on the host.
         LMSTUDIO_BASE_URL="http://host.docker.internal:1234/v1/"
         OLLAMA_BASE_URL="http://host.docker.internal:11434"
+        
+        # Ensure local traffic bypasses the proxy
+        NO_PROXY=localhost,127.0.0.1,host.docker.internal
         ```
       * Copy the user settings template: `cp user_settings.yaml.example user_settings.yaml`
       * Edit `user_settings.yaml` to bind your desired models to core specialists like the `router_specialist`.
@@ -129,6 +134,7 @@ Using Docker is the recommended way to run this project. It provides a secure, s
 ### How to Interact (Docker)
 
   * **Web UI (Gradio):** Access the web interface in your browser at **`http://localhost:5003`**.
+  * **V.E.G.A.S. Terminal:** A real-time, streaming terminal interface for monitoring agent execution at **`http://localhost:3000`**.
   * **API Docs (FastAPI):** Access the interactive API documentation at **`http://localhost:8000/docs`**.
   * **Command Line (CLI):** To interact via the CLI, execute the `cli.py` script inside the running `app` container.
     ```bash
@@ -192,9 +198,13 @@ This scaffold is designed for serious agentic system development with comprehens
 
 ### Essential Reading
 
-  * **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)**: Complete architecture overview, LangSmith setup, configuration system, and architectural patterns (Virtual Coordinator, MCP, Tiered Chat)
-  * **[Creating a New Specialist](./docs/CREATING_A_NEW_SPECIALIST.md)**: Step-by-step tutorial for adding custom specialists
-  * **[Integration Test Guide](./docs/INTEGRATION_TEST_GUIDE.md)**: Patterns and examples for writing integration tests
+  * **[Developer's Guide](./docs/DEVELOPERS_GUIDE.md)**: The central hub for all documentation.
+  * **[System Architecture](./docs/ARCHITECTURE.md)**: Core concepts, patterns, and best practices.
+  * **[Configuration Guide](./docs/CONFIGURATION_GUIDE.md)**: The 3-Tiered Configuration System.
+  * **[MCP Guide](./docs/MCP_GUIDE.md)**: Synchronous service calls and the Message-Centric Protocol.
+  * **[Observability Guide](./docs/OBSERVABILITY.md)**: LangSmith integration and debugging.
+  * **[Creating a New Specialist](./docs/CREATING_A_NEW_SPECIALIST.md)**: Step-by-step tutorial for adding custom specialists.
+  * **[Integration Test Guide](./docs/INTEGRATION_TEST_GUIDE.md)**: Patterns and examples for writing integration tests.
   * **[Graph Construction Guide](./docs/GRAPH_CONSTRUCTION_GUIDE.md)**: Subgraph patterns and workflow composition
 
 ### Observability (Critical for Development)
@@ -205,7 +215,7 @@ Debugging complex multi-agent interactions with `print` statements is insufficie
   * Error isolation with red highlighting
   * Token count and latency tracking
 
-**Setup**: Add LangSmith credentials to `.env` and ensure the FastAPI `lifespan` manager is present (see Developer's Guide Section 3.2).
+**Setup**: Add LangSmith credentials to `.env` and ensure the FastAPI `lifespan` manager is present (see [Observability Guide](./docs/OBSERVABILITY.md)).
 
 ### Current Status
 

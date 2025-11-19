@@ -136,10 +136,16 @@ This is the main Python package for the application.
 
 Contains all project documentation.
 
--   `docs/DEVELOPERS_GUIDE.md`: The primary guide for developers on system architecture, patterns, and how to extend the system.
+-   `docs/DEVELOPERS_GUIDE.md`: The central hub for all developer documentation.
+-   `docs/ARCHITECTURE.md`: Core system architecture and design patterns.
+-   `docs/CONFIGURATION_GUIDE.md`: Guide to the 3-tiered configuration system.
+-   `docs/MCP_GUIDE.md`: Guide to the Message-Centric Protocol (MCP).
+-   `docs/OBSERVABILITY.md`: Guide to LangSmith integration and debugging.
 -   `docs/CREATING_A_NEW_SPECIALIST.md`: A step-by-step tutorial for adding new specialists.
+-   `docs/INTEGRATION_TEST_GUIDE.md`: Guide to writing integration tests.
+-   `docs/GRAPH_CONSTRUCTION_GUIDE.md`: Guide to graph construction and subgraphs.
+-   `docs/UX_UI_GUIDE.md`: UX/UI and API integration guide.
 -   `docs/PROJECT_STRUCTURE.md`: (This file) A detailed breakdown of the repository layout.
--   `docs/UX_UI & API Mockup Guide.md`: UX/UI and API Mockup Guide.
 
 **Note:** Architecture Decision Records (ADRs) and blueprints have been moved to the `design-docs` repository (sibling to this repo, added to VS Code workspace). See `../design-docs/agentic-scaffold/03_ADRS/` for active ADRs and `/01_BLUEPRINTS/` for vision documents.
 

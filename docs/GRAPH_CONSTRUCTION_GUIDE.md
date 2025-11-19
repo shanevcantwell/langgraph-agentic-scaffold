@@ -219,7 +219,7 @@ LangSmith traces show parallel execution visually:
 - Wall-clock time for parallel section ≈ max(alpha_time, bravo_time), not alpha_time + bravo_time
 - `routing_history` shows execution order: `["router_specialist", "progenitor_alpha_specialist", "progenitor_bravo_specialist", "tiered_synthesizer_specialist"]`
 
-**Reference:** See section 4.7 in DEVELOPERS_GUIDE.md for detailed architectural patterns and ADR CORE-CHAT-002 for implementation rationale.
+**Reference:** See section 4.0 in `ARCHITECTURE.md` for detailed architectural patterns and ADR CORE-CHAT-002 for implementation rationale.
 
 ### 2.3. Setting the Entry Point and Compiling
 

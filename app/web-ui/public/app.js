@@ -38,6 +38,41 @@ let lastUpdateTime = 0;
 let loadedFile = null; // { content: string, type: 'text' | 'image' }
 let abortController = null; // Controller for the fetch request
 
+// Theme Switcher Logic
+const themeBtns = document.querySelectorAll('.theme-btn');
+
+// Load saved theme
+const savedTheme = localStorage.getItem('theme') || 'light';
+setTheme(savedTheme);
+
+themeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const theme = btn.dataset.theme;
+        setTheme(theme);
+    });
+});
+
+function setTheme(theme) {
+    // Update DOM
+    if (theme === 'light') {
+        document.documentElement.removeAttribute('data-theme');
+    } else {
+        document.documentElement.setAttribute('data-theme', theme);
+    }
+
+    // Update Buttons
+    themeBtns.forEach(btn => {
+        if (btn.dataset.theme === theme) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    // Save preference
+    localStorage.setItem('theme', theme);
+}
+
 // Event Listeners
 executeBtn.addEventListener('click', executeWorkflow);
 cancelBtn.addEventListener('click', handleAbort); // Changed to handleAbort

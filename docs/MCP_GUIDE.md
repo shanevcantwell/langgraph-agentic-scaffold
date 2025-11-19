@@ -1,0 +1,376 @@
+# Message-Centric Protocol (MCP) Guide
+
+## 1.0 Overview
+
+**Context:** The system provides two primary communication mechanisms between specialists:
+
+1. **Graph-mediated routing** - Specialists modify GraphState and routing flows through the RouterSpecialist
+2. **Dossier pattern** - Asynchronous, state-mediated workflow handoffs (see ADR-CORE-003/004)
+
+However, neither pattern efficiently handles **synchronous, deterministic service calls** where one specialist needs to invoke a simple function on another specialist (e.g., "Does file X exist?", "What's the current date?").
+
+**MCP (Message-Centric Protocol)** provides synchronous, direct service invocation between specialists, complementing the existing communication patterns.
+
+## 2.0 MCP Architecture
+
+**Per-Graph-Instance Registry:**
+Each `GraphBuilder` creates its own `McpRegistry` instance, ensuring test isolation and supporting concurrent graph execution. Specialists register their service functions during graph initialization.
+
+**Service Registration:**
+```python
+class MySpecialist(BaseSpecialist):
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Optional: Register this specialist's functions as MCP services."""
+        registry.register_service(self.specialist_name, {
+            "my_function": self.my_function,
+            "another_function": self.another_function,
+        })
+
+    def my_function(self, param1: str, param2: int) -> dict:
+        """Service function callable via MCP."""
+        # ... implementation ...
+        return {"result": "data"}
+```
+
+**Service Invocation:**
+```python
+class ConsumerSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        # Synchronous call with automatic error handling
+        result = self.mcp_client.call("my_specialist", "my_function",
+                                      param1="value", param2=42)
+
+        # Fault-tolerant call returning (success, result) tuple
+        success, result = self.mcp_client.call_safe("my_specialist", "my_function",
+                                                     param1="value", param2=42)
+        if success:
+            # ... use result ...
+        else:
+            # ... handle error (result contains error message) ...
+```
+
+## 3.0 When to Use MCP vs Dossier
+
+**Use MCP When:**
+- **Synchronous operations** - Immediate result needed (file existence check, date retrieval)
+- **Deterministic functions** - No LLM involvement, pure logic
+- **Low-latency requirements** - Cannot afford graph routing overhead
+- **Service-oriented calls** - Treating specialist as a utility service
+
+**Examples:**
+- `self.mcp_client.call("file_specialist", "file_exists", path="report.md")` → bool
+- `self.mcp_client.call("datetime_specialist", "get_current_date")` → str
+- `self.mcp_client.call("validation_specialist", "validate_schema", data=..., schema=...)` → bool
+
+**Use Dossier When:**
+- **Asynchronous handoffs** - Specialist-to-specialist workflow transitions
+- **LLM-driven tasks** - Next specialist needs to perform reasoning
+- **State-mediated communication** - Requires graph state transition tracking
+- **Complex workflows** - Multi-step orchestration with routing logic
+
+**Examples:**
+- BuilderSpecialist → CriticSpecialist (review workflow)
+- TriageArchitect → Facilitator (context engineering handoff)
+- ErrorHandler → HumanEscalation (failure recovery)
+
+## 4.0 MCP Configuration
+
+MCP behavior is controlled via `config.yaml`:
+
+```yaml
+mcp:
+  # Toggle LangSmith trace spans for MCP calls
+  tracing_enabled: true
+
+  # Maximum execution time per MCP call (prevents hanging)
+  timeout_seconds: 5
+```
+
+**Timeout Protection:** MCP calls are protected by a configurable timeout (default: 5 seconds) using `signal.alarm()`. Note: This mechanism is Unix-only; Windows support requires threading-based implementation.
+
+**LangSmith Tracing:** When enabled, MCP calls emit trace spans for observability. Gracefully degrades if LangSmith is not installed.
+
+## 5.0 Reference Implementation: FileSpecialist
+
+The `FileSpecialist` demonstrates the **MCP-only pattern**, where a specialist operates exclusively via MCP and never participates in graph routing:
+
+```python
+class FileSpecialist(BaseSpecialist):
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Expose all file operations as MCP services."""
+        registry.register_service(self.specialist_name, {
+            "file_exists": self.file_exists,
+            "read_file": self.read_file,
+            "write_file": self.write_file,
+            "list_files": self.list_files,
+            "create_directory": self.create_directory,
+            "create_zip": self.create_zip,
+        })
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """No-op for MCP-only mode."""
+        logger.warning(f"{self.specialist_name} operates exclusively via MCP")
+        return {}
+```
+
+**Security Note:** FileSpecialist implements path validation using `pathlib.Path.resolve()` and `relative_to()` to prevent directory traversal attacks, providing defense-in-depth alongside container isolation.
+
+**Additional Documentation:** See `ADR-CORE-008_MCP-Architecture.md` for complete architectural details and design decisions.
+
+## 6.0 Available MCP Services (Service Directory)
+
+The following table documents all MCP services currently available in the system. Use this as a reference when implementing specialists that need to call MCP services.
+
+| Service Name | Function | Parameters | Returns | Description |
+|--------------|----------|------------|---------|-------------|
+| `file_specialist` | `file_exists` | `path: str` | `bool` | Check if file/directory exists at path |
+| `file_specialist` | `read_file` | `path: str` | `str` | Read and return file contents as string |
+| `file_specialist` | `write_file` | `path: str, content: str` | `str` | Write content to file, return confirmation message |
+| `file_specialist` | `list_files` | `path: str = "."` | `List[str]` | List all files and directories at path |
+| `file_specialist` | `create_directory` | `path: str` | `str` | Create directory (and parents if needed) |
+| `file_specialist` | `create_zip` | `source_path: str, destination_path: str` | `str` | Create zip archive from source directory |
+
+**Service Discovery at Runtime:**
+
+```python
+# Get list of all available services and their functions
+services = self.mcp_client.list_services()
+# Returns: {'file_specialist': ['file_exists', 'read_file', ...], ...}
+```
+
+## 7.0 Integration Examples: Using MCP from Specialists
+
+**Example 1: Check File Existence Before Processing**
+
+```python
+class ReportAnalyzerSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        if not self.mcp_client:
+            return {"error": "MCP client not available"}
+
+        # Check if previous report exists
+        report_exists = self.mcp_client.call(
+            "file_specialist",
+            "file_exists",
+            path="/workspace/previous_report.md"
+        )
+
+        if report_exists:
+            # Read existing report for context
+            old_report = self.mcp_client.call(
+                "file_specialist",
+                "read_file",
+                path="/workspace/previous_report.md"
+            )
+            logger.info("Found existing report, augmenting analysis")
+            # ... process with context ...
+        else:
+            logger.info("No previous report found, creating new analysis")
+
+        return {"artifacts": {"analysis_complete": True}}
+```
+
+**Example 2: Safe Error Handling with `call_safe()`**
+
+```python
+class DataProcessorSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        # Use call_safe() for graceful error handling
+        success, result = self.mcp_client.call_safe(
+            "file_specialist",
+            "read_file",
+            path="/workspace/data.json"
+        )
+
+        if not success:
+            # result contains error message
+            logger.warning(f"Could not read data file: {result}")
+            return {
+                "messages": [AIMessage(content=f"Unable to access data file: {result}")]
+            }
+
+        # result contains file content
+        data = json.loads(result)
+        # ... process data ...
+        return {"artifacts": {"processed_data": data}}
+```
+
+**Example 3: Multi-Step Workflow with File Operations**
+
+```python
+class WebBuilderSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        # 1. List existing files to check workspace state
+        files = self.mcp_client.call(
+            "file_specialist",
+            "list_files",
+            path="/workspace/output"
+        )
+        logger.info(f"Found {len(files)} existing files")
+
+        # 2. Generate HTML content
+        html_content = self._generate_html(state)
+
+        # 3. Write HTML to file
+        self.mcp_client.call(
+            "file_specialist",
+            "write_file",
+            path="/workspace/output/index.html",
+            content=html_content
+        )
+
+        # 4. Create archive for download
+        archive_path = self.mcp_client.call(
+            "file_specialist",
+            "create_zip",
+            source_path="/workspace/output",
+            destination_path="/workspace/website.zip"
+        )
+
+        return {
+            "artifacts": {
+                "html_file": "/workspace/output/index.html",
+                "archive": archive_path
+            }
+        }
+```
+
+**Example 4: Conditional MCP Availability**
+
+```python
+class FlexibleSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: dict) -> dict:
+        # Check if MCP client is available (not all graphs may have it)
+        if self.mcp_client:
+            # Use MCP for file operations
+            content = self.mcp_client.call(
+                "file_specialist",
+                "read_file",
+                path="/workspace/config.yaml"
+            )
+        else:
+            # Fallback to alternative approach
+            content = state.get("artifacts", {}).get("config_content")
+
+        # ... process content ...
+        return {"artifacts": {"processed": True}}
+```
+
+## 8.0 Troubleshooting MCP Calls
+
+**Common Errors and Solutions:**
+
+**1. `McpServiceNotFoundError: Service 'my_specialist' not found`**
+- **Cause:** Service was not registered or specialist name is misspelled
+- **Solution:**
+  - Verify specialist implements `register_mcp_services()` method
+  - Check `GraphBuilder` logs for service registration messages
+  - Use `self.mcp_client.list_services()` to see available services
+  - Ensure specialist is loaded (check `config.yaml` and startup logs)
+
+**2. `McpFunctionNotFoundError: Function 'my_func' not found in service 'file_specialist'`**
+- **Cause:** Function name typo or function not exposed in service registry
+- **Solution:**
+  - Check service directory table (Section 6.0) for correct function names
+  - Verify function is included in `register_service()` dictionary
+  - Function names are case-sensitive
+
+**3. `TimeoutError: MCP call exceeded timeout`**
+- **Cause:** Operation took longer than configured timeout (default: 5 seconds)
+- **Solution:**
+  - Increase timeout in `config.yaml`: `mcp.timeout_seconds: 10`
+  - Investigate why operation is slow (large file, complex computation)
+  - Consider async alternatives for long-running operations
+  - **Note:** Timeout protection uses Unix-only `signal.alarm()` - Windows support pending
+
+**4. `SpecialistError: Path '/../../etc/passwd' escapes root directory`**
+- **Cause:** Path validation detected potential directory traversal attack
+- **Solution:**
+  - Ensure paths are relative to workspace root or absolute within workspace
+  - Use forward slashes `/` (not backslashes `\`) in paths
+  - Verify path construction logic doesn't include `..` sequences
+  - FileSpecialist enforces security boundary at `/workspace`
+
+**5. `ValueError: MCP call failed: <error message>`**
+- **Cause:** MCP call returned error status (from `call()` method)
+- **Solution:**
+  - Read error message for specific failure reason
+  - Use `call_safe()` instead of `call()` for inline error handling
+  - Check LangSmith traces for detailed error context
+  - Verify parameters match function signature
+
+**6. `AttributeError: 'NoneType' object has no attribute 'call'`**
+- **Cause:** `self.mcp_client` is `None` (not attached to specialist)
+- **Solution:**
+  - Verify `GraphBuilder` is attaching MCP client (should happen automatically)
+  - Check for test environment - may need to mock `mcp_client`
+  - Add defensive check: `if self.mcp_client:` before calling
+
+**Debugging Strategies:**
+
+**1. Enable LangSmith Tracing for MCP Calls**
+```yaml
+# config.yaml
+mcp:
+  tracing_enabled: true  # Creates trace spans for each MCP call
+```
+- View MCP calls as separate spans in LangSmith trace hierarchy
+- Inspect request parameters and response data
+- Measure latency per MCP call
+
+**2. Check Service Registration Logs**
+```bash
+# Look for these log messages at startup
+grep "Registered MCP services" logs/app.log
+grep "McpRegistry" logs/app.log
+```
+Expected output:
+```
+INFO: Registered MCP services for 'file_specialist'
+DEBUG: McpRegistry: Registered service 'file_specialist' with 6 functions
+```
+
+**3. Use Service Discovery to Verify Availability**
+```python
+# In specialist's _execute_logic() or test
+available_services = self.mcp_client.list_services()
+logger.info(f"Available MCP services: {available_services}")
+```
+
+**4. Inspect Request IDs for Distributed Tracing**
+- Each MCP request gets a unique `request_id` (UUID)
+- Search logs for `request_id` to trace call through registry → dispatch → function → response
+- Format: `McpClient.call: file_specialist.read_file() [request_id=a1b2c3d4...]`
+
+**5. Test MCP Calls in Isolation**
+```python
+# In pytest
+def test_mcp_file_exists(initialized_specialist_factory):
+    specialist = initialized_specialist_factory("MySpecialist")
+
+    # Mock the MCP client
+    specialist.mcp_client = MagicMock()
+    specialist.mcp_client.call.return_value = True
+
+    result = specialist._execute_logic({})
+
+    # Verify MCP call was made correctly
+    specialist.mcp_client.call.assert_called_once_with(
+        "file_specialist", "file_exists", path="/workspace/test.txt"
+    )
+```
+
+**Performance Considerations:**
+
+- **MCP Call Latency:** Typically <10ms for simple operations (file_exists)
+- **File I/O:** May take 50-200ms for large files (read_file, write_file)
+- **Network Calls:** If MCP services are remote (future), expect 100-500ms
+- **Timeout Protection:** Default 5s prevents hanging, tune per use case
+
+**Best Practices:**
+
+1. **Always use `call_safe()` for non-critical operations** - Graceful degradation
+2. **Check `self.mcp_client` existence before use** - Not available in all contexts
+3. **Log MCP errors with context** - Include file paths, specialist name, operation
+4. **Use meaningful parameter names** - Improves trace readability
+5. **Prefer MCP over graph routing for synchronous ops** - Lower latency, no LLM cost

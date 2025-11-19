@@ -14,9 +14,18 @@
     
     <div class="container">
         <header>
-            <h1>🖥️ V.E.G.A.S. TERMINAL</h1>
-            <div class="subtitle">Visual Agentic-Scaffold</div>
-            <div class="system-status">SYSTEM STATUS: OPERATIONAL | CLEARANCE LEVEL: ALPHA</div>
+            <div>
+                <h1>🖥️ V.E.G.A.S. TERMINAL</h1>
+                <div class="subtitle">Visual Agentic-Scaffold</div>
+            </div>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 5px;">
+                <div class="theme-switcher">
+                    <button class="theme-btn active" data-theme="light">MANGO</button>
+                    <button class="theme-btn" data-theme="dark">DARK</button>
+                    <button class="theme-btn" data-theme="terminal">TERM</button>
+                </div>
+                <div class="system-status">SYSTEM STATUS: OPERATIONAL | CLEARANCE LEVEL: ALPHA</div>
+            </div>
         </header>
 
         <div class="main-grid">
@@ -27,12 +36,12 @@
                     <textarea id="promptInput" placeholder="█ ENTER DIRECTIVE... (ENTER: NEW LINE | SHIFT+ENTER: EXECUTE)"></textarea>
                     
                     <!-- File Upload Section -->
-                    <div class="upload-section" style="margin: 10px 0; border: 1px dashed var(--crt-green); padding: 8px;">
-                        <div style="margin-bottom: 5px; font-size: 0.8em; color: var(--crt-green);">📂 DATA INJECTION</div>
+                    <div class="upload-section" style="margin: 10px 0; border: 1px dashed var(--secondary-color); padding: 8px;">
+                        <div style="margin-bottom: 5px; font-size: 0.8em; color: var(--secondary-color);">📂 DATA INJECTION</div>
                         <input type="file" id="fileInput" style="display: none;">
-                        <button id="uploadBtn" style="font-size: 0.8em; padding: 2px 8px; background: transparent; border: 1px solid var(--crt-green); color: var(--crt-green); cursor: pointer;">SELECT FILE</button>
+                        <button id="uploadBtn" style="font-size: 0.8em; padding: 2px 8px; background: transparent; border: 1px solid var(--secondary-color); color: var(--secondary-color); cursor: pointer;">SELECT FILE</button>
                         <span id="fileName" style="margin-left: 10px; font-size: 0.8em; opacity: 0.7;">NO DATA LOADED</span>
-                        <button id="clearFileBtn" style="display: none; margin-left: 10px; font-size: 0.8em; padding: 2px 8px; color: #ff4444; border: 1px solid #ff4444; background: transparent; cursor: pointer;">CLEAR</button>
+                        <button id="clearFileBtn" style="display: none; margin-left: 10px; font-size: 0.8em; padding: 2px 8px; color: var(--alert-color); border: 1px solid var(--alert-color); background: transparent; cursor: pointer;">CLEAR</button>
                     </div>
 
                     <div class="controls">
@@ -42,7 +51,7 @@
                             SIMPLE CHAT MODE
                         </label>
                         <button id="executeBtn">▶️ EXECUTE</button>
-                        <button id="cancelBtn" style="display: none; background: #ff4444; color: black; margin-left: 10px; border: 1px solid #ff4444; cursor: pointer; font-family: 'VT323', monospace; font-size: 1.2em; padding: 5px 15px;">⏹️ ABORT</button>
+                        <button id="cancelBtn" style="display: none; background: var(--alert-color); color: var(--bg-color); margin-left: 10px; border: 1px solid var(--alert-color); cursor: pointer; font-family: 'VT323', monospace; font-size: 1.2em; padding: 5px 15px;">⏹️ ABORT</button>
                     </div>
                 </section>
 
@@ -106,8 +115,8 @@
     <div id="zoomModal" class="modal">
         <div class="modal-content">
             <span class="close-modal">&times;</span>
-            <h2 style="color: var(--crt-green); border-bottom: 1px solid var(--crt-green); padding-bottom: 10px;">ARCHIVE REPORT [FULL VIEW]</h2>
-            <div id="modal-body" class="markdown-body" style="color: var(--crt-green);"></div>
+            <h2 style="color: var(--primary-color); border-bottom: 1px solid var(--primary-color); padding-bottom: 10px;">ARCHIVE REPORT [FULL VIEW]</h2>
+            <div id="modal-body" class="markdown-body" style="color: var(--primary-color);"></div>
         </div>
     </div>
 

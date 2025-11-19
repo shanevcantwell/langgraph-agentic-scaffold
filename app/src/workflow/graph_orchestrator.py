@@ -373,16 +373,20 @@ class GraphOrchestrator:
                     if not any(all(state.get("artifacts", {}).get(a) for a in dep_set) for dep_set in required_artifacts):
                         first_artifact = required_artifacts[0][0]
                         recommended = artifact_providers.get(first_artifact)
-                        return self.create_missing_artifact_response(
+                        response = self.create_missing_artifact_response(
                             specialist_name, [f"At least one of {required_artifacts}"], [recommended] if recommended else []
                         )
+                        response["routing_history"] = [routing_entry] # Ensure blocked execution is tracked
+                        return response
                 else:
                     for artifact in required_artifacts:
                         if not state.get("artifacts", {}).get(artifact):
                             recommended = artifact_providers.get(artifact)
-                            return self.create_missing_artifact_response(
+                            response = self.create_missing_artifact_response(
                                 specialist_name, [artifact], [recommended] if recommended else []
                             )
+                            response["routing_history"] = [routing_entry] # Ensure blocked execution is tracked
+                            return response
 
             try:
                 # If a streaming callback is provided, use it to signal the start of execution.
