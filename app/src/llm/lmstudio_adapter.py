@@ -6,7 +6,7 @@ import tiktoken
 from typing import Dict, Any, List, Optional, Type
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
 import httpx
-from langchain_core.messages import BaseMessage
+from langchain_core.messages import BaseMessage, HumanMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
 from pydantic import BaseModel
 
@@ -142,6 +142,28 @@ class LMStudioAdapter(BaseAdapter):
         as per LM Studio's documentation.
         """
         pruned_messages = self._prune_messages(request.messages)
+
+        # Handle Image Injection
+        if request.image_data:
+            # Find the last user message to attach the image to
+            for i in range(len(pruned_messages) - 1, -1, -1):
+                msg = pruned_messages[i]
+                if msg.type == 'human':
+                    logger.info("LMStudioAdapter: Injecting image into last user message.")
+                    original_text = msg.content
+                    # Construct multimodal content
+                    new_content = [
+                        {"type": "text", "text": original_text},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{request.image_data}"
+                            }
+                        }
+                    ]
+                    # Replace the message with a new HumanMessage containing the multimodal content
+                    pruned_messages[i] = HumanMessage(content=new_content)
+                    break
 
         api_messages = adapters_helpers.format_openai_messages(
             messages=pruned_messages,

@@ -68,8 +68,14 @@ class ProgenitorBravoSpecialist(BaseSpecialist):
         # Get the full message history for context
         messages = state.get("messages", [])
 
+        # Check for uploaded image
+        image_data = state.get("artifacts", {}).get("uploaded_image.png")
+
         # Create a standardized request with the full conversation history
-        request = StandardizedLLMRequest(messages=messages)
+        request = StandardizedLLMRequest(
+            messages=messages,
+            image_data=image_data
+        )
 
         # Invoke the LLM adapter
         response_data = self.llm_adapter.invoke(request)

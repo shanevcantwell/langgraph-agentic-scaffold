@@ -124,13 +124,13 @@ class TieredSynthesizerSpecialist(BaseSpecialist):
         """
         formatted_response = f"""# Multi-Perspective Response
 
-## Perspective 1: Analytical View
+### Perspective 1: Analytical View
 
 {alpha_response}
 
 ---
 
-## Perspective 2: Contextual View
+### Perspective 2: Contextual View
 
 {bravo_response}
 
@@ -156,7 +156,7 @@ class TieredSynthesizerSpecialist(BaseSpecialist):
         """
         formatted_response = f"""# Single-Perspective Response
 
-## {perspective_name}
+### {perspective_name}
 
 {response}
 

@@ -64,10 +64,13 @@ class ResearcherSpecialist(BaseSpecialist):
             system_prompt = "You are a Researcher. Search for information to answer the user's request."
 
         # 2. Create Request with Search Tool
+        image_data = state.get("artifacts", {}).get("uploaded_image.png")
+        
         request = StandardizedLLMRequest(
             messages=[SystemMessage(content=system_prompt)] + messages,
             tools=[SearchQuery],
-            force_tool_call=True
+            force_tool_call=True,
+            image_data=image_data
         )
 
         # 3. Invoke LLM to get search query

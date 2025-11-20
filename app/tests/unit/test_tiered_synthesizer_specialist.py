@@ -10,6 +10,7 @@ Tests graceful degradation (CORE-CHAT-002.1) when one or both progenitors fail.
 import pytest
 from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage
+from app.src.graph.state_factory import create_test_state
 
 
 @pytest.fixture
@@ -277,3 +278,69 @@ def test_tiered_synthesizer_does_not_add_to_user_response_snippets_if_already_pr
     # Should NOT contain the old snippet
     combined_response = result_state["scratchpad"]["user_response_snippets"][0]
     assert "Old snippet" not in combined_response
+
+
+def test_tiered_synthesizer_full_synthesis(tiered_synthesizer):
+    """Tests synthesis when both Alpha and Bravo responses are present."""
+    state = create_test_state(
+        artifacts={
+            "alpha_response": "Alpha content",
+            "bravo_response": "Bravo content"
+        }
+    )
+    
+    result = tiered_synthesizer._execute_logic(state)
+    
+    assert result["task_is_complete"] is True
+    assert result["artifacts"]["response_mode"] == "tiered_full"
+    
+    final_response = result["artifacts"]["final_user_response.md"]
+    assert "## Perspective 1: Analytical View" in final_response
+    assert "Alpha content" in final_response
+    assert "## Perspective 2: Contextual View" in final_response
+    assert "Bravo content" in final_response
+
+
+def test_tiered_synthesizer_graceful_degradation_alpha_only(tiered_synthesizer):
+    """Tests synthesis when Bravo is missing."""
+    state = create_test_state(
+        artifacts={
+            "alpha_response": "Alpha content"
+            # Bravo missing
+        }
+    )
+    
+    result = tiered_synthesizer._execute_logic(state)
+    
+    assert result["artifacts"]["response_mode"] == "tiered_alpha_only"
+    final_response = result["artifacts"]["final_user_response.md"]
+    assert "# Single-Perspective Response" in final_response
+    assert "## Analytical View" in final_response
+    assert "Alpha content" in final_response
+    assert "Note: This response provides a single perspective" in final_response
+
+
+def test_tiered_synthesizer_graceful_degradation_bravo_only(tiered_synthesizer):
+    """Tests synthesis when Alpha is missing."""
+    state = create_test_state(
+        artifacts={
+            "bravo_response": "Bravo content"
+            # Alpha missing
+        }
+    )
+    
+    result = tiered_synthesizer._execute_logic(state)
+    
+    assert result["artifacts"]["response_mode"] == "tiered_bravo_only"
+    final_response = result["artifacts"]["final_user_response.md"]
+    assert "# Single-Perspective Response" in final_response
+    assert "## Contextual View" in final_response
+    assert "Bravo content" in final_response
+
+
+def test_tiered_synthesizer_failure_both_missing(tiered_synthesizer):
+    """Tests failure when both are missing."""
+    state = create_test_state(artifacts={})
+    
+    with pytest.raises(ValueError, match="requires at least one progenitor response"):
+        tiered_synthesizer._execute_logic(state)

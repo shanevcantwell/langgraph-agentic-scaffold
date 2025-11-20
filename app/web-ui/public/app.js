@@ -73,54 +73,42 @@ function setTheme(theme) {
     localStorage.setItem('theme', theme);
 }
 
-// LLM Switcher Logic
-const llmSelect = document.getElementById('llmSelect');
+// Config Refresh Logic
+const refreshConfigBtn = document.getElementById('refreshConfigBtn');
 
-async function loadLlmProviders() {
-    try {
-        const res = await fetch(`${API_BASE}/system/llm-providers`);
-        if (!res.ok) throw new Error('Failed to fetch providers');
-        const data = await res.json();
-        
-        llmSelect.innerHTML = '';
-        data.providers.forEach(p => {
-            const option = document.createElement('option');
-            option.value = p.key;
-            option.textContent = `${p.key} (${p.type})`;
-            if (p.is_default) option.selected = true;
-            llmSelect.appendChild(option);
-        });
-    } catch (e) {
-        console.error("Error loading LLM providers:", e);
-        llmSelect.innerHTML = '<option disabled>ERROR LOADING MODELS</option>';
-    }
-}
+refreshConfigBtn.addEventListener('click', async () => {
+    logStatus('► RELOADING CONFIGURATION...');
+    refreshConfigBtn.disabled = true;
+    const originalContent = refreshConfigBtn.innerHTML;
+    refreshConfigBtn.textContent = 'Wait...';
 
-llmSelect.addEventListener('change', async (e) => {
-    const newProvider = e.target.value;
-    logStatus(`► SWITCHING MODEL TO: ${newProvider}...`);
-    llmSelect.disabled = true;
-    
     try {
         const res = await fetch(`${API_BASE}/system/config`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ default_llm_config: newProvider })
+            body: JSON.stringify({}) // Empty body triggers reload from disk
         });
-        
-        if (!res.ok) throw new Error('Failed to update config');
+
+        if (!res.ok) throw new Error('Failed to reload config');
         const data = await res.json();
-        logStatus(`► SYSTEM RECONFIGURED: ${newProvider}`);
+        logStatus('► CONFIGURATION RELOADED');
+        
+        refreshConfigBtn.textContent = 'Done!';
+        setTimeout(() => {
+            refreshConfigBtn.innerHTML = originalContent;
+            refreshConfigBtn.disabled = false;
+        }, 1500);
+
     } catch (e) {
-        console.error("Error switching model:", e);
-        logStatus(`❌ ERROR SWITCHING MODEL`);
-    } finally {
-        llmSelect.disabled = false;
+        console.error("Error reloading config:", e);
+        logStatus('❌ ERROR RELOADING CONFIG');
+        refreshConfigBtn.textContent = 'Error';
+        setTimeout(() => {
+            refreshConfigBtn.innerHTML = originalContent;
+            refreshConfigBtn.disabled = false;
+        }, 2000);
     }
 });
-
-// Call on load
-loadLlmProviders();
 
 // Event Listeners
 executeBtn.addEventListener('click', executeWorkflow);

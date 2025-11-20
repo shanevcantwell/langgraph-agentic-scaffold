@@ -1,6 +1,7 @@
 import os
 import pytest
 from unittest.mock import patch, MagicMock, mock_open, ANY
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from app.src.specialists.archiver_specialist import ArchiverSpecialist
 from app.src.graph.state_factory import create_test_state
 
@@ -135,3 +136,38 @@ def test_execute_logic_handles_missing_final_response(archiver_specialist, initi
         call_args = mock_create_pkg.call_args
         report_content = call_args[0][1] # 2nd arg is report_md
         assert "No final response was generated" in report_content
+
+def test_archiver_summarize_conversation_with_objects(archiver_specialist):
+    """
+    Reproduces the 'AttributeError: 'HumanMessage' object has no attribute 'get''
+    by passing real LangChain message objects to _summarize_conversation.
+    """
+    messages = [
+        HumanMessage(content="Hello"),
+        AIMessage(content="Hi there", name="router_specialist", additional_kwargs={"routing_decision": "some_specialist"}),
+        ToolMessage(content="Tool output", tool_call_id="123", name="some_tool")
+    ]
+    
+    # This should NOT raise AttributeError
+    summary = archiver_specialist._summarize_conversation(messages)
+    
+    assert "**User:** *Hello*" in summary
+    assert "**Router Specialist:** *Routing to specialist: some_specialist...*" in summary
+    assert "**some_tool:** *Tool execution result: Tool output*" in summary
+
+def test_archiver_execute_logic_integration(archiver_specialist):
+    """
+    Integration-like test for _execute_logic with real message objects in state.
+    """
+    state = create_test_state(
+        messages=[HumanMessage(content="Test")],
+        artifacts={"final_user_response.md": "Done."},
+        routing_history=["router"]
+    )
+    
+    with patch.object(archiver_specialist, "_create_atomic_package", return_value="/tmp/pkg.zip"):
+        with patch.object(archiver_specialist, "_prune_archive"):
+            result = archiver_specialist._execute_logic(state)
+            
+            assert result["artifacts"]["archive_package_path"] == "/tmp/pkg.zip"
+            # Ensure no crash

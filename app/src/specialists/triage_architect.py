@@ -40,6 +40,10 @@ class TriageArchitect(BaseSpecialist):
                 logger.warning("TriageArchitect received no messages.")
                 return {}
             
+        # Check for uploaded image (Blind Triage Support)
+        if state.get("artifacts", {}).get("uploaded_image.png"):
+            user_input += "\n\n[SYSTEM NOTE: The user has uploaded an image. You cannot see it, but it is available in the artifacts. Do not ask for the image.]"
+
         # 2. Build Prompt
         prompt_file = self.specialist_config.get("prompt_file")
         if prompt_file:

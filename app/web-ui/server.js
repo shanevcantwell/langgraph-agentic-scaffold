@@ -4,7 +4,7 @@ const cors = require('cors');
 const { createProxyMiddleware } = require('http-proxy-middleware');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 26899;
 const API_URL = process.env.API_URL || 'http://app:8000';
 
 app.use(cors());

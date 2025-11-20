@@ -126,6 +126,15 @@ class RouterSpecialist(BaseSpecialist):
                 recommendation_context = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
                 logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
 
+        # Check for uploaded image (Blind Router Support)
+        # If the router is text-only, it won't see the image. We must explicitly tell it.
+        if state.get("artifacts", {}).get("uploaded_image.png"):
+            vision_candidates = [s for s in current_specialists if "vision" in s or "researcher" in s or "web_builder" in s]
+            if vision_candidates:
+                recommendation_context += f"\n\n**CRITICAL: IMAGE DETECTED**\nThe user has uploaded an image. You cannot see it, but it is available in the artifacts. You MUST route to a specialist capable of vision analysis. Recommended: {', '.join(vision_candidates)}."
+            else:
+                recommendation_context += "\n\n**CRITICAL: IMAGE DETECTED**\nThe user has uploaded an image. You cannot see it. Please route to a specialist that can handle images."
+
         # Put CRITICAL dependency requirements FIRST, before specialist list
         # This ensures LLM sees it before making a decision
         contextual_prompt_addition = f"{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"

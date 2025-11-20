@@ -26,9 +26,13 @@ class WebBuilder(BaseSpecialist):
         # be in the history, naturally guiding the LLM to refine the HTML.
         logger.info("Executing WebBuilder logic to generate/refine HTML.")
 
+        # Check for uploaded image (e.g. for "build from mockup")
+        image_data = state.get("artifacts", {}).get("uploaded_image.png")
+
         request = StandardizedLLMRequest(
             messages=state["messages"],
-            output_model_class=WebContent
+            output_model_class=WebContent,
+            image_data=image_data
         )
 
         response_data = self.llm_adapter.invoke(request)

@@ -15,6 +15,7 @@ class StandardizedLLMRequest(BaseModel):
     output_model_class: Optional[Type[BaseModel]] = Field(default=None)
     tools: Optional[List[Any]] = Field(default=None)
     force_tool_call: bool = Field(default=False, description="If True, forces the LLM to use a tool. Critical for routing.")
+    image_data: Optional[str] = Field(default=None, description="Base64 encoded image data to attach to the last user message.")
 
 class BaseAdapter(ABC):
     """

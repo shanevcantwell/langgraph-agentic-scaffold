@@ -43,7 +43,7 @@ class ArchiverSpecialist(BaseSpecialist):
         logger.info(f"--- Archiver: Preparing Atomic Archival Package. ---")
 
         # Prune the state to get a clean conversation summary
-        pruned_state = state_pruner.prune_state(state)
+        # pruned_state = state_pruner.prune_state(state) # REMOVED: prune_state removes 'messages' list
 
         final_user_response = state.get("artifacts", {}).get("final_user_response.md", "No final response was generated.")
         report_data = SuccessReport(
@@ -51,7 +51,7 @@ class ArchiverSpecialist(BaseSpecialist):
             routing_history=state.get("routing_history", []),
             artifacts=state.get("artifacts", {}),
             scratchpad=state.get("scratchpad", {}),
-            conversation_summary=self._summarize_conversation(pruned_state.get("messages", [])),
+            conversation_summary=self._summarize_conversation(state.get("messages", [])), # Use full state messages
         )
 
         markdown_report = state_pruner.generate_success_report(report_data)
@@ -147,20 +147,28 @@ class ArchiverSpecialist(BaseSpecialist):
             if os.path.exists(package_dir):
                 shutil.rmtree(package_dir)
 
-    def _summarize_conversation(self, messages: List[Dict[str, Any]]) -> str:
+    def _summarize_conversation(self, messages: List[Any]) -> str:
         """Creates a concise, human-readable summary of the agentic workflow for the report."""
         summary_lines = []
         for i, msg in enumerate(messages):
-            role = msg.get("role", "unknown")
-            name = msg.get("name", "unknown")
-            content = str(msg.get("content", "")).strip()
-            kwargs = msg.get("additional_kwargs", {})
+            # Handle both dicts (legacy/pruned) and BaseMessage objects (runtime)
+            if isinstance(msg, dict):
+                role = msg.get("role", "unknown")
+                name = msg.get("name", "unknown")
+                content = str(msg.get("content", "")).strip()
+                kwargs = msg.get("additional_kwargs", {})
+            else:
+                # Assume LangChain BaseMessage object
+                role = getattr(msg, "type", "unknown")
+                name = getattr(msg, "name", "unknown")
+                content = str(getattr(msg, "content", "")).strip()
+                kwargs = getattr(msg, "additional_kwargs", {})
 
             # Shorten long content for display
             if len(content) > 120:
                 content = content[:120] + "..."
 
-            if role == "user":
+            if role == "human" or role == "user":
                 summary_lines.append(f"{i+1}. **User:** *{content}*")
 
             elif role == "tool":
