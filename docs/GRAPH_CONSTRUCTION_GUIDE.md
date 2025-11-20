@@ -252,3 +252,37 @@ graph TD
 
     Initialization --> "GraphBuilder: Graph Construction"
 ```
+
+## Context Engineering Subgraph
+
+The workflow begins with the **Context Engineering** phase, designed to gather context or clarify intent before the main routing loop.
+
+```
+User Query
+    ↓
+TriageArchitect (Generates ContextPlan)
+    ↓
+check_triage_outcome (Decider)
+    ├─→ FacilitatorSpecialist (Execute Plan) → RouterSpecialist
+    ├─→ EndSpecialist (Clarification Needed / ASK_USER)
+    └─→ RouterSpecialist (No Context Needed)
+```
+
+**Key Edges:**
+1.  **Triage -> Facilitator:** If `ContextPlan` has research/read actions.
+2.  **Triage -> End:** If `ContextPlan` has `ASK_USER` actions (Faithfulness Check).
+3.  **Triage -> Router:** If no context actions are needed (e.g., simple greeting).
+4.  **Facilitator -> Router:** After context is gathered, always proceed to Router.
+
+**Configuration:**
+```python
+workflow.add_conditional_edges(
+    "triage_architect",
+    self.orchestrator.check_triage_outcome,
+    {
+        "facilitator_specialist": "facilitator_specialist",
+        router_name: router_name,
+        CoreSpecialist.END.value: CoreSpecialist.END.value  # For clarification questions
+    }
+)
+```

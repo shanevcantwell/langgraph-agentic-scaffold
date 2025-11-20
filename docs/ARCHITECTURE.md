@@ -422,3 +422,34 @@ def safe_executor(state: GraphState) -> Dict[str, Any]:
 ### 5.3 Observability
 
 The `InvariantMonitor` is instrumented with LangSmith tracing (`@traceable`). In the LangSmith UI, you will see `InvariantMonitor.check_invariants` calls as "tool" runs within the trace, allowing you to verify that checks are passing (or see exactly why they failed).
+
+## 6.0 Pattern: Context Engineering & Faithfulness
+
+**Context:** Traditional RAG systems often fail when users provide ambiguous prompts (e.g., "fix the bug" without specifying the file) or ask questions that require external knowledge not in the model's weights. Models often hallucinate answers in these scenarios.
+
+**Solution:** The system implements a **Context Engineering** phase *before* the main routing loop. This phase analyzes the request, gathers missing context, and enforces "faithfulness" by asking clarification questions instead of guessing.
+
+### 6.1 The Triage Architect
+
+The `triage_architect` is the entry point of the system. It does not answer the user's question. Instead, it produces a `ContextPlan` containing a list of actions:
+
+*   **RESEARCH:** Search the web for real-time info.
+*   **READ_FILE:** Read specific files mentioned in the prompt.
+*   **SUMMARIZE:** Compress large context.
+*   **ASK_USER:** (Faithfulness Check) Ask the user for clarification if the request is ambiguous.
+
+### 6.2 The Faithfulness Loop
+
+If the `triage_architect` determines that the request is ambiguous or impossible to fulfill (e.g., "Fix the function" with no file context), it generates an `ASK_USER` action.
+
+**Workflow:**
+1.  **Triage:** Detects ambiguity -> `{"type": "ask_user", "target": "Which file?"}`
+2.  **Orchestrator:** Detects `ASK_USER` action -> **Short-circuits** the workflow.
+3.  **Routing:** Routes directly to `end_specialist`.
+4.  **EndSpecialist:** Presents the clarification questions to the user.
+
+This prevents the `router_specialist` from receiving a bad prompt and hallucinating a solution.
+
+### 6.3 Context Facilitation
+
+If the plan contains valid context-gathering actions (Research/Read), the `facilitator_specialist` executes them using MCP (Message-Centric Protocol) to gather the data *before* the main router sees the request. This ensures the router has all necessary context to make an informed decision.

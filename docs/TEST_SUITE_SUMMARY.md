@@ -886,3 +886,12 @@
   - *Tests that the sync run method handles a missing final artifact gracefully.*
 - **`test_workflow_runner_run_sync_handles_invoke_error`**
   - *Tests that the sync run method raises a WorkflowError on graph invocation failure.*
+
+## `app/tests/unit/test_clarification_workflow.py`
+
+- **`test_check_triage_outcome_routes_to_end_on_ask_user`**
+  - *Tests that check_triage_outcome routes directly to EndSpecialist when ASK_USER action is present.*
+- **`test_check_triage_outcome_routes_to_facilitator_on_normal_actions`**
+  - *Tests that check_triage_outcome routes to Facilitator for normal research/read actions.*
+- **`test_end_specialist_generates_clarification_response`**
+  - *Tests that EndSpecialist generates a clarification response instead of synthesizing a final answer when ASK_USER actions are present.*

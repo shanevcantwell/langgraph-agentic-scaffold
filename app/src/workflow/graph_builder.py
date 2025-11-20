@@ -371,7 +371,8 @@ class GraphBuilder:
                 self.orchestrator.check_triage_outcome,
                 {
                     "facilitator_specialist": "facilitator_specialist",
-                    router_name: router_name
+                    router_name: router_name,
+                    CoreSpecialist.END.value: CoreSpecialist.END.value
                 }
             )
             logger.info("Graph Edge: Added TriageArchitect conditional edge")
