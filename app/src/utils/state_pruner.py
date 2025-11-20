@@ -66,6 +66,18 @@ def generate_success_report(report_data: SuccessReport) -> str:
             if key == "final_user_response.md":
                 continue
             
+            # Handle Images
+            if key.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) or (isinstance(value, str) and value.startswith('data:image')):
+                # If it's a base64 string without the prefix, add it (assuming png for simplicity if unknown)
+                image_src = value
+                if isinstance(value, str) and not value.startswith('data:image') and not value.startswith('http'):
+                     # Simple heuristic: if it's a long string without spaces, assume base64
+                     if len(value) > 100 and ' ' not in value:
+                         image_src = f"data:image/png;base64,{value}"
+                
+                artifacts_str += f"### 🖼️ {key}\n\n![{key}]({image_src})\n\n"
+                continue
+
             # Truncate content for the report to prevent UI issues
             content_str = str(value)
             if len(content_str) > 500:
