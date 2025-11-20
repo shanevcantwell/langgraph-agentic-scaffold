@@ -93,9 +93,26 @@ class EndSpecialist(BaseSpecialist):
 
         # Check for explicit termination reason (e.g., from loop detection)
         termination_reason = current_state.get("scratchpad", {}).get("termination_reason")
+        
+        # Check for clarification questions from Triage
+        context_plan_data = current_state.get("artifacts", {}).get("context_plan")
+        clarification_questions = []
+        if context_plan_data:
+            try:
+                from ..interface.context_schema import ContextPlan
+                plan = ContextPlan(**context_plan_data)
+                for action in plan.actions:
+                    if action.type == "ask_user":
+                        clarification_questions.append(f"- {action.target}")
+            except Exception as e:
+                logger.warning(f"EndSpecialist: Failed to parse ContextPlan: {e}")
+
         if termination_reason:
             logger.warning(f"EndSpecialist: Using explicit termination reason: {termination_reason}")
             synthesized_response = termination_reason
+        elif clarification_questions:
+            logger.info("EndSpecialist: Presenting clarification questions to user.")
+            synthesized_response = "I need some clarification before I can proceed:\n\n" + "\n".join(clarification_questions)
         # Check if final response already exists
         elif current_state.get("artifacts", {}).get("final_user_response.md"):
             logger.info("EndSpecialist: Final response already exists. Skipping synthesis.")

@@ -6,6 +6,7 @@ class ContextActionType(str, Enum):
     RESEARCH = "research"
     READ_FILE = "read_file"
     SUMMARIZE = "summarize"
+    ASK_USER = "ask_user"
 
 class ContextAction(BaseModel):
     type: ContextActionType

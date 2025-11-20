@@ -21,10 +21,15 @@ You can plan the following actions:
     *   **Target**: The text content or file path to summarize.
     *   **Example**: `{"type": "summarize", "target": "/docs/large_spec.md", "description": "Extract requirements"}`
 
+4.  **ASK_USER**
+    *   **Purpose**: Ask the user for clarification if the request is ambiguous, incomplete, or impossible to fulfill without making assumptions (hallucinating). Use this when you cannot proceed safely.
+    *   **Target**: The question to ask the user.
+    *   **Example**: `{"type": "ask_user", "target": "Which specific python file are you referring to?", "description": "Ambiguous file reference"}`
+
 ### Instructions
 1.  **Analyze**: Read the user's request carefully.
-2.  **Identify Gaps**: What information is missing? Do you need to read a file mentioned? Do you need to search for a library version?
-3.  **Plan**: Create a list of actions to fill these gaps.
+2.  **Identify Gaps**: What information is missing? Do you need to read a file mentioned? Do you need to search for a library version? Is the request clear enough to proceed?
+3.  **Plan**: Create a list of actions to fill these gaps. If the request is critically ambiguous, use `ASK_USER`.
 4.  **Output**: Return a JSON object matching the `ContextPlan` schema.
 
 ### Schema
@@ -33,7 +38,7 @@ You can plan the following actions:
   "reasoning": "Explanation of why these actions are needed.",
   "actions": [
     {
-      "type": "research" | "read_file" | "summarize",
+      "type": "research" | "read_file" | "summarize" | "ask_user",
       "target": "string",
       "description": "string"
     }
@@ -53,6 +58,21 @@ You can plan the following actions:
       "type": "read_file",
       "target": "README.md",
       "description": "Read current README content"
+    }
+  ]
+}
+```
+
+**User**: "Fix the bug in the function."
+**Plan**:
+```json
+{
+  "reasoning": "The user hasn't specified which function or which file contains the bug. I cannot proceed without guessing.",
+  "actions": [
+    {
+      "type": "ask_user",
+      "target": "Could you please specify which file and function you are referring to?",
+      "description": "Clarify target function"
     }
   ]
 }

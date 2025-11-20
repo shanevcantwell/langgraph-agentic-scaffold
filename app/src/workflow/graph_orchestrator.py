@@ -44,6 +44,13 @@ class GraphOrchestrator:
         if context_plan_data:
             try:
                 plan = ContextPlan(**context_plan_data)
+                
+                # Check for clarification questions (faithfulness check)
+                for action in plan.actions:
+                    if action.type == "ask_user":
+                        logger.info("Triage produced 'ask_user' action. Routing to EndSpecialist for clarification.")
+                        return CoreSpecialist.END.value
+
                 if plan.actions:
                     logger.info(f"Triage produced plan with {len(plan.actions)} actions. Routing to Facilitator.")
                     return "facilitator_specialist"
