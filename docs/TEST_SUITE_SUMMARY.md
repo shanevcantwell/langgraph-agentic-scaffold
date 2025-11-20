@@ -30,6 +30,13 @@
 - **`test_chat_specialist_appears_in_router_specialist_map`**
   - *Simpler test: Verify ChatSpecialist is registered and discoverable by router.*
 
+## `app/tests/integration/test_circuit_breaker.py`
+
+- **`test_circuit_breaker_route_to_error_handler`**
+  - *Test that the circuit breaker catches an invariant violation and triggers*
+- **`test_circuit_breaker_halt_action`**
+  - *Test that the circuit breaker halts execution when configured to HALT.*
+
 ## `app/tests/integration/test_config_validation.py`
 
 - **`test_real_config_loads_successfully`**
@@ -71,6 +78,11 @@
 - **`test_provider_choice_sets_correct_defaults`**
   - *Verifies each provider choice sets correct default and router bindings.*
 
+## `app/tests/integration/test_invariant_monitor.py`
+
+- **`test_invariant_monitor_called_during_execution`**
+  - *Verifies that the InvariantMonitor is invoked during the execution lifecycle.*
+
 ## `app/tests/integration/test_live_llm.py`
 
 - **`test_live_gemini_adapter_interaction`**
@@ -80,6 +92,9 @@
 
 - **`test_live_lmstudio_adapter_interaction`**
   - *Tests a basic interaction with a live LM Studio model via the AdapterFactory.*
+
+## `app/tests/integration/test_parallel_execution.py`
+
 
 ## `app/tests/integration/test_plan_and_execute_integration.py`
 
@@ -142,6 +157,9 @@
 - **`test_adapter_robust_parsing_contract`**
   - *This contract test verifies that an adapter can robustly parse JSON*
 
+## `app/tests/unit/test_ag_ui_translator.py`
+
+
 ## `app/tests/unit/test_api.py`
 
 - **`test_invoke_graph_sync`**
@@ -158,14 +176,18 @@
 
 ## `app/tests/unit/test_archiver_specialist.py`
 
-- **`test_save_report_writes_to_file`**
-  - *Tests that _save_report correctly writes content to a file.*
+- **`test_create_atomic_package_structure`**
+  - *Tests that _create_atomic_package creates the correct file structure and zip.*
+- **`test_execute_logic_creates_package_and_updates_state`**
+  - *Tests the main logic flow: package creation and state update.*
 - **`test_prune_archive_removes_oldest_files`**
   - *Tests that _prune_archive correctly removes the oldest files.*
-- **`test_execute_logic_generates_and_saves_report`**
-  - *Tests the main logic flow for generating and saving a success report.*
 - **`test_execute_logic_handles_missing_final_response`**
-  - *Tests edge case where final_user_response.md is missing from artifacts.*
+  - *Tests edge case where final_user_response.md is missing.*
+- **`test_archiver_summarize_conversation_with_objects`**
+  - *Reproduces the 'AttributeError: 'HumanMessage' object has no attribute 'get''*
+- **`test_archiver_execute_logic_integration`**
+  - *Integration-like test for _execute_logic with real message objects in state.*
 
 ## `app/tests/unit/test_base_schemas.py`
 
@@ -200,6 +222,26 @@
   - *Tests that ChatSpecialist creates AIMessage with proper metadata.*
 - **`test_chat_specialist_handles_empty_message_history`**
   - *Tests that ChatSpecialist handles edge case of empty message history.*
+
+## `app/tests/unit/test_circuit_breaker.py`
+
+- **`test_stabilization_action_halt`**
+  - *Verifies that the monitor raises InvariantViolationError when action is HALT.*
+- **`test_stabilization_action_default_halt`**
+  - *Verifies that the monitor defaults to HALT if action is not configured.*
+- **`test_violation_type_detection_structure`**
+  - *Verifies that structural violations are correctly identified.*
+- **`test_violation_type_detection_loop`**
+  - *Verifies that loop violations are correctly identified.*
+
+## `app/tests/unit/test_clarification_workflow.py`
+
+- **`test_check_triage_outcome_routes_to_end_on_ask_user`**
+  - *Tests that check_triage_outcome routes directly to EndSpecialist*
+- **`test_check_triage_outcome_routes_to_facilitator_on_normal_actions`**
+  - *Tests that check_triage_outcome routes to Facilitator for normal actions.*
+- **`test_end_specialist_generates_clarification_response`**
+  - *Tests that EndSpecialist generates a clarification response instead of*
 
 ## `app/tests/unit/test_cli.py`
 
@@ -242,6 +284,11 @@
   - *Tests that env vars are substituted with actual env value when set.*
 - **`test_env_var_substitution_required_missing`**
   - *Tests that missing required env var (no default) raises ConfigError.*
+
+## `app/tests/unit/test_context_engineering_graph.py`
+
+- **`test_context_engineering_graph_wiring`**
+  - *Tests that the Context Engineering subgraph is correctly wired:*
 
 ## `app/tests/unit/test_critic_specialist.py`
 
@@ -297,6 +344,13 @@
   - *Tests that EndSpecialist generates a fallback response when no snippets are available.*
 - **`test_end_specialist_handles_termination_reason`**
   - *Tests that EndSpecialist uses explicit termination_reason when present*
+
+## `app/tests/unit/test_facilitator.py`
+
+- **`test_facilitator_executes_research_action`**
+- **`test_facilitator_executes_read_file_action`**
+- **`test_facilitator_handles_missing_plan`**
+- **`test_facilitator_handles_mcp_error`**
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -375,6 +429,12 @@
   - *Test that create_zip rejects directory traversal in source path.*
 - **`test_create_zip_rejects_dest_path_escape`**
   - *Test that create_zip rejects directory traversal in dest path.*
+- **`test_create_manifest_creates_valid_json`**
+  - *Test that create_manifest creates a valid JSON file.*
+- **`test_create_manifest_validates_schema`**
+  - *Test that create_manifest raises error for invalid data.*
+- **`test_create_manifest_rejects_path_escape`**
+  - *Test that create_manifest rejects directory traversal.*
 - **`test_validate_path_accepts_relative_paths`**
   - *Test that relative paths within root_dir are accepted.*
 - **`test_validate_path_accepts_current_directory`**
@@ -465,6 +525,11 @@
 - **`test_hello_world_specialist_handles_empty_messages`**
   - *Tests that the specialist provides a default response if state has no messages.*
 
+## `app/tests/unit/test_image_injection.py`
+
+- **`test_lmstudio_adapter_injects_image`**
+- **`test_lmstudio_adapter_no_image`**
+
 ## `app/tests/unit/test_imports.py`
 
 - **`test_import_all_modules`**
@@ -474,6 +539,19 @@
 
 - **`test_install_script_creates_venv_and_installs_pytest`**
   - *Test that install.sh creates a virtual environment and installs pytest.*
+
+## `app/tests/unit/test_invariants.py`
+
+- **`test_check_state_structure_valid`**
+- **`test_check_state_structure_missing_key`**
+- **`test_check_state_structure_invalid_type`**
+- **`test_check_max_turn_count_valid`**
+- **`test_check_max_turn_count_exceeded`**
+- **`test_check_loop_detection_no_loop`**
+- **`test_check_loop_detection_immediate_loop`**
+- **`test_check_loop_detection_immediate_loop_below_threshold`**
+- **`test_check_loop_detection_2step_cycle`**
+- **`test_check_loop_detection_2step_cycle_below_threshold`**
 
 ## `app/tests/unit/test_llm_factory.py`
 
@@ -664,6 +742,36 @@
 - **`test_open_interpreter_specialist_raises_error_if_no_prompt_file`**
   - *Tests that the specialist raises a ValueError if the 'prompt_file' is*
 
+## `app/tests/unit/test_parallel_reducer.py`
+
+- **`test_initialization`**
+  - *Test initializing the list with a list update.*
+- **`test_removal`**
+  - *Test removing an item with a string update.*
+- **`test_removal_last_item`**
+  - *Test removing the last item results in empty list.*
+- **`test_removal_non_existent`**
+  - *Test removing an item that doesn't exist (idempotency).*
+- **`test_reinitialization`**
+  - *Test overwriting existing list with new list.*
+
+## `app/tests/unit/test_parallel_state_logic.py`
+
+- **`test_reduce_parallel_tasks_initialization`**
+  - *Test that passing a list REPLACES the current state (Scatter).*
+- **`test_reduce_parallel_tasks_completion`**
+  - *Test that passing a string REMOVES it from the list (Gather).*
+- **`test_reduce_parallel_tasks_completion_last_item`**
+  - *Test that removing the last item results in an empty list.*
+- **`test_reduce_parallel_tasks_idempotent`**
+  - *Test that removing a non-existent item does nothing.*
+- **`test_check_task_completion_barrier_active`**
+  - *Test that workflow terminates (END) if parallel tasks are still pending.*
+- **`test_check_task_completion_barrier_cleared`**
+  - *Test that workflow proceeds to ROUTER if parallel tasks are empty.*
+- **`test_check_task_completion_explicit_complete`**
+  - *Test that explicit task completion overrides barrier (edge case).*
+
 ## `app/tests/unit/test_plan_and_execute_integration.py`
 
 - **`test_plan_and_execute_workflow`**
@@ -735,6 +843,27 @@
 - **`test_prompt_triage_no_specialist_map_configured`**
   - *Tests behavior when specialist_map is empty.*
 
+## `app/tests/unit/test_researcher.py`
+
+- **`test_researcher_performs_search`**
+- **`test_researcher_registers_mcp`**
+- **`test_researcher_handles_no_messages`**
+
+## `app/tests/unit/test_router_parallel.py`
+
+- **`test_validate_llm_choice_single`**
+  - *Test validation of a single specialist choice.*
+- **`test_validate_llm_choice_list`**
+  - *Test validation of a list of specialist choices.*
+- **`test_validate_llm_choice_list_partial_invalid`**
+  - *Test validation filters out invalid choices from a list.*
+- **`test_validate_llm_choice_list_all_invalid`**
+  - *Test fallback when all choices in list are invalid.*
+- **`test_route_to_next_specialist_list`**
+  - *Test routing to a list of specialists.*
+- **`test_route_to_next_specialist_list_invalid`**
+  - *Test routing raises error if any specialist in list is invalid.*
+
 ## `app/tests/unit/test_router_specialist.py`
 
 - **`test_get_available_specialists_no_recommendations`**
@@ -745,6 +874,8 @@
   - *Tests the fallback logic when the LLM fails to make a decision.*
 - **`test_validate_llm_choice`**
   - *Tests the validation of the LLM's routing choice.*
+- **`test_validate_llm_choice_list`**
+  - *Tests validation when LLM returns a list of specialists (Scatter-Gather).*
 - **`test_router_stage_3_termination_logic`**
   - *Tests Stage 3 of termination: when an archive report is present, the router*
 - **`test_router_normal_llm_routing`**
@@ -790,6 +921,11 @@
 - **`test_get_specialist_class_syntax_error`**
   - *Tests that the loader propagates a SyntaxError if the specialist*
 
+## `app/tests/unit/test_state_pruner.py`
+
+- **`test_generate_success_report_renders_images`**
+- **`test_generate_success_report_detects_base64_string`**
+
 ## `app/tests/unit/test_structured_data_extractor.py`
 
 - **`test_structured_data_extractor_success`**
@@ -804,6 +940,12 @@
   - *Tests that the specialist handles exceptions from the LLM adapter.*
 - **`test_structured_data_extractor_handles_invalid_schema_in_scratchpad`**
   - *Tests that the specialist handles an invalid schema object gracefully.*
+
+## `app/tests/unit/test_summarizer.py`
+
+- **`test_summarizer_summarizes_text`**
+- **`test_summarizer_registers_mcp`**
+- **`test_summarizer_handles_missing_artifact`**
 
 ## `app/tests/unit/test_systems_architect_specialist.py`
 
@@ -866,6 +1008,20 @@
   - *Tests that the formatted response has proper structure.*
 - **`test_tiered_synthesizer_does_not_add_to_user_response_snippets_if_already_present`**
   - *Tests that TieredSynthesizer replaces (not appends to) user_response_snippets.*
+- **`test_tiered_synthesizer_full_synthesis`**
+  - *Tests synthesis when both Alpha and Bravo responses are present.*
+- **`test_tiered_synthesizer_graceful_degradation_alpha_only`**
+  - *Tests synthesis when Bravo is missing.*
+- **`test_tiered_synthesizer_graceful_degradation_bravo_only`**
+  - *Tests synthesis when Alpha is missing.*
+- **`test_tiered_synthesizer_failure_both_missing`**
+  - *Tests failure when both are missing.*
+
+## `app/tests/unit/test_triage_architect.py`
+
+- **`test_triage_architect_generates_plan`**
+- **`test_triage_architect_handles_no_messages`**
+- **`test_triage_architect_handles_llm_error`**
 
 ## `app/tests/unit/test_web_builder.py`
 
@@ -886,12 +1042,3 @@
   - *Tests that the sync run method handles a missing final artifact gracefully.*
 - **`test_workflow_runner_run_sync_handles_invoke_error`**
   - *Tests that the sync run method raises a WorkflowError on graph invocation failure.*
-
-## `app/tests/unit/test_clarification_workflow.py`
-
-- **`test_check_triage_outcome_routes_to_end_on_ask_user`**
-  - *Tests that check_triage_outcome routes directly to EndSpecialist when ASK_USER action is present.*
-- **`test_check_triage_outcome_routes_to_facilitator_on_normal_actions`**
-  - *Tests that check_triage_outcome routes to Facilitator for normal research/read actions.*
-- **`test_end_specialist_generates_clarification_response`**
-  - *Tests that EndSpecialist generates a clarification response instead of synthesizing a final answer when ASK_USER actions are present.*
