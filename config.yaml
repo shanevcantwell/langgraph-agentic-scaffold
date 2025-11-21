@@ -95,7 +95,7 @@ specialists:
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
-    description: "Performs file system operations (read, write, list, move, delete) using structured commands. Use this when the user explicitly requests file manipulation, not for analyzing or processing file contents (use text_analysis_specialist instead)."
+    description: "Performs ALL file system operations: listing directories, reading files, creating files, writing content, appending to files, renaming, deleting, creating directories, and creating zip archives. Use this whenever the user asks to: view/list/browse files, create/write/save files, delete/remove files, rename/move files, read file contents for manipulation (not analysis), or manage directories. For analyzing or summarizing file contents, use text_analysis_specialist instead."
     root_dir: "${WORKSPACE_PATH:-workspace}" # Workspace path from .env (defaults to 'workspace')
 
   # --- Data & Analysis ---
