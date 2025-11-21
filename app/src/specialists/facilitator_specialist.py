@@ -40,7 +40,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                     results = self.mcp_client.call(
                         service_name="researcher_specialist",
                         function_name="search",
-                        parameters={"query": action.target}
+                        query=action.target
                     )
                     # Format results
                     formatted_results = "\n".join([f"- [{r.get('title')}]({r.get('url')}): {r.get('snippet')}" for r in results]) if isinstance(results, list) else str(results)
@@ -51,7 +51,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                     content = self.mcp_client.call(
                         service_name="file_specialist",
                         function_name="read_file",
-                        parameters={"file_path": action.target}
+                        path=action.target
                     )
                     gathered_context.append(f"### File: {action.target}\n```\n{content}\n```")
                     
@@ -65,7 +65,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                              text_to_summarize = self.mcp_client.call(
                                 service_name="file_specialist",
                                 function_name="read_file",
-                                parameters={"file_path": text_to_summarize}
+                                path=text_to_summarize
                             )
                         except Exception:
                             # If read fails, assume it's raw text and proceed
@@ -74,7 +74,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                     summary = self.mcp_client.call(
                         service_name="summarizer_specialist",
                         function_name="summarize",
-                        parameters={"text": text_to_summarize}
+                        text=text_to_summarize
                     )
                     gathered_context.append(f"### Summary: {action.target}\n{summary}")
                     

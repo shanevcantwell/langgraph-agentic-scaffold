@@ -289,6 +289,11 @@ specialists:
     description: "Orchestrates the execution of a ContextPlan by calling Researcher, FileSpecialist, and Summarizer via MCP."
     requires_artifacts: ["context_plan"]
 
+  image_specialist:
+    type: "llm"
+    prompt_file: "image_specialist_prompt.md"
+    description: "Analyzes images using vision models. Provides detailed descriptions via MCP. Call with describe(base64_image, prompt)."
+
   # --- General & Fallback ---
   prompt_specialist:
     type: "llm"
