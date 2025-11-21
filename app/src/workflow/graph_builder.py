@@ -213,7 +213,7 @@ class GraphBuilder:
             "progenitor_alpha_specialist",   # Internal to tiered chat subgraph
             "progenitor_bravo_specialist",   # Internal to tiered chat subgraph
             "tiered_synthesizer_specialist", # Internal to tiered chat subgraph
-            "file_specialist",               # MCP-only specialist (Task 2.6) - no graph routing
+            "file_specialist",               # MCP-only service layer - use file_operations_specialist for user requests
             "researcher_specialist",         # MCP-only specialist (Task 5.2) - no graph routing
             "summarizer_specialist",         # MCP-only specialist (Task 5.3) - no graph routing
             # DISTILLATION SUBGRAPH: Exclude internal specialists from router

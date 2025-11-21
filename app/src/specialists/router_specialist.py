@@ -150,8 +150,24 @@ class RouterSpecialist(BaseSpecialist):
             return self._handle_llm_failure()
 
         validated_choice = self._validate_llm_choice(next_specialist_from_llm, list(current_specialists.keys()))
+
+        # Diagnostic logging for Thought Stream visibility
+        available_specialists_list = list(current_specialists.keys())[:5]  # Show first 5
+        logger.info(f"Router LLM chose: {next_specialist_from_llm}, validated as: {validated_choice}")
+        logger.info(f"Available specialists were: {available_specialists_list}")
+
         content = f"Routing to specialist: {validated_choice}"
-        return {"next_specialist": validated_choice, "tool_calls": tool_calls, "content": content}
+        return {
+            "next_specialist": validated_choice,
+            "tool_calls": tool_calls,
+            "content": content,
+            "router_diagnostics": {
+                "llm_choice": next_specialist_from_llm,
+                "validated_choice": validated_choice,
+                "available_count": len(current_specialists),
+                "top_5_available": available_specialists_list
+            }
+        }
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         turn_count = state.get("turn_count", 0) + 1
@@ -169,6 +185,7 @@ class RouterSpecialist(BaseSpecialist):
             routing_type = "llm_decision"
             content = llm_decision["content"]
             tool_calls = llm_decision.get("tool_calls", [])
+            router_diagnostics = llm_decision.get("router_diagnostics", {})
 
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
@@ -189,11 +206,16 @@ class RouterSpecialist(BaseSpecialist):
             parallel_tasks_update = next_specialist_name
             logger.info(f"Router initiating parallel execution for: {parallel_tasks_update}")
 
+        # Prepare scratchpad with diagnostics for Thought Stream visibility
+        scratchpad_update = {"recommended_specialists": None}  # Task 2.7: Consume recommendations after routing
+        if router_diagnostics:
+            scratchpad_update["router_decision"] = f"LLM chose '{router_diagnostics.get('llm_choice')}', validated as '{router_diagnostics.get('validated_choice')}'. ({router_diagnostics.get('available_count')} specialists available)"
+
         return {
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
-            "scratchpad": {"recommended_specialists": None},  # Task 2.7: Consume recommendations after routing
+            "scratchpad": scratchpad_update,
             "parallel_tasks": parallel_tasks_update, # Task 3.3: Initialize barrier
             # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
         }

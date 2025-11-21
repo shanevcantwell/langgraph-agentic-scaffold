@@ -117,6 +117,77 @@ class FileSpecialist(BaseSpecialist):
 
 **Additional Documentation:** See `ADR-CORE-008_MCP-Architecture.md` for complete architectural details and design decisions.
 
+## 5.1 User Interface Layer Pattern: FileOperationsSpecialist
+
+**Problem:** MCP-only specialists cannot be routed to directly by users. How do users trigger file operations?
+
+**Solution:** Separate the **interface layer** (routable, LLM-driven) from the **service layer** (MCP-only, procedural).
+
+```python
+class FileOperationsSpecialist(BaseSpecialist):
+    """
+    User interface layer for file operations.
+
+    Interprets user requests and routes to FileSpecialist via MCP.
+    This specialist IS routable - it serves as the user-facing interface.
+    """
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Use LLM to parse user intent
+        request = StandardizedLLMRequest(
+            messages=state["messages"],
+            tools=[FileOperation],  # Pydantic schema for operations
+            force_tool_call=True
+        )
+
+        response = self.llm_adapter.invoke(request)
+        operation = response["tool_calls"][0]['args']['operation']
+
+        # Route to FileSpecialist via MCP
+        if operation == "list_files":
+            files = self.mcp_client.call("file_specialist", "list_files", path=".")
+            return {"messages": [AIMessage(content=f"Files: {files}")]}
+        # ... other operations
+```
+
+**Architecture Pattern (aligns with ADR-MCP-002 Dockyard):**
+
+```
+┌─────────────────────────┐
+│ User: "list files"      │
+└───────────┬─────────────┘
+            ↓
+┌──────────────────────────────────┐
+│ Router (sees only interface      │
+│ layer specialists)               │
+└───────────┬──────────────────────┘
+            ↓
+┌──────────────────────────────────┐
+│ FileOperationsSpecialist         │
+│ (Interface Layer - Routable)     │
+│ - LLM-driven intent parsing      │
+│ - Formats user-friendly responses│
+└───────────┬──────────────────────┘
+            ↓ MCP Call
+┌──────────────────────────────────┐
+│ FileSpecialist                   │
+│ (Service Layer - MCP-only)       │
+│ - Procedural file operations     │
+│ - Path validation & security     │
+└──────────────────────────────────┘
+```
+
+**Benefits:**
+- ✅ **Separation of Concerns:** Interface logic (parsing, formatting) separate from service logic (file I/O)
+- ✅ **Architectural Purity:** FileSpecialist remains MCP-only as designed
+- ✅ **Extensibility:** FileOperationsSpecialist can route to multiple MCP services (future: DockmasterSpecialist)
+- ✅ **Testability:** Both layers can be tested independently
+
+**When to Use This Pattern:**
+- MCP service needs to be accessed by users directly (not just other specialists)
+- Need LLM-driven intent parsing for natural language requests
+- Want to maintain clean separation between interface and service layers
+
 ## 6.0 Available MCP Services (Service Directory)
 
 The following table documents all MCP services currently available in the system. Use this as a reference when implementing specialists that need to call MCP services.
