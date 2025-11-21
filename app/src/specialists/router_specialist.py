@@ -173,6 +173,9 @@ class RouterSpecialist(BaseSpecialist):
         turn_count = state.get("turn_count", 0) + 1
         logger.debug(f"Executing turn {turn_count}")
 
+        # Initialize diagnostics (populated only for LLM routing path)
+        router_diagnostics = None
+
         if state.get("artifacts", {}).get("archive_report.md"):
             logger.info("Router: Found 'archive_report.md'. Routing to END.")
             next_specialist_name = END
