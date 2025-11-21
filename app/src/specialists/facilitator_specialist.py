@@ -47,13 +47,37 @@ class FacilitatorSpecialist(BaseSpecialist):
                     gathered_context.append(f"### Research: {action.target}\n{formatted_results}")
                     
                 elif action.type == ContextActionType.READ_FILE:
-                    # Call FileSpecialist via MCP
-                    content = self.mcp_client.call(
-                        service_name="file_specialist",
-                        function_name="read_file",
-                        path=action.target
-                    )
-                    gathered_context.append(f"### File: {action.target}\n```\n{content}\n```")
+                    # Special handling: Check if target refers to an artifact already in state
+                    # (e.g., uploaded images stored as base64, not filesystem files)
+                    target_path = action.target
+
+                    # Extract artifact key from paths like "/artifacts/image.png" or "uploaded_image.png"
+                    if target_path.startswith("/artifacts/"):
+                        artifact_key = target_path.replace("/artifacts/", "")
+                    elif target_path.startswith("artifacts/"):
+                        artifact_key = target_path.replace("artifacts/", "")
+                    else:
+                        artifact_key = target_path
+
+                    # Check if this artifact exists in state (in-memory data)
+                    if artifact_key in artifacts:
+                        content = artifacts[artifact_key]
+                        logger.info(f"Facilitator: Found '{artifact_key}' in artifacts (in-memory), skipping file read")
+
+                        # Special formatting for base64 image data
+                        if isinstance(content, str) and content.startswith("data:image/"):
+                            gathered_context.append(f"### Image: {artifact_key}\n[Image data available in artifacts - {len(content)} chars]")
+                        else:
+                            # Regular text content
+                            gathered_context.append(f"### Artifact: {artifact_key}\n```\n{content}\n```")
+                    else:
+                        # Not in artifacts, treat as filesystem path - call FileSpecialist via MCP
+                        content = self.mcp_client.call(
+                            service_name="file_specialist",
+                            function_name="read_file",
+                            path=target_path
+                        )
+                        gathered_context.append(f"### File: {target_path}\n```\n{content}\n```")
                     
                 elif action.type == ContextActionType.SUMMARIZE:
                     # Call Summarizer via MCP

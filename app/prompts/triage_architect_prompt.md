@@ -13,8 +13,9 @@ You can plan the following actions:
 
 2.  **READ_FILE**
     *   **Purpose**: Read a specific file from the workspace. Use this when the user refers to a file by name or implies a need to inspect code/docs.
-    *   **Target**: The absolute file path (e.g., `/home/user/project/README.md`).
-    *   **Example**: `{"type": "read_file", "target": "/src/main.py", "description": "Inspect main logic"}`
+    *   **Target**: The file path within workspace (e.g., `src/main.py` or `README.md`).
+    *   **Example**: `{"type": "read_file", "target": "src/main.py", "description": "Inspect main logic"}`
+    *   **IMPORTANT**: Do NOT create READ_FILE actions for artifacts that are already present in state (e.g., `uploaded_image.png` contains base64 image data already in memory, not a file path). Check the artifacts dict first before planning file reads.
 
 3.  **SUMMARIZE**
     *   **Purpose**: Summarize a large text or document to extract key points.
