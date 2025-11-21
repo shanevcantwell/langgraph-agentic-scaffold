@@ -122,6 +122,14 @@ promptInput.addEventListener('keydown', (e) => {
     }
 });
 
+// Clear prompt on focus if flagged (after workflow completion)
+promptInput.addEventListener('focus', () => {
+    if (promptInput.dataset.clearOnFocus === 'true') {
+        promptInput.value = '';
+        delete promptInput.dataset.clearOnFocus;
+    }
+});
+
 // File Upload Logic
 uploadBtn.addEventListener('click', () => fileInput.click());
 
@@ -313,11 +321,15 @@ async function executeWorkflow() {
         executeBtn.disabled = false;
         executeBtn.style.display = 'inline-block';
         cancelBtn.style.display = 'none';
-        promptInput.value = '';
+
+        // Don't clear prompt immediately - let user see what they asked
+        // Clear it when they click to type a new prompt
+        promptInput.dataset.clearOnFocus = 'true';
+
         promptInput.focus();
         stopTracePolling();
         abortController = null;
-        
+
         // Clear file after send? Maybe keep it? Let's keep it for now, user can clear manually.
     }
 }
@@ -495,16 +507,18 @@ function handleStreamEvent(event) {
             }
             break;
 
+        case 'node_start':
         case 'specialist_start':
-            // Specialist is starting execution
+            // Specialist/Node is starting execution
             if (source) {
                 addRoutingEntry(source);
                 addThoughtStreamEntry(source, 'Starting execution...', 'info');
             }
             break;
 
+        case 'node_end':
         case 'specialist_end':
-            // Specialist completed execution
+            // Specialist/Node completed execution
             if (source) {
                 addThoughtStreamEntry(source, 'Execution complete', 'success');
 
@@ -516,6 +530,9 @@ function handleStreamEvent(event) {
                     if (data.scratchpad.facilitator_complete) {
                         addThoughtStreamEntry('FACILITATOR', 'Context gathering complete', 'success');
                     }
+                    if (data.scratchpad.router_decision) {
+                        addThoughtStreamEntry('ROUTER', `Decision: ${data.scratchpad.router_decision}`, 'info');
+                    }
                 }
 
                 // Update artifacts if present
@@ -524,7 +541,10 @@ function handleStreamEvent(event) {
 
                     // Add thought stream entry for each artifact
                     Object.keys(data.artifacts).forEach(key => {
-                        addThoughtStreamEntry(source, `Generated artifact: ${key}`, 'success');
+                        // Skip archive_report.md from artifacts display (goes to Final Response)
+                        if (key !== 'archive_report.md') {
+                            addThoughtStreamEntry(source, `Generated artifact: ${key}`, 'success');
+                        }
                     });
                 }
             }
@@ -532,11 +552,8 @@ function handleStreamEvent(event) {
 
         case 'log':
             if (data.message) {
-                // Check for routing info in logs
-                if (data.message.includes('Entering node:')) {
-                    const node = data.message.split('Entering node:')[1].trim();
-                    addRoutingEntry(node);
-                }
+                // NOTE: Routing entries are added via node_start events, not logs
+                // (to avoid duplicates since both events fire for each node)
 
                 // Detect MCP calls in logs - add to thought stream
                 if (data.message.includes('MCP') || data.message.includes('Facilitator: Executing action')) {
@@ -564,6 +581,10 @@ function handleStreamEvent(event) {
             logStatus(`► WORKFLOW COMPLETE`);
             addThoughtStreamEntry('SYSTEM', 'Workflow completed successfully', 'success');
 
+            console.log('[workflow_end] Received data:', data);
+            console.log('[workflow_end] Archive exists:', !!data.archive);
+            console.log('[workflow_end] Archive length:', data.archive ? data.archive.length : 0);
+
             if (data.final_state) {
                 jsonOutputEl.textContent = JSON.stringify(data.final_state, null, 2);
 
@@ -574,7 +595,10 @@ function handleStreamEvent(event) {
             }
 
             if (data.archive) {
+                console.log('[workflow_end] Rendering mission report...');
                 renderMissionReport(data.archive);
+            } else {
+                console.warn('[workflow_end] No archive data found!');
             }
             break;
 
@@ -587,56 +611,8 @@ function logStatus(msg) {
     systemStatusEl.textContent = msg;
 }
 
-function renderMissionReport(markdown) {
-    if (!markdown) return;
-
-    // Split by H2 headers (## )
-    // We use a regex that matches the start of a line, ##, space, and captures the title
-    const sections = markdown.split(/^## /gm);
-    
-    traceTabsEl.innerHTML = '';
-    executionTraceEl.innerHTML = '';
-
-    let firstTabBtn = null;
-
-    sections.forEach((section, index) => {
-        if (!section.trim()) return; // Skip empty sections (often the first split if file starts with ##)
-
-        // The split consumes the "## ", so we need to extract the title from the first line
-        const lines = section.split('\n');
-        const title = lines.shift().trim();
-        const content = lines.join('\n');
-
-        if (!title) return;
-
-        const btn = document.createElement('button');
-        btn.className = 'tab-btn';
-        btn.textContent = title;
-        
-        btn.onclick = () => {
-            // Deactivate all
-            document.querySelectorAll('#traceTabs .tab-btn').forEach(b => b.classList.remove('active'));
-            // Activate this
-            btn.classList.add('active');
-            // Render content
-            executionTraceEl.innerHTML = marked.parse(content);
-        };
-
-        traceTabsEl.appendChild(btn);
-
-        if (!firstTabBtn) {
-            firstTabBtn = btn;
-        }
-    });
-
-    // Activate first tab by default
-    if (firstTabBtn) {
-        firstTabBtn.click();
-    } else {
-        // Fallback if no sections found
-        executionTraceEl.innerHTML = marked.parse(markdown);
-    }
-}
+// NOTE: renderMissionReport is defined earlier in the file (around line 410)
+// This duplicate has been removed to fix ReferenceError with old variable names
 
 function addRoutingEntry(node) {
     const div = document.createElement('div');
@@ -673,7 +649,8 @@ const observer = new MutationObserver((mutations) => {
     });
 });
 
-observer.observe(executionTraceEl, { childList: true, subtree: true });
+// Observe both archive output (Final Response tab) and JSON output for code block toolbars
+observer.observe(archiveOutputEl, { childList: true, subtree: true });
 observer.observe(jsonOutputEl.parentElement, { childList: true, subtree: true }); // Observe tab-json content
 
 function addToolbarsToPreBlocks() {
@@ -734,7 +711,9 @@ function renderTraces(runs) {
     // Sort by start_time
     runs.sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
     
-    executionTraceEl.innerHTML = '';
+    // DEPRECATED: executionTraceEl no longer exists - this function is disabled
+    // executionTraceEl.innerHTML = '';
+    return; // Exit early since this function is deprecated
     
     // Build a map for hierarchy
     const runMap = {};
@@ -783,7 +762,8 @@ function renderTraces(runs) {
         return div;
     }
 
+    // DEPRECATED: This code is unreachable due to early return above
     rootRuns.forEach(run => {
-        executionTraceEl.appendChild(createTraceNode(run));
+        // executionTraceEl.appendChild(createTraceNode(run));
     });
 }

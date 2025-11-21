@@ -33,14 +33,22 @@ class AgUiTranslator:
 
             # 2. Handle Node Execution
             for node_name, node_output in chunk.items():
-                # Emit Status Update
+                # Emit NODE_START event
+                yield AgUiEvent(
+                    run_id=self.run_id,
+                    type=EventType.NODE_START,
+                    source=node_name,
+                    data={"status": f"Starting {node_name}..."}
+                )
+
+                # Emit Status Update (for backward compatibility)
                 yield AgUiEvent(
                     run_id=self.run_id,
                     type=EventType.STATUS_UPDATE,
                     source=node_name,
                     data={"status": f"Executing specialist: {node_name}..."}
                 )
-                
+
                 # Emit Log (for UI ticker)
                 yield AgUiEvent(
                     run_id=self.run_id,
@@ -64,6 +72,18 @@ class AgUiTranslator:
 
                     # 4. Accumulate State (Reducer Logic)
                     self._update_accumulated_state(node_output)
+
+                    # Emit NODE_END event with output data
+                    yield AgUiEvent(
+                        run_id=self.run_id,
+                        type=EventType.NODE_END,
+                        source=node_name,
+                        data={
+                            "scratchpad": scratchpad,
+                            "artifacts": node_output.get("artifacts", {}),
+                            "status": f"Completed {node_name}"
+                        }
+                    )
 
         # 5. End of Workflow
         yield self._create_workflow_end_event()
