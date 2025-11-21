@@ -427,3 +427,189 @@ pre, .markdown-body pre {
     opacity: 1;
 }
 
+/* ============================================================================ */
+/* THOUGHT STREAM PANEL */
+/* ============================================================================ */
+
+.thought-stream-panel {
+    max-height: 400px;
+    min-height: 250px;
+}
+
+.thought-stream-box {
+    height: 350px;
+    overflow-y: auto;
+    font-size: 0.9em;
+    line-height: 1.6;
+    padding: 8px;
+    background: var(--panel-bg);
+    border: 1px solid var(--secondary-color);
+}
+
+.thought-entry {
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    border-left: 2px solid var(--secondary-color);
+    animation: slideIn 0.3s ease-out;
+}
+
+.thought-entry.thought-info {
+    border-left-color: var(--secondary-color);
+}
+
+.thought-entry.thought-success {
+    border-left-color: #27ae60;
+}
+
+.thought-entry.thought-error {
+    border-left-color: var(--alert-color);
+}
+
+.thought-entry.thought-mcp {
+    border-left-color: #3498db;
+}
+
+.thought-time {
+    opacity: 0.6;
+    margin-right: 8px;
+    font-size: 0.85em;
+}
+
+.thought-specialist {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-right: 6px;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* ============================================================================ */
+/* ENHANCED NEURAL GRID */
+/* ============================================================================ */
+
+.spec-node {
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.spec-node.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--primary-color);
+    animation: pulse 1.5s ease-in-out infinite;
+    transform: scale(1.05);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 0 15px var(--primary-color);
+    }
+    50% {
+        box-shadow: 0 0 25px var(--primary-color), 0 0 35px var(--primary-color);
+    }
+}
+
+.spec-node::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+}
+
+.spec-node.active::after {
+    left: 100%;
+}
+
+/* ============================================================================ */
+/* CONSOLIDATED MISSION REPORT TABS */
+/* ============================================================================ */
+
+.trace-panel .tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.trace-panel .tab-btn {
+    padding: 8px 15px;
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    font-family: var(--font-main);
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.trace-panel .tab-btn:hover {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.trace-panel .tab-btn.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.trace-panel .tab-content {
+    display: none;
+    padding: 10px;
+    border: 1px solid var(--secondary-color);
+    min-height: 300px;
+    overflow-y: auto;
+}
+
+.trace-panel .tab-content.active {
+    display: block;
+}
+
+/* ============================================================================ */
+/* SECOND-LEVEL SUBTABS (Dynamic from Archive H2 headers) */
+/* ============================================================================ */
+
+.subtabs {
+    display: flex;
+    gap: 3px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.subtab-btn {
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    font-family: var(--font-main);
+    font-size: 0.85em;
+    transition: all 0.2s;
+    opacity: 0.7;
+}
+
+.subtab-btn:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.subtab-btn.active {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+    opacity: 1;
+    font-weight: bold;
+}
+

@@ -48,7 +48,27 @@ def handle_submit(api_client: ApiClient, status_output, json_output, html_output
 
 def create_ui(api_client: ApiClient):
     """Creates the Gradio UI and wires up the components."""
-    with gr.Blocks(theme=gr.themes.Soft(), title="Agentic System UI") as demo:
+    # Custom JavaScript to make Enter=submit, Shift+Enter=newline (standard AI chat behavior)
+    custom_js = """
+    function setupEnterKeyBehavior() {
+        const textareas = document.querySelectorAll('textarea[data-testid="textbox"]');
+        textareas.forEach(textarea => {
+            if (textarea.hasAttribute('data-enter-fixed')) return;
+            textarea.setAttribute('data-enter-fixed', 'true');
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const submitBtn = textarea.closest('.gradio-container').querySelector('button[aria-label="Submit"]') ||
+                                     textarea.parentElement.parentElement.querySelector('button.primary');
+                    if (submitBtn) submitBtn.click();
+                }
+            });
+        });
+    }
+    setTimeout(setupEnterKeyBehavior, 100);
+    """
+
+    with gr.Blocks(theme=gr.themes.Soft(), title="Agentic System UI", js=custom_js) as demo:
         gr.Markdown("# Agentic System Testing UI")
         gr.Markdown("Interact with the agent by providing a prompt and optional files.")
 
@@ -57,8 +77,8 @@ def create_ui(api_client: ApiClient):
                 prompt_input = gr.Textbox(
                     label="Your Prompt",
                     lines=3,
-                    placeholder="e.g., Describe the attached image... (Press Enter to submit, Shift+Enter for new line)",
-                    submit_btn=True
+                    placeholder="e.g., Describe the attached image... (Enter to submit, Shift+Enter for new line)",
+                    elem_id="prompt_input"
                 )
                 with gr.Row():
                     file_input = gr.File(label="Upload Text File", visible=False)  # Disabled pending Dockyard/MCP integration (ADR-MCP-002)

@@ -41,7 +41,7 @@
             <div class="left-col">
                 <section class="panel command-panel">
                     <h3>⌨️ COMMAND BAR</h3>
-                    <textarea id="promptInput" placeholder="█ ENTER DIRECTIVE... (ENTER: NEW LINE | SHIFT+ENTER: EXECUTE)"></textarea>
+                    <textarea id="promptInput" placeholder="█ ENTER DIRECTIVE... (ENTER: EXECUTE | SHIFT+ENTER: NEW LINE)"></textarea>
                     
                     <!-- File Upload Section -->
                     <div class="upload-section" style="margin: 10px 0; border: 1px dashed var(--secondary-color); padding: 8px;">
@@ -92,24 +92,35 @@
 
             <!-- RIGHT COLUMN -->
             <div class="right-col">
-                <section class="panel trace-panel">
-                    <h3>📜 MISSION REPORT</h3>
-                    <div class="tabs" id="traceTabs">
-                        <!-- Dynamic tabs will be injected here -->
-                    </div>
-                    <div class="trace-box" id="executionTrace">
-                        <div class="placeholder">WAITING FOR MISSION DATA...</div>
+                <!-- THOUGHT STREAM: Real-time internal monologue (includes MCP calls) -->
+                <section class="panel thought-stream-panel">
+                    <h3>💭 THOUGHT STREAM</h3>
+                    <div class="thought-stream-box" id="thoughtStream">
+                        <div class="placeholder">WAITING FOR COGNITIVE ACTIVITY...</div>
                     </div>
                 </section>
 
-                <section class="panel artifacts-panel">
-                    <h3>📦 ARTIFACTS</h3>
+                <!-- MISSION REPORT: Consolidated final output with tabs -->
+                <section class="panel trace-panel">
+                    <h3>📜 MISSION REPORT</h3>
                     <div class="tabs">
-                        <button class="tab-btn active" data-tab="report">📋 MISSION DOSSIER</button>
-                        <button class="tab-btn" data-tab="json">⚙️ FINAL STATE</button>
+                        <button class="tab-btn active" data-tab="report">📋 FINAL RESPONSE</button>
+                        <button class="tab-btn" data-tab="artifacts">📦 ARTIFACTS</button>
+                        <button class="tab-btn" data-tab="json">⚙️ STATE</button>
                     </div>
                     <div class="tab-content active" id="tab-report">
-                        <div id="archiveOutput" class="markdown-body"></div>
+                        <!-- Second-level dynamic tabs from archive H2 headers -->
+                        <div class="subtabs" id="archiveSubtabs">
+                            <!-- Dynamic tabs will be injected here -->
+                        </div>
+                        <div id="archiveOutput" class="markdown-body">
+                            <div class="placeholder">WAITING FOR MISSION DATA...</div>
+                        </div>
+                    </div>
+                    <div class="tab-content" id="tab-artifacts">
+                        <div id="artifactsOutput" class="markdown-body">
+                            <div class="placeholder">NO ARTIFACTS YET...</div>
+                        </div>
                     </div>
                     <div class="tab-content" id="tab-json">
                         <pre id="jsonOutput">{}</pre>

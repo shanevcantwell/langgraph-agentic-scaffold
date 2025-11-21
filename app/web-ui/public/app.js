@@ -5,12 +5,12 @@ const promptInput = document.getElementById('promptInput');
 const executeBtn = document.getElementById('executeBtn');
 const cancelBtn = document.getElementById('cancelBtn');
 const simpleChatMode = document.getElementById('simpleChatMode');
-// const turnCountEl = document.getElementById('turnCount'); // Removed
-// const latencyEl = document.getElementById('latency'); // Removed
 const routingLogEl = document.getElementById('routingLog');
 const systemStatusEl = document.getElementById('systemStatus');
-const traceTabsEl = document.getElementById('traceTabs');
-const executionTraceEl = document.getElementById('executionTrace');
+const thoughtStreamEl = document.getElementById('thoughtStream');
+const archiveSubtabsEl = document.getElementById('archiveSubtabs');
+const archiveOutputEl = document.getElementById('archiveOutput');
+const artifactsOutputEl = document.getElementById('artifactsOutput');
 const jsonOutputEl = document.getElementById('jsonOutput');
 
 // File Upload Elements
@@ -25,9 +25,9 @@ const zoomModal = document.getElementById('zoomModal');
 const closeModal = document.querySelector('.close-modal');
 const modalBody = document.getElementById('modal-body');
 
-// Artifact Tabs
-const tabBtns = document.querySelectorAll('.artifacts-panel .tab-btn');
-const tabContents = document.querySelectorAll('.artifacts-panel .tab-content');
+// Mission Report Tabs (consolidated)
+const tabBtns = document.querySelectorAll('.trace-panel .tab-btn');
+const tabContents = document.querySelectorAll('.trace-panel .tab-content');
 
 // State
 let currentRunId = null;
@@ -37,6 +37,8 @@ let startTime = 0;
 let lastUpdateTime = 0;
 let loadedFile = null; // { content: string, type: 'text' | 'image' }
 let abortController = null; // Controller for the fetch request
+let thoughtStreamEntries = []; // Track thought stream entries
+let currentArtifacts = {}; // Track artifacts as they're generated
 
 // Theme Switcher Logic
 const themeBtns = document.querySelectorAll('.theme-btn');
@@ -114,7 +116,7 @@ refreshConfigBtn.addEventListener('click', async () => {
 executeBtn.addEventListener('click', executeWorkflow);
 cancelBtn.addEventListener('click', handleAbort); // Changed to handleAbort
 promptInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         executeWorkflow();
     }
@@ -207,10 +209,15 @@ async function executeWorkflow() {
     
     systemStatusEl.innerHTML = '► INITIALIZING...';
     routingLogEl.innerHTML = '';
-    executionTraceEl.innerHTML = '<div class="placeholder">WAITING FOR MISSION DATA...</div>';
-    traceTabsEl.innerHTML = '';
+    thoughtStreamEl.innerHTML = '<div class="placeholder">WAITING FOR COGNITIVE ACTIVITY...</div>';
+    archiveSubtabsEl.innerHTML = '';
+    archiveOutputEl.innerHTML = '<div class="placeholder">WAITING FOR MISSION DATA...</div>';
+    artifactsOutputEl.innerHTML = '<div class="placeholder">NO ARTIFACTS YET...</div>';
     jsonOutputEl.textContent = '{}';
-    document.getElementById('archiveOutput').innerHTML = '';
+
+    // Reset state trackers
+    thoughtStreamEntries = [];
+    currentArtifacts = {};
     
     // Reset Specialist Grid
     document.querySelectorAll('.spec-node').forEach(el => el.classList.remove('active'));
@@ -350,6 +357,114 @@ async function handleAbort() {
 // Removed old cancelWorkflow function
 // async function cancelWorkflow() { ... }
 
+// ============================================================================
+// THOUGHT STREAM & MCP TRACE HELPERS
+// ============================================================================
+
+function formatTimestamp() {
+    const now = new Date();
+    return `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
+}
+
+function addThoughtStreamEntry(specialist, message, type = 'info') {
+    const timestamp = formatTimestamp();
+    const entry = { timestamp, specialist, message, type };
+    thoughtStreamEntries.push(entry);
+
+    // Create entry element
+    const div = document.createElement('div');
+    div.className = `thought-entry thought-${type}`;
+
+    const typeIcon = type === 'error' ? '❌' : type === 'success' ? '✓' : type === 'mcp' ? '📡' : '💭';
+    div.innerHTML = `<span class="thought-time">${timestamp}</span> <span class="thought-specialist">${specialist.toUpperCase()}:</span> ${typeIcon} ${message}`;
+
+    // Remove placeholder if exists
+    if (thoughtStreamEl.querySelector('.placeholder')) {
+        thoughtStreamEl.innerHTML = '';
+    }
+
+    thoughtStreamEl.appendChild(div);
+    thoughtStreamEl.scrollTop = thoughtStreamEl.scrollHeight;
+
+    // Limit to last 100 entries (increased since we're merging MCP calls)
+    if (thoughtStreamEntries.length > 100) {
+        thoughtStreamEntries.shift();
+        if (thoughtStreamEl.firstChild) {
+            thoughtStreamEl.removeChild(thoughtStreamEl.firstChild);
+        }
+    }
+}
+
+function updateArtifactsDisplay(artifacts) {
+    if (!artifacts || Object.keys(artifacts).length === 0) return;
+
+    currentArtifacts = { ...currentArtifacts, ...artifacts };
+
+    // Build markdown display of all artifacts
+    let artifactsMarkdown = '# Artifacts\n\n';
+    for (const [key, value] of Object.entries(currentArtifacts)) {
+        artifactsMarkdown += `## ${key}\n\n`;
+        if (typeof value === 'object') {
+            artifactsMarkdown += `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\`\n\n`;
+        } else {
+            artifactsMarkdown += `\`\`\`\n${value}\n\`\`\`\n\n`;
+        }
+    }
+
+    artifactsOutputEl.innerHTML = marked.parse(artifactsMarkdown);
+}
+
+function renderMissionReport(markdown) {
+    if (!markdown) return;
+
+    // Split by H2 headers (## )
+    const sections = markdown.split(/^## /gm);
+
+    archiveSubtabsEl.innerHTML = '';
+    archiveOutputEl.innerHTML = '';
+
+    let firstTabBtn = null;
+
+    sections.forEach((section, index) => {
+        if (!section.trim()) return; // Skip empty sections
+
+        // Extract title from first line
+        const lines = section.split('\n');
+        const title = lines.shift().trim();
+        const content = lines.join('\n');
+
+        if (!title) return;
+
+        // Create sub-tab button
+        const btn = document.createElement('button');
+        btn.className = 'subtab-btn';
+        btn.textContent = title;
+
+        btn.onclick = () => {
+            // Deactivate all subtabs
+            document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+            // Activate this subtab
+            btn.classList.add('active');
+            // Render content
+            archiveOutputEl.innerHTML = marked.parse(content);
+        };
+
+        archiveSubtabsEl.appendChild(btn);
+
+        if (!firstTabBtn) {
+            firstTabBtn = btn;
+        }
+    });
+
+    // Activate first tab by default
+    if (firstTabBtn) {
+        firstTabBtn.click();
+    } else {
+        // Fallback if no sections found - render the whole thing
+        archiveOutputEl.innerHTML = marked.parse(markdown);
+    }
+}
+
 function handleStreamEvent(event) {
     const now = Date.now();
     const latency = now - lastUpdateTime;
@@ -366,10 +481,12 @@ function handleStreamEvent(event) {
     }
 
     const data = event.data || {};
+    const source = event.source || 'system';
 
     switch (event.type) {
         case 'workflow_start':
             logStatus(`► WORKFLOW STARTED`);
+            addThoughtStreamEntry('SYSTEM', 'Workflow initiated', 'info');
             break;
 
         case 'status_update':
@@ -378,41 +495,89 @@ function handleStreamEvent(event) {
             }
             break;
 
+        case 'specialist_start':
+            // Specialist is starting execution
+            if (source) {
+                addRoutingEntry(source);
+                addThoughtStreamEntry(source, 'Starting execution...', 'info');
+            }
+            break;
+
+        case 'specialist_end':
+            // Specialist completed execution
+            if (source) {
+                addThoughtStreamEntry(source, 'Execution complete', 'success');
+
+                // Extract thought process from scratchpad
+                if (data.scratchpad) {
+                    if (data.scratchpad.triage_reasoning) {
+                        addThoughtStreamEntry('TRIAGE', `Reasoning: ${data.scratchpad.triage_reasoning}`, 'info');
+                    }
+                    if (data.scratchpad.facilitator_complete) {
+                        addThoughtStreamEntry('FACILITATOR', 'Context gathering complete', 'success');
+                    }
+                }
+
+                // Update artifacts if present
+                if (data.artifacts) {
+                    updateArtifactsDisplay(data.artifacts);
+
+                    // Add thought stream entry for each artifact
+                    Object.keys(data.artifacts).forEach(key => {
+                        addThoughtStreamEntry(source, `Generated artifact: ${key}`, 'success');
+                    });
+                }
+            }
+            break;
+
         case 'log':
             if (data.message) {
-                // Check for routing info in logs (legacy support or explicit log)
+                // Check for routing info in logs
                 if (data.message.includes('Entering node:')) {
                     const node = data.message.split('Entering node:')[1].trim();
                     addRoutingEntry(node);
+                }
+
+                // Detect MCP calls in logs - add to thought stream
+                if (data.message.includes('MCP') || data.message.includes('Facilitator: Executing action')) {
+                    // Try to extract MCP call info
+                    const mcpMatch = data.message.match(/(\w+_specialist)\.(\w+)\((.*?)\)/);
+                    if (mcpMatch) {
+                        const [_, service, func, params] = mcpMatch;
+                        addThoughtStreamEntry('MCP', `📡 ${service}.${func}(${params})`, 'mcp');
+                    } else if (data.message.includes('Executing action')) {
+                        addThoughtStreamEntry('FACILITATOR', data.message.split('Facilitator: ')[1] || data.message, 'info');
+                    }
                 }
             }
             break;
 
         case 'error':
             logStatus(`❌ ERROR: ${data.error}`);
+            addThoughtStreamEntry('SYSTEM', `ERROR: ${data.error}`, 'error');
             if (data.error_report) {
-                renderMissionReport(`## ❌ Error Report\n\n${data.error_report}`);
+                archiveOutputEl.innerHTML = marked.parse(`## ❌ Error Report\n\n${data.error_report}`);
             }
             break;
 
         case 'workflow_end':
             logStatus(`► WORKFLOW COMPLETE`);
-            
+            addThoughtStreamEntry('SYSTEM', 'Workflow completed successfully', 'success');
+
             if (data.final_state) {
                 jsonOutputEl.textContent = JSON.stringify(data.final_state, null, 2);
-            }
 
-            // Removed legacy HTML rendering
-            // if (data.html) { ... }
+                // Final artifacts update
+                if (data.final_state.artifacts) {
+                    updateArtifactsDisplay(data.final_state.artifacts);
+                }
+            }
 
             if (data.archive) {
                 renderMissionReport(data.archive);
-                // Also render to the Artifacts panel if needed, but Mission Report panel is primary now.
-                // If we want it in the Artifacts panel too:
-                document.getElementById('archiveOutput').innerHTML = marked.parse(data.archive);
             }
             break;
-            
+
         default:
             console.warn("Unknown event type:", event.type, event);
     }

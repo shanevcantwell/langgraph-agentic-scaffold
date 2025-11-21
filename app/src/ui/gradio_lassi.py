@@ -311,7 +311,27 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
 
 def create_ui(api_client: ApiClient):
     """Creates the L.A.S.S.I. Gradio UI with dark mode and glowing mango accents."""
-    with gr.Blocks(theme=gr.themes.Soft(), title="L.A.S.S.I. Interface", css=LASSI_CSS) as demo:
+    # Custom JavaScript to make Enter=submit, Shift+Enter=newline (standard AI chat behavior)
+    custom_js = """
+    function setupEnterKeyBehavior() {
+        const textareas = document.querySelectorAll('textarea[data-testid="textbox"]');
+        textareas.forEach(textarea => {
+            if (textarea.hasAttribute('data-enter-fixed')) return;
+            textarea.setAttribute('data-enter-fixed', 'true');
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const submitBtn = textarea.closest('.gradio-container').querySelector('button[aria-label="Submit"]') ||
+                                     textarea.parentElement.parentElement.querySelector('button.primary');
+                    if (submitBtn) submitBtn.click();
+                }
+            });
+        });
+    }
+    setTimeout(setupEnterKeyBehavior, 100);
+    """
+
+    with gr.Blocks(theme=gr.themes.Soft(), title="L.A.S.S.I. Interface", css=LASSI_CSS, js=custom_js) as demo:
 
         # Header
         gr.Markdown("# 🥭 L.A.S.S.I. Interface")
@@ -326,8 +346,8 @@ def create_ui(api_client: ApiClient):
                         label="Your Prompt",
                         show_label=False,
                         lines=5,
-                        placeholder="Enter your prompt here...",
-                        submit_btn=True
+                        placeholder="Enter your prompt here... (Enter to submit, Shift+Enter for new line)",
+                        elem_id="prompt_input_lassi"
                     )
                     simple_chat_checkbox = gr.Checkbox(
                         label="Simple Chat Mode",

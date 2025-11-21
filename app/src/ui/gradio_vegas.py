@@ -390,7 +390,27 @@ def handle_submit(api_client: ApiClient, status_output, turn_counter, latency_di
 
 def create_ui(api_client: ApiClient):
     """Creates the VEGAS Gradio UI with retro terminal styling."""
-    with gr.Blocks(theme=gr.themes.Monochrome(), title="LAS VEGAS Terminal", css=VEGAS_CSS) as demo:
+    # Custom JavaScript to make Enter=submit, Shift+Enter=newline (standard AI chat behavior)
+    custom_js = """
+    function setupEnterKeyBehavior() {
+        const textareas = document.querySelectorAll('textarea[data-testid="textbox"]');
+        textareas.forEach(textarea => {
+            if (textarea.hasAttribute('data-enter-fixed')) return;
+            textarea.setAttribute('data-enter-fixed', 'true');
+            textarea.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    const submitBtn = textarea.closest('.gradio-container').querySelector('button[aria-label="Submit"]') ||
+                                     textarea.parentElement.parentElement.querySelector('button.primary');
+                    if (submitBtn) submitBtn.click();
+                }
+            });
+        });
+    }
+    setTimeout(setupEnterKeyBehavior, 100);
+    """
+
+    with gr.Blocks(theme=gr.themes.Monochrome(), title="LAS VEGAS Terminal", css=VEGAS_CSS, js=custom_js) as demo:
 
         # Header
         gr.Markdown("# 🖥️ V.E.G.A.S. TERMINAL")
@@ -406,7 +426,7 @@ def create_ui(api_client: ApiClient):
                     label="COMMAND INPUT",
                     lines=4,
                     placeholder="█ ENTER DIRECTIVE... (ENTER: EXECUTE | SHIFT+ENTER: NEW LINE)",
-                    submit_btn=True
+                    elem_id="prompt_input_vegas"
                 )
 
                 with gr.Row():
