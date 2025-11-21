@@ -325,8 +325,8 @@ async function executeWorkflow() {
         // Don't clear prompt immediately - let user see what they asked
         // Clear it when they click to type a new prompt
         promptInput.dataset.clearOnFocus = 'true';
+        // Don't auto-focus - let user click when ready (prevents immediate clearing)
 
-        promptInput.focus();
         stopTracePolling();
         abortController = null;
 

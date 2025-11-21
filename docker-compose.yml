@@ -26,9 +26,9 @@ services:
     volumes:
       # Mount the project directory for live code changes during development.
       - .:/app
-      # Create a named volume for the agent's persistent "walled garden" workspace.
+      # Mount host workspace directory directly for file visibility.
       # Path is configured via WORKSPACE_PATH in .env (defaults to "workspace")
-      - app_workspace:/app/${WORKSPACE_PATH:-workspace}
+      - ./workspace:/app/workspace
     ports:
       # Map the API and UI ports from the container to your host machine.
       - "8000:8000"
@@ -65,7 +65,3 @@ services:
     depends_on:
       - app
     restart: unless-stopped
-
-volumes:
-  # Define the named volume for persistent storage.
-  app_workspace:
