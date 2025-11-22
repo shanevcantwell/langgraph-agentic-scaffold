@@ -103,6 +103,11 @@ specialists:
     prompt_file: "file_operations_prompt.md"
     description: "Handles user requests for file system operations (list, create, read, write, delete files and directories in workspace). Interprets user intent and executes operations via MCP services. Use this for all user-initiated file operations."
 
+  batch_processor_specialist:
+    type: "llm"
+    prompt_file: "batch_processor_prompt.md"
+    description: "Handles batch file operations with emergent LLM-driven sorting logic. Processes collections of files atomically (single graph node) using internal iteration. Use this for sorting, organizing, or batch-processing multiple files (e.g., 'sort these files into folders', 'organize these documents')."
+
   # --- Data & Analysis ---
   data_extractor_specialist:
     type: "llm"

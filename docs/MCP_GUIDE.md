@@ -188,6 +188,122 @@ class FileOperationsSpecialist(BaseSpecialist):
 - Need LLM-driven intent parsing for natural language requests
 - Want to maintain clean separation between interface and service layers
 
+## 5.2 Advanced Pattern: Internal Iteration with MCP (BatchProcessorSpecialist)
+
+**Problem:** How do you process collections of items (e.g., sorting multiple files) without creating graph-level loops?
+
+**Solution:** Use **internal iteration** within a single specialist, calling MCP services for each item. The graph sees a single atomic operation, but internally the specialist iterates over the collection.
+
+```python
+class BatchProcessorSpecialist(BaseSpecialist):
+    """
+    Processes collections of files with emergent LLM-driven sorting logic.
+
+    Architecture: Single graph node with internal iteration.
+    From graph perspective: Router → BatchProcessor → Router (atomic)
+    Internal perspective: Loops over files, calls MCP for each
+    """
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Phase 1: LLM parses user request into structured batch
+        batch_request = self._parse_batch_request(state["messages"])
+        # Result: ["e.txt", "l.txt", "n.txt"] + ["a-m/", "n-z/"]
+
+        # Phase 2: LLM generates sorting plan (emergent logic)
+        sort_plan = self._generate_sort_plan(batch_request)
+        # Result: [
+        #   {file: "e.txt", dest: "a-m/", rationale: "starts with e"},
+        #   {file: "l.txt", dest: "a-m/", rationale: "starts with l"},
+        #   ...
+        # ]
+
+        # Phase 3: Execute moves via MCP (internal iteration)
+        results = {"successful": [], "failed": []}
+
+        for decision in sort_plan.decisions:
+            try:
+                # Check file exists
+                exists = self.mcp_client.call(
+                    "file_specialist", "file_exists", path=decision.file_path
+                )
+
+                if not exists:
+                    results["failed"].append({...})
+                    continue
+
+                # Create destination directory
+                self.mcp_client.call(
+                    "file_specialist", "create_directory", path=decision.destination
+                )
+
+                # Move file
+                new_path = f"{decision.destination}/{Path(decision.file_path).name}"
+                self.mcp_client.call(
+                    "file_specialist", "rename_file",
+                    old_path=decision.file_path, new_path=new_path
+                )
+
+                results["successful"].append({...})
+
+            except Exception as e:
+                results["failed"].append({"file": decision.file_path, "error": str(e)})
+
+        # Phase 4: Return comprehensive results
+        return {
+            "artifacts": {
+                "batch_sort_summary": {
+                    "total": len(sort_plan.decisions),
+                    "successful": len(results["successful"]),
+                    "failed": len(results["failed"])
+                },
+                "batch_sort_details": results["successful"] + results["failed"],
+                "batch_sort_report.md": self._generate_report(results)
+            },
+            "messages": [AIMessage(content=self._format_summary(results))],
+            "task_is_complete": True
+        }
+```
+
+**Key Architectural Benefits:**
+
+1. **Atomic Execution** - Graph sees single node, no routing overhead
+2. **Emergent Logic** - LLM decides destinations (not hardcoded rules)
+3. **Per-Item Error Handling** - Continues processing on failures, tracks each individually
+4. **Rich Observability** - Detailed artifacts show decision rationale for each item
+5. **No Graph Looping** - Avoids `recommended_next_specialist` complexity
+
+**Graph Flow:**
+```
+User: "Sort e.txt, l.txt, n.txt, q.txt into a-m/ and n-z/"
+  ↓
+Router routes to: batch_processor_specialist
+  ↓
+BatchProcessor (single node execution):
+  - Parse request
+  - Generate LLM sorting plan
+  - Loop internally: for each file, call MCP 4x (exists, create_dir, rename)
+  - Return consolidated results
+  ↓
+Router sees: task_is_complete = True, routes to END
+```
+
+**Contrast with Graph-Level Looping:**
+```
+# Graph-level looping (complex, inefficient):
+Router → FileProcessor (file 1) → Router → FileProcessor (file 2) → Router → ...
+# 8 routing cycles for 4 files
+
+# Internal iteration (simple, efficient):
+Router → BatchProcessor (processes all 4 files) → Router
+# 2 routing cycles total
+```
+
+**When to Use This Pattern:**
+- Processing collections of items (files, records, tasks)
+- Need emergent decision-making per item (LLM-driven logic)
+- Want atomic operations (all or partial success, no half-finished state)
+- Avoiding graph-level looping complexity
+
 ## 6.0 Available MCP Services (Service Directory)
 
 The following table documents all MCP services currently available in the system. Use this as a reference when implementing specialists that need to call MCP services.

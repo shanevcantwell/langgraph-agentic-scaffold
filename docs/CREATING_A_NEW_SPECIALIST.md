@@ -386,6 +386,170 @@ def test_code_writer_specialist_execute(code_writer_specialist):
 
 To run the tests, simply run `pytest` from the root directory.
 
+## Advanced Pattern: Internal Iteration with MCP
+
+When you need to process **collections of items** (files, records, tasks) without creating complex graph-level loops, use the **Internal Iteration** pattern. This pattern processes entire collections atomically within a single specialist execution.
+
+### Problem: Processing Collections
+
+Consider this requirement: "Sort these files into folders: e.txt, l.txt, n.txt, q.txt"
+
+**Naive approach (graph-level looping):**
+```
+Router → FileProcessor (e.txt) → Router → FileProcessor (l.txt) → Router → ...
+# 8 routing cycles, expensive LLM calls, complex state tracking
+```
+
+**Better approach (internal iteration):**
+```
+Router → BatchProcessor (processes all 4 files internally) → Router
+# 2 routing cycles, single atomic operation, simple state
+```
+
+### Solution: BatchProcessorSpecialist Example
+
+```python
+# app/src/specialists/batch_processor_specialist.py
+
+from typing import Dict, Any, List
+from pathlib import Path
+from .base import BaseSpecialist
+from ..llm.adapter import StandardizedLLMRequest
+from .schemas._batch_ops import BatchSortRequest, BatchSortPlan
+
+class BatchProcessorSpecialist(BaseSpecialist):
+    """
+    Processes collections with emergent LLM-driven logic.
+
+    Architecture:
+    - Graph sees single atomic node
+    - Internally iterates over collection
+    - Calls MCP services for each item
+    """
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Phase 1: Parse user's batch request (LLM tool calling)
+        batch_request = self._parse_batch_request(state["messages"])
+        # Result: ["e.txt", "l.txt", "n.txt"] + ["a-m/", "n-z/"]
+
+        # Phase 2: LLM generates sorting plan (emergent decision making)
+        sort_plan = self._generate_sort_plan(batch_request)
+        # Result: [
+        #   {file: "e.txt", dest: "a-m/", rationale: "starts with e"},
+        #   {file: "l.txt", dest: "a-m/", rationale: "starts with l"},
+        #   ...
+        # ]
+
+        # Phase 3: Execute operations via MCP (INTERNAL ITERATION)
+        results = {"successful": [], "failed": []}
+
+        for decision in sort_plan.decisions:  # ← Internal loop
+            try:
+                # Check file exists via MCP
+                exists = self.mcp_client.call(
+                    "file_specialist", "file_exists",
+                    path=decision.file_path
+                )
+
+                if not exists:
+                    results["failed"].append({
+                        "file": decision.file_path,
+                        "error": "File not found"
+                    })
+                    continue  # Continue to next file on error
+
+                # Create destination directory
+                self.mcp_client.call(
+                    "file_specialist", "create_directory",
+                    path=decision.destination
+                )
+
+                # Move file
+                new_path = f"{decision.destination}/{Path(decision.file_path).name}"
+                self.mcp_client.call(
+                    "file_specialist", "rename_file",
+                    old_path=decision.file_path,
+                    new_path=new_path
+                )
+
+                results["successful"].append({
+                    "file": decision.file_path,
+                    "destination": new_path,
+                    "rationale": decision.rationale
+                })
+
+            except Exception as e:
+                results["failed"].append({
+                    "file": decision.file_path,
+                    "error": str(e)
+                })
+
+        # Phase 4: Return comprehensive results
+        return {
+            "artifacts": {
+                "batch_sort_summary": {
+                    "total": len(sort_plan.decisions),
+                    "successful": len(results["successful"]),
+                    "failed": len(results["failed"])
+                },
+                "batch_sort_details": results["successful"] + results["failed"],
+                "batch_sort_report.md": self._generate_report(results)
+            },
+            "messages": [AIMessage(content=self._format_summary(results))],
+            "task_is_complete": True
+        }
+```
+
+### Key Benefits
+
+1. **Atomic Execution** - All items processed in single graph node
+2. **Emergent Logic** - LLM decides actions per item (not hardcoded)
+3. **Granular Error Handling** - Tracks success/failure per item
+4. **No Graph Looping** - Avoids `recommended_next_specialist` complexity
+5. **Rich Observability** - Detailed artifacts with decision rationale
+
+### When to Use This Pattern
+
+✅ **Use Internal Iteration When:**
+- Processing collections (files, records, API calls)
+- Need emergent per-item decision making (LLM-driven)
+- Want atomic operations (all-or-partial success tracking)
+- Avoiding routing overhead and state complexity
+
+❌ **Don't Use When:**
+- Single item operations (use standard specialist)
+- Need graph-level visibility per item (use subgraph)
+- Items require different specialist types (use routing)
+
+### Testing Internal Iteration
+
+```python
+def test_batch_processor_partial_failure(batch_processor):
+    """Test that specialist handles partial failures gracefully."""
+    # Mock LLM to return plan with 3 files
+    batch_processor.llm_adapter.invoke.side_effect = [...]
+
+    # Mock MCP: first file exists, second doesn't, third exists
+    batch_processor.mcp_client.call.side_effect = [
+        True,   # file_exists file1
+        False,  # file_exists file2 - FAILS HERE
+        True,   # file_exists file3
+        None,   # create_directory
+        "Success"  # rename file1
+        None,   # create_directory
+        "Success"  # rename file3
+    ]
+
+    result = batch_processor.execute(state)
+
+    # Verify partial success
+    assert result["artifacts"]["batch_sort_summary"]["successful"] == 2
+    assert result["artifacts"]["batch_sort_summary"]["failed"] == 1
+    assert "file2" in str(result["artifacts"]["batch_sort_details"])
+```
+
+See [app/src/specialists/batch_processor_specialist.py](../app/src/specialists/batch_processor_specialist.py) for the complete implementation and [app/tests/specialists/test_batch_processor_specialist.py](../app/tests/specialists/test_batch_processor_specialist.py) for comprehensive test examples.
+
 ## Advanced: Creating a Procedural Specialist
 
 A "procedural" specialist is one that executes deterministic code, rather than making a conversational request to an LLM. This pattern is ideal for two scenarios:
