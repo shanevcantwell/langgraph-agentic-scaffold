@@ -122,14 +122,6 @@ promptInput.addEventListener('keydown', (e) => {
     }
 });
 
-// Clear prompt on focus if flagged (after workflow completion)
-promptInput.addEventListener('focus', () => {
-    if (promptInput.dataset.clearOnFocus === 'true') {
-        promptInput.value = '';
-        delete promptInput.dataset.clearOnFocus;
-    }
-});
-
 // File Upload Logic
 uploadBtn.addEventListener('click', () => fileInput.click());
 
@@ -322,10 +314,8 @@ async function executeWorkflow() {
         executeBtn.style.display = 'inline-block';
         cancelBtn.style.display = 'none';
 
-        // Don't clear prompt immediately - let user see what they asked
-        // Clear it when they click to type a new prompt
-        promptInput.dataset.clearOnFocus = 'true';
-        // Don't auto-focus - let user click when ready (prevents immediate clearing)
+        // Prompt remains visible for copy/paste or re-execution
+        // User can manually select all + delete to clear, or just type over it
 
         stopTracePolling();
         abortController = null;
