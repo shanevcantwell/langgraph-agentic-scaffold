@@ -44,16 +44,26 @@ class GraphOrchestrator:
         if context_plan_data:
             try:
                 plan = ContextPlan(**context_plan_data)
-                
-                # Check for clarification questions (faithfulness check)
-                for action in plan.actions:
-                    if action.type == "ask_user":
-                        logger.info("Triage produced 'ask_user' action. Routing to EndSpecialist for clarification.")
-                        return CoreSpecialist.END.value
 
-                if plan.actions:
-                    logger.info(f"Triage produced plan with {len(plan.actions)} actions. Routing to Facilitator.")
+                # Separate ask_user actions from context-gathering actions
+                ask_user_actions = [a for a in plan.actions if a.type == "ask_user"]
+                other_actions = [a for a in plan.actions if a.type != "ask_user"]
+
+                # If there are context-gathering actions, execute those first via Facilitator
+                # (even if ask_user is also present as a fallback)
+                if other_actions:
+                    logger.info(f"Triage produced plan with {len(other_actions)} context-gathering actions. Routing to Facilitator.")
                     return "facilitator_specialist"
+
+                # If ONLY ask_user actions exist (no context to gather), route to END for clarification
+                if ask_user_actions and not other_actions:
+                    logger.info("Triage produced only 'ask_user' actions (no context gathering possible). Routing to EndSpecialist for clarification.")
+                    return CoreSpecialist.END.value
+
+                # Empty plan (no actions at all) - route to Router
+                if not plan.actions:
+                    logger.info("Triage produced empty plan. Routing to Router.")
+                    return CoreSpecialist.ROUTER.value
             except Exception as e:
                 logger.error(f"Failed to parse ContextPlan in check_triage_outcome: {e}")
         

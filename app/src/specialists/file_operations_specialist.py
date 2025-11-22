@@ -72,7 +72,7 @@ class FileOperationsSpecialist(BaseSpecialist):
             }
 
         # Use LLM to parse user intent
-        messages = state.get("messages", [])
+        messages = self._get_enriched_messages(state)
         if not messages:
             return {
                 "messages": [AIMessage(content="Error: No user request to process.")],

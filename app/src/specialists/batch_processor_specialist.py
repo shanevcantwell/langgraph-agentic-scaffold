@@ -49,7 +49,7 @@ class BatchProcessorSpecialist(BaseSpecialist):
                 "task_is_complete": True
             }
 
-        messages = state.get("messages", [])
+        messages = self._get_enriched_messages(state)
         if not messages:
             return {
                 "messages": [AIMessage(content="Error: No batch operation request to process.")],

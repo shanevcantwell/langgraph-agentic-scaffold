@@ -101,7 +101,21 @@ class FacilitatorSpecialist(BaseSpecialist):
                         text=text_to_summarize
                     )
                     gathered_context.append(f"### Summary: {action.target}\n{summary}")
-                    
+
+                elif action.type == ContextActionType.LIST_DIRECTORY:
+                    # Call FileSpecialist to list directory contents
+                    items = self.mcp_client.call(
+                        service_name="file_specialist",
+                        function_name="list_files",
+                        path=action.target
+                    )
+                    # Format as bulleted list
+                    if isinstance(items, list):
+                        formatted_items = "\n".join([f"- {item}" for item in items])
+                    else:
+                        formatted_items = str(items)
+                    gathered_context.append(f"### Directory: {action.target}\n{formatted_items}")
+
             except Exception as e:
                 logger.error(f"Failed to execute action {action}: {e}")
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")

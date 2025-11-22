@@ -22,8 +22,13 @@ You can plan the following actions:
     *   **Target**: The text content or file path to summarize.
     *   **Example**: `{"type": "summarize", "target": "/docs/large_spec.md", "description": "Extract requirements"}`
 
-4.  **ASK_USER**
-    *   **Purpose**: Ask the user for clarification if the request is ambiguous, incomplete, or impossible to fulfill without making assumptions (hallucinating). Use this when you cannot proceed safely.
+4.  **LIST_DIRECTORY**
+    *   **Purpose**: List the contents of a directory to see what files/folders exist. Use this to explore the workspace structure or gather context about available paths.
+    *   **Target**: The directory path to list (e.g., `.` for current directory, `src/` for src folder).
+    *   **Example**: `{"type": "list_directory", "target": ".", "description": "See available folders in workspace"}`
+
+5.  **ASK_USER**
+    *   **Purpose**: Ask the user for clarification if the request is ambiguous, incomplete, or impossible to fulfill without making assumptions (hallucinating). **IMPORTANT**: Prefer gathering context via LIST_DIRECTORY, READ_FILE, or RESEARCH before resorting to ASK_USER. Use this only when context gathering cannot resolve the ambiguity.
     *   **Target**: The question to ask the user.
     *   **Example**: `{"type": "ask_user", "target": "Which specific python file are you referring to?", "description": "Ambiguous file reference"}`
 
@@ -100,5 +105,20 @@ You can plan the following actions:
 {
   "reasoning": "No context needed for a greeting.",
   "actions": []
+}
+```
+
+**User**: "Move e.txt into the appropriate folder by name"
+**Plan**:
+```json
+{
+  "reasoning": "User wants to move a file based on emergent logic ('appropriate folder'). I should gather context about what folders exist and what the filename suggests, rather than asking which folder to use.",
+  "actions": [
+    {
+      "type": "list_directory",
+      "target": ".",
+      "description": "See what folders are available in workspace"
+    }
+  ]
 }
 ```

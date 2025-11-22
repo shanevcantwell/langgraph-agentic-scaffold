@@ -21,13 +21,11 @@ class SystemsArchitect(BaseSpecialist):
         logger.info("---INITIALIZED SystemsArchitect---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        messages: List[BaseMessage] = state.get("messages", [])
-        
-        # This specialist should operate on the primary messages, not transient text.
-        contextual_messages = messages[:] 
+        # Get enriched messages (includes gathered_context if available)
+        messages: List[BaseMessage] = self._get_enriched_messages(state)
 
         request = StandardizedLLMRequest(
-            messages=contextual_messages,
+            messages=messages,
             output_model_class=SystemPlan
         )
 

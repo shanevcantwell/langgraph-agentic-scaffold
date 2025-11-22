@@ -19,30 +19,22 @@ class TriageArchitect(BaseSpecialist):
         if not self.llm_adapter:
             raise SpecialistError(f"LLM Adapter not attached to {self.specialist_name}")
 
-        # 1. Get user input
-        messages = state.get("messages", [])
-        
-        # Find the last HumanMessage to ensure we are processing the user's actual request,
-        # not a routing instruction from the Router (which is an AIMessage).
-        user_input = None
-        for msg in reversed(messages):
-            if isinstance(msg, HumanMessage):
-                user_input = msg.content
-                break
-        
-        if not user_input:
-            # Fallback: If no HumanMessage is found (unlikely), use the last message content
-            # but log a warning.
-            if messages:
-                logger.warning("TriageArchitect could not find a HumanMessage. Using last message content.")
-                user_input = messages[-1].content
-            else:
-                logger.warning("TriageArchitect received no messages.")
-                return {}
-            
+        # 1. Get enriched messages (includes gathered_context if available)
+        messages = self._get_enriched_messages(state)
+
+        if not messages:
+            logger.warning("TriageArchitect received no messages.")
+            return {}
+
         # Check for uploaded image (Blind Triage Support)
         if state.get("artifacts", {}).get("uploaded_image.png"):
-            user_input += "\n\n[SYSTEM NOTE: The user has uploaded an image. You cannot see it, but it is available in the artifacts. Do not ask for the image.]"
+            # Append image notification to last message
+            from langchain_core.messages import HumanMessage as HM
+            if messages and isinstance(messages[-1], HM):
+                last_content = messages[-1].content
+                messages = messages[:-1] + [
+                    HM(content=last_content + "\n\n[SYSTEM NOTE: The user has uploaded an image. You cannot see it, but it is available in the artifacts. Do not ask for the image.]")
+                ]
 
         # 2. Build Prompt
         prompt_file = self.specialist_config.get("prompt_file")
@@ -54,13 +46,10 @@ class TriageArchitect(BaseSpecialist):
                 system_prompt = self._get_fallback_prompt()
         else:
             system_prompt = self._get_fallback_prompt()
-        
-        # 3. Create Request
+
+        # 3. Create Request with system prompt + enriched conversation history
         request = StandardizedLLMRequest(
-            messages=[
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_input)
-            ],
+            messages=[SystemMessage(content=system_prompt)] + messages,
             tools=[ContextPlan],
             force_tool_call=True
         )

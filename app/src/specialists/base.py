@@ -37,6 +37,44 @@ class BaseSpecialist(ABC):
         """
         return True
 
+    def _get_enriched_messages(self, state: Dict[str, Any]):
+        """
+        Get messages with gathered_context injected if available.
+
+        For specialists that interpret user intent (parse requests, create plans,
+        route decisions), this ensures they have access to context gathered by
+        TriageArchitect/Facilitator before executing their logic.
+
+        Pattern: Append gathered_context as a HumanMessage to the conversation.
+        This provides the LLM with directory listings, file contents, search results,
+        or other contextual information that helps resolve ambiguous requests.
+
+        Usage:
+            # Instead of:
+            messages = state.get("messages", [])
+
+            # Use:
+            messages = self._get_enriched_messages(state)
+
+        Args:
+            state: The graph state containing messages and artifacts
+
+        Returns:
+            List of messages with gathered_context appended if present in artifacts
+        """
+        messages = state.get("messages", [])
+        artifacts = state.get("artifacts", {})
+        gathered_context = artifacts.get("gathered_context")
+
+        if gathered_context:
+            from langchain_core.messages import HumanMessage
+            messages = messages + [
+                HumanMessage(content=f"[Context gathered by the system]:\n\n{gathered_context}")
+            ]
+            logger.info(f"{self.__class__.__name__}: Injected gathered_context into LLM input")
+
+        return messages
+
     def execute(self, state: dict) -> Dict[str, Any]:
         """Public method to execute the specialist's task."""
         logger.info(f"--- Executing specialist: {self.specialist_name} ---")

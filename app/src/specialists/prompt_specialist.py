@@ -15,7 +15,8 @@ class PromptSpecialist(BaseSpecialist):
     A specialist that generates a direct, conversational response to the user's prompt.
     """
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        messages = state.get("messages", [])
+        # Get enriched messages (includes gathered_context if available)
+        messages = self._get_enriched_messages(state)
         if not messages:
             logger.warning("PromptSpecialist called with no messages. Returning empty response.")
             return {"messages": [create_llm_message(self.specialist_name, self.llm_adapter, "I have nothing to respond to.")]}
