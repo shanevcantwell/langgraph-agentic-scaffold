@@ -44,6 +44,9 @@ class GraphBuilder:
         from ..mcp import McpRegistry, McpClient
         self.mcp_registry = McpRegistry(self.config)
 
+        # ADR-MCP-003: External MCP (lazy initialization - call initialize_external_mcp() after build())
+        self.external_mcp_client = None
+
         self.specialists = self._load_and_configure_specialists()
 
         # TASK 1.2: Build allowed destinations for route validation
@@ -79,6 +82,108 @@ class GraphBuilder:
         compiled_graph = workflow.compile()
         logger.info(f"---GraphBuilder: Graph compiled successfully with entry point '{self.entry_point}'.---")
         return compiled_graph
+
+    async def initialize_external_mcp(self):
+        """
+        Initialize external MCP services (Docker containers, Node.js servers, etc).
+
+        Must be called AFTER build() and BEFORE first graph invocation.
+        This method is async because external MCP uses JSON-RPC protocol.
+
+        See ADR-MCP-003 for architecture details.
+
+        Usage:
+            ```python
+            graph_builder = GraphBuilder(config)
+            graph = graph_builder.build()
+
+            # Initialize external MCP (async)
+            await graph_builder.initialize_external_mcp()
+
+            # Now graph is ready
+            result = graph.invoke(state)
+            ```
+
+        Raises:
+            RuntimeError: If critical external MCP service fails to start
+            ImportError: If mcp package not installed
+        """
+        external_config = self.config.get("mcp", {}).get("external_mcp", {})
+
+        if not external_config or not external_config.get("enabled", False):
+            logger.info("External MCP not enabled in configuration")
+            return
+
+        from ..mcp import ExternalMcpClient
+
+        logger.info("Initializing external MCP services...")
+        self.external_mcp_client = ExternalMcpClient(self.config)
+
+        # Connect to configured services
+        services = external_config.get("services", {})
+        for service_name, service_config in services.items():
+            if not service_config.get("enabled", False):
+                logger.debug(f"External MCP service '{service_name}' is disabled")
+                continue
+
+            command = service_config.get("command")
+            args = service_config.get("args", [])
+            required = service_config.get("required", False)
+
+            if not command or not args:
+                logger.warning(
+                    f"External MCP service '{service_name}' missing command or args, skipping"
+                )
+                continue
+
+            try:
+                tools = await self.external_mcp_client.connect_service(
+                    service_name=service_name,
+                    command=command,
+                    args=args
+                )
+                logger.info(
+                    f"✓ External MCP service '{service_name}' connected successfully "
+                    f"({len(tools)} tools available)"
+                )
+
+            except Exception as e:
+                error_msg = (
+                    f"Failed to connect external MCP service '{service_name}': {e}\n"
+                    f"Command: {command} {' '.join(args)}"
+                )
+
+                if required:
+                    logger.error(f"CRITICAL: {error_msg}")
+                    # Cleanup any successfully connected services before failing
+                    await self.external_mcp_client.cleanup()
+                    raise RuntimeError(
+                        f"Critical external MCP service '{service_name}' failed to start. "
+                        "Application cannot continue. See logs for details."
+                    ) from e
+                else:
+                    logger.warning(f"Optional service unavailable: {error_msg}")
+
+        # Attach external_mcp_client to specialists that need it
+        # Currently all specialists get access (they can choose whether to use it)
+        for instance in self.specialists.values():
+            instance.external_mcp_client = self.external_mcp_client
+
+        logger.info(
+            f"External MCP initialization complete. "
+            f"Connected services: {self.external_mcp_client.get_connected_services()}"
+        )
+
+    async def cleanup_external_mcp(self):
+        """
+        Cleanup external MCP connections at shutdown.
+
+        Should be called during application shutdown to gracefully
+        close container connections.
+        """
+        if self.external_mcp_client:
+            await self.external_mcp_client.cleanup()
+            logger.info("External MCP cleanup complete")
 
     def _attach_llm_adapter(self, specialist_instance: BaseSpecialist):
         """

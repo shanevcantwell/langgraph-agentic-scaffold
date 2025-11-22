@@ -31,27 +31,44 @@ This is the main Python package for the application.
         -   `gradio_app.py`: Defines the UI layout and event handling.
         -   `api_client.py`: A dedicated client for communicating with the backend API, separating UI logic from API logic.
     -   `app/src/cli.py`: The command-line interface for interacting with the agent.
-    -   `app/src/specialists/`: The heart of the agentic system. Each `.py` file defines a `BaseSpecialist` subclass that encapsulates a specific skill (e.g., `file_specialist.py`, `web_builder.py`).
-        -   `base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from.
+    -   `app/src/specialists/`: The heart of the agentic system. Each `.py` file defines a `BaseSpecialist` subclass that encapsulates a specific skill. **Note**: The flat directory structure is maintained per ADR-CORE-013, pending MCP container migration. See categorized inventory below for discoverability.
+        -   `base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from. Includes `_get_enriched_messages()` helper for context injection.
         -   `helpers.py`: Provides helper functions to reduce boilerplate in specialists, such as creating standardized "self-correction" responses.
-        -   `archiver_specialist.py`: Specialist for archiving reports.
-        -   `critic_specialist.py`: Specialist for critiquing artifacts.
+
+        **File Operations** (4 specialists):
+        -   `file_specialist.py`: MCP service layer for file system operations (list, read, write, delete, rename). Procedural implementation.
+        -   `file_operations_specialist.py`: User-facing interface layer that interprets file operation requests via LLM tool calling, routes to `file_specialist` via MCP.
+        -   `batch_processor_specialist.py`: Handles batch file operations with internal iteration pattern (e.g., "move all txt files to appropriate folders").
+        -   `facilitator_specialist.py`: Executes context-gathering plans from Triage (LIST_DIRECTORY, READ_FILE, RESEARCH actions).
+
+        **Analysis & Data Processing** (5 specialists):
+        -   `text_analysis_specialist.py`: Specialist for text analysis.
         -   `data_extractor_specialist.py`: Specialist for extracting structured data.
         -   `data_processor_specialist.py`: Specialist for processing data.
-        -   `default_responder_specialist.py`: Specialist for default responses.
-        -   `end_specialist.py`: Specialist for ending the workflow.
-        -   `file_specialist.py`: Specialist for file system operations.
-        -   `hello_world.py`: Example specialist.
-        -   `open_interpreter_specialist.py`: Specialist for executing code via open-interpreter.
-        -   `prompt_specialist.py`: Specialist for general Q&A and instruction following.
-        -   `prompt_triage_specialist.py`: Specialist for pre-flight prompt checks.
-        -   `response_synthesizer_specialist.py`: Specialist for synthesizing final responses.
-        -   `router_specialist.py`: The master router and planner.
-        -   `sentiment_classifier_specialist.py`: Specialist for sentiment analysis.
         -   `structured_data_extractor.py`: Specialist for structured data extraction.
-        -   `systems_architect.py`: Specialist for creating high-level technical plans.
-        -   `text_analysis_specialist.py`: Specialist for text analysis.
-        -   `web_builder.py`: Specialist for generating HTML documents.
+        -   `sentiment_classifier_specialist.py`: Specialist for sentiment analysis.
+
+        **Communication & Response** (3 specialists):
+        -   `chat_specialist.py`: Conversational specialist for general Q&A (part of tiered chat subgraph).
+        -   `response_synthesizer_specialist.py`: Synthesizes final responses from multiple specialist outputs.
+        -   `default_responder_specialist.py`: Handles simple greetings and default responses.
+
+        **Workflow & Orchestration** (5 specialists):
+        -   `router_specialist.py`: The master router and planner. Decides which specialist to route to next.
+        -   `triage_architect.py`: Pre-flight context engineering. Creates plans for gathering context before routing (ContextPlan with LIST_DIRECTORY, READ_FILE, RESEARCH actions).
+        -   `prompt_triage_specialist.py`: Pre-flight prompt checks (deprecated/replaced by triage_architect).
+        -   `critic_specialist.py`: Critiques artifacts and provides revision feedback (generate-critique-refine subgraph pattern).
+        -   `end_specialist.py`: Centralized termination point. Synthesizes final response and triggers archival.
+
+        **Generation & Planning** (3 specialists):
+        -   `web_builder.py`: Generates HTML documents from specifications.
+        -   `systems_architect.py`: Creates high-level technical plans and architectural designs.
+        -   `prompt_specialist.py`: General Q&A and instruction following specialist.
+
+        **Utilities** (3 specialists):
+        -   `archiver_specialist.py`: Archives workflow completion reports to `./logs/archive/*.md` with state snapshots.
+        -   `open_interpreter_specialist.py`: Executes code via open-interpreter framework (may migrate to MCP container).
+        -   `hello_world.py`: Example specialist for onboarding and testing.
         -   `schemas/`: A Python package containing all Pydantic models that define the data contracts for specialist inputs and outputs.
             -   `__init__.py`: Exposes all schemas for clean, unified imports.
             -   `_archiver.py`: Schema for archiver specialist.

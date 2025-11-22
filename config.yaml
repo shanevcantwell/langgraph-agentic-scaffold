@@ -43,10 +43,37 @@ workflow:
 # through the graph. This reduces latency and LLM costs for deterministic operations.
 # ==============================================================================
 mcp:
+  # --- Internal MCP (Python function calls) ---
   # Toggle LangSmith trace spans for MCP calls (kill switch for tracing overhead)
   tracing_enabled: true
   # Maximum execution time per MCP call (prevents hanging on slow operations)
   timeout_seconds: 5
+
+  # --- External MCP (Containerized services) - ADR-MCP-003 ---
+  # Configuration for external MCP servers (Node.js, Docker containers, etc.)
+  # See docs/ADR/ADR-MCP-003-External-MCP-Container-Integration.md for details
+  external_mcp:
+    # Global enable/disable for all external MCP services
+    enabled: false  # Set to true to enable external MCP containers
+    # Toggle LangSmith trace spans for external MCP calls
+    tracing_enabled: true
+    # Configuration for individual external MCP services
+    services:
+      # Example: Filesystem MCP server (Node.js container)
+      # Uncomment and configure to use external filesystem operations
+      # filesystem:
+      #   enabled: false
+      #   required: false  # If true, application fails to start if container unavailable
+      #   command: "docker"
+      #   args:
+      #     - "run"
+      #     - "-i"           # REQUIRED: Interactive mode for stdin connectivity
+      #     - "--rm"         # Auto-remove container when stopped
+      #     - "-v"
+      #     - "${WORKSPACE_PATH}:/projects"  # Mount workspace into container
+      #     - "mcp/filesystem"               # Container image name
+      #     - "/projects"                    # Allowed directory for filesystem server
+      #   # Security: Only mount necessary directories, consider read-only (:ro) for sandboxing
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION

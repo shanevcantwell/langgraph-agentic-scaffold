@@ -561,3 +561,429 @@ def test_mcp_file_exists(initialized_specialist_factory):
 3. **Log MCP errors with context** - Include file paths, specialist name, operation
 4. **Use meaningful parameter names** - Improves trace readability
 5. **Prefer MCP over graph routing for synchronous ops** - Lower latency, no LLM cost
+
+---
+
+## 9.0 External MCP Containers (ADR-MCP-003)
+
+External MCP enables integration with containerized MCP servers (Node.js, Go, Python) running in Docker. This unlocks the broader MCP ecosystem including community-built servers for filesystems, databases, APIs, and more.
+
+### Architecture: Dual-Client Pattern
+
+```
+┌──────────────────────────────────────────────────────────┐
+│                 Specialist (BaseSpecialist)              │
+│                                                          │
+│  ┌──────────────────┐         ┌──────────────────────┐  │
+│  │  Internal MCP    │         │  External MCP        │  │
+│  │  (McpClient)     │         │  (ExternalMcpClient) │  │
+│  │                  │         │                      │  │
+│  │  - Sync Python   │         │  - Async JSON-RPC    │  │
+│  │  - In-process    │         │  - Subprocesses      │  │
+│  │  - No overhead   │         │  - Containers        │  │
+│  └────────┬─────────┘         └─────────┬────────────┘  │
+│           │                             │                │
+│           ▼                             ▼                │
+│  ┌──────────────────┐         ┌──────────────────────┐  │
+│  │  McpRegistry     │         │  Container Pool      │  │
+│  │  (service→func)  │         │  (service→session)   │  │
+│  └──────────────────┘         └──────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+**Key Differences:**
+- **Internal MCP**: Python function calls (fast, in-process)
+- **External MCP**: JSON-RPC over stdio (async, containerized)
+- **Both**: Available to all specialists, explicitly chosen per call
+
+### 9.1 Configuration
+
+**Enable in `config.yaml`:**
+
+```yaml
+mcp:
+  # Internal MCP (existing)
+  tracing_enabled: true
+  timeout_seconds: 5
+
+  # External MCP (new)
+  external_mcp:
+    enabled: true  # Global enable/disable
+    tracing_enabled: true
+    services:
+      # Filesystem MCP server (Node.js container)
+      filesystem:
+        enabled: true
+        required: false  # Fail-fast if true and container unavailable
+        command: "docker"
+        args:
+          - "run"
+          - "-i"           # REQUIRED: Interactive mode for stdin
+          - "--rm"         # Auto-remove container when stopped
+          - "-v"
+          - "${WORKSPACE_PATH}:/projects"  # Mount workspace
+          - "mcp/filesystem"               # Container image
+          - "/projects"                    # Allowed directory
+```
+
+**Container Setup:**
+
+The official MCP filesystem server is available at:
+https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+
+Build the container:
+```bash
+# Clone the MCP servers repository
+git clone https://github.com/modelcontextprotocol/servers.git
+cd servers
+
+# Build filesystem server Docker image
+docker build -t mcp/filesystem -f src/filesystem/Dockerfile .
+```
+
+### 9.2 Initialization
+
+External MCP containers are initialized at application startup:
+
+```python
+# In application startup (e.g., runner.py, api.py)
+async def startup():
+    # 1. Build graph
+    graph_builder = GraphBuilder(config)
+    graph = graph_builder.build()
+
+    # 2. Initialize external MCP (async)
+    await graph_builder.initialize_external_mcp()
+
+    # 3. Graph is now ready with both internal and external MCP
+    return graph
+
+# At shutdown
+async def shutdown(graph_builder):
+    await graph_builder.cleanup_external_mcp()
+```
+
+**Startup Logs:**
+```
+INFO: Initializing external MCP services...
+INFO: Connecting to external MCP service 'filesystem'...
+DEBUG: Command: docker run -i --rm -v /app:/projects mcp/filesystem /projects
+INFO: ✓ External MCP service 'filesystem' connected successfully (7 tools available)
+INFO: External MCP initialization complete. Connected services: ['filesystem']
+```
+
+### 9.3 Using External MCP in Specialists
+
+**From Sync Code (Current Specialists):**
+
+```python
+from ..mcp import sync_call_external_mcp
+
+class MySpecialist(BaseSpecialist):
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Check if external MCP client is available
+        if not self.external_mcp_client:
+            logger.warning("External MCP not available, using fallback")
+            return self._fallback_logic(state)
+
+        # Call external MCP filesystem server
+        try:
+            files = sync_call_external_mcp(
+                self.external_mcp_client,
+                "filesystem",
+                "list_directory",
+                {"path": "/projects"}
+            )
+
+            content = sync_call_external_mcp(
+                self.external_mcp_client,
+                "filesystem",
+                "read_file",
+                {"path": "/projects/data.txt"}
+            )
+
+            return {
+                "artifacts": {
+                    "files": files,
+                    "content": content
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"External MCP call failed: {e}")
+            return {"error": str(e)}
+```
+
+**From Async Code (Future):**
+
+```python
+class MyAsyncSpecialist(BaseSpecialist):
+    async def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Direct async call (no bridging needed)
+        files = await self.external_mcp_client.call_tool(
+            "filesystem",
+            "list_directory",
+            {"path": "/projects"}
+        )
+
+        return {"artifacts": {"files": files}}
+```
+
+### 9.4 Available External MCP Servers
+
+**Filesystem Server** (Official):
+- **Image**: `mcp/filesystem`
+- **Tools**: read_file, write_file, list_directory, create_directory, move_file, search_files, get_file_info
+- **Use Case**: File operations with security boundaries
+- **Repo**: https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem
+
+**Community Servers** (Examples from MCP Toolkit):
+- **PostgreSQL**: Database queries with read-only access
+- **Slack**: Interact with Slack workspaces
+- **Puppeteer**: Browser automation and web scraping
+- **DuckDuckGo**: Web search capabilities
+- **Memory**: Knowledge graph-based persistent memory
+- **YouTube Transcripts**: Retrieve transcripts for videos
+
+**Building Custom Servers:**
+- Use official MCP SDK (Node.js, Python, Go)
+- Follow stdio transport protocol
+- Expose tools via JSON-RPC
+- See: https://modelcontextprotocol.io/docs/develop/build-server
+
+### 9.5 BatchProcessor + External MCP
+
+The `BatchProcessorSpecialist` can orchestrate external MCP operations with internal iteration:
+
+```python
+class BatchProcessorSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Phase 1: LLM determines which files to process
+        batch_plan = self._generate_batch_plan(state)
+
+        # Phase 2: Execute via external MCP (internal iteration)
+        results = {"successful": [], "failed": []}
+
+        for file_path in batch_plan.file_paths:
+            try:
+                # Call external filesystem MCP
+                content = sync_call_external_mcp(
+                    self.external_mcp_client,
+                    "filesystem",
+                    "read_file",
+                    {"path": file_path}
+                )
+
+                # Process content
+                processed = self._process_content(content)
+
+                # Write back via external MCP
+                sync_call_external_mcp(
+                    self.external_mcp_client,
+                    "filesystem",
+                    "write_file",
+                    {"path": f"/projects/output/{file_path}", "content": processed}
+                )
+
+                results["successful"].append(file_path)
+
+            except Exception as e:
+                results["failed"].append({"file": file_path, "error": str(e)})
+
+        # Phase 3: Return consolidated results
+        return {
+            "artifacts": {
+                "batch_summary": results,
+                "total": len(batch_plan.file_paths),
+                "successful": len(results["successful"])
+            },
+            "task_is_complete": True
+        }
+```
+
+**Benefits:**
+- **Emergent logic**: LLM decides which files and destinations
+- **Atomic execution**: Single graph node processes entire batch
+- **External operations**: Leverages containerized MCP tools
+- **Error resilience**: Continues processing on individual failures
+
+### 9.6 Troubleshooting External MCP
+
+**Common Errors:**
+
+**1. `ImportError: MCP Python SDK not installed`**
+- **Cause**: `mcp` package not in dependencies
+- **Solution**: `pip install mcp` or run `bash scripts/sync-reqs.sh`
+
+**2. `RuntimeError: External MCP service 'filesystem' connection failed`**
+- **Cause**: Docker container failed to start
+- **Solutions**:
+  - Verify Docker is running: `docker ps`
+  - Check image exists: `docker images | grep mcp/filesystem`
+  - Build image if missing (see Section 9.1)
+  - Check volume mount path: ensure `WORKSPACE_PATH` is valid
+  - Review container logs: `docker logs <container_id>`
+
+**3. `RuntimeError: External MCP tool call failed`**
+- **Cause**: Container crashed or tool doesn't exist
+- **Solutions**:
+  - List available tools: `await external_mcp_client.list_tools("filesystem")`
+  - Check container health: `await external_mcp_client.health_check("filesystem")`
+  - Review container stderr in application logs
+
+**4. `ValueError: External MCP service 'filesystem' not connected`**
+- **Cause**: Service not initialized or initialization failed
+- **Solutions**:
+  - Check startup logs for initialization errors
+  - Verify `enabled: true` in config.yaml
+  - Ensure `await graph_builder.initialize_external_mcp()` was called
+
+**Debugging Strategies:**
+
+**1. Enable Debug Logging:**
+```yaml
+# config.yaml
+mcp:
+  external_mcp:
+    tracing_enabled: true  # LangSmith traces
+```
+
+**2. Check Connected Services:**
+```python
+# In specialist or test
+if self.external_mcp_client:
+    services = self.external_mcp_client.get_connected_services()
+    logger.info(f"Connected external MCP services: {services}")
+```
+
+**3. Test Container Manually:**
+```bash
+# Test filesystem container outside application
+docker run -i --rm -v $(pwd):/projects mcp/filesystem /projects
+# Then send JSON-RPC messages via stdin
+```
+
+**4. Health Check:**
+```python
+# Verify service is alive
+is_alive = await external_mcp_client.health_check("filesystem")
+if not is_alive:
+    logger.error("Filesystem service not responding")
+```
+
+### 9.7 Security Considerations
+
+**Container Isolation:**
+- Only mount necessary directories (workspace, not root)
+- Use read-only mounts where possible: `-v ${WORKSPACE_PATH}:/projects:ro`
+- Leverage filesystem server's `allowed_directories` enforcement
+
+**Docker Socket Access:**
+- Required for launching containers from within `langgraph-app` container
+- Grants significant privileges - review security implications
+- Consider dedicated MCP container launcher service for production
+
+**Network Isolation:**
+- stdio transport (no network exposure)
+- Containers cannot access external network unless explicitly configured
+
+**Resource Limits:**
+```yaml
+# Add to args in config.yaml
+args:
+  - "--memory=512m"      # Limit container memory
+  - "--cpus=1.0"         # Limit CPU usage
+  - "--cap-drop=ALL"     # Drop all Linux capabilities
+```
+
+### 9.8 Performance Considerations
+
+**Startup Latency:**
+- Container launch: 1-3 seconds per service
+- Mitigated by long-lived connections (launched once at startup)
+
+**Call Latency:**
+- stdio transport: ~10-50ms overhead vs internal MCP
+- File I/O: Dominated by actual operation (read/write), not transport
+- JSON-RPC serialization: Negligible (<1ms)
+
+**Concurrency:**
+- Current: Sync wrapper blocks during async calls
+- Future: Async migration enables parallel external MCP calls
+
+**Best Practices:**
+1. **Reuse connections**: Don't restart containers per request
+2. **Batch operations**: Use internal iteration to minimize round-trips
+3. **Monitor latency**: LangSmith traces show external MCP overhead
+4. **Health checks**: Detect dead containers early (future enhancement)
+
+### 9.9 Migration Path: Internal → External MCP
+
+**Step 1: Dual Support (Fallback)**
+```python
+class FileOperationsSpecialist(BaseSpecialist):
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Try external MCP first
+        if self.external_mcp_client:
+            try:
+                return self._external_file_operation(state)
+            except Exception as e:
+                logger.warning(f"External MCP failed, falling back to internal: {e}")
+
+        # Fallback to internal MCP
+        return self._internal_file_operation(state)
+```
+
+**Step 2: Gradual Migration**
+- Start with non-critical operations (read_file)
+- Monitor stability and performance
+- Migrate write operations after validation
+
+**Step 3: Deprecate Internal**
+- Mark internal implementation as deprecated
+- Remove fallback after external MCP proves stable
+
+**Example: FileSpecialist Migration**
+- **Current**: Internal Python MCP service
+- **Future**: External filesystem MCP container
+- **Benefit**: Reduced specialist count (ADR-CORE-013)
+
+---
+
+## 10.0 Quick Reference
+
+### Internal MCP (Python)
+```python
+# Call internal Python MCP service
+result = self.mcp_client.call("file_specialist", "read_file", path="/workspace/data.txt")
+```
+
+### External MCP (Containers)
+```python
+# Call external containerized MCP service
+result = sync_call_external_mcp(
+    self.external_mcp_client,
+    "filesystem",
+    "read_file",
+    {"path": "/projects/data.txt"}
+)
+```
+
+### Service Discovery
+```python
+# Internal MCP
+services = self.mcp_client.list_services()
+
+# External MCP
+services = self.external_mcp_client.get_connected_services()
+tools = await self.external_mcp_client.list_tools("filesystem")
+```
+
+---
+
+**For More Information:**
+- **ADR-MCP-003**: [External MCP Container Integration](ADR/ADR-MCP-003-External-MCP-Container-Integration.md)
+- **ADR-CORE-014**: [Async Graph Execution Migration](ADR/ADR-CORE-014-Async-Graph-Execution-Migration.md)
+- **MCP Specification**: https://modelcontextprotocol.io/
+- **MCP Python SDK**: https://github.com/modelcontextprotocol/python-sdk
+- **Official MCP Servers**: https://github.com/modelcontextprotocol/servers
