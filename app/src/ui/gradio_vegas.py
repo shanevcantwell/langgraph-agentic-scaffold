@@ -410,7 +410,7 @@ def create_ui(api_client: ApiClient):
     setTimeout(setupEnterKeyBehavior, 100);
     """
 
-    with gr.Blocks(theme=gr.themes.Monochrome(), title="LAS VEGAS Terminal", css=VEGAS_CSS, js=custom_js) as demo:
+    with gr.Blocks(title="LAS VEGAS Terminal") as demo:
 
         # Header
         gr.Markdown("# 🖥️ V.E.G.A.S. TERMINAL")

@@ -57,7 +57,6 @@ proxy/*
 !proxy/squid.conf.example
 audit_manifest.md
 .continue/*
-.claude/CLAUDE.md
 finetuning_data*.json*
 run_finetune.sh
 scripts/create_finetuning_data.py

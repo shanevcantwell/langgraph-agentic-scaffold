@@ -214,6 +214,22 @@ class ExternalMcpClient:
         try:
             result = await session.call_tool(tool_name, arguments=arguments)
 
+            # Check if result indicates an error
+            if hasattr(result, 'isError') and result.isError:
+                # Extract error message from content
+                error_msg = "Unknown error"
+                if hasattr(result, 'content') and result.content:
+                    if isinstance(result.content, list) and len(result.content) > 0:
+                        error_msg = result.content[0].text if hasattr(result.content[0], 'text') else str(result.content[0])
+                    else:
+                        error_msg = str(result.content)
+
+                raise RuntimeError(
+                    f"External MCP tool call failed: {service_name}.{tool_name}()\n"
+                    f"Error: {error_msg}\n"
+                    "This is a fail-fast error (no fallback in Stage 1)."
+                )
+
             if self.tracing_enabled:
                 logger.debug(
                     f"✓ External MCP call succeeded: {service_name}.{tool_name}()"
@@ -221,6 +237,9 @@ class ExternalMcpClient:
 
             return result
 
+        except RuntimeError:
+            # Re-raise RuntimeError from isError check above
+            raise
         except Exception as e:
             logger.error(
                 f"External MCP call failed: {service_name}.{tool_name}({arguments}) - {e}",
