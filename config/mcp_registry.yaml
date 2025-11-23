@@ -1,0 +1,104 @@
+# MCP Service Registry
+# Curated list of known MCP servers that can be added to LAS via add_mcp_service.py script
+#
+# Each entry defines:
+# - source: Where the server comes from (npm, docker, github)
+# - package: Package name or Docker image
+# - dockerfile_template: Which Dockerfile template to use for building
+# - env_vars: Required environment variables (API keys, config)
+# - args: Command-line arguments to pass to the MCP server
+# - volumes: Docker volume mounts needed
+# - description: Human-readable description
+
+available_servers:
+  # ===================================================================
+  # OFFICIAL MCP SERVERS (from modelcontextprotocol/servers)
+  # ===================================================================
+
+  brave-search:
+    source: "npm"
+    package: "@modelcontextprotocol/server-brave-search"
+    dockerfile_template: "node-mcp"
+    env_vars:
+      - BRAVE_API_KEY
+    args: []  # API key passed via environment variable
+    volumes: []
+    description: "Web search using Brave Search API. Requires BRAVE_API_KEY from https://brave.com/search/api/"
+    docs_url: "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search"
+
+  fetch:
+    source: "npm"
+    package: "@modelcontextprotocol/server-fetch"
+    dockerfile_template: "node-mcp"
+    env_vars: []
+    args: []
+    volumes: []
+    description: "HTTP fetching for web content. No API key required. Useful for retrieving web pages, APIs, and structured data."
+    docs_url: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+
+  puppeteer:
+    source: "npm"
+    package: "@modelcontextprotocol/server-puppeteer"
+    dockerfile_template: "node-mcp"
+    env_vars: []
+    args: []
+    volumes: []
+    description: "Browser automation for web scraping and interaction. Renders JavaScript, takes screenshots, interacts with dynamic content."
+    docs_url: "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer"
+    notes: "Requires additional Chrome/Chromium dependencies in Docker image"
+
+  filesystem:
+    source: "npm"
+    package: "@modelcontextprotocol/server-filesystem"
+    dockerfile_template: "node-mcp"
+    env_vars: []
+    args:
+      - "/projects"  # Allowed directory path
+    volumes:
+      - "${WORKSPACE_PATH}:/projects"
+    description: "Secure file operations with directory boundaries. Already configured in LAS by default."
+    docs_url: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+    notes: "This is already installed - use as reference for other services"
+
+  postgres:
+    source: "npm"
+    package: "@modelcontextprotocol/server-postgres"
+    dockerfile_template: "node-mcp"
+    env_vars:
+      - POSTGRES_CONNECTION_STRING
+    args: []
+    volumes: []
+    description: "PostgreSQL database operations. Requires POSTGRES_CONNECTION_STRING (e.g., postgresql://user:pass@host:5432/db)"
+    docs_url: "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+
+  sqlite:
+    source: "npm"
+    package: "@modelcontextprotocol/server-sqlite"
+    dockerfile_template: "node-mcp"
+    env_vars: []
+    args:
+      - "/data/database.db"
+    volumes:
+      - "${WORKSPACE_PATH}/data:/data"
+    description: "SQLite database operations. Useful for local data storage and querying."
+    docs_url: "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+
+  # ===================================================================
+  # FUTURE: Community MCP Servers
+  # Add more as Docker Hub ecosystem grows
+  # ===================================================================
+
+  # Example template for adding new servers:
+  #
+  # example-server:
+  #   source: "npm"  # or "docker" for pre-built images
+  #   package: "@org/server-name"
+  #   dockerfile_template: "node-mcp"  # or "python-mcp" or "prebuilt"
+  #   env_vars:
+  #     - API_KEY_NAME
+  #   args:
+  #     - "--option=value"
+  #   volumes:
+  #     - "${WORKSPACE_PATH}/data:/data"
+  #   description: "What this server does"
+  #   docs_url: "https://github.com/..."
