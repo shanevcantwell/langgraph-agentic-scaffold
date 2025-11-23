@@ -268,6 +268,108 @@ def test_router_respects_specialist_cannot_proceed(initialized_app):
                         )
 
 
+@pytest.mark.integration
+def test_context_aware_routing_prevents_loop(initialized_app):
+    """
+    End-to-end test verifying context-aware routing prevents infinite loop.
+
+    Scenario (regression test for router loop bug):
+    - User sends research query
+    - Router → triage_architect (analyzes request)
+    - Router → facilitator_specialist (executes context gathering)
+    - facilitator_specialist creates gathered_context artifact
+    - Router sees gathered_context → excludes triage/facilitator from menu
+    - Router → chat_specialist or researcher_specialist (NOT back to triage)
+    - Workflow completes successfully
+
+    BEFORE FIX:
+    - User → Triage → Facilitator → Router → Triage → [LOOP DETECTION ERROR]
+
+    AFTER FIX:
+    - User → Triage → Facilitator → Router → Chat/Researcher → End [SUCCESS]
+
+    This test verifies the fix in router_specialist.py:_get_available_specialists()
+    that excludes planning specialists when gathered_context artifact exists.
+    """
+    app = initialized_app
+
+    with TestClient(app) as client:
+        # Research query that triggers triage → facilitator flow
+        payload = {
+            "input_prompt": "Research: winter weather patterns in Pueblo, CO",
+            "text_to_process": None,
+            "image_to_process": None
+        }
+
+        response = client.post("/v1/graph/invoke", json=payload)
+        assert response.status_code == 200
+
+        result = response.json()
+        final_state = result["final_output"]
+
+        # CRITICAL: Verify no loop detection error
+        scratchpad = final_state.get("scratchpad", {})
+        assert scratchpad.get("termination_reason") is None, (
+            f"Workflow should not be halted by loop detection. "
+            f"Termination reason: {scratchpad.get('termination_reason')}"
+        )
+
+        # Verify no error report
+        assert final_state.get("error_report") is None, (
+            f"Workflow should complete without errors. Error: {final_state.get('error_report')}"
+        )
+
+        # Verify routing history shows correct flow
+        routing_history = final_state.get("routing_history", [])
+
+        # Should have triage and facilitator in history
+        assert "triage_architect" in routing_history, (
+            f"Expected triage_architect in routing history. Got: {routing_history}"
+        )
+        assert "facilitator_specialist" in routing_history, (
+            f"Expected facilitator_specialist in routing history. Got: {routing_history}"
+        )
+
+        # CRITICAL: After facilitator runs, should NOT route back to triage_architect
+        facilitator_indices = [i for i, spec in enumerate(routing_history) if spec == "facilitator_specialist"]
+        if facilitator_indices:
+            last_facilitator_idx = facilitator_indices[-1]
+            # Check all specialists after last facilitator execution
+            specialists_after_facilitator = routing_history[last_facilitator_idx + 1:]
+
+            # Filter out router and check_task_completion (those are orchestration nodes)
+            actual_specialists_after = [
+                s for s in specialists_after_facilitator
+                if s not in ["router_specialist", "check_task_completion"]
+            ]
+
+            # CRITICAL: triage_architect should NOT appear after facilitator completed
+            assert "triage_architect" not in actual_specialists_after, (
+                f"Router should NOT route back to triage_architect after context gathering complete. "
+                f"Routing history: {routing_history}"
+            )
+
+            # CRITICAL: facilitator_specialist should NOT appear again after completing
+            assert "facilitator_specialist" not in actual_specialists_after, (
+                f"Router should NOT route back to facilitator_specialist after context gathering complete. "
+                f"Routing history: {routing_history}"
+            )
+
+        # Verify workflow completed successfully
+        assert final_state.get("task_is_complete") is not False, (
+            "Workflow should complete successfully"
+        )
+
+        # Verify no unproductive loop patterns (same specialist 3+ times consecutively)
+        for i in range(len(routing_history) - 2):
+            if (routing_history[i] == routing_history[i+1] == routing_history[i+2] and
+                routing_history[i] not in ["router_specialist", "check_task_completion"]):
+                pytest.fail(
+                    f"Unproductive loop detected: {routing_history[i]} repeated 3 times consecutively. "
+                    f"Routing history: {routing_history}"
+                )
+
+
 # ============================================================================
 # FIXTURE: Initialized FastAPI App
 # ============================================================================
