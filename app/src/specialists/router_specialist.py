@@ -35,12 +35,40 @@ class RouterSpecialist(BaseSpecialist):
     def _get_available_specialists(self, state: Dict[str, Any]) -> Dict[str, Dict]:
         """Returns the full list of specialists available for routing.
 
-        NOTE: This always returns the COMPLETE specialist map. Triage recommendations
-        are provided as advisory context in the LLM prompt (see _get_llm_choice),
-        but do NOT restrict the router's choices. This prevents triage errors from
-        blocking correct routing decisions.
+        ADR-CORE-016: Menu Filter Pattern (Tier 1)
+        - Checks scratchpad for forbidden_specialists list (populated by InvariantMonitor on loop detection)
+        - Removes forbidden specialists from returned menu (hard constraint, P=0)
+        - Triage recommendations remain advisory context in LLM prompt (soft constraint)
+
+        Returns:
+            Dictionary of available specialists (filtered if menu filter active)
         """
-        return self.specialist_map
+        all_specialists = self.specialist_map
+
+        # ADR-CORE-016: Check for Menu Filter activation
+        scratchpad = state.get("scratchpad", {})
+        forbidden_specialists = scratchpad.get("forbidden_specialists")
+
+        if not forbidden_specialists:
+            # No menu filter active - return full specialist map
+            return all_specialists
+
+        # Apply Menu Filter: Remove forbidden specialists
+        filtered_specialists = {
+            name: spec
+            for name, spec in all_specialists.items()
+            if name not in forbidden_specialists
+        }
+
+        # Safety Check: Don't return an empty menu!
+        if not filtered_specialists:
+            logger.error(f"Menu Filter Error: All specialists forbidden ({forbidden_specialists}). Escalating to END.")
+            # If we filtered everything, return only end_specialist as fallback
+            # This should trigger circuit breaker in practice, but prevents hard crash
+            return {CoreSpecialist.END.value: all_specialists.get(CoreSpecialist.END.value, {})}
+
+        logger.info(f"Menu Filter active: Removed {forbidden_specialists} from routing options ({len(filtered_specialists)} specialists remain)")
+        return filtered_specialists
 
     def _handle_llm_failure(self) -> Dict[str, Any]:
         """Provides a robust fallback mechanism if the LLM fails to make a decision."""
