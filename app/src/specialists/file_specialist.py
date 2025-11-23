@@ -41,6 +41,10 @@ class FileSpecialist(BaseSpecialist):
         if not self.root_dir.is_absolute():
             self.root_dir = Path.cwd() / self.root_dir
 
+        # SECURITY: Resolve to canonical path to prevent symlink/traversal bypasses
+        # Ensures both root_dir and validated paths use same canonical representation
+        self.root_dir = self.root_dir.resolve()
+
         self.root_dir.mkdir(parents=True, exist_ok=True)
         logger.info(f"FileSpecialist initialized with root_dir: {self.root_dir}")
 
