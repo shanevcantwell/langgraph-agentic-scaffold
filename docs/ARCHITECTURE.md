@@ -63,6 +63,129 @@ def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
 - Artifacts provide structured cross-specialist contracts
 - Clear boundaries prevent specialist-specific fields from polluting root state
 
+## 2.2 Triage Recommendations Flow
+
+The system implements an **advisory routing guidance pattern** where the `TriageArchitect` specialist analyzes the user's request and recommends appropriate specialists to handle the task after context gathering completes.
+
+### Architecture Overview
+
+**Flow Diagram:**
+```
+User Request
+    ↓
+TriageArchitect (analyzes request, creates ContextPlan)
+    ├─ actions: [RESEARCH, READ_FILE, etc.]
+    └─ recommended_specialists: ["researcher_specialist", "chat_specialist"]  ← Advisory guidance
+    ↓
+FacilitatorSpecialist (executes actions, gathers context)
+    ↓
+RouterSpecialist (receives recommendations, makes final decision)
+    ├─ Filters recommendations against available menu
+    ├─ Distinguishes advisory vs. dependency requirements
+    └─ Routes to appropriate specialist
+```
+
+### Key Components
+
+**1. ContextPlan Schema** (`app/src/interface/context_schema.py`):
+```python
+class ContextPlan(BaseModel):
+    actions: List[ContextAction] = Field(default_factory=list)
+    reasoning: str = Field(..., description="Why these actions are needed")
+    recommended_specialists: List[str] = Field(
+        default_factory=list,
+        description="Specialists recommended to handle the user's request"
+    )
+```
+
+**2. TriageArchitect** (`app/src/specialists/triage_architect.py`):
+- Analyzes user request and creates structured ContextPlan
+- Recommends 1-3 specialists based on task type
+- Populates `scratchpad.recommended_specialists` for router consumption
+
+**3. RouterSpecialist Recommendation Handling** (`app/src/specialists/router_specialist.py`):
+- Receives recommendations from `scratchpad.recommended_specialists`
+- Filters recommendations against currently available specialists
+- Excludes planning specialists (triage/facilitator) after context gathering
+- Distinguishes between:
+  - **Advisory recommendations** (from triage): Guidance, not mandatory
+  - **Dependency requirements** (from failed specialists): Hard requirements
+
+### Advisory vs. Dependency Distinction
+
+**Advisory Recommendations (Triage):**
+```
+Router Prompt:
+"TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY):
+The triage specialist recommends considering: researcher_specialist, chat_specialist
+These are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
+```
+
+**Dependency Requirements (Specialist Error):**
+```
+Router Prompt:
+"Dependency Requirement:
+The 'text_analysis_specialist' cannot proceed without artifacts from 'file_specialist'.
+Please route to 'file_specialist' to satisfy this dependency."
+```
+
+The distinction is determined by checking `routing_history`:
+- If last non-planning specialist made the recommendation → Dependency (mandatory)
+- Otherwise → Advisory (guidance only)
+
+### Context-Aware Routing
+
+After context gathering completes (`gathered_context` artifact exists):
+1. Planning specialists (`triage_architect`, `facilitator_specialist`) excluded from routing menu
+2. Recommendations filtered to only include available specialists
+3. "CONTEXT GATHERING COMPLETE" note added to router prompt
+4. Router chooses from filtered menu with filtered recommendations
+
+### Example: Web Search Request
+
+**Before Fix (Gemini 3.0 Migration Lost Recommendations):**
+```
+User: "Research winter weather in Colorado"
+├─ Triage: ❌ No recommendations set
+├─ Facilitator: Gathers context
+└─ Router: Blind choice from 15 specialists → text_analysis × 3 → LOOP DETECTED
+```
+
+**After Fix (Recommendations Restored):**
+```
+User: "Research winter weather in Colorado"
+├─ Triage: ✅ recommends ["researcher_specialist"]
+├─ Facilitator: Gathers context
+└─ Router: Sees recommendation → researcher_specialist ✅ → END
+```
+
+### Testing
+
+**Unit Tests:**
+- `test_context_schema.py`: ContextPlan validation (7 tests)
+- `test_triage_architect.py`: Recommendation population (4 new tests)
+- `test_router_specialist.py`: Recommendation filtering (2 new tests)
+
+**Integration Test:**
+- `test_triage_routing_flow.py`: Full flow regression test
+
+### Design Rationale
+
+**Why Advisory vs. Mandatory?**
+- Preserves router's autonomy for complex reasoning
+- Triage provides guidance based on initial analysis
+- Router can override with stronger context-specific reasoning
+- Dependencies from failed specialists are hard requirements (must satisfy to proceed)
+
+**Why Filter Recommendations After Context Gathering?**
+- Planning specialists (`triage_architect`, `facilitator_specialist`) complete their job
+- Prevents router from choosing excluded specialists
+- Ensures recommendations match available menu
+- Prevents validation failures and default_responder fallbacks
+
+**Migration Note:**
+This pattern was lost during the Triage → TriageArchitect refactoring (likely Gemini 3.0 migration). The `recommended_specialists` field was removed from the ContextPlan schema, causing routers to make blind choices after context gathering. The fix restores this critical routing guidance mechanism.
+
 ## 3.0 Architectural Best Practices & Lessons Learned
 
 ### 3.1 Principle: Match Model Capability to Architectural Role
