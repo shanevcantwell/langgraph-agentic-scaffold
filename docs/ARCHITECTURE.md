@@ -13,66 +13,55 @@ The system is composed of several agent types with a clear separation of concern
 
 The system also includes a robust set of custom exceptions (e.g., `ProxyError`, `SafetyFilterError`, `RateLimitError`) to provide clear, actionable error messages instead of generic failures, which is critical for debugging agentic workflows.
 
-## 2.1 BREAKING CHANGE: State Purge (Nov 14, 2025)
+## 2.1 State Management Architecture
 
-**Task 2.7 Migration:** Deprecated specialist-specific fields have been removed from root `GraphState` and migrated to `scratchpad` to enforce architectural purity (ADR-CORE-004).
+The system maintains three distinct state layers with strict separation of concerns:
 
-### What Changed
+### Root GraphState (Orchestration Only)
+Core system fields managed by the graph infrastructure:
+- `messages`: Permanent conversation history (LangChain Message objects)
+- `routing_history`: Execution path tracking
+- `turn_count`: Recursion control
+- `artifacts`: Structured outputs for cross-specialist communication
 
-The following fields have been **REMOVED** from root GraphState:
-- `Dossier` TypedDict (obsolete - superseded by MCP)
-- `text_to_process` in Artifacts model (redundant - use artifacts dict directly)
-- `recommended_specialists` at root level → **moved to scratchpad**
-- `error_report` at root level → **moved to scratchpad**
+### Scratchpad (Transient Signals)
+Ephemeral specialist-to-specialist communication cleared after routing:
+- `recommended_specialists`: Routing suggestions from triage/error handlers
+- `error_report`: Failure signals for orchestrator handling
+- `context_plan`: Context-gathering instructions from triage
+- `user_response_snippets`: Response fragments for synthesis
 
-### Migration Pattern
+### Artifacts (Structured Outputs)
+Persistent structured data for consumption by other specialists:
+- Named keys for specialist outputs (e.g., `alpha_response`, `bravo_response`)
+- `final_user_response.md`: Synthesized final response
+- `archive_report.md`: Workflow completion report
+
+**Implementation Pattern:**
 
 ```python
-# ❌ OLD (before Task 2.7)
 def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-    # Read
-    next_specialist = state.get("recommended_specialists")
-    error = state.get("error_report")
-
-    # Write
-    return {
-        "recommended_specialists": ["file_specialist"],
-        "error_report": "Something failed"
-    }
-
-# ✅ NEW (after Task 2.7)
-def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-    # Read
+    # Read from scratchpad
     scratchpad = state.get("scratchpad", {})
-    next_specialist = scratchpad.get("recommended_specialists")
-    error = scratchpad.get("error_report")
+    recommendations = scratchpad.get("recommended_specialists")
 
-    # Write
+    # Write to scratchpad (transient) and artifacts (persistent)
     return {
         "scratchpad": {
             "recommended_specialists": ["file_specialist"],
-            "error_report": "Something failed"
+            "error_report": "Needs file context"
+        },
+        "artifacts": {
+            "analysis_result": {"findings": [...]}
         }
     }
 ```
 
-### Rationale
-
-**Architectural Purity (ADR-CORE-004):**
-- Root GraphState = core orchestration only (messages, routing_history, turn_count, etc.)
-- Scratchpad = transient specialist communication signals
-- Moving `recommended_specialists` and `error_report` to scratchpad enforces proper state management hygiene
-
-**Dossier Obsolescence:**
-- The Dossier pattern (ADR-CORE-003) has been **superseded by MCP** (ADR-CORE-008)
-- Use `McpClient` for synchronous service calls instead of async Dossier handoffs
-- Direct edges + artifacts pattern for workflow handoffs (ADR-CORE-012)
-
-### Impact
-
-- **Breaking Change:** All code accessing these fields must update to scratchpad pattern
-- **Test Coverage:** 440+ tests passing with new structure
-- **Documentation:** See commits `2adcf94`, `d40f43f`, `e011646` for complete migration
+**Architectural Rationale (ADR-CORE-004):**
+- Root state contains only orchestration primitives
+- Scratchpad enforces signal ephemerality (prevents state bloat)
+- Artifacts provide structured cross-specialist contracts
+- Clear boundaries prevent specialist-specific fields from polluting root state
 
 ## 3.0 Architectural Best Practices & Lessons Learned
 
@@ -84,7 +73,7 @@ The `router_specialist` is the most critical reasoning component in the architec
 
 ### 3.2 Pattern: Intentional vs. Unproductive Loops
 
-The `GraphOrchestrator` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck. This is the preferred pattern for creating controlled, stateful cycles.
+The `GraphOrchestrator` includes a generic loop detection mechanism to halt unproductive cycles (e.g., a sequence like `Router -> Specialist A -> Router -> Specialist A ...`). This mechanism inspects the `routing_history` to prevent the system from getting stuck.
 
 Intentional loops, such as the "Generate-and-Critique" cycle, are architected differently. They are implemented using conditional edges in the graph that create a direct `Specialist A -> Specialist B -> Specialist A` sub-graph. Because this sub-loop does not repeatedly pass through the main `RouterSpecialist`, it is not flagged by the generic unproductive loop detector. This is the preferred pattern for creating controlled, stateful cycles.
 
@@ -404,7 +393,7 @@ The `InvariantMonitor` (`app/src/resilience/monitor.py`) is a service that runs 
 **Key Invariants:**
 1.  **Structural Integrity:** Ensures `GraphState` contains all required keys (`messages`, `artifacts`, `scratchpad`, etc.) and correct types.
 2.  **Max Turn Count:** Prevents runaway execution by enforcing a hard limit on total turns.
-3.  **Loop Detection:** Detects both immediate loops (`A -> A -> A`) and 2-step cycles (`A -> B -> A -> B`) to prevent unproductive infinite loops.
+3.  **Progressive Loop Detection:** Detects both immediate loops (`A -> A -> A`) and 2-step cycles (`A -> B -> A -> B`). Enhanced with stagnation checking to distinguish productive iteration (different outputs) from stuck loops (same output). See §5.4 for details.
 
 ### 5.2 Integration Point
 
@@ -423,6 +412,75 @@ def safe_executor(state: GraphState) -> Dict[str, Any]:
 
 The `InvariantMonitor` is instrumented with LangSmith tracing (`@traceable`). In the LangSmith UI, you will see `InvariantMonitor.check_invariants` calls as "tool" runs within the trace, allowing you to verify that checks are passing (or see exactly why they failed).
 
+### 5.4 Progressive Loop Detection with Stagnation Check
+
+**Enhancement Date:** 2025-11-22
+**Status:** Implemented & Tested
+
+**Problem:** The original loop detection (`check_loop_detection()`) could not distinguish between:
+- **Productive iteration:** Specialist repeats legitimately with different outputs (e.g., downloading file1, file2, file3)
+- **Stuck loops:** Specialist repeats with identical output (same error repeated)
+
+This created false positives that broke legitimate research workflows requiring 15-20 iterations.
+
+**Solution: Three-Check Logic**
+
+The enhanced loop detection implements a progressive verification strategy:
+
+```
+CHECK 1: IDENTITY - Is specialist repeated > threshold (3)?
+    ↓ YES
+CHECK 2: CONFIG - Does specialist allow iteration?
+    ↓ YES (allows_iteration=True in config.yaml)
+CHECK 3: STAGNATION - Is output hash identical to last execution?
+    ↓ YES → KILL FAST (InvariantViolationError)
+    ↓ NO → Check max_iterations → ALLOW or KILL
+```
+
+**Configuration Example:**
+
+```yaml
+# config.yaml
+specialists:
+  researcher_specialist:
+    allows_iteration: true       # Can repeat legitimately
+    max_iterations: 20           # Cap for extensive workflows
+    detect_stagnation: true      # Kill if same output (stuck)
+```
+
+**How It Works:**
+
+1. **Output Hash Tracking:** After each specialist execution, `GraphOrchestrator.safe_executor` computes an MD5 hash of the specialist's output message and stores it in `scratchpad.output_hashes` (last 3 hashes per specialist).
+
+2. **Stagnation Detection:** When a specialist repeats beyond the threshold, the system:
+   - Checks if `allows_iteration=True` in config
+   - Compares the last 2 output hashes
+   - If identical → raises `InvariantViolationError` (stagnation detected)
+   - If different → allows execution (productive iteration)
+
+3. **Iteration Cap:** Even with productive iteration, `max_iterations` enforces a safety limit.
+
+**Benefits:**
+
+- ✅ **Eliminates False Positives:** Research workflows (15-20 iterations) work correctly
+- ✅ **Preserves Fail-Fast:** Stuck loops still killed in 4 turns (threshold+1)
+- ✅ **Zero Breaking Changes:** Non-iterative specialists use standard loop detection
+- ✅ **Hardware-Inspired:** MD5 checksum approach mirrors assembly/hardware integrity patterns
+
+**Integration with Menu Filter (ADR-CORE-016):**
+
+Progressive loop detection works as **first-line defense** before the Menu Filter Pattern:
+
+1. **Tier 1a (Progressive Detection):** Allows productive iteration, kills stagnation fast
+2. **Tier 1b (Menu Filter):** If stagnation detected, removes specialist from router's menu (P=0)
+3. **Tier 2 (Circuit Breaker):** Final HALT if both tiers fail
+
+**Files:**
+- Implementation: [app/src/resilience/invariants.py](../app/src/resilience/invariants.py#L34-L188)
+- Hash Tracking: [app/src/workflow/graph_orchestrator.py](../app/src/workflow/graph_orchestrator.py#L460-L481)
+- Tests: [app/tests/unit/test_invariants.py](../app/tests/unit/test_invariants.py#L64-L273)
+- Full Specification: [ADR-CORE-016: Menu Filter Pattern](./ADR/ADR-CORE-016-Menu-Filter-Pattern.md#progressive-loop-detection-enhancement-stagnation-check)
+
 ## 6.0 Pattern: Context Engineering & Faithfulness
 
 **Context:** Traditional RAG systems often fail when users provide ambiguous prompts (e.g., "fix the bug" without specifying the file) or ask questions that require external knowledge not in the model's weights. Models often hallucinate answers in these scenarios.
@@ -435,6 +493,7 @@ The `triage_architect` is the entry point of the system. It does not answer the 
 
 *   **RESEARCH:** Search the web for real-time info.
 *   **READ_FILE:** Read specific files mentioned in the prompt.
+*   **LIST_DIRECTORY:** Enumerate directory contents to discover files.
 *   **SUMMARIZE:** Compress large context.
 *   **ASK_USER:** (Faithfulness Check) Ask the user for clarification if the request is ambiguous.
 
@@ -452,4 +511,169 @@ This prevents the `router_specialist` from receiving a bad prompt and hallucinat
 
 ### 6.3 Context Facilitation
 
-If the plan contains valid context-gathering actions (Research/Read), the `facilitator_specialist` executes them using MCP (Message-Centric Protocol) to gather the data *before* the main router sees the request. This ensures the router has all necessary context to make an informed decision.
+If the plan contains valid context-gathering actions (Research/Read/List), the `facilitator_specialist` executes them using MCP (Message-Centric Protocol) to gather the data *before* the main router sees the request. This ensures the router has all necessary context to make an informed decision.
+
+## 7.0 Communication Protocol: MCP (Message-Centric Protocol)
+
+The system uses **MCP** for synchronous, direct service invocation between specialists, replacing the earlier Dossier pattern with a more efficient architecture.
+
+### 7.1 MCP Architecture
+
+**Components:**
+- `McpRegistry`: Per-graph-instance service registry
+- `McpClient`: Convenience wrapper for making service calls
+- `McpRequest`/`McpResponse`: Pydantic schemas with UUID-based distributed tracing
+
+**Design Principles:**
+- Synchronous Python function calls for internal MCP
+- Async JSON-RPC via stdio for external containers (ADR-MCP-003)
+- Timeout protection (5 seconds default)
+- Optional LangSmith tracing integration
+
+### 7.2 External MCP (Containerized Services)
+
+The system supports external MCP servers (Node.js, Docker containers) via `ExternalMcpClient`:
+
+**Key Features:**
+- Async communication with containerized MCP servers
+- JSON-RPC protocol over stdio
+- Fail-fast error handling (Stage 1 implementation)
+- LangSmith tracing with configuration toggle
+- Docker socket mounting for container management
+
+**Example Configuration:**
+```yaml
+mcp:
+  external_mcp:
+    enabled: true
+    tracing_enabled: true
+    services:
+      filesystem:
+        enabled: true
+        command: "docker"
+        args:
+          - "run"
+          - "-i"
+          - "--rm"
+          - "-v"
+          - "${WORKSPACE_PATH}:/projects"
+          - "mcp/filesystem"
+          - "/projects"
+```
+
+### 7.3 Usage Pattern
+
+```python
+# Specialist calling MCP service
+result = self.mcp_client.call(
+    service_name="file_specialist",
+    function_name="read_file",
+    path="/path/to/file.txt"
+)
+```
+
+This pattern enables specialists to invoke services directly without routing through the graph, reducing latency and LLM costs for deterministic operations.
+
+## 8.0 Pattern: Subgraph Architecture (Generate-Critique-Refine)
+
+The system supports tightly-coupled specialist subgraphs that operate independently of the main routing loop. This pattern is exemplified by the Web Builder ↔ Critic subgraph (ADR-CORE-012).
+
+### 8.1 Subgraph Structure
+
+```
+Router → web_builder → critic_specialist
+            ↑              ↓
+            └── REVISE ────┘
+                ACCEPT → check_task_completion → END
+```
+
+### 8.2 Critical Configuration Requirements
+
+**Three components must align:**
+
+1. **Exclusion from Hub-and-Spoke** (`graph_builder.py:350`)
+   ```python
+   excluded_specialists = {'web_builder', 'triage_architect', 'facilitator_specialist'}
+   ```
+
+2. **Direct Edge** (`graph_builder.py:401`)
+   ```python
+   workflow.add_edge("web_builder", "critic_specialist")
+   ```
+
+3. **Config Setting** (`config.yaml:71`)
+   ```yaml
+   critic_specialist:
+     revision_target: "web_builder"
+   ```
+
+### 8.3 Why This Pattern Matters
+
+**Without subgraph:**
+- Router hops create 3x overhead
+- False loop detection triggers
+- Critic's revision recommendations ignored
+
+**With subgraph:**
+- Tight refinement loop
+- 66% faster execution
+- Specialist recommendations respected
+
+## 9.0 Observability & Debugging
+
+The system provides multiple observability layers for debugging and performance analysis:
+
+### 9.1 LangSmith Integration
+
+LangSmith tracing is mandatory for non-trivial workflows:
+- Visual trace inspection of workflow execution
+- State snapshots at each node
+- Error isolation and stack traces
+- Performance analysis and timing
+
+**Configuration:**
+```bash
+# .env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_key_here
+LANGCHAIN_PROJECT=your_project_name
+```
+
+### 9.2 Debug Logs
+
+All debug logs are written to `./logs/agentic_server.log`:
+- DEBUG level includes graph compilation details
+- INFO level shows specialist initialization and routing decisions
+- WARNING level captures degraded modes and recoverable errors
+- ERROR level logs failures with full stack traces
+
+### 9.3 Archive Reports
+
+The `ArchiverSpecialist` generates workflow completion reports in `./logs/archive/`:
+- State snapshots at completion
+- Artifact inventories
+- Execution path (routing_history)
+- Performance metrics
+
+**Common Debugging Workflow:**
+1. Check `./logs/agentic_server.log` for errors during startup or execution
+2. Review archive reports in `./logs/archive/` for completed workflows
+3. Use LangSmith UI for visual trace inspection (retrieve specific trace URLs as needed)
+
+## 10.0 Model-Agnostic Architecture
+
+The architecture maintains strict model-agnosticism through the 3-tier configuration system:
+
+### 10.1 Configuration Tiers
+
+1. **Tier 1 (Secrets):** `.env` - API keys, connection details (git-ignored)
+2. **Tier 2 (Architecture):** `config.yaml` - System blueprint, all possible components (committed)
+3. **Tier 3 (Implementation):** `user_settings.yaml` - Model bindings, runtime config (git-ignored)
+
+### 10.2 Philosophy
+
+Architecture never depends on specific models. All model bindings are runtime startup configuration in `user_settings.yaml`. This enables:
+- Zero-cost development with local models (LM Studio, Ollama)
+- Seamless upgrade to API models for production
+- Per-specialist model selection (hybrid deployments)
+- A/B testing across different model providers
