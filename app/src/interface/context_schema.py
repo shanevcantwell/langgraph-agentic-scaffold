@@ -17,3 +17,7 @@ class ContextAction(BaseModel):
 class ContextPlan(BaseModel):
     actions: List[ContextAction] = Field(default_factory=list)
     reasoning: str = Field(..., description="The reasoning behind the plan")
+    recommended_specialists: List[str] = Field(
+        default_factory=list,
+        description="List of specialist names recommended to handle the user's request after context gathering. Must be chosen from the AVAILABLE SPECIALISTS provided in the prompt."
+    )

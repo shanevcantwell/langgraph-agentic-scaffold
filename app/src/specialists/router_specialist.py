@@ -170,14 +170,18 @@ class RouterSpecialist(BaseSpecialist):
 
         if recommended_specialists:
             # Determine if this is a triage suggestion or a specialist dependency
-            # Check if the last specialist that ran (excluding router/triage) is making this recommendation
+            # Check if the last specialist that ran (excluding router/triage/facilitator) is making this recommendation
             is_specialist_dependency = False
             recommending_specialist = None
 
+            # Exclude planning specialists from dependency detection
+            # Recommendations from triage_architect or facilitator_specialist should always be treated as advisory
+            planning_specialists = ["router_specialist", "prompt_triage_specialist", "triage_architect", "facilitator_specialist"]
+
             if routing_history:
-                # Find the last specialist that ran (not router, not triage)
+                # Find the last specialist that ran (not router, not planning specialists)
                 for spec in reversed(routing_history):
-                    if spec not in ["router_specialist", "prompt_triage_specialist"]:
+                    if spec not in planning_specialists:
                         recommending_specialist = spec
                         is_specialist_dependency = True
                         break

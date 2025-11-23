@@ -70,14 +70,15 @@ class TriageArchitect(BaseSpecialist):
             context_plan = ContextPlan(**plan_args)
             
             logger.info(f"TriageArchitect generated plan with {len(context_plan.actions)} actions.")
-            
-            # 5. Return Artifact
+
+            # 5. Return Artifact with recommendations
             return {
                 "artifacts": {
                     "context_plan": context_plan.model_dump()
                 },
                 "scratchpad": {
-                    "triage_reasoning": context_plan.reasoning
+                    "triage_reasoning": context_plan.reasoning,
+                    "recommended_specialists": context_plan.recommended_specialists
                 }
             }
             

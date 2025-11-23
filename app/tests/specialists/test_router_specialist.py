@@ -342,3 +342,91 @@ def test_context_gathering_complete_note_in_prompt(router_specialist):
     assert "CONTEXT GATHERING COMPLETE" in prompt
     assert "triage and facilitator specialists have finished" in prompt.lower() or \
            "no longer available" in prompt.lower()
+
+
+def test_triage_recommendations_included_in_router_prompt(router_specialist):
+    """
+    Test that triage recommendations are properly included in router prompt.
+
+    Scenario:
+    - Triage sets recommended_specialists in scratchpad
+    - Router should include these in prompt as "TRIAGE SUGGESTIONS (ADVISORY)"
+    - Recommendations should guide but not force the choice
+    """
+    captured_prompts = []
+
+    def mock_invoke(request):
+        captured_prompts.append(request.messages[-1].content)
+        return {
+            "tool_calls": [{
+                "name": "Route",
+                "args": {"next_specialist": "researcher_specialist"}
+            }]
+        }
+
+    router_specialist.llm_adapter.invoke = mock_invoke
+
+    state = {
+        "messages": [HumanMessage(content="Research winter weather")],
+        "artifacts": {},
+        "scratchpad": {
+            "recommended_specialists": ["researcher_specialist", "chat_specialist"]
+        },
+        "routing_history": []  # Fresh request, no routing history yet
+    }
+
+    result = router_specialist._get_llm_choice(state)
+
+    # Verify recommendations are in prompt
+    prompt = captured_prompts[0]
+    assert "TRIAGE SUGGESTIONS" in prompt or "recommends considering" in prompt.lower()
+    assert "researcher_specialist" in prompt
+    assert "chat_specialist" in prompt
+    # Should be marked as advisory, not mandatory
+    assert "ADVISORY" in prompt or "suggestions" in prompt.lower()
+
+
+def test_researcher_specialist_recommended_for_web_search(router_specialist):
+    """
+    Test the specific case from user's trace: web search should route to researcher.
+
+    Scenario:
+    - User asks for web research
+    - Triage recommends researcher_specialist
+    - After context gathering, router should choose researcher_specialist
+    - NOT text_analysis_specialist (which was the bug)
+    """
+    captured_prompts = []
+
+    def mock_invoke(request):
+        captured_prompts.append(request.messages[-1].content)
+        return {
+            "tool_calls": [{
+                "name": "Route",
+                "args": {"next_specialist": "researcher_specialist"}
+            }]
+        }
+
+    router_specialist.llm_adapter.invoke = mock_invoke
+
+    state = {
+        "messages": [HumanMessage(content="Research winter weather patterns in Colorado")],
+        "artifacts": {
+            "gathered_context": "Research action executed for: winter weather patterns Colorado"
+        },
+        "scratchpad": {
+            "recommended_specialists": ["researcher_specialist"],
+            "triage_reasoning": "User needs web search for real-time weather information"
+        },
+        "routing_history": ["triage_architect", "facilitator_specialist"]
+    }
+
+    result = router_specialist._get_llm_choice(state)
+
+    # Verify researcher_specialist is mentioned in prompt
+    prompt = captured_prompts[0]
+    assert "researcher_specialist" in prompt
+    # Verify context gathering complete note is present
+    assert "CONTEXT GATHERING COMPLETE" in prompt
+    # Verify triage/facilitator are no longer in menu
+    assert "triage" not in prompt.lower() or "no longer available" in prompt.lower()
