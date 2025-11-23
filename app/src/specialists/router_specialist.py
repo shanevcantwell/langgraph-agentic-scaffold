@@ -139,11 +139,34 @@ class RouterSpecialist(BaseSpecialist):
         available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in current_specialists.items()]
         tools_list_str = "\n".join(available_tools_desc)
 
+        # Check if context gathering is complete
+        gathered_context = state.get("artifacts", {}).get("gathered_context")
+        context_gathering_note = ""
+        if gathered_context:
+            context_gathering_note = "\n\n**CONTEXT GATHERING COMPLETE**\nThe triage and facilitator specialists have finished gathering context. They are no longer available in the menu. Please choose a specialist to respond to the user's request based on the gathered context."
+
         # Check for specialist recommendations (could be from triage or from another specialist)
         # Task 2.7: recommended_specialists moved to scratchpad
         recommended_specialists = state.get("scratchpad", {}).get("recommended_specialists")
         routing_history = state.get("routing_history", [])
         recommendation_context = ""
+
+        # CRITICAL: Filter recommendations to only include specialists that are currently available
+        # Prevents LLM from choosing excluded specialists (e.g., planning specialists after context gathered)
+        if recommended_specialists:
+            available_specialist_names = set(current_specialists.keys())
+            filtered_recommendations = [s for s in recommended_specialists if s in available_specialist_names]
+
+            if not filtered_recommendations:
+                # All recommendations were filtered out - don't show recommendation context
+                logger.info(f"All recommended specialists {recommended_specialists} were filtered out (not in available menu)")
+                recommended_specialists = None
+            else:
+                recommended_specialists = filtered_recommendations
+                if len(filtered_recommendations) < len(state.get("scratchpad", {}).get("recommended_specialists", [])):
+                    original = state.get("scratchpad", {}).get("recommended_specialists", [])
+                    filtered_out = set(original) - set(filtered_recommendations)
+                    logger.info(f"Filtered out unavailable recommendations: {filtered_out}. Remaining: {filtered_recommendations}")
 
         if recommended_specialists:
             # Determine if this is a triage suggestion or a specialist dependency
@@ -184,7 +207,7 @@ class RouterSpecialist(BaseSpecialist):
 
         # Put CRITICAL dependency requirements FIRST, before specialist list
         # This ensures LLM sees it before making a decision
-        contextual_prompt_addition = f"{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
+        contextual_prompt_addition = f"{context_gathering_note}{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 

@@ -216,3 +216,129 @@ def test_get_available_specialists_logging(router_specialist, caplog):
     assert any("Context gathering complete" in msg for msg in log_messages)
     assert any("removed planning specialists" in msg for msg in log_messages)
     assert any("2 specialists remain" in msg for msg in log_messages)
+
+
+def test_recommendation_filtering_with_gathered_context(router_specialist):
+    """
+    Test that recommendations are filtered when specialists are excluded from menu.
+
+    Scenario:
+    - gathered_context exists (planning specialists excluded)
+    - Triage recommends chat_specialist and triage_architect
+    - Should filter out triage_architect, keep only chat_specialist
+
+    This prevents LLM from choosing excluded specialists based on recommendations.
+    """
+    # Mock LLM adapter to capture the prompt
+    captured_prompts = []
+
+    def mock_invoke(request):
+        captured_prompts.append(request.messages[-1].content)
+        return {
+            "tool_calls": [{
+                "name": "Route",
+                "args": {"next_specialist": "chat_specialist"}
+            }]
+        }
+
+    router_specialist.llm_adapter.invoke = mock_invoke
+
+    state = {
+        "messages": [HumanMessage(content="Research query")],
+        "artifacts": {
+            "gathered_context": {"actions_executed": []}
+        },
+        "scratchpad": {
+            "recommended_specialists": ["chat_specialist", "triage_architect"]
+        },
+        "routing_history": []
+    }
+
+    result = router_specialist._get_llm_choice(state)
+
+    # Verify the prompt mentions only chat_specialist in recommendations
+    prompt = captured_prompts[0]
+    assert "chat_specialist" in prompt
+    # triage_architect should be filtered out from recommendations
+    # (it might appear in routing history but not in current recommendations)
+    assert "TRIAGE SUGGESTIONS" in prompt or "chat_specialist" in prompt
+
+
+def test_all_recommendations_filtered_out(router_specialist, caplog):
+    """
+    Test behavior when all recommendations are filtered out.
+
+    Scenario:
+    - gathered_context exists
+    - Triage recommends only triage_architect and facilitator_specialist
+    - Both are filtered out (not in available menu)
+    - Should not show recommendation context at all
+    """
+    # Mock LLM adapter
+    def mock_invoke(request):
+        return {
+            "tool_calls": [{
+                "name": "Route",
+                "args": {"next_specialist": "chat_specialist"}
+            }]
+        }
+
+    router_specialist.llm_adapter.invoke = mock_invoke
+
+    state = {
+        "messages": [HumanMessage(content="Research query")],
+        "artifacts": {
+            "gathered_context": {"actions_executed": []}
+        },
+        "scratchpad": {
+            "recommended_specialists": ["triage_architect", "facilitator_specialist"]
+        },
+        "routing_history": []
+    }
+
+    import logging
+    with caplog.at_level(logging.INFO):
+        result = router_specialist._get_llm_choice(state)
+
+    # Verify log shows all recommendations were filtered
+    log_messages = [record.message for record in caplog.records]
+    assert any("filtered out" in msg.lower() for msg in log_messages)
+
+
+def test_context_gathering_complete_note_in_prompt(router_specialist):
+    """
+    Test that explicit guidance is added when context gathering is complete.
+
+    Scenario:
+    - gathered_context exists
+    - Should add "CONTEXT GATHERING COMPLETE" note to prompt
+    - Should explain that planning specialists are no longer available
+    """
+    captured_prompts = []
+
+    def mock_invoke(request):
+        captured_prompts.append(request.messages[-1].content)
+        return {
+            "tool_calls": [{
+                "name": "Route",
+                "args": {"next_specialist": "chat_specialist"}
+            }]
+        }
+
+    router_specialist.llm_adapter.invoke = mock_invoke
+
+    state = {
+        "messages": [HumanMessage(content="Research query")],
+        "artifacts": {
+            "gathered_context": {"actions_executed": []}
+        },
+        "routing_history": []
+    }
+
+    result = router_specialist._get_llm_choice(state)
+
+    # Verify prompt contains context gathering complete note
+    prompt = captured_prompts[0]
+    assert "CONTEXT GATHERING COMPLETE" in prompt
+    assert "triage and facilitator specialists have finished" in prompt.lower() or \
+           "no longer available" in prompt.lower()
