@@ -127,13 +127,12 @@ specialists:
   file_specialist:
     type: "llm"
     prompt_file: "file_specialist_prompt.md"
-    description: "MCP-only service layer for file system operations. NOT routable - accessed exclusively via MCP by other specialists. For user-initiated file requests, use file_operations_specialist instead."
+    description: "MCP-only service layer for file system operations. NOT routable - accessed exclusively via MCP by other specialists. User-initiated file operations now handled by external filesystem MCP container."
     root_dir: "${WORKSPACE_PATH:-workspace}" # Workspace path from .env (defaults to 'workspace')
 
-  file_operations_specialist:
-    type: "llm"
-    prompt_file: "file_operations_prompt.md"
-    description: "Handles user requests for file system operations (list, create, read, write, delete files and directories in workspace). Interprets user intent and executes operations via MCP services. Use this for all user-initiated file operations."
+  # file_operations_specialist REMOVED - replaced by external filesystem MCP container
+  # Users can now interact with filesystem via chat_specialist or other specialists
+  # that call the external filesystem MCP service
 
   batch_processor_specialist:
     type: "llm"
@@ -352,14 +351,12 @@ specialists:
     description: "SYSTEM FALLBACK - NOT FOR TRIAGE RECOMMENDATION. Handles edge cases like greetings ('hello', 'ping') or genuinely ambiguous inputs. The triage specialist should NEVER recommend this - let the router select it automatically when no other specialist fits."
 
   # --- Procedural Specialists with External Dependencies ---
-  open_interpreter_specialist:
-    type: "hybrid"
-    prompt_file: "open_interpreter_prompt.md"
-    description: "Executes general-purpose shell commands and code (e.g., Python, bash) to perform complex, open-ended tasks like data analysis, web research, or running scripts. Use this for tasks that require more than simple file manipulation."
-    # Progressive loop detection: Allow iteration for multi-file operations
-    allows_iteration: true       # Can repeat legitimately (processing multiple files)
-    max_iterations: 15           # Cap for batch operations
-    detect_stagnation: true      # Kill if same error repeating
+  # open_interpreter_specialist REMOVED - replaced by MCP services
+  # Functionality now provided by:
+  # - Shell operations: shell_specialist or direct bash MCP
+  # - File operations: filesystem MCP container
+  # - Code execution: specific MCP services as needed
+  # BENEFIT: Removes litellm and 45+ transitive dependencies
 
   end_specialist:
     type: "hybrid"

@@ -30,7 +30,7 @@ dependencies = [
     "tenacity",
     "psycopg2-binary",
     "gradio",
-    "open-interpreter",
+    # "open-interpreter",  # REMOVED - replaced by MCP services (drops litellm + 45 dependencies)
     "google-generativeai",
     "playwright",
     "inflection",
