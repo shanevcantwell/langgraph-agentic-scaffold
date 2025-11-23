@@ -11,8 +11,10 @@
 #     -t mcp/fetch \
 #     .
 
-ARG NPM_PACKAGE
 FROM node:lts-alpine
+
+# Redeclare ARG after FROM to make it available in this stage
+ARG NPM_PACKAGE
 
 # Install the MCP server package globally
 RUN npm install -g ${NPM_PACKAGE}
@@ -20,7 +22,7 @@ RUN npm install -g ${NPM_PACKAGE}
 # Create a simple entrypoint script that runs the MCP server
 # MCP servers use stdio for JSON-RPC communication
 RUN echo '#!/bin/sh' > /usr/local/bin/mcp-server && \
-    echo 'exec npx -y ${NPM_PACKAGE} "$@"' >> /usr/local/bin/mcp-server && \
+    echo "exec npx -y ${NPM_PACKAGE} \"\$@\"" >> /usr/local/bin/mcp-server && \
     chmod +x /usr/local/bin/mcp-server
 
 # MCP protocol uses stdin/stdout for JSON-RPC
