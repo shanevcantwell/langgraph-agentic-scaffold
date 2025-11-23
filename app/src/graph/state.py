@@ -76,6 +76,26 @@ class Scratchpad(BaseModel):
     web_builder_iteration: Optional[int] = None
     termination_reason: Optional[str] = None
 
+    # Loop recovery state (ADR-CORE-016: Menu Filter Pattern - Tier 1)
+    forbidden_specialists: Optional[List[str]] = None
+    """
+    Transient list of specialists forbidden from next routing decision.
+    Populated by InvariantMonitor when loop detected (immediate repetition or 2-step cycle).
+    Cleared after successful specialist execution (non-router) to prevent permanent bans.
+    Implements hard constraint (P=0) by removing specialists from router's tool schema.
+    """
+    loop_detection_reason: Optional[str] = None
+    """Diagnostic message explaining why specialists were forbidden."""
+
+    # Progressive loop detection (stagnation check)
+    output_hashes: Optional[Dict[str, List[str]]] = None
+    """
+    Tracks output hashes per specialist for stagnation detection.
+    Structure: {specialist_name: [hash1, hash2, hash3]} (last 3 hashes)
+    Used to distinguish productive iteration (different outputs) from stuck loops (same output).
+    Cleared when routing to different specialist (context switch).
+    """
+
 def reduce_parallel_tasks(current: List[str], update: List[str] | str) -> List[str]:
     """
     Reducer for managing active parallel tasks.

@@ -1,6 +1,7 @@
 # app/src/workflow/graph_orchestrator.py
 import logging
 import traceback
+import hashlib
 from typing import Dict, Any, Callable
 
 from langchain_core.messages import AIMessage
@@ -362,14 +363,16 @@ class GraphOrchestrator:
 
             # TASK 1.5: Invariant Monitoring (Pre-Execution)
             # Fail-fast if the system is in an invalid state before executing the specialist.
+            # ADR-CORE-016: Menu Filter Pattern - check_invariants may return state updates for loop recovery
+            menu_filter_update = None
             try:
-                self.invariant_monitor.check_invariants(state, stage=f"pre-execution:{specialist_name}")
+                menu_filter_update = self.invariant_monitor.check_invariants(state, stage=f"pre-execution:{specialist_name}")
             except CircuitBreakerTriggered as cbt:
                 logger.error(f"Circuit Breaker Triggered in '{specialist_name}': {cbt}")
-                
+
                 if cbt.action == "HALT":
                     raise WorkflowError(f"System Halted by Circuit Breaker: {cbt.reason}") from cbt
-                
+
                 elif cbt.action == "ROUTE_TO_ERROR_HANDLER":
                     # Return a state update that forces routing to the error handler
                     # The decider functions (route_to_next_specialist, etc.) will pick this up.
@@ -435,6 +438,48 @@ class GraphOrchestrator:
                 if "turn_count" in update:
                     logger.warning(f"Specialist '{specialist_name}' returned a 'turn_count'. This is not allowed and will be ignored.")
                     del update["turn_count"]
+
+                # ADR-CORE-016: Menu Filter Lifecycle Management
+                # Clear forbidden_specialists after ANY successful specialist execution (non-router)
+                # This ensures transient state and prevents permanent bans
+                if specialist_name != "router_specialist":
+                    scratchpad_in_update = update.get("scratchpad", {})
+                    scratchpad_in_update["forbidden_specialists"] = None
+                    update["scratchpad"] = scratchpad_in_update
+                    logger.debug(f"Cleared forbidden_specialists after successful execution of '{specialist_name}'")
+
+                # ADR-CORE-016: Merge menu filter updates from InvariantMonitor (if any)
+                if menu_filter_update:
+                    logger.info(f"Merging menu filter update from InvariantMonitor: {menu_filter_update}")
+                    # Merge scratchpad updates
+                    if "scratchpad" in menu_filter_update:
+                        existing_scratchpad = update.get("scratchpad", {})
+                        existing_scratchpad.update(menu_filter_update["scratchpad"])
+                        update["scratchpad"] = existing_scratchpad
+
+                # Progressive Loop Detection: Track output hashes for stagnation detection
+                # Compute hash of specialist's output to distinguish productive iteration from stuck loops
+                update_messages = update.get("messages", [])
+                if update_messages:
+                    last_message = update_messages[-1]
+                    if hasattr(last_message, "content"):
+                        # Compute hash of normalized message content
+                        content = last_message.content
+                        normalized = content.strip()
+                        output_hash = hashlib.md5(normalized.encode()).hexdigest()
+
+                        # Update scratchpad with hash history
+                        scratchpad_update = update.get("scratchpad", {})
+                        output_hashes = scratchpad_update.get("output_hashes") or {}
+                        specialist_history = output_hashes.get(specialist_name, [])
+                        specialist_history.append(output_hash)
+                        specialist_history = specialist_history[-3:]  # Keep only last 3 hashes
+                        output_hashes[specialist_name] = specialist_history
+                        scratchpad_update["output_hashes"] = output_hashes
+                        update["scratchpad"] = scratchpad_update
+
+                        logger.debug(f"Output hash for '{specialist_name}': {output_hash[:8]}... ({len(specialist_history)} in history)")
+
                 return update
             except RateLimitError as e:
                 # Rate limit errors are FATAL - halt workflow immediately (fail-fast pattern)

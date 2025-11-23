@@ -36,6 +36,12 @@ workflow:
     loop_detected: "HALT"
     structural_integrity_violated: "HALT"
 
+  # --- Loop Recovery Configuration (ADR-CORE-016: Menu Filter Pattern) ---
+  # Enable/disable Menu Filter Pattern (Tier 1 loop recovery)
+  # When enabled, loop detection removes looping specialists from router's menu
+  # instead of immediate HALT, forcing innovation in routing decisions.
+  enable_menu_filter: true
+
 # ==============================================================================
 # MCP (MESSAGE-CENTRIC PROTOCOL) CONFIGURATION
 # ==============================================================================
@@ -54,26 +60,25 @@ mcp:
   # See docs/ADR/ADR-MCP-003-External-MCP-Container-Integration.md for details
   external_mcp:
     # Global enable/disable for all external MCP services
-    enabled: false  # Set to true to enable external MCP containers
+    enabled: true  # Set to true to enable external MCP containers
     # Toggle LangSmith trace spans for external MCP calls
     tracing_enabled: true
     # Configuration for individual external MCP services
     services:
-      # Example: Filesystem MCP server (Node.js container)
-      # Uncomment and configure to use external filesystem operations
-      # filesystem:
-      #   enabled: false
-      #   required: false  # If true, application fails to start if container unavailable
-      #   command: "docker"
-      #   args:
-      #     - "run"
-      #     - "-i"           # REQUIRED: Interactive mode for stdin connectivity
-      #     - "--rm"         # Auto-remove container when stopped
-      #     - "-v"
-      #     - "${WORKSPACE_PATH}:/projects"  # Mount workspace into container
-      #     - "mcp/filesystem"               # Container image name
-      #     - "/projects"                    # Allowed directory for filesystem server
-      #   # Security: Only mount necessary directories, consider read-only (:ro) for sandboxing
+      # Filesystem MCP server (Node.js container)
+      filesystem:
+        enabled: true
+        required: false  # If true, application fails to start if container unavailable
+        command: "docker"
+        args:
+          - "run"
+          - "-i"           # REQUIRED: Interactive mode for stdin connectivity
+          - "--rm"         # Auto-remove container when stopped
+          - "-v"
+          - "${WORKSPACE_PATH}:/projects"  # Mount workspace into container
+          - "mcp/filesystem"               # Container image name
+          - "/projects"                    # Allowed directory for filesystem server
+        # Security: Only mount necessary directories, consider read-only (:ro) for sandboxing
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION
@@ -314,6 +319,10 @@ specialists:
     type: "llm"
     prompt_file: "researcher_prompt.md"
     description: "Performs web searches to gather real-time information. Can be called by TriageArchitect or Router."
+    # Progressive loop detection: Allow iteration for multi-step research
+    allows_iteration: true       # Can repeat legitimately (multiple web searches)
+    max_iterations: 20           # Cap for extensive research workflows
+    detect_stagnation: true      # Kill if same output (stuck on error)
 
   summarizer_specialist:
     type: "llm"
@@ -347,6 +356,10 @@ specialists:
     type: "hybrid"
     prompt_file: "open_interpreter_prompt.md"
     description: "Executes general-purpose shell commands and code (e.g., Python, bash) to perform complex, open-ended tasks like data analysis, web research, or running scripts. Use this for tasks that require more than simple file manipulation."
+    # Progressive loop detection: Allow iteration for multi-file operations
+    allows_iteration: true       # Can repeat legitimately (processing multiple files)
+    max_iterations: 15           # Cap for batch operations
+    detect_stagnation: true      # Kill if same error repeating
 
   end_specialist:
     type: "hybrid"
