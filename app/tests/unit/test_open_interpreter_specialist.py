@@ -15,7 +15,7 @@ def open_interpreter_specialist(initialized_specialist_factory):
     specialist.specialist_config['prompt_file'] = 'open_interpreter_prompt.md'
     return specialist
 
-@patch('interpreter.interpreter', new_callable=MagicMock)
+@patch('interpreter.interpreter', new_callable=MagicMock, create=True)
 def test_open_interpreter_specialist_executes_code_successfully(mock_interpreter, open_interpreter_specialist):
     """
     Tests the full plan-and-execute flow for the OpenInterpreterSpecialist.
@@ -74,7 +74,7 @@ def test_open_interpreter_specialist_handles_no_tool_call_from_llm(open_interpre
     # Assert
     assert "failed to produce a valid code plan" in result_state.get("error", "")
 
-@patch('interpreter.interpreter', new_callable=MagicMock)
+@patch('interpreter.interpreter', new_callable=MagicMock, create=True)
 def test_open_interpreter_handles_list_files_prompt(mock_interpreter, open_interpreter_specialist):
     """
     Tests that OpenInterpreterSpecialist can correctly plan and execute a

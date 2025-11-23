@@ -34,18 +34,30 @@ async def test_translator_flow():
     # Check Workflow Start
     assert events[0].type == EventType.WORKFLOW_START
     assert events[0].run_id == "test-run-123"
-    
-    # Check Router Status
-    assert events[1].type == EventType.STATUS_UPDATE
+
+    # Check Router Node Start
+    assert events[1].type == EventType.NODE_START
     assert events[1].source == "router_specialist"
-    
+
+    # Check Router Status
+    assert events[2].type == EventType.STATUS_UPDATE
+    assert events[2].source == "router_specialist"
+
     # Check Router Log
-    assert events[2].type == EventType.LOG
-    assert "Entering node: router_specialist" in events[2].data["message"]
-    
+    assert events[3].type == EventType.LOG
+    assert "Entering node: router_specialist" in events[3].data["message"]
+
+    # Check Router Node End
+    assert events[4].type == EventType.NODE_END
+    assert events[4].source == "router_specialist"
+
+    # Check End Node Start
+    assert events[5].type == EventType.NODE_START
+    assert events[5].source == "end_specialist"
+
     # Check End Status
-    assert events[3].type == EventType.STATUS_UPDATE
-    assert events[3].source == "end_specialist"
+    assert events[6].type == EventType.STATUS_UPDATE
+    assert events[6].source == "end_specialist"
     
     # Check Workflow End
     last_event = events[-1]

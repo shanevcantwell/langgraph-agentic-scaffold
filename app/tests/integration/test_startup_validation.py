@@ -258,9 +258,12 @@ def test_startup_validation_specialist_pre_flight_checks():
 
     # --- Assert ---
     # All specialists that passed pre-flight should be in the graph
+    # EXCEPT MCP-only specialists (researcher, summarizer)
+    mcp_only_specialists = {'researcher_specialist', 'summarizer_specialist'}
     for name in builder.specialists.keys():
-        assert name in graph.nodes, \
-            f"Specialist '{name}' passed pre-flight but not in graph"
+        if name not in mcp_only_specialists:
+            assert name in graph.nodes, \
+                f"Specialist '{name}' passed pre-flight but not in graph"
 
     print("\n✓ Pre-flight checks executed successfully")
     print(f"✓ {len(builder.specialists)} specialists passed pre-flight checks")

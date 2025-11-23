@@ -1,12 +1,12 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from app.src.resilience.monitor import InvariantMonitor
-from app.src.utils.errors import InvariantViolationError
+from app.src.utils.errors import InvariantViolationError, CircuitBreakerTriggered
 from app.src.graph.state_factory import create_test_state
 
 def test_stabilization_action_halt():
     """
-    Verifies that the monitor raises InvariantViolationError when action is HALT.
+    Verifies that the monitor raises CircuitBreakerTriggered when action is HALT.
     """
     config = {
         "workflow": {
@@ -19,7 +19,7 @@ def test_stabilization_action_halt():
     monitor = InvariantMonitor(config)
     state = create_test_state(turn_count=10) # Exceeds limit
 
-    with pytest.raises(InvariantViolationError):
+    with pytest.raises(CircuitBreakerTriggered):
         monitor.check_invariants(state)
 
 def test_stabilization_action_default_halt():
@@ -35,7 +35,7 @@ def test_stabilization_action_default_halt():
     monitor = InvariantMonitor(config)
     state = create_test_state(turn_count=10)
 
-    with pytest.raises(InvariantViolationError):
+    with pytest.raises(CircuitBreakerTriggered):
         monitor.check_invariants(state)
 
 def test_violation_type_detection_structure():
@@ -48,9 +48,9 @@ def test_violation_type_detection_structure():
     del state["messages"] # Structural violation
 
     with patch("app.src.resilience.monitor.logger") as mock_logger:
-        with pytest.raises(InvariantViolationError):
+        with pytest.raises(CircuitBreakerTriggered):
             monitor.check_invariants(state)
-        
+
         # Check logs for correct violation type detection
         # We look for the log message that contains the violation type
         found = False
@@ -70,9 +70,9 @@ def test_violation_type_detection_loop():
     state = create_test_state(routing_history=["A", "A", "A"])
 
     with patch("app.src.resilience.monitor.logger") as mock_logger:
-        with pytest.raises(InvariantViolationError):
+        with pytest.raises(CircuitBreakerTriggered):
             monitor.check_invariants(state)
-        
+
         found = False
         for call in mock_logger.warning.call_args_list:
             if "Violation: loop_detected" in call[0][0]:

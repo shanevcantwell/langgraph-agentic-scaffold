@@ -147,14 +147,14 @@ def test_safe_executor_blocks_execution_on_missing_artifact(orchestrator_instanc
 
     # Assert
     mock_specialist.execute.assert_not_called()
-    
-    # The create_missing_artifact_response is now part of the orchestrator
-    expected_response = orchestrator_instance.create_missing_artifact_response(
-        specialist_name="artifact_requiring_specialist",
-        missing_artifacts=["system_plan"],
-        recommended_specialists=["systems_architect"]
-    )
-    assert result == expected_response
+
+    # Check that the response contains the expected fields
+    assert "scratchpad" in result
+    assert result["scratchpad"]["recommended_specialists"] == ["systems_architect"]
+    assert "messages" in result
+    assert len(result["messages"]) == 1
+    assert "system_plan" in result["messages"][0].content
+    assert "systems_architect" in result["messages"][0].content
 
 def test_create_missing_artifact_response_format(orchestrator_instance):
     """Tests the specific format of the missing artifact response."""

@@ -35,7 +35,7 @@ def test_facilitator_executes_research_action(facilitator):
     facilitator.mcp_client.call.assert_called_with(
         service_name="researcher_specialist",
         function_name="search",
-        parameters={"query": "LangGraph"}
+        query="LangGraph"
     )
 
 def test_facilitator_executes_read_file_action(facilitator):
