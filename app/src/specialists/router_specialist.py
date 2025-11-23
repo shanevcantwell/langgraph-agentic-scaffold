@@ -40,10 +40,29 @@ class RouterSpecialist(BaseSpecialist):
         - Removes forbidden specialists from returned menu (hard constraint, P=0)
         - Triage recommendations remain advisory context in LLM prompt (soft constraint)
 
+        Context-Aware Routing:
+        - After context gathering complete, prevents routing back to planning specialists
+        - Fixes triage → facilitator → router → triage loop
+
         Returns:
             Dictionary of available specialists (filtered if menu filter active)
         """
         all_specialists = self.specialist_map
+
+        # Context-Aware Routing: Prevent routing back to planning specialists after context gathered
+        gathered_context = state.get("artifacts", {}).get("gathered_context")
+        if gathered_context:
+            # Triage and Facilitator jobs are DONE - remove from menu to force router to pick response specialist
+            planning_specialists = ["triage_architect", "facilitator_specialist"]
+            all_specialists = {
+                name: spec
+                for name, spec in all_specialists.items()
+                if name not in planning_specialists
+            }
+            logger.info(
+                f"Context gathering complete - removed planning specialists {planning_specialists} from routing menu "
+                f"({len(all_specialists)} specialists remain)"
+            )
 
         # ADR-CORE-016: Check for Menu Filter activation
         scratchpad = state.get("scratchpad", {})
