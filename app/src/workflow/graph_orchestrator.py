@@ -5,6 +5,7 @@ import hashlib
 from typing import Dict, Any, Callable
 
 from langchain_core.messages import AIMessage
+from langgraph.errors import GraphInterrupt
 
 from ..specialists.base import BaseSpecialist
 from ..graph.state import GraphState, Scratchpad
@@ -46,26 +47,23 @@ class GraphOrchestrator:
             try:
                 plan = ContextPlan(**context_plan_data)
 
-                # Separate ask_user actions from context-gathering actions
-                ask_user_actions = [a for a in plan.actions if a.type == "ask_user"]
-                other_actions = [a for a in plan.actions if a.type != "ask_user"]
+                # ADR-CORE-018: Route ALL plans with actions through Facilitator chain
+                # Flow: Facilitator (autonomous) → Dialogue (interactive) → Router
+                # - Facilitator executes automated actions (READ_FILE, RESEARCH, etc.)
+                # - Facilitator ignores ASK_USER actions (passes context_plan through)
+                # - Dialogue checks for remaining ASK_USER actions and triggers interrupt()
 
-                # If there are context-gathering actions, execute those first via Facilitator
-                # (even if ask_user is also present as a fallback)
-                if other_actions:
-                    logger.info(f"Triage produced plan with {len(other_actions)} context-gathering actions. Routing to Facilitator.")
+                if plan.actions:
+                    ask_user_count = sum(1 for a in plan.actions if a.type == "ask_user")
+                    other_count = len(plan.actions) - ask_user_count
+                    logger.info(
+                        f"Triage produced plan with {other_count} context-gathering and "
+                        f"{ask_user_count} ask_user actions. Routing to Facilitator chain."
+                    )
                     return "facilitator_specialist"
 
-                # If ONLY ask_user actions exist (no context to gather), route to default_responder_specialist
-                # to explain what's missing rather than silently ending
-                if ask_user_actions and not other_actions:
-                    logger.info("Triage produced only 'ask_user' actions (no context gathering possible). Routing to default_responder_specialist for clarification.")
-                    return "default_responder_specialist"
-
                 # Empty plan (no actions at all) - route to Router
-                if not plan.actions:
-                    logger.info("Triage produced empty plan. Routing to Router.")
-                    return CoreSpecialist.ROUTER.value
+                logger.info("Triage produced empty plan. Routing to Router.")
             except Exception as e:
                 logger.error(f"Failed to parse ContextPlan in check_triage_outcome: {e}")
         
@@ -489,6 +487,10 @@ class GraphOrchestrator:
                     f"Rate limit exceeded for specialist '{specialist_name}'. "
                     f"Please wait before retrying. Error: {e}"
                 ) from e
+            except GraphInterrupt:
+                # ADR-CORE-018: Let interrupt() propagate for HitL workflows
+                logger.info(f"Specialist '{specialist_name}' triggered interrupt for user clarification")
+                raise
             except (SpecialistError, Exception) as e:
                 logger.error(f"Caught unhandled exception from specialist '{specialist_name}': {e}", exc_info=True)
                 tb_str = traceback.format_exc()

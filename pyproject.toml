@@ -35,6 +35,7 @@ dependencies = [
     "playwright",
     "inflection",
     "mcp",  # Model Context Protocol SDK for external MCP containers (ADR-MCP-003)
+    "langgraph-checkpoint-sqlite",  # SQLite checkpointing for HitL interrupt/resume (ADR-CORE-018)
     # Add pip-tools as a core dependency to break the bootstrap cycle
     "pip-tools",
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"

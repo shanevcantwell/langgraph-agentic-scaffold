@@ -71,16 +71,28 @@ class GraphBuilder:
         else:
             self.entry_point = raw_entry_point
 
-    def build(self, streaming_callback: Callable[[str], None] = None) -> StateGraph:
+    def build(self, streaming_callback: Callable[[str], None] = None, checkpointer=None) -> StateGraph:
         """
         Builds and compiles the LangGraph StateGraph instance.
+
+        Args:
+            streaming_callback: Optional callback for streaming specialist output
+            checkpointer: Optional LangGraph checkpointer for HitL interrupt/resume
+                          (ADR-CORE-018). Pass SqliteSaver or PostgresSaver instance.
         """
         workflow = StateGraph(GraphState)
         self._add_nodes_to_graph(workflow, streaming_callback)
         self._wire_hub_and_spoke_edges(workflow)
         workflow.set_entry_point(self.entry_point)
-        compiled_graph = workflow.compile()
-        logger.info(f"---GraphBuilder: Graph compiled successfully with entry point '{self.entry_point}'.---")
+
+        # ADR-CORE-018: Enable checkpointing for HitL workflows
+        if checkpointer:
+            compiled_graph = workflow.compile(checkpointer=checkpointer)
+            logger.info(f"---GraphBuilder: Graph compiled with checkpointer ({type(checkpointer).__name__}) and entry point '{self.entry_point}'.---")
+        else:
+            compiled_graph = workflow.compile()
+            logger.info(f"---GraphBuilder: Graph compiled successfully with entry point '{self.entry_point}'.---")
+
         return compiled_graph
 
     async def initialize_external_mcp(self):
@@ -471,22 +483,30 @@ class GraphBuilder:
         # TriageArchitect -> [Facilitator | Router]
         # Facilitator -> Router
         if "triage_architect" in self.specialists:
+            # ADR-CORE-018: Simplified routing - all plans with actions go through Facilitator chain
+            # Facilitator → Dialogue → Router handles both context-gathering and ask_user actions
             workflow.add_conditional_edges(
                 "triage_architect",
                 self.orchestrator.check_triage_outcome,
                 {
                     "facilitator_specialist": "facilitator_specialist",
                     router_name: router_name,
-                    "default_responder_specialist": "default_responder_specialist",
                     CoreSpecialist.END.value: CoreSpecialist.END.value
                 }
             )
-            logger.info("Graph Edge: Added TriageArchitect conditional edge")
+            logger.info("Graph Edge: Added TriageArchitect conditional edge (ADR-CORE-018)")
 
         if "facilitator_specialist" in self.specialists:
-            # Facilitator always routes to Router after execution
-            workflow.add_edge("facilitator_specialist", router_name)
-            logger.info("Graph Edge: Added Facilitator -> Router edge")
+            # ADR-CORE-018: Facilitator → Dialogue → Router
+            # DialogueSpecialist checks for ASK_USER actions after automated context gathering
+            if "dialogue_specialist" in self.specialists:
+                workflow.add_edge("facilitator_specialist", "dialogue_specialist")
+                workflow.add_edge("dialogue_specialist", router_name)
+                logger.info("Graph Edge: Added Facilitator -> Dialogue -> Router chain (ADR-CORE-018)")
+            else:
+                # Fallback if DialogueSpecialist not loaded
+                workflow.add_edge("facilitator_specialist", router_name)
+                logger.info("Graph Edge: Added Facilitator -> Router edge (DialogueSpecialist not loaded)")
 
         for name in self.specialists:
             # Exclude orchestration nodes and subgraph components from hub-and-spoke routing
@@ -498,6 +518,7 @@ class GraphBuilder:
                 "web_builder",  # ADR-CORE-012
                 "triage_architect", # Context Engineering
                 "facilitator_specialist", # Context Engineering
+                "dialogue_specialist",  # ADR-CORE-018: HitL clarification
                 "researcher_specialist", # MCP-only
                 "summarizer_specialist" # MCP-only
             ]

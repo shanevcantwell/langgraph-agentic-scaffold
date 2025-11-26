@@ -18,3 +18,4 @@ class CoreSpecialist(str, Enum):
     DEFAULT_RESPONDER = "default_responder_specialist"
     END = "end_specialist"
     TRIAGE_ARCHITECT = "triage_architect"
+    DIALOGUE = "dialogue_specialist"  # ADR-CORE-018: HitL clarification

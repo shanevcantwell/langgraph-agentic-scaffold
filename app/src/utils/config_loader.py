@@ -170,6 +170,11 @@ class ConfigLoader:
         merged["llm_providers"] = user_settings.get("llm_providers") or {}
         self._resolve_provider_env_vars(merged.get("llm_providers"))
 
+        # ADR-CORE-018: Merge checkpointing config from user_settings
+        if checkpointing_config := user_settings.get("checkpointing"):
+            merged["checkpointing"] = checkpointing_config
+            logger.debug(f"Checkpointing config merged: enabled={checkpointing_config.get('enabled')}")
+
         # Robustly get bindings, defaulting to an empty dict if the key is missing or its value is None.
         bindings = user_settings.get("specialist_model_bindings") or {}
         default_binding = user_settings.get("default_llm_config")

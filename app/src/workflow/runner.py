@@ -3,16 +3,18 @@ import logging
 import json
 import uuid
 from datetime import datetime
-from typing import Dict, Any, AsyncGenerator
+from typing import Dict, Any, AsyncGenerator, Optional
 
 from langchain_core.messages import HumanMessage, BaseMessage
 from langchain_core.messages import messages_to_dict
+from langgraph.types import Command
 from pydantic import BaseModel
 
 from ..utils.errors import ConfigError
 from ..utils.cancellation_manager import CancellationManager
 from ..graph.state import GraphState
 from ..graph.state_factory import create_initial_state
+from ..persistence.checkpoint_manager import get_checkpointer
 from .graph_builder import GraphBuilder
 
 logger = logging.getLogger(__name__)
@@ -55,8 +57,15 @@ class WorkflowRunner:
         self.specialists = self.builder.specialists
         self._perform_pre_flight_checks()
         self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
-        self.app = self.builder.build() # Build a non-streaming version for sync calls
-        logger.info("WorkflowRunner initialized with compiled graph.")
+
+        # ADR-CORE-018: Initialize checkpointer for HitL interrupt/resume
+        self.checkpointer = get_checkpointer(self.config)
+        self.app = self.builder.build(checkpointer=self.checkpointer)
+
+        if self.checkpointer:
+            logger.info(f"WorkflowRunner initialized with checkpointing enabled ({type(self.checkpointer).__name__}).")
+        else:
+            logger.info("WorkflowRunner initialized (checkpointing disabled).")
 
     def reload(self, overrides: Dict[str, Any] = None):
         """
@@ -65,19 +74,22 @@ class WorkflowRunner:
         """
         logger.info("Reloading WorkflowRunner...")
         from ..utils.config_loader import ConfigLoader
-        
+
         # Reload configuration with overrides
         ConfigLoader().reload(overrides)
-        
+
         # Re-initialize builder with new config
         self.builder = GraphBuilder()
         self.config = self.builder.config
         self.specialists = self.builder.specialists
-        
+
         # Re-run checks and build
         self._perform_pre_flight_checks()
         self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
-        self.app = self.builder.build()
+
+        # ADR-CORE-018: Re-initialize checkpointer on reload
+        self.checkpointer = get_checkpointer(self.config)
+        self.app = self.builder.build(checkpointer=self.checkpointer)
         logger.info("WorkflowRunner successfully reloaded.")
 
     def _perform_pre_flight_checks(self):
@@ -196,3 +208,108 @@ class WorkflowRunner:
         finally:
             # Cleanup cancellation state
             CancellationManager.clear_cancellation(str(run_id))
+
+    async def resume(self, thread_id: str, user_input: str) -> Dict[str, Any]:
+        """
+        ADR-CORE-018: Resume a workflow from an interrupt point.
+
+        This is called when a DialogueSpecialist has triggered an interrupt()
+        and the user has provided clarification. The graph resumes from the
+        checkpoint stored under thread_id.
+
+        Args:
+            thread_id: The unique identifier for this conversation thread.
+                       Must match the thread_id used when the interrupt occurred.
+            user_input: The user's response to the clarification questions.
+
+        Returns:
+            The final state after the graph completes.
+
+        Raises:
+            ValueError: If checkpointing is not enabled.
+            RuntimeError: If no interrupt is pending for the given thread_id.
+        """
+        if not self.checkpointer:
+            raise ValueError(
+                "Cannot resume workflow: checkpointing is not enabled. "
+                "Set checkpointing.enabled=true in user_settings.yaml"
+            )
+
+        logger.info(f"--- Resuming workflow for thread_id: '{thread_id}' with user input ---")
+
+        try:
+            # Create a Command to resume with the user's input
+            # The user_input will be available as the return value of interrupt()
+            resume_command = Command(resume=user_input)
+
+            config = {
+                "configurable": {"thread_id": thread_id},
+                "recursion_limit": self.recursion_limit
+            }
+
+            # Resume the graph from the interrupt point
+            final_state = await self.app.ainvoke(resume_command, config=config)
+            logger.info(f"--- Workflow resumed and completed for thread_id: '{thread_id}' ---")
+
+            return _make_state_serializable(final_state)
+
+        except Exception as e:
+            logger.error(f"--- Resume failed for thread_id '{thread_id}': {e} ---", exc_info=True)
+            return {
+                "error": f"Failed to resume workflow: {e}",
+                "thread_id": thread_id
+            }
+
+    def run_with_thread(
+        self,
+        goal: str,
+        thread_id: Optional[str] = None,
+        text_to_process: str = None,
+        image_to_process: str = None,
+        use_simple_chat: bool = False
+    ) -> tuple[Dict[str, Any], str]:
+        """
+        ADR-CORE-018: Execute workflow with explicit thread tracking.
+
+        This version of run() supports checkpointing by using a thread_id.
+        If the workflow is interrupted (e.g., by DialogueSpecialist), the
+        client can later call resume() with the same thread_id.
+
+        Args:
+            goal: The user's input/request
+            thread_id: Optional thread identifier. If not provided, a new UUID is generated.
+            text_to_process: Optional text content
+            image_to_process: Optional base64 image
+            use_simple_chat: Whether to use simple chat mode
+
+        Returns:
+            Tuple of (final_state, thread_id). The thread_id is needed for resume().
+        """
+        if thread_id is None:
+            thread_id = str(uuid.uuid4())
+
+        logger.info(f"--- Starting workflow for goal: '{goal}' (thread_id: {thread_id}) ---")
+
+        initial_state: GraphState = create_initial_state(
+            goal=goal,
+            text_to_process=text_to_process,
+            image_to_process=image_to_process,
+            use_simple_chat=use_simple_chat
+        )
+
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": self.recursion_limit
+        }
+
+        try:
+            final_state = self.app.invoke(initial_state, config=config)
+            logger.info(f"--- Workflow completed for thread_id: '{thread_id}' ---")
+            return _make_state_serializable(final_state), thread_id
+
+        except Exception as e:
+            logger.error(f"--- Workflow failed for thread_id '{thread_id}': {e} ---", exc_info=True)
+            return {
+                "error": f"Workflow failed: {e}",
+                "thread_id": thread_id
+            }, thread_id

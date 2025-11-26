@@ -3,6 +3,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
+from langgraph.errors import GraphInterrupt
+
 from ..llm.adapter import BaseAdapter
 from ..utils.errors import SpecialistError
 
@@ -80,6 +82,10 @@ class BaseSpecialist(ABC):
         logger.info(f"--- Executing specialist: {self.specialist_name} ---")
         try:
             result = self._execute_logic(state) or {}
+        except GraphInterrupt:
+            # ADR-CORE-018: Let interrupt() propagate for HitL workflows
+            logger.info(f"Specialist '{self.specialist_name}' triggered interrupt for user clarification")
+            raise
         except Exception as e:
             logger.error(f"Specialist '{self.specialist_name}' raised an exception: {e}", exc_info=True)
             raise SpecialistError(f"Execution failed in '{self.specialist_name}': {e}") from e

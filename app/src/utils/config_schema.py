@@ -19,6 +19,27 @@ class LLMProviderConfig(BaseModel):
     )
 
 
+class CheckpointingConfig(BaseModel):
+    """ADR-CORE-018: Configuration for HitL interrupt/resume checkpointing."""
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable graph state persistence for interrupt/resume workflows."
+    )
+    backend: Literal["sqlite", "postgres"] = Field(
+        default="sqlite",
+        description="Checkpointing backend: 'sqlite' for dev, 'postgres' for production."
+    )
+    sqlite_path: Optional[str] = Field(
+        default="./data/checkpoints.db",
+        description="Path to SQLite database file (only used when backend='sqlite')."
+    )
+    postgres_url: Optional[str] = Field(
+        default=None,
+        description="PostgreSQL connection URL (only used when backend='postgres'). Can use ${DATABASE_URL} syntax."
+    )
+
+
 class WorkflowConfig(BaseModel):
     """Defines the graph's execution flow."""
 
@@ -145,4 +166,10 @@ class UserSettings(BaseModel):
     default_llm_config: Optional[str] = Field(
         None,
         description="The default llm_provider key to use for any LLM specialist not explicitly bound. Must exist in llm_providers.",
+    )
+
+    # ADR-CORE-018: Checkpointing configuration for HitL workflows
+    checkpointing: Optional[CheckpointingConfig] = Field(
+        default=None,
+        description="Configuration for graph state persistence (interrupt/resume workflows)."
     )

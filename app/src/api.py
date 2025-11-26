@@ -290,6 +290,56 @@ async def cancel_run(run_id: str):
     CancellationManager.request_cancellation(run_id)
     return {"status": "Cancellation requested"}
 
+
+class ResumeRequest(BaseModel):
+    """ADR-CORE-018: Request body for resuming interrupted workflows."""
+    thread_id: str = Field(
+        ...,
+        description="The thread ID of the interrupted workflow (from interrupt payload)."
+    )
+    user_input: str = Field(
+        ...,
+        description="The user's response to the clarification questions."
+    )
+
+
+@app.post("/v1/graph/resume")
+async def resume_workflow(request: ResumeRequest):
+    """
+    ADR-CORE-018: Resume a workflow from an interrupt point.
+
+    When DialogueSpecialist triggers an interrupt(), this endpoint allows
+    the user to provide their clarification and continue the workflow.
+
+    The thread_id must match the one returned in the interrupt payload.
+    The user_input will be injected as the return value of interrupt().
+    """
+    if not workflow_runner:
+        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
+
+    logger.info(f"Received resume request for thread_id: {request.thread_id}")
+
+    try:
+        result = await workflow_runner.resume(
+            thread_id=request.thread_id,
+            user_input=request.user_input
+        )
+
+        if "error" in result:
+            logger.error(f"Resume failed: {result['error']}")
+            raise HTTPException(status_code=500, detail=result["error"])
+
+        return {"status": "Workflow resumed successfully", "final_state": result}
+
+    except ValueError as e:
+        # Checkpointing not enabled
+        logger.error(f"Resume failed - checkpointing disabled: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error(f"Resume failed with exception: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to resume workflow: {e}")
+
+
 @app.post("/v1/graph/stream")
 async def stream_graph(request: InvokeRequest):
     """Streams the workflow execution step by step."""

@@ -17,10 +17,13 @@ def orchestrator_instance():
     orchestrator = GraphOrchestrator(config, specialists)
     return orchestrator
 
-def test_check_triage_outcome_routes_to_end_on_ask_user(orchestrator_instance):
+def test_check_triage_outcome_routes_to_facilitator_on_ask_user(orchestrator_instance):
     """
-    Tests that check_triage_outcome routes directly to EndSpecialist
+    ADR-CORE-018: Tests that check_triage_outcome routes to Facilitator chain
     when the ContextPlan contains an 'ask_user' action.
+
+    ASK_USER plans now flow through: Facilitator → Dialogue → Router
+    The DialogueSpecialist will interrupt() to pause for user clarification.
     """
     # Arrange
     plan = ContextPlan(
@@ -33,7 +36,7 @@ def test_check_triage_outcome_routes_to_end_on_ask_user(orchestrator_instance):
             )
         ]
     )
-    
+
     state = {
         "artifacts": {
             "context_plan": plan.model_dump()
@@ -43,8 +46,8 @@ def test_check_triage_outcome_routes_to_end_on_ask_user(orchestrator_instance):
     # Act
     result = orchestrator_instance.check_triage_outcome(state)
 
-    # Assert
-    assert result == CoreSpecialist.END.value
+    # Assert - ASK_USER now routes through Facilitator chain for HitL interrupt
+    assert result == "facilitator_specialist"
 
 def test_check_triage_outcome_routes_to_facilitator_on_normal_actions(orchestrator_instance):
     """

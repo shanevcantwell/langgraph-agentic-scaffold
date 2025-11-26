@@ -335,6 +335,13 @@ specialists:
     description: "Orchestrates the execution of a ContextPlan by calling Researcher, FileSpecialist, and Summarizer via MCP."
     requires_artifacts: ["context_plan"]
 
+  dialogue_specialist:
+    type: "procedural"
+    description: "ADR-CORE-018: Presents clarification questions to the user when TriageArchitect determines the request is ambiguous (ASK_USER actions). Uses LangGraph interrupt() to pause graph execution and wait for user response."
+    # This specialist checks context_plan for ASK_USER actions AFTER FacilitatorSpecialist
+    # has executed automated actions. Flow: Triage → Facilitator → Dialogue → Router
+    # If no ASK_USER actions exist, it's a no-op pass-through.
+
   image_specialist:
     type: "llm"
     prompt_file: "image_specialist_prompt.md"
