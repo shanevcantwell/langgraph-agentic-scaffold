@@ -68,6 +68,8 @@ pythonpath = [
     "app"
 ]
 markers = [
-    "live_llm: marks tests that require a live LLM connection and API keys"
+    "live_llm: marks tests that require a live LLM connection and API keys",
+    "integration: marks integration tests that test full workflow paths",
+    "archive: marks tests that validate archive/log output from completed workflows"
 ]
 asyncio_mode = "auto" # Recommended for pytest-asyncio to handle async tests automatically
