@@ -477,6 +477,7 @@ class GraphBuilder:
                 {
                     "facilitator_specialist": "facilitator_specialist",
                     router_name: router_name,
+                    "default_responder_specialist": "default_responder_specialist",
                     CoreSpecialist.END.value: CoreSpecialist.END.value
                 }
             )

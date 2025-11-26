@@ -56,10 +56,11 @@ class GraphOrchestrator:
                     logger.info(f"Triage produced plan with {len(other_actions)} context-gathering actions. Routing to Facilitator.")
                     return "facilitator_specialist"
 
-                # If ONLY ask_user actions exist (no context to gather), route to END for clarification
+                # If ONLY ask_user actions exist (no context to gather), route to default_responder_specialist
+                # to explain what's missing rather than silently ending
                 if ask_user_actions and not other_actions:
-                    logger.info("Triage produced only 'ask_user' actions (no context gathering possible). Routing to EndSpecialist for clarification.")
-                    return CoreSpecialist.END.value
+                    logger.info("Triage produced only 'ask_user' actions (no context gathering possible). Routing to default_responder_specialist for clarification.")
+                    return "default_responder_specialist"
 
                 # Empty plan (no actions at all) - route to Router
                 if not plan.actions:
