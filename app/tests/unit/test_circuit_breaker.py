@@ -63,19 +63,28 @@ def test_violation_type_detection_structure():
 def test_violation_type_detection_loop():
     """
     Verifies that loop violations are correctly identified.
+
+    ADR-CORE-016: Menu Filter Pattern means first loop detection returns
+    state update (Tier 1). This test simulates Tier 1 already active
+    (forbidden_specialists set) so Tier 3 (CircuitBreakerTriggered) fires.
     """
     config = {"workflow": {"max_loop_cycles": 2}}
     monitor = InvariantMonitor(config)
     # A -> A -> A (3 times, threshold 2)
-    state = create_test_state(routing_history=["A", "A", "A"])
+    # Set forbidden_specialists to simulate Tier 1 already active
+    state = create_test_state(
+        routing_history=["A", "A", "A"],
+        scratchpad={"forbidden_specialists": ["A"]}  # Tier 1 already tried
+    )
 
     with patch("app.src.resilience.monitor.logger") as mock_logger:
         with pytest.raises(CircuitBreakerTriggered):
             monitor.check_invariants(state)
 
+        # Tier 3 uses logger.error, check for circuit breaker message
         found = False
-        for call in mock_logger.warning.call_args_list:
-            if "Violation: loop_detected" in call[0][0]:
+        for call in mock_logger.error.call_args_list:
+            if "TIER 3" in call[0][0] or "Circuit Breaker" in call[0][0]:
                 found = True
                 break
-        assert found
+        assert found, f"Expected TIER 3 circuit breaker log. Error calls: {mock_logger.error.call_args_list}"

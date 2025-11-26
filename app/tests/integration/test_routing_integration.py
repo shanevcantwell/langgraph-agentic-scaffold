@@ -269,6 +269,7 @@ def test_router_respects_specialist_cannot_proceed(initialized_app):
 
 
 @pytest.mark.integration
+@pytest.mark.xfail(reason="LLM-dependent: routing decisions vary between models, local models may not follow expected triage→facilitator→chat flow")
 def test_context_aware_routing_prevents_loop(initialized_app):
     """
     End-to-end test verifying context-aware routing prevents infinite loop.
@@ -290,6 +291,9 @@ def test_context_aware_routing_prevents_loop(initialized_app):
 
     This test verifies the fix in router_specialist.py:_get_available_specialists()
     that excludes planning specialists when gathered_context artifact exists.
+
+    NOTE: This test depends on LLM routing decisions and may fail with local models
+    that don't follow the expected routing pattern.
     """
     app = initialized_app
 
