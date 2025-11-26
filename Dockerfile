@@ -15,9 +15,12 @@ ARG EXECUTION_MODE=supervised
 
 # Install system dependencies. 'build-essential' includes kernel headers.
 # Playwright dependencies: https://playwright.dev/docs/ci#docker
+# Docker CLI for external MCP container spawning (ADR-MCP-003)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     build-essential \
+    curl \
+    ca-certificates \
     # Playwright browser dependencies
     libnss3 \
     libnspr4 \
@@ -35,6 +38,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 && \
+    # Install Docker CLI (for spawning external MCP containers)
+    curl -fsSL https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz | tar xz --strip-components=1 -C /usr/local/bin docker/docker && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user for security.

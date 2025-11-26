@@ -84,11 +84,43 @@ class HybridSpecialistConfig(BaseSpecialistConfig):
 SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig, HybridSpecialistConfig]
 
 
+class ExternalMcpServiceConfig(BaseModel):
+    """Configuration for a single external MCP service (Docker container, Node.js server, etc.)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    enabled: bool = Field(default=False, description="Whether this external MCP service is enabled.")
+    required: bool = Field(default=False, description="If true, application fails to start if service unavailable.")
+    command: str = Field(..., description="Executable command (e.g., 'docker').")
+    args: list[str] = Field(default_factory=list, description="Command arguments.")
+
+
+class ExternalMcpConfig(BaseModel):
+    """Configuration for external MCP services (Docker containers, etc.)."""
+
+    enabled: bool = Field(default=False, description="Global enable/disable for all external MCP services.")
+    tracing_enabled: bool = Field(default=True, description="Toggle LangSmith trace spans for external MCP calls.")
+    services: Dict[str, ExternalMcpServiceConfig] = Field(
+        default_factory=dict, description="Configuration for individual external MCP services."
+    )
+
+
+class McpConfig(BaseModel):
+    """Configuration for the MCP (Message-Centric Protocol) system."""
+
+    tracing_enabled: bool = Field(default=True, description="Toggle LangSmith trace spans for internal MCP calls.")
+    timeout_seconds: int = Field(default=5, description="Maximum execution time per MCP call.")
+    external_mcp: Optional[ExternalMcpConfig] = Field(
+        default=None, description="Configuration for external MCP services (Docker containers, etc.)."
+    )
+
+
 class RootConfig(BaseModel):
     """The root model for the entire config.yaml file."""
 
     workflow: WorkflowConfig
     specialists: Dict[str, SpecialistConfig]
+    mcp: Optional[McpConfig] = Field(default=None, description="MCP configuration for internal and external services.")
 
 
 class UserSettings(BaseModel):

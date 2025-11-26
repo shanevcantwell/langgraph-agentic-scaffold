@@ -31,6 +31,16 @@ async def lifespan(app: FastAPI):
     """
     global langsmith_client, workflow_runner
     workflow_runner = WorkflowRunner()
+
+    # Initialize external MCP services (Docker containers like filesystem)
+    # This must be called after WorkflowRunner init to connect containers
+    try:
+        await workflow_runner.builder.initialize_external_mcp()
+        logger.info("--- FastAPI startup: External MCP services initialized. ---")
+    except Exception as e:
+        logger.error(f"Failed to initialize external MCP services: {e}", exc_info=True)
+        # Non-fatal if services are marked as not required
+
     try:
         # This will respect the environment variables (LANGCHAIN_TRACING_V2, etc.)
         langsmith_client = Client()
@@ -38,9 +48,16 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize LangSmith client on startup: {e}", exc_info=True)
         langsmith_client = None
-    
+
     yield
-    
+
+    # Cleanup external MCP containers on shutdown
+    try:
+        await workflow_runner.builder.cleanup_external_mcp()
+        logger.info("--- FastAPI shutdown: External MCP services cleaned up. ---")
+    except Exception as e:
+        logger.error(f"Error during external MCP cleanup: {e}", exc_info=True)
+
     if langsmith_client:
         # On shutdown, give the LangSmith client a moment to send any buffered traces.
         logger.info("--- FastAPI shutdown: Allowing 2s for LangSmith trace flush... ---")
