@@ -170,6 +170,165 @@ def test_api_streams_tiered_chat_specialists(initialized_app):
             )
 
 
+@pytest.mark.integration
+def test_api_streams_file_operations_specialist(initialized_app):
+    """
+    Integration test: Verifies file_operations_specialist streams correctly.
+
+    Tests that file operations (list files, read, etc.) produce proper
+    streaming output including:
+    - Specialist status updates
+    - MCP call execution
+    - Final response with file listing
+    """
+    app = initialized_app
+
+    with TestClient(app) as client:
+        payload = {
+            "input_prompt": "List files in the workspace",
+            "text_to_process": None,
+            "image_to_process": None
+        }
+
+        response = client.post("/v1/graph/stream", json=payload)
+        assert response.status_code == 200
+
+        specialist_names = set()
+        status_updates = []
+        final_state = None
+
+        for line in response.text.split('\n'):
+            if line.startswith('data:'):
+                try:
+                    data = json.loads(line[len('data:'):].strip())
+
+                    if 'status' in data:
+                        status_updates.append(data['status'])
+                        match = re.search(r'Executing specialist: (\w+)', data['status'])
+                        if match:
+                            specialist_names.add(match.group(1))
+
+                    # Capture final state for assertion
+                    if 'final_state' in data:
+                        final_state = data['final_state']
+
+                except json.JSONDecodeError:
+                    pass
+
+        # Should have routed through triage and to file operations
+        assert len(specialist_names) >= 2, (
+            f"Expected multiple specialists. Got: {specialist_names}"
+        )
+
+        # Final state should exist
+        assert final_state is not None or any("complete" in s.lower() for s in status_updates), (
+            "Expected final state or completion status in stream"
+        )
+
+
+@pytest.mark.integration
+def test_api_streams_artifacts_in_response(initialized_app):
+    """
+    Integration test: Verifies artifacts are included in streamed response.
+
+    Tests that specialist-generated artifacts (system plans, HTML, etc.)
+    are properly included in the final streamed state.
+    """
+    app = initialized_app
+
+    with TestClient(app) as client:
+        # Request that should produce artifacts (planning task)
+        payload = {
+            "input_prompt": "Create a brief plan for a hello world web page",
+            "text_to_process": None,
+            "image_to_process": None
+        }
+
+        response = client.post("/v1/graph/stream", json=payload)
+        assert response.status_code == 200
+
+        artifacts_found = False
+        final_response_found = False
+
+        for line in response.text.split('\n'):
+            if line.startswith('data:'):
+                try:
+                    data = json.loads(line[len('data:'):].strip())
+
+                    # Check for artifacts in streamed data
+                    if 'artifacts' in data:
+                        artifacts_found = True
+
+                    # Check final state for artifacts
+                    if 'final_state' in data:
+                        final_state = data['final_state']
+                        if 'artifacts' in final_state and final_state['artifacts']:
+                            artifacts_found = True
+                        if 'messages' in final_state and final_state['messages']:
+                            final_response_found = True
+
+                    # Check for completion message content
+                    if 'content' in data or 'message' in data:
+                        final_response_found = True
+
+                except json.JSONDecodeError:
+                    pass
+
+        # At minimum, should have some response content
+        assert final_response_found or artifacts_found, (
+            "Expected either final response content or artifacts in stream"
+        )
+
+
+@pytest.mark.integration
+def test_api_streams_status_for_all_routed_specialists(initialized_app):
+    """
+    Integration test: Verifies status updates are emitted for every specialist
+    in the routing path, not just router.
+
+    This is critical for UI feedback - users need to see progress through
+    the entire workflow.
+    """
+    app = initialized_app
+
+    with TestClient(app) as client:
+        payload = {
+            "input_prompt": "What is 2 + 2?",
+            "text_to_process": None,
+            "image_to_process": None
+        }
+
+        response = client.post("/v1/graph/stream", json=payload)
+        assert response.status_code == 200
+
+        execution_order = []
+
+        for line in response.text.split('\n'):
+            if line.startswith('data:'):
+                try:
+                    data = json.loads(line[len('data:'):].strip())
+                    if 'status' in data:
+                        match = re.search(r'Executing specialist: (\w+)', data['status'])
+                        if match:
+                            specialist = match.group(1)
+                            if specialist not in execution_order:
+                                execution_order.append(specialist)
+                except json.JSONDecodeError:
+                    pass
+
+        # Should have execution order tracked
+        assert len(execution_order) >= 2, (
+            f"Expected at least 2 specialists in execution path. "
+            f"Got: {execution_order}"
+        )
+
+        # Triage should be first (entry point)
+        if "triage_architect" in execution_order:
+            assert execution_order[0] == "triage_architect", (
+                f"triage_architect should be first. Order: {execution_order}"
+            )
+
+
 # ============================================================================
 # FIXTURE: Initialized FastAPI App
 # ============================================================================

@@ -467,6 +467,108 @@ class TestRouterSpecialistExecution:
 
 
 # =============================================================================
+# ARCHIVER SPECIALIST TESTS
+# =============================================================================
+
+class TestArchiverSpecialistExecution:
+    """Test ArchiverSpecialist execution."""
+
+    def test_archiver_creates_archive_package(
+        self, initialized_specialist_factory, tmp_path
+    ):
+        """Verify ArchiverSpecialist creates an Atomic Archival Package."""
+        import os
+        from pathlib import Path
+
+        # Set archive path to temp directory
+        os.environ["AGENTIC_SCAFFOLD_ARCHIVE_PATH"] = str(tmp_path)
+
+        archiver = initialized_specialist_factory("ArchiverSpecialist")
+
+        state = create_test_state(
+            messages=[
+                HumanMessage(content="What is Python?"),
+                AIMessage(content="Python is a programming language...")
+            ],
+            artifacts={
+                "final_user_response.md": "Python is a versatile programming language.",
+                "response_mode": "tiered_full"
+            }
+        )
+        state["routing_history"] = ["triage_architect", "chat_specialist", "end_specialist"]
+
+        result = archiver.execute(state)
+
+        # Should produce archive_package_path artifact
+        assert "artifacts" in result
+        assert "archive_package_path" in result["artifacts"]
+
+        # Verify archive file was created
+        archive_path = result["artifacts"]["archive_package_path"]
+        assert Path(archive_path).exists(), f"Archive not created at {archive_path}"
+        assert archive_path.endswith(".zip")
+
+    def test_archiver_includes_manifest(
+        self, initialized_specialist_factory, tmp_path
+    ):
+        """Verify archive includes valid manifest.json."""
+        import os
+        import zipfile
+        import json
+
+        os.environ["AGENTIC_SCAFFOLD_ARCHIVE_PATH"] = str(tmp_path)
+
+        archiver = initialized_specialist_factory("ArchiverSpecialist")
+
+        state = create_test_state(
+            messages=[HumanMessage(content="Test")],
+            artifacts={"final_user_response.md": "Test response"}
+        )
+        state["routing_history"] = ["triage_architect", "end_specialist"]
+
+        result = archiver.execute(state)
+
+        archive_path = result["artifacts"]["archive_package_path"]
+
+        # Open and verify manifest
+        with zipfile.ZipFile(archive_path, 'r') as zf:
+            assert "manifest.json" in zf.namelist()
+
+            manifest = json.loads(zf.read("manifest.json"))
+            assert "run_id" in manifest
+            assert "routing_history" in manifest
+            assert "final_response_generated" in manifest
+
+    def test_archiver_includes_report(
+        self, initialized_specialist_factory, tmp_path
+    ):
+        """Verify archive includes report.md."""
+        import os
+        import zipfile
+
+        os.environ["AGENTIC_SCAFFOLD_ARCHIVE_PATH"] = str(tmp_path)
+
+        archiver = initialized_specialist_factory("ArchiverSpecialist")
+
+        state = create_test_state(
+            messages=[HumanMessage(content="Generate a report")],
+            artifacts={"final_user_response.md": "Here is your report content."}
+        )
+        state["routing_history"] = ["triage_architect", "chat_specialist", "end_specialist"]
+
+        result = archiver.execute(state)
+
+        archive_path = result["artifacts"]["archive_package_path"]
+
+        with zipfile.ZipFile(archive_path, 'r') as zf:
+            assert "report.md" in zf.namelist()
+
+            report_content = zf.read("report.md").decode("utf-8")
+            # Report should have some content
+            assert len(report_content) > 0
+
+
+# =============================================================================
 # END SPECIALIST TESTS
 # =============================================================================
 
