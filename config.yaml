@@ -130,9 +130,10 @@ specialists:
     description: "MCP-only service layer for file system operations. NOT routable - accessed exclusively via MCP by other specialists. User-initiated file operations now handled by external filesystem MCP container."
     root_dir: "${WORKSPACE_PATH:-workspace}" # Workspace path from .env (defaults to 'workspace')
 
-  # file_operations_specialist REMOVED - replaced by external filesystem MCP container
-  # Users can now interact with filesystem via chat_specialist or other specialists
-  # that call the external filesystem MCP service
+  file_operations_specialist:
+    type: "llm"
+    prompt_file: "file_operations_prompt.md"
+    description: "User interface for file system operations. Interprets user requests (list files, read, write, etc.) and executes via MCP. Use this for any file system task (e.g., 'list files', 'read config.yaml', 'create notes.txt')."
 
   batch_processor_specialist:
     type: "llm"
