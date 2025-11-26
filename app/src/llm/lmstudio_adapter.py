@@ -45,9 +45,13 @@ class LMStudioAdapter(BaseAdapter):
         self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
         self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
         self.max_tokens = self.config.get('parameters', {}).get('max_tokens') or 4096
+        # Pass through any additional sampling params (top_p, top_k, etc.) to the API
+        self.extra_params = {k: v for k, v in self.config.get('parameters', {}).items()
+                            if k not in ('temperature', 'max_tokens')}
+        extra_params_str = f", extra_params={self.extra_params}" if self.extra_params else ""
         logger.info(f"INITIALIZED LMStudioAdapter. Requests will be sent to '{base_url}' for model "
                     f"'{self.model_name}' with a timeout of {self.timeout}s, max_tokens={self.max_tokens}, "
-                    f"and context_window={self.context_window}. "
+                    f"and context_window={self.context_window}{extra_params_str}. "
                     "Ensure this matches your LM Studio server setup."
                    )
 
@@ -177,6 +181,7 @@ class LMStudioAdapter(BaseAdapter):
             "messages": api_messages,
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
+            **self.extra_params,  # top_p, top_k, etc. from config
         }
 
         # --- Intent Detection: Prioritize native tool-calling ---

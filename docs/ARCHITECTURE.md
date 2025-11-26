@@ -620,17 +620,32 @@ The `triage_architect` is the entry point of the system. It does not answer the 
 *   **SUMMARIZE:** Compress large context.
 *   **ASK_USER:** (Faithfulness Check) Ask the user for clarification if the request is ambiguous.
 
-### 6.2 The Faithfulness Loop
+### 6.2 The Faithfulness Loop (ADR-CORE-018)
 
 If the `triage_architect` determines that the request is ambiguous or impossible to fulfill (e.g., "Fix the function" with no file context), it generates an `ASK_USER` action.
 
 **Workflow:**
 1.  **Triage:** Detects ambiguity -> `{"type": "ask_user", "target": "Which file?"}`
-2.  **Orchestrator:** Detects `ASK_USER` action -> **Short-circuits** the workflow.
-3.  **Routing:** Routes directly to `end_specialist`.
-4.  **EndSpecialist:** Presents the clarification questions to the user.
+2.  **Facilitator:** Executes any automated actions first (READ_FILE, RESEARCH, etc.)
+3.  **Dialogue:** Detects remaining `ASK_USER` actions -> calls `interrupt()` to pause graph
+4.  **User:** Provides clarification via `/v1/graph/resume` endpoint
+5.  **Resume:** Graph continues with user's answer injected into state
 
 This prevents the `router_specialist` from receiving a bad prompt and hallucinating a solution.
+
+**Key Components:**
+- `DialogueSpecialist`: Uses LangGraph's `interrupt()` function to pause execution
+- `SqliteSaver`/`PostgresSaver`: Checkpointing backends for state persistence
+- `/v1/graph/resume` API: Endpoint to continue interrupted workflows
+
+**Configuration:**
+```yaml
+# user_settings.yaml
+checkpointing:
+  enabled: true
+  backend: "sqlite"  # "sqlite" for dev, "postgres" for production
+  sqlite_path: "./data/checkpoints.db"
+```
 
 ### 6.3 Context Facilitation
 
@@ -800,3 +815,30 @@ Architecture never depends on specific models. All model bindings are runtime st
 - Seamless upgrade to API models for production
 - Per-specialist model selection (hybrid deployments)
 - A/B testing across different model providers
+
+### 10.3 Model-Specific Sampling Parameters
+
+The LMStudio adapter supports pass-through of model-specific sampling parameters via the `parameters` dict. This is critical for models like MoE (Mixture of Experts) that require specific tuning:
+
+```yaml
+# user_settings.yaml
+llm_providers:
+  lmstudio_router:
+    type: "lmstudio"
+    api_identifier: "openai/gpt-oss-20b-gguf/gpt-oss-20b-mxfp4.gguf"
+    parameters:
+      temperature: 0.7
+      top_p: 0.8      # Nucleus sampling
+      top_k: 64       # Top-k sampling
+      # Any additional OpenAI-compatible params passed through
+```
+
+**Supported Parameters:**
+- `temperature`, `max_tokens` - Standard (explicitly handled)
+- `top_p`, `top_k` - Sampling params (passed through)
+- Any other OpenAI-compatible params - Passed through to the API
+
+The adapter logs extra params on initialization for verification:
+```
+INITIALIZED LMStudioAdapter... extra_params={'top_p': 0.8, 'top_k': 64}
+```

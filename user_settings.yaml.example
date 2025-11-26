@@ -9,6 +9,7 @@
 # --- 1. Define Your Concrete Models ---
 # This section defines your named LLM provider configurations. Each configuration
 # must have a `type` (which maps to an adapter) and an `api_identifier` (the model name).
+# You can also include a `parameters` section for model-specific sampling settings.
 llm_providers:
   # For cloud providers, this is the API model name.
   gemini_flash:
@@ -19,15 +20,23 @@ llm_providers:
     api_identifier: "gemini-2.5-pro"
 
   # For local providers (like LM Studio), this is typically the model file path/name
-  # that the server is loading.
+  # that the server is loading. Include parameters for model-specific sampling.
   lmstudio_router:
     type: "lmstudio"
     api_identifier: "gpt-oss-20b"   # Tested to be excellent router when prompted well
+    parameters:
+      temperature: 0.7
+      top_p: 0.8      # Nucleus sampling - important for MoE models
+      top_k: 64       # Top-k sampling - model-specific tuning
   lmstudio_specialist:
     type: "lmstudio"
     api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
+    parameters:
+      temperature: 0.7
+      top_p: 0.9
 
-  # OLLAMA SUPPORT - Use https://github.com/shanevcantwell/ollama-shim  # The Ollama adapter is planned but not currently available.
+  # OLLAMA SUPPORT - Use https://github.com/shanevcantwell/ollama-shim
+  # The Ollama adapter is planned but not currently available.
   # See app/src/llm/factory.py line 17 for implementation status.
   # Uncomment the section below once Ollama support is added:
   # ollama_local:
@@ -46,14 +55,18 @@ specialist_model_bindings:
   # --- Orchestration Bindings ---
   # It's critical to bind the core orchestrators explicitly.
   router_specialist: "lmstudio_router"
-  prompt_triage_specialist: "gemini_flash"
+  default_responder_specialist: "lmstudio_router"
+  prompt_triage_specialist: "lmstudio_router"
+  triage_architect: "lmstudio_router"
+
+  # --- Research & Context Gathering ---
+  researcher_specialist: "lmstudio_specialist"
+  summarizer_specialist: "lmstudio_specialist"
 
   # --- Hybrid Specialist Bindings ---
-  # The Open Interpreter specialist is hybrid, requiring an LLM for planning.
   # The End Specialist is hybrid, using an LLM for response synthesis.
-  # You MUST bind them to an LLM provider here for them to work.
-  open_interpreter_specialist: "gemini_flash"
-  end_specialist: "gemini_flash"
+  # You MUST bind it to an LLM provider here for it to work.
+  # end_specialist: "gemini_flash"  # Uncomment if you want LLM synthesis
 
   # --- Tiered Chat Subgraph Bindings (CORE-CHAT-002) ---
   # ===========================================================================
@@ -90,8 +103,9 @@ specialist_model_bindings:
   # - Test with local models first, upgrade to cloud for production
   # ===========================================================================
 
-  progenitor_alpha_specialist: "gemini_flash"  # Analytical perspective (cloud, fast)
-  progenitor_bravo_specialist: "lmstudio_specialist"  # Contextual perspective (local, free)
+  progenitor_alpha_specialist: "lmstudio_specialist"  # Analytical perspective
+  progenitor_bravo_specialist: "lmstudio_specialist"  # Contextual perspective
+  tiered_synthesizer_specialist: "lmstudio_specialist"
 
   # ALTERNATIVE CONFIGURATIONS (uncomment to try):
   # Both Cloud (Premium Quality):
@@ -106,14 +120,21 @@ specialist_model_bindings:
   # progenitor_alpha_specialist: "gemini_flash"  # Speed-optimized
   # progenitor_bravo_specialist: "gemini_pro"    # Quality-optimized
 
-  # Note: tiered_synthesizer_specialist is procedural and doesn't need a model binding
-  # It simply formats the progenitor responses into tiered markdown output.
-
 # --- 3. Set the Default ---
 # The default LLM configuration to use for any specialist that is not
 # explicitly bound above. This must match a key from the providers defined above.
-default_llm_config: "gemini_flash"
+default_llm_config: "lmstudio_specialist"
 
+# --- 4. Checkpointing (ADR-CORE-018: Human-in-the-Loop) ---
+# Enables state persistence for interrupt/resume workflows.
+# When DialogueSpecialist needs user clarification, the graph state is saved.
+checkpointing:
+  enabled: true
+  backend: "sqlite"  # "sqlite" for dev, "postgres" for production
+  sqlite_path: "./data/checkpoints.db"
+  # postgres_url: "${DATABASE_URL}"  # Uncomment for production
+
+# --- 5. UI Module ---
 # Standard clean UI (default)
 ui_module: "gradio_app"     # most basic sample UI
 # ui_module: "gradio_vegas"   # retro scifi terminal UI
