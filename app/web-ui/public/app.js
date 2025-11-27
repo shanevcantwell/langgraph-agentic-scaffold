@@ -512,25 +512,25 @@ function handleStreamEvent(event) {
             if (source) {
                 addThoughtStreamEntry(source, 'Execution complete', 'success');
 
-                // Extract thought process from scratchpad
+                // Extract thought process from scratchpad (generic pattern)
                 if (data.scratchpad) {
-                    if (data.scratchpad.triage_reasoning) {
-                        addThoughtStreamEntry('TRIAGE', `Reasoning: ${data.scratchpad.triage_reasoning}`, 'info');
-                    }
+                    // Generic: display any key ending in _reasoning or _decision
+                    Object.keys(data.scratchpad).forEach(key => {
+                        if (key.endsWith('_reasoning') || key.endsWith('_decision')) {
+                            const specialist = key.replace(/_reasoning$|_decision$/, '').toUpperCase().replace(/_/g, ' ');
+                            const value = data.scratchpad[key];
+                            // Handle multiline values
+                            const lines = String(value).split('\n');
+                            lines.forEach(line => {
+                                if (line.trim()) {
+                                    addThoughtStreamEntry(specialist, line.trim(), 'info');
+                                }
+                            });
+                        }
+                    });
+                    // Special case: facilitator_complete (boolean flag, not reasoning)
                     if (data.scratchpad.facilitator_complete) {
                         addThoughtStreamEntry('FACILITATOR', 'Context gathering complete', 'success');
-                    }
-                    if (data.scratchpad.router_decision) {
-                        addThoughtStreamEntry('ROUTER', `Decision: ${data.scratchpad.router_decision}`, 'info');
-                    }
-                    if (data.scratchpad.batch_processor_reasoning) {
-                        // Split multiline reasoning into separate entries
-                        const lines = data.scratchpad.batch_processor_reasoning.split('\n');
-                        lines.forEach(line => {
-                            if (line.trim()) {
-                                addThoughtStreamEntry('BATCH', line.trim(), 'info');
-                            }
-                        });
                     }
                 }
 

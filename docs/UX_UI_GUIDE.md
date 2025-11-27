@@ -254,15 +254,26 @@ Artifacts are stored as a dictionary with string keys. Common artifact keys:
 
 Specialists emit thinking traces to `scratchpad` for UI observability. These are **NOT used for response synthesis** - `EndSpecialist` only reads `user_response_snippets` from scratchpad.
 
-| Key | Source | Content |
-|-----|--------|---------|
-| `triage_reasoning` | TriageArchitect | Explanation of context analysis and action plan |
-| `facilitator_complete` | FacilitatorSpecialist | Boolean flag when context gathering finishes |
-| `router_decision` | RouterSpecialist | Routing decision explanation |
-| `batch_processor_reasoning` | BatchProcessorSpecialist | File sorting decisions with LLM rationales |
-| `user_response_snippets` | Various specialists | **Response synthesis only** (not observability) |
+**Convention (Generic Pattern):**
+- Keys ending in `_reasoning` or `_decision` are automatically displayed in the Thought Stream
+- Example: `triage_reasoning`, `router_decision`, `batch_processor_reasoning`
+- The UI extracts the specialist name from the key prefix (e.g., `triage_reasoning` → "TRIAGE")
 
-**Note:** Most specialists have "quiet minds" - they don't emit thinking traces. Orchestration specialists (Triage, Facilitator, Router) and BatchProcessorSpecialist emit observability data.
+**Adding Observability to a New Specialist:**
+```python
+return {
+    "scratchpad": {
+        "myspecialist_reasoning": "Decided to X because Y..."
+    }
+}
+```
+No UI changes required - the generic pattern handles it.
+
+**Reserved Keys (Not Observability):**
+| Key | Purpose |
+|-----|---------|
+| `facilitator_complete` | Boolean flag (special case, shows "Context gathering complete") |
+| `user_response_snippets` | **Response synthesis only** - read by EndSpecialist |
 
 ## **5.0 Using the ApiClient**
 
