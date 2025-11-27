@@ -1,5 +1,14 @@
 # Test Suite Summary
 
+## Overview
+
+| Category | Files | Tests |
+|----------|-------|-------|
+| Unit | 57 | 384 |
+| Integration | 21 | 133 |
+| Other | 7 | 99 |
+| **Total** | **85** | **616** |
+
 
 ## `app/tests/interface/test_context_schema.py`
 

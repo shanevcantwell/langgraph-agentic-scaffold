@@ -13,8 +13,61 @@ def summarize_tests(start_dir: str, output_file: str):
     search_path = project_root / start_dir
     output_path = project_root / output_file
 
-    summary_lines = ["# Test Suite Summary\n"]
+    # First pass: collect counts by category
+    counts = {
+        "unit": {"files": 0, "tests": 0},
+        "integration": {"files": 0, "tests": 0},
+        "other": {"files": 0, "tests": 0},
+    }
 
+    for root, _, files in os.walk(search_path):
+        for file in files:
+            if file.startswith("test_") and file.endswith(".py"):
+                file_path = Path(root) / file
+                relative_path = str(file_path.relative_to(project_root))
+
+                # Determine category
+                if "/unit/" in relative_path:
+                    category = "unit"
+                elif "/integration/" in relative_path:
+                    category = "integration"
+                else:
+                    category = "other"
+
+                counts[category]["files"] += 1
+
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        source = f.read()
+                        tree = ast.parse(source)
+                        for node in ast.walk(tree):
+                            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                                counts[category]["tests"] += 1
+                except Exception:
+                    pass
+
+    # Build summary with counts header
+    total_files = sum(c["files"] for c in counts.values())
+    total_tests = sum(c["tests"] for c in counts.values())
+
+    summary_lines = [
+        "# Test Suite Summary\n",
+        "## Overview\n",
+        "| Category | Files | Tests |",
+        "|----------|-------|-------|",
+        f"| Unit | {counts['unit']['files']} | {counts['unit']['tests']} |",
+        f"| Integration | {counts['integration']['files']} | {counts['integration']['tests']} |",
+    ]
+
+    if counts["other"]["files"] > 0:
+        summary_lines.append(f"| Other | {counts['other']['files']} | {counts['other']['tests']} |")
+
+    summary_lines.extend([
+        f"| **Total** | **{total_files}** | **{total_tests}** |",
+        "",
+    ])
+
+    # Second pass: detailed listing
     for root, _, files in os.walk(search_path):
         for file in sorted(files):
             if file.startswith("test_") and file.endswith(".py"):
