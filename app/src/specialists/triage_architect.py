@@ -26,10 +26,21 @@ class TriageArchitect(BaseSpecialist):
             logger.warning("TriageArchitect received no messages.")
             return {}
 
-        # Check for uploaded image (Blind Triage Support)
+        # Check for uploaded content (Blind Triage Support)
+        from langchain_core.messages import HumanMessage as HM
+
+        # Handle uploaded text (Data Injection)
+        if state.get("artifacts", {}).get("text_to_process"):
+            if messages and isinstance(messages[-1], HM):
+                last_content = messages[-1].content
+                text_length = len(state["artifacts"]["text_to_process"])
+                messages = messages[:-1] + [
+                    HM(content=last_content + f"\n\n[SYSTEM NOTE: The user has uploaded a document ({text_length} characters). This document is ALREADY AVAILABLE in artifacts - you do NOT need to gather it. Do NOT emit READ_FILE or RESEARCH actions to obtain this document. Emit an empty actions list and recommend an appropriate specialist to process it.]")
+                ]
+
+        # Handle uploaded image
         if state.get("artifacts", {}).get("uploaded_image.png"):
             # Append image notification to last message
-            from langchain_core.messages import HumanMessage as HM
             if messages and isinstance(messages[-1], HM):
                 last_content = messages[-1].content
                 messages = messages[:-1] + [

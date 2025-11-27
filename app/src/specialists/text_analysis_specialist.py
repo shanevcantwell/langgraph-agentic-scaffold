@@ -31,7 +31,9 @@ class TextAnalysisSpecialist(BaseSpecialist):
             # Recommend a specialist that can provide the missing artifact (Task 2.7: moved to scratchpad)
             return {"messages": [ai_message], "scratchpad": {"recommended_specialists": ["file_specialist"]}}
 
-        contextual_messages = messages + [HumanMessage(content=f"Please perform the requested analysis on the following text:\n\n---\n{text_to_process}\n---")]
+        # Include uploaded text as context - the user's message determines how to use it
+        # (e.g., "summarize this" vs "use this reference to analyze X")
+        contextual_messages = messages + [HumanMessage(content=f"The following document has been provided as context:\n\n---\n{text_to_process}\n---\n\nPerform the analysis requested by the user above.")]
 
         request = StandardizedLLMRequest(
             messages=contextual_messages, output_model_class=TextAnalysis
@@ -60,6 +62,7 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 "text_analysis_report.md": report,
                 "text_analysis": json_response # Store the structured data as well
             },
+            "task_is_complete": True,  # Root level - checked by check_task_completion()
         }
 
         return updated_state

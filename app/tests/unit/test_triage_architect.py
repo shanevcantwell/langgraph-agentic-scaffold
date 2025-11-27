@@ -241,3 +241,168 @@ def test_triage_default_empty_recommendations_if_not_provided(triage_architect, 
     assert "scratchpad" in result
     assert "recommended_specialists" in result["scratchpad"]
     assert result["scratchpad"]["recommended_specialists"] == []
+
+
+# ==============================================================================
+# Data Injection / Blind Triage Tests
+# ==============================================================================
+
+def test_triage_appends_system_note_for_text_to_process(triage_architect, mock_llm_adapter):
+    """
+    Test that TriageArchitect appends a system note when text_to_process is in artifacts.
+
+    Bug fixed: When user uploads a file, the content goes to artifacts['text_to_process'].
+    Without a system note, the LLM would emit READ_FILE with a guessed filename,
+    causing MCP to fail with "File not found".
+
+    The fix appends [SYSTEM NOTE] telling LLM the content is already available.
+    """
+    uploaded_content = "This is the content of an uploaded file with important information."
+    state = {
+        "messages": [HumanMessage(content="Analyze the uploaded document")],
+        "artifacts": {"text_to_process": uploaded_content}
+    }
+
+    expected_plan = {
+        "reasoning": "Content already in artifacts, no READ_FILE needed",
+        "actions": [],  # Should NOT emit READ_FILE
+        "recommended_specialists": ["text_analysis_specialist"]
+    }
+
+    mock_llm_adapter.invoke.return_value = {
+        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+    }
+
+    # Act
+    result = triage_architect.execute(state)
+
+    # Assert - verify the LLM was called with the system note
+    call_args = mock_llm_adapter.invoke.call_args[0][0]
+    messages = call_args.messages
+
+    # Find the message with the system note
+    system_note_found = False
+    for msg in messages:
+        if hasattr(msg, 'content') and "[SYSTEM NOTE:" in msg.content:
+            system_note_found = True
+            # Verify key content of the note
+            assert "uploaded a document" in msg.content
+            assert str(len(uploaded_content)) in msg.content  # Character count
+            assert "ALREADY AVAILABLE" in msg.content
+            assert "Do NOT emit READ_FILE or RESEARCH" in msg.content
+            break
+
+    assert system_note_found, "System note for text_to_process should be appended to messages"
+
+
+def test_triage_no_system_note_without_text_to_process(triage_architect, mock_llm_adapter):
+    """
+    Test that no system note is appended when text_to_process is NOT in artifacts.
+    """
+    state = {
+        "messages": [HumanMessage(content="Hello, how are you?")],
+        "artifacts": {}  # No text_to_process
+    }
+
+    expected_plan = {
+        "reasoning": "Simple greeting",
+        "actions": [],
+        "recommended_specialists": ["chat_specialist"]
+    }
+
+    mock_llm_adapter.invoke.return_value = {
+        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+    }
+
+    # Act
+    result = triage_architect.execute(state)
+
+    # Assert - verify no system note was added
+    call_args = mock_llm_adapter.invoke.call_args[0][0]
+    messages = call_args.messages
+
+    for msg in messages:
+        if hasattr(msg, 'content'):
+            assert "[SYSTEM NOTE:" not in msg.content, "No system note should be added without text_to_process"
+
+
+def test_triage_appends_system_note_for_uploaded_image(triage_architect, mock_llm_adapter):
+    """
+    Test that TriageArchitect appends a system note when uploaded_image.png is in artifacts.
+
+    This tests the pre-existing image handling (which served as the pattern for text_to_process).
+    """
+    state = {
+        "messages": [HumanMessage(content="Describe this image")],
+        "artifacts": {"uploaded_image.png": b"fake image bytes"}
+    }
+
+    expected_plan = {
+        "reasoning": "Image analysis needed",
+        "actions": [],
+        "recommended_specialists": ["vision_specialist"]
+    }
+
+    mock_llm_adapter.invoke.return_value = {
+        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+    }
+
+    # Act
+    result = triage_architect.execute(state)
+
+    # Assert - verify the image system note was appended
+    call_args = mock_llm_adapter.invoke.call_args[0][0]
+    messages = call_args.messages
+
+    system_note_found = False
+    for msg in messages:
+        if hasattr(msg, 'content') and "[SYSTEM NOTE:" in msg.content:
+            system_note_found = True
+            assert "uploaded an image" in msg.content
+            assert "Do not ask for the image" in msg.content
+            break
+
+    assert system_note_found, "System note for uploaded image should be appended"
+
+
+def test_triage_both_text_and_image_get_system_notes(triage_architect, mock_llm_adapter):
+    """
+    Test that both text and image system notes are appended when both are present.
+    """
+    state = {
+        "messages": [HumanMessage(content="Compare the document with the image")],
+        "artifacts": {
+            "text_to_process": "Document content here",
+            "uploaded_image.png": b"fake image bytes"
+        }
+    }
+
+    expected_plan = {
+        "reasoning": "Multi-modal analysis",
+        "actions": [],
+        "recommended_specialists": ["vision_specialist"]
+    }
+
+    mock_llm_adapter.invoke.return_value = {
+        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+    }
+
+    # Act
+    result = triage_architect.execute(state)
+
+    # Assert - verify both notes are appended (in sequence)
+    call_args = mock_llm_adapter.invoke.call_args[0][0]
+    messages = call_args.messages
+
+    text_note_found = False
+    image_note_found = False
+
+    for msg in messages:
+        if hasattr(msg, 'content'):
+            if "uploaded a document" in msg.content:
+                text_note_found = True
+            if "uploaded an image" in msg.content:
+                image_note_found = True
+
+    assert text_note_found, "Text system note should be appended"
+    assert image_note_found, "Image system note should be appended"

@@ -91,3 +91,132 @@ def test_text_analysis_handles_malformed_llm_response(text_analysis_specialist):
     # Act & Assert
     with pytest.raises(ValueError, match="failed to get a valid JSON response"):
         text_analysis_specialist._execute_logic(initial_state)
+
+
+# ==============================================================================
+# Task Completion Signal Tests
+# ==============================================================================
+
+def test_text_analysis_sets_task_is_complete(text_analysis_specialist):
+    """
+    Test that successful analysis sets task_is_complete at root level.
+
+    Bug fixed: Without task_is_complete=True at ROOT level (not scratchpad),
+    check_task_completion() wouldn't see it, causing Router to keep routing
+    back to text_analysis_specialist until loop detection kicked in.
+    """
+    # Arrange
+    mock_response = {"summary": "Analysis complete", "main_points": ["Point 1"]}
+    text_analysis_specialist.llm_adapter.invoke.return_value = {"json_response": mock_response}
+
+    initial_state = {
+        "messages": [HumanMessage(content="Analyze this text.")],
+        "artifacts": {"text_to_process": "Text to analyze."},
+    }
+
+    # Act
+    result_state = text_analysis_specialist._execute_logic(initial_state)
+
+    # Assert - verify task_is_complete is set at ROOT level (not scratchpad!)
+    # check_task_completion() checks state.get("task_is_complete"), not scratchpad
+    assert result_state.get("task_is_complete") is True
+
+
+def test_text_analysis_no_task_complete_on_missing_text(text_analysis_specialist):
+    """
+    Test that task_is_complete is NOT set when text is missing (self-correction path).
+
+    When text is missing, the specialist recommends file_specialist and should
+    NOT signal completion since the actual task hasn't been done yet.
+    """
+    # Arrange
+    initial_state = {
+        "messages": [HumanMessage(content="Analyze this.")],
+        "artifacts": {"text_to_process": None}
+    }
+
+    # Act
+    result_state = text_analysis_specialist._execute_logic(initial_state)
+
+    # Assert - task_is_complete should NOT be set at root level
+    assert result_state.get("task_is_complete") is not True
+
+
+# ==============================================================================
+# Contextual Prompt Tests
+# ==============================================================================
+
+def test_text_analysis_treats_content_as_context(text_analysis_specialist):
+    """
+    Test that the specialist treats uploaded content as context, not target.
+
+    Bug fixed: The specialist was appending "analyze this text" which caused
+    the LLM to summarize the uploaded style guide instead of using it as
+    a reference to analyze the chat snippet in the user's message.
+
+    The fix changes the prompt to "this document has been provided as context"
+    so the LLM follows the user's actual request.
+    """
+    # Arrange
+    mock_response = {"summary": "Analysis based on context", "main_points": ["Point 1"]}
+    text_analysis_specialist.llm_adapter.invoke.return_value = {"json_response": mock_response}
+
+    user_request = "Using this style guide, identify LLM tells in the following snippet: 'Delve into the tapestry...'"
+    reference_doc = "Style Guide: Avoid words like 'delve', 'tapestry', etc."
+
+    initial_state = {
+        "messages": [HumanMessage(content=user_request)],
+        "artifacts": {"text_to_process": reference_doc},
+    }
+
+    # Act
+    result_state = text_analysis_specialist._execute_logic(initial_state)
+
+    # Assert - verify the prompt treats content as context
+    call_args = text_analysis_specialist.llm_adapter.invoke.call_args[0][0]
+    messages = call_args.messages
+
+    # Find the appended context message
+    context_message = None
+    for msg in messages:
+        if hasattr(msg, 'content') and "provided as context" in msg.content:
+            context_message = msg
+            break
+
+    assert context_message is not None, "Should include 'provided as context' in prompt"
+    assert "Perform the analysis requested by the user above" in context_message.content
+    # Should NOT say "analyze this text" or similar directive that ignores user request
+    assert "Please perform the requested analysis on the following text" not in context_message.content
+
+
+def test_text_analysis_preserves_user_message(text_analysis_specialist):
+    """
+    Test that the user's original message is preserved in the context.
+
+    The user's request (e.g., "use this reference to analyze X") should be
+    visible to the LLM so it can follow the actual instruction.
+    """
+    # Arrange
+    mock_response = {"summary": "Done", "main_points": []}
+    text_analysis_specialist.llm_adapter.invoke.return_value = {"json_response": mock_response}
+
+    user_message = "Summarize the key takeaways from this document"
+    initial_state = {
+        "messages": [HumanMessage(content=user_message)],
+        "artifacts": {"text_to_process": "Document content here."},
+    }
+
+    # Act
+    result_state = text_analysis_specialist._execute_logic(initial_state)
+
+    # Assert - user message should be in the messages sent to LLM
+    call_args = text_analysis_specialist.llm_adapter.invoke.call_args[0][0]
+    messages = call_args.messages
+
+    user_message_found = False
+    for msg in messages:
+        if hasattr(msg, 'content') and user_message in msg.content:
+            user_message_found = True
+            break
+
+    assert user_message_found, "User's original message should be preserved in LLM context"
