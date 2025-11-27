@@ -4,9 +4,11 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional, TYPE_CHECKING
 
 from langgraph.errors import GraphInterrupt
+from pydantic import ValidationError
 
 from ..llm.adapter import BaseAdapter
 from ..utils.errors import SpecialistError
+from .schemas import SpecialistResult
 
 if TYPE_CHECKING:
     from ..mcp import McpClient, McpRegistry
@@ -89,6 +91,16 @@ class BaseSpecialist(ABC):
         except Exception as e:
             logger.error(f"Specialist '{self.specialist_name}' raised an exception: {e}", exc_info=True)
             raise SpecialistError(f"Execution failed in '{self.specialist_name}': {e}") from e
+
+        # FAIL-FAST: Validate result against SpecialistResult contract
+        # This catches task_is_complete in scratchpad immediately rather than silently looping
+        try:
+            SpecialistResult(**result)  # Validate only - don't transform
+        except ValidationError as e:
+            raise SpecialistError(
+                f"Specialist '{self.specialist_name}' returned invalid result: {e}"
+            ) from e
+
         logger.info(f"--- Finished specialist: {self.specialist_name} ---")
         return result
 

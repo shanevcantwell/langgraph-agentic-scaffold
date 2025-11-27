@@ -10,6 +10,7 @@ from ._orchestration import (
 )
 from ._web import WebContent
 from ._analysis import TextAnalysis
+from ._state import SpecialistResult
 
 __all__ = [
     "SpecialistOutput", "StatusEnum", "SuccessReport",
@@ -18,4 +19,5 @@ __all__ = [
     "SystemPlan", "Critique", "TriageRecommendations", "CodeExecutionParams",
     "WebContent",
     "TextAnalysis",
+    "SpecialistResult",
 ]

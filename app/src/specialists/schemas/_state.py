@@ -1,6 +1,8 @@
 # app/src/specialists/schemas/_state.py
-from pydantic import BaseModel, Field
-from typing import List, Optional, Literal
+from pydantic import BaseModel, Field, model_validator
+from typing import List, Optional, Literal, Dict, Any, Union
+from langchain_core.messages import BaseMessage
+
 
 class Scratchpad(BaseModel):
     """
@@ -19,3 +21,75 @@ class Scratchpad(BaseModel):
         default=None,
         description="The reason for workflow termination, e.g., from loop detection."
     )
+
+
+class SpecialistResult(BaseModel):
+    """
+    Contract for specialist return values.
+
+    CRITICAL INVARIANT: task_is_complete MUST be at root level, never in scratchpad.
+    The check_task_completion() function in GraphOrchestrator checks state.get("task_is_complete"),
+    NOT scratchpad. If task_is_complete is buried in scratchpad, it becomes invisible
+    and causes infinite loops (Router keeps routing back to the same specialist).
+
+    This model enforces this contract at the type/validation level.
+    """
+    model_config = {"arbitrary_types_allowed": True}  # Allow BaseMessage
+
+    # Messages to append to conversation history
+    messages: List[BaseMessage] = Field(
+        default_factory=list,
+        description="Messages to append to conversation history."
+    )
+
+    # Structured outputs for other specialists to consume
+    artifacts: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured outputs (reports, data) for other specialists."
+    )
+
+    # CONTROL SIGNAL - Must be at root level for check_task_completion() to see it
+    task_is_complete: Optional[bool] = Field(
+        default=None,
+        description="Control signal indicating task completion. MUST be at root level."
+    )
+
+    # Transient communication between specialists (cleared after routing)
+    scratchpad: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Ephemeral specialist communication. Cannot contain task_is_complete."
+    )
+
+    # Router-specific fields (optional for most specialists)
+    next_specialist: Optional[Union[str, List[str]]] = Field(
+        default=None,
+        description="Next specialist(s) to route to. Only set by RouterSpecialist."
+    )
+
+    turn_count: Optional[int] = Field(
+        default=None,
+        description="Turn counter. Only set by RouterSpecialist."
+    )
+
+    parallel_tasks: List[str] = Field(
+        default_factory=list,
+        description="List of parallel tasks for fan-out execution."
+    )
+
+    @model_validator(mode='after')
+    def validate_task_is_complete_not_in_scratchpad(self) -> 'SpecialistResult':
+        """
+        FAIL-FAST: Raise immediately if task_is_complete is found in scratchpad.
+
+        This prevents the silent bug where specialists put task_is_complete in the
+        wrong location, causing check_task_completion() to never see it.
+        """
+        if self.scratchpad and 'task_is_complete' in self.scratchpad:
+            raise ValueError(
+                "INVARIANT VIOLATION: 'task_is_complete' found in scratchpad. "
+                "This control signal MUST be at root level of the return dict, "
+                "not nested in scratchpad. check_task_completion() checks "
+                "state.get('task_is_complete'), which will NOT see scratchpad values. "
+                "Fix: Move task_is_complete to root level of the returned dict."
+            )
+        return self
