@@ -158,6 +158,23 @@ class RouterSpecialist(BaseSpecialist):
         routing_history = state.get("routing_history", [])
         recommendation_context = ""
 
+        # Handle "not me" pattern: specialist declined the task
+        # Remove the declining specialist from recommendations
+        scratchpad = state.get("scratchpad", {})
+        if scratchpad.get("decline_task"):
+            declining_specialist = scratchpad.get("declining_specialist")
+            decline_reason = scratchpad.get("decline_reason", "unspecified reason")
+            logger.info(f"Specialist '{declining_specialist}' declined task: {decline_reason}")
+
+            if recommended_specialists and declining_specialist in recommended_specialists:
+                recommended_specialists = [s for s in recommended_specialists if s != declining_specialist]
+                logger.info(f"Removed '{declining_specialist}' from recommendations. Remaining: {recommended_specialists}")
+
+                if not recommended_specialists:
+                    # All recommendations exhausted - LLM will make fresh decision
+                    recommended_specialists = None
+                    logger.info("All recommended specialists declined. LLM will choose from full menu.")
+
         # CRITICAL: Filter recommendations to only include specialists that are currently available
         # Prevents LLM from choosing excluded specialists (e.g., planning specialists after context gathered)
         if recommended_specialists:
@@ -299,7 +316,13 @@ class RouterSpecialist(BaseSpecialist):
             logger.info(f"Router initiating parallel execution for: {parallel_tasks_update}")
 
         # Prepare scratchpad with diagnostics for Thought Stream visibility
-        scratchpad_update = {"recommended_specialists": None}  # Task 2.7: Consume recommendations after routing
+        # Clear ALL routing-related signals after processing to prevent stale state pollution
+        scratchpad_update = {
+            "recommended_specialists": None,  # Task 2.7: Consume recommendations after routing
+            "decline_task": None,             # Clear decline signals to prevent stale state
+            "declining_specialist": None,
+            "decline_reason": None,
+        }
         if router_diagnostics:
             scratchpad_update["router_decision"] = f"LLM chose '{router_diagnostics.get('llm_choice')}', validated as '{router_diagnostics.get('validated_choice')}'. ({router_diagnostics.get('available_count')} specialists available)"
 

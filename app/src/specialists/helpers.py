@@ -48,3 +48,54 @@ def create_error_message(
         state_update["scratchpad"] = {"recommended_specialists": recommended_specialists}
 
     return state_update
+
+
+def create_decline_response(
+    specialist_name: str,
+    reason: str,
+    recommended_specialists: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Creates a response indicating this specialist cannot handle the current task.
+
+    The "not me" pattern: A specialist can decline a task and remove itself from
+    the recommended_specialists list. The Router will detect this and re-route
+    to the next available specialist.
+
+    Args:
+        specialist_name: The name of the specialist declining the task
+        reason: Why this specialist cannot handle the task
+        recommended_specialists: Optional list of specialists to try instead.
+                                 If not provided, the Router will use remaining
+                                 recommendations or call the LLM for a new decision.
+
+    Returns:
+        State update dict with decline_task signal in scratchpad
+
+    Example:
+        if not self._can_handle_task(state):
+            return create_decline_response(
+                specialist_name=self.specialist_name,
+                reason="This task requires vision capabilities I don't have",
+                recommended_specialists=["vision_specialist"]
+            )
+    """
+    message = AIMessage(
+        content=f"[{specialist_name}] I cannot handle this task: {reason}",
+        name=specialist_name,
+        additional_kwargs={"is_decline": True},
+    )
+
+    scratchpad: Dict[str, Any] = {
+        "decline_task": True,
+        "decline_reason": reason,
+        "declining_specialist": specialist_name,
+    }
+
+    if recommended_specialists:
+        scratchpad["recommended_specialists"] = recommended_specialists
+
+    return {
+        "messages": [message],
+        "scratchpad": scratchpad,
+    }
