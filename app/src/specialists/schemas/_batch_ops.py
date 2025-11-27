@@ -3,13 +3,13 @@ Schemas for BatchProcessorSpecialist operations.
 
 Defines Pydantic models for batch file sorting with emergent LLM-driven logic.
 """
-from typing import List, Literal
-from pydantic import BaseModel, Field
+from typing import List, Literal, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 class FileSortStrategy(BaseModel):
     """Strategy configuration for file sorting."""
-    strategy: Literal["alphabetic", "emergent"] = Field(
+    strategy: Literal["alphabetic", "emergent", "auto"] = Field(
         default="emergent",
         description="Sorting strategy: 'alphabetic' (predefined rules) or 'emergent' (LLM decides)"
     )
@@ -27,14 +27,25 @@ class BatchSortRequest(BaseModel):
         min_length=1
     )
     destination_directories: List[str] = Field(
-        ...,
-        description="Target directories for sorting (e.g., ['a-m/', 'n-z/'])",
-        min_length=1
+        default_factory=list,
+        description="Target directories for sorting (e.g., ['a-m/', 'n-z/']). If empty, LLM will infer from context."
     )
-    strategy: FileSortStrategy = Field(
+    strategy: Union[FileSortStrategy, str] = Field(
         default_factory=FileSortStrategy,
         description="Sorting strategy configuration"
     )
+
+    @field_validator('strategy', mode='before')
+    @classmethod
+    def coerce_strategy(cls, v):
+        """Convert string strategy to FileSortStrategy object."""
+        if isinstance(v, str):
+            # LLM might return just "auto" or "emergent" string
+            strategy_name = v if v in ("alphabetic", "emergent", "auto") else "emergent"
+            return FileSortStrategy(strategy=strategy_name)
+        if isinstance(v, dict):
+            return FileSortStrategy(**v)
+        return v
 
 
 class FileSortDecision(BaseModel):
