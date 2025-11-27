@@ -1,6 +1,6 @@
 # **UX/UI & API Integration Guide**
 
-# **Version: 3.0**
+# **Version: 4.0**
 
 # **Status: ACTIVE**
 
@@ -34,6 +34,18 @@ The area where the final output of the agent's work is presented.
 
 *   **Description:** A flexible component that can render different types of final products (HTML, Markdown, images, archive reports).
 *   **API Interaction:** Final artifacts are delivered in the last SSE event from `/v1/graph/stream` with keys: `final_state`, `archive`, `html`, `image`.
+
+### **2.4 The Thought Stream (Real-time Observability)**
+
+Provides real-time visibility into the agent's internal reasoning process. This is **observability data only** - it does NOT contribute to the final response synthesis.
+
+*   **Description:** A scrolling log of cognitive events: specialist start/end, reasoning traces, MCP service calls, artifact generation notifications.
+*   **Purpose:** User transparency and debugging. Shows "how the agent thinks" without affecting output.
+*   **API Interaction:** Consumes AG-UI events from `/v1/graph/stream/events` and extracts observability data from `scratchpad` in `NODE_END` events.
+
+**Key Distinction from Agent Log:**
+- **Agent Log**: High-level status messages ("Executing specialist: X...")
+- **Thought Stream**: Detailed cognitive traces (reasoning, MCP calls, decisions)
 
 ## **3.0 API Endpoints**
 
@@ -144,6 +156,59 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
 
 Note: Parallel specialists (progenitor_alpha/bravo) may appear in either order depending on which completes first.
 
+### **4.1.2 AG-UI Event Schema (`/v1/graph/stream/events`)**
+
+The `/v1/graph/stream/events` endpoint returns structured AG-UI events for rich UI integration:
+
+**Event Structure:**
+```json
+{
+  "type": "node_end",
+  "run_id": "abc123",
+  "timestamp": "2024-01-15T10:30:00Z",
+  "source": "triage_architect",
+  "data": {
+    "scratchpad": {...},
+    "artifacts": {...},
+    "status": "Completed triage_architect"
+  }
+}
+```
+
+**Event Types:**
+| Type | When Emitted | Data Contents |
+|------|--------------|---------------|
+| `workflow_start` | Graph execution begins | `run_id` |
+| `node_start` | Specialist begins | `status` |
+| `status_update` | Progress update | `status` message |
+| `log` | Internal log entry | `message` |
+| `node_end` | Specialist completes | `scratchpad`, `artifacts`, `status` |
+| `error` | Error occurred | `error`, `error_report` |
+| `workflow_end` | Graph execution complete | `final_state`, `archive`, `html` |
+
+**Thought Stream Extraction from `node_end` events:**
+```javascript
+// In handleStreamEvent(event)
+if (event.type === 'node_end') {
+    const scratchpad = event.data.scratchpad || {};
+
+    // Triage reasoning
+    if (scratchpad.triage_reasoning) {
+        addThoughtStreamEntry('TRIAGE', scratchpad.triage_reasoning);
+    }
+
+    // Facilitator status
+    if (scratchpad.facilitator_complete) {
+        addThoughtStreamEntry('FACILITATOR', 'Context gathering complete');
+    }
+
+    // Router decision
+    if (scratchpad.router_decision) {
+        addThoughtStreamEntry('ROUTER', scratchpad.router_decision);
+    }
+}
+```
+
 ### **4.2 Final State Object**
 
 The `final_state` object in the final SSE event contains:
@@ -184,6 +249,19 @@ Artifacts are stored as a dictionary with string keys. Common artifact keys:
 - `final_user_response.md`: The main response to the user
 - `response_mode`: Mode used for response generation (e.g., "tiered_full")
 - `alpha_response`, `bravo_response`: Individual progenitor responses (tiered mode)
+
+### **4.4 Observability Scratchpad Keys**
+
+Specialists emit thinking traces to `scratchpad` for UI observability. These are **NOT used for response synthesis** - `EndSpecialist` only reads `user_response_snippets` from scratchpad.
+
+| Key | Source | Content |
+|-----|--------|---------|
+| `triage_reasoning` | TriageArchitect | Explanation of context analysis and action plan |
+| `facilitator_complete` | FacilitatorSpecialist | Boolean flag when context gathering finishes |
+| `router_decision` | RouterSpecialist | Routing decision explanation |
+| `user_response_snippets` | Various specialists | **Response synthesis only** (not observability) |
+
+**Note:** Most specialists have "quiet minds" - they don't emit thinking traces. Only orchestration specialists (Triage, Facilitator, Router) currently emit observability data.
 
 ## **5.0 Using the ApiClient**
 
@@ -306,8 +384,11 @@ Any UI must handle these core data flows:
 ### **Key Files**
 
 - **API Implementation:** `app/src/api.py` - FastAPI endpoints and SSE formatting
-- **API Client:** `app/src/ui/api_client.py` - Client wrapper for SSE consumption
-- **Reference UI:** `app/src/ui/gradio_app.py` - Complete working Gradio implementation
+- **AG-UI Translator:** `app/src/interface/translator.py` - Converts LangGraph chunks to AG-UI events
+- **API Client:** `app/src/ui/api_client.py` - Python client for SSE consumption
+- **Reference UIs:**
+  - `app/src/ui/gradio_lassi.py` - Gradio-based L.A.S.S.I. UI
+  - `app/web-ui/` - Node.js V.E.G.A.S. Terminal with Thought Stream
 - **State Schema:** `app/src/graph/state.py` - GraphState TypedDict definition
 
 ### **Testing Endpoints**
