@@ -60,25 +60,13 @@ mcp:
   # See docs/ADR/ADR-MCP-003-External-MCP-Container-Integration.md for details
   external_mcp:
     # Global enable/disable for all external MCP services
-    enabled: true  # Set to true to enable external MCP containers
+    enabled: true
     # Toggle LangSmith trace spans for external MCP calls
     tracing_enabled: true
     # Configuration for individual external MCP services
-    services:
-      # Filesystem MCP server (Node.js container)
-      filesystem:
-        enabled: true
-        required: false  # If true, application fails to start if container unavailable
-        command: "docker"
-        args:
-          - "run"
-          - "-i"           # REQUIRED: Interactive mode for stdin connectivity
-          - "--rm"         # Auto-remove container when stopped
-          - "-v"
-          - "${WORKSPACE_PATH}:/projects"  # Mount workspace into container
-          - "mcp/filesystem"               # Container image name
-          - "/projects"                    # Allowed directory for filesystem server
-        # Security: Only mount necessary directories, consider read-only (:ro) for sandboxing
+    services: {}
+      # NOTE: mcp/filesystem removed - using internal FileSpecialist instead
+      # Add other external MCP services here as needed
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION

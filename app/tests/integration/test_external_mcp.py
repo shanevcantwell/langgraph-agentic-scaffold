@@ -4,6 +4,9 @@ Integration tests for External MCP Container Integration (ADR-MCP-003).
 Tests external MCP filesystem server connectivity, operations, error handling,
 and integration with the specialist system.
 
+NOTE: These tests are SKIPPED because mcp/filesystem container has been removed.
+Using internal FileSpecialist MCP instead. Keep tests for future external MCP services.
+
 Prerequisites:
 1. mcp/filesystem Docker image must be built/pulled
 2. config.yaml must have external_mcp.enabled: true
@@ -11,10 +14,13 @@ Prerequisites:
 
 Run with: pytest app/tests/integration/test_external_mcp.py -v
 """
+import pytest
+
+# Skip entire module - mcp/filesystem container removed, using internal FileSpecialist
+pytestmark = pytest.mark.skip(reason="mcp/filesystem container removed - using internal FileSpecialist MCP")
 
 import asyncio
 import os
-import pytest
 import tempfile
 from pathlib import Path
 from typing import Dict, Any

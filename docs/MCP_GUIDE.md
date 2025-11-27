@@ -598,6 +598,10 @@ External MCP enables integration with containerized MCP servers (Node.js, Go, Py
 
 ### 9.1 Configuration
 
+> **Note**: The `mcp/filesystem` container example below is for illustration only.
+> File operations use the internal `FileSpecialist` MCP service by default (faster, no container overhead).
+> Use external MCP for services that require containerization (isolation, different runtimes, etc.).
+
 **Enable in `config.yaml`:**
 
 ```yaml
@@ -611,7 +615,8 @@ mcp:
     enabled: true  # Global enable/disable
     tracing_enabled: true
     services:
-      # Filesystem MCP server (Node.js container)
+      # Example: Filesystem MCP server (Node.js container)
+      # NOTE: Currently disabled - using internal FileSpecialist instead
       filesystem:
         enabled: true
         required: false  # Fail-fast if true and container unavailable
