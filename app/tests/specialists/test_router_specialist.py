@@ -19,9 +19,11 @@ def router_specialist(initialized_specialist_factory):
     specialist = initialized_specialist_factory("RouterSpecialist", "router_specialist", {})
 
     # Mock specialist_map with planning and response specialists
+    # triage_architect and facilitator_specialist have "context_engineering" tag
+    # for context-aware filtering after gathered_context exists
     specialist.specialist_map = {
-        "triage_architect": {"description": "Analyzes user request and creates context gathering plan"},
-        "facilitator_specialist": {"description": "Executes context gathering actions"},
+        "triage_architect": {"description": "Analyzes user request and creates context gathering plan", "tags": ["context_engineering"]},
+        "facilitator_specialist": {"description": "Executes context gathering actions", "tags": ["context_engineering"]},
         "chat_specialist": {"description": "Provides conversational responses"},
         "researcher_specialist": {"description": "Performs web research"}
     }

@@ -204,35 +204,39 @@ def test_router_handles_invalid_llm_response(router_specialist):
     assert ai_message.additional_kwargs["routing_type"] == "llm_decision" # It's still an LLM decision, just a corrected one.
 
 def test_get_available_specialists_context_aware_filtering_with_tags(router_specialist):
-    """Tests that planning specialists are filtered out after context gathering, based on TAGS."""
+    """Tests that context_engineering specialists are filtered out after context gathering.
+
+    Note: Only "context_engineering" tag is filtered. "planning" tag specialists like
+    systems_architect remain available as valid work destinations.
+    """
     # Arrange
     router_specialist.set_specialist_map({
-        "triage_architect": {"desc": "d1", "tags": ["planning"]},
+        "triage_architect": {"desc": "d1", "tags": ["context_engineering"]},
         "facilitator_specialist": {"desc": "d2", "tags": ["context_engineering"]},
         "systems_architect": {"desc": "d3", "tags": ["planning"]},
         "web_builder": {"desc": "d4", "tags": ["coding"]},
         "chat_specialist": {"desc": "d5", "tags": ["chat"]}
     })
-    
+
     # Simulate context gathering complete
     state = {
-        "messages": [], 
+        "messages": [],
         "artifacts": {"gathered_context": "Some context"}
     }
-    
+
     # Act
     available = router_specialist._get_available_specialists(state)
-    
+
     # Assert
-    # Should filter out anything with "planning" or "context_engineering" tags
+    # Should filter out only "context_engineering" tagged specialists
     assert "triage_architect" not in available
     assert "facilitator_specialist" not in available
-    assert "systems_architect" not in available
-    
-    # Should keep others
+
+    # "planning" tag specialists remain available (valid work destinations)
+    assert "systems_architect" in available
     assert "web_builder" in available
     assert "chat_specialist" in available
-    assert len(available) == 2
+    assert len(available) == 3
 
 def test_get_llm_choice_vision_logic_with_tags(router_specialist):
     """Tests that vision-capable specialists are identified via tags when an image is present."""
