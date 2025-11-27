@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 ROUTING_TEST_CASES = [
     # --- Planning & Architecture ---
     (
-        "Create a detailed technical plan for building a REST API with user authentication",
+        "Create a detailed technical plan for building a REST API with user authentication using Python and FastAPI.",
         ["systems_architect"],
         "planning_task",
         True,  # May also route to chat for clarification
@@ -74,7 +74,7 @@ ROUTING_TEST_CASES = [
 
     # --- Prompt Engineering ---
     (
-        "Help me write a better prompt for generating code documentation",
+        "Help me write a better prompt for generating Python code documentation. I want it to be concise and use Google style docstrings.",
         ["prompt_specialist", "chat_specialist"],
         "prompt_engineering",
         True,  # Chat may handle prompt questions
@@ -90,7 +90,7 @@ ROUTING_TEST_CASES = [
 
     # --- Text Analysis (when artifact provided) ---
     (
-        "Summarize the key points and main arguments from the following document",
+        "Summarize the following text: This is a sample document to summarize. It contains important information about the project.",
         ["text_analysis_specialist", "chat_specialist", "summarizer_specialist"],
         "text_analysis",
         True,  # Multiple specialists can handle summarization
@@ -130,9 +130,14 @@ def test_router_routes_to_expected_specialist(
     the appropriate specialist based on user intent expressed in the prompt.
     """
     with TestClient(initialized_app) as client:
+        # Provide text artifact for text analysis tasks to prevent Triage from asking for it
+        text_to_process = None
+        if desc == "text_analysis":
+            text_to_process = "This is a sample document to summarize. It contains important information about the project."
+
         payload = {
             "input_prompt": prompt,
-            "text_to_process": None,
+            "text_to_process": text_to_process,
             "image_to_process": None
         }
 

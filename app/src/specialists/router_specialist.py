@@ -53,7 +53,14 @@ class RouterSpecialist(BaseSpecialist):
         gathered_context = state.get("artifacts", {}).get("gathered_context")
         if gathered_context:
             # Triage and Facilitator jobs are DONE - remove from menu to force router to pick response specialist
-            planning_specialists = ["triage_architect", "facilitator_specialist"]
+            # Dynamic Tag-Based Filtering
+            # Only remove context_engineering specialists. 'planning' specialists like systems_architect
+            # must remain available as they are valid destinations for the actual work.
+            planning_specialists = [
+                name for name, spec in all_specialists.items() 
+                if "context_engineering" in spec.get("tags", [])
+            ]
+
             all_specialists = {
                 name: spec
                 for name, spec in all_specialists.items()
@@ -176,7 +183,11 @@ class RouterSpecialist(BaseSpecialist):
 
             # Exclude planning specialists from dependency detection
             # Recommendations from triage_architect or facilitator_specialist should always be treated as advisory
-            planning_specialists = ["router_specialist", "prompt_triage_specialist", "triage_architect", "facilitator_specialist"]
+            # Dynamic Tag-Based Filtering
+            planning_specialists = [self.specialist_name] + [
+                name for name, spec in self.specialist_map.items() 
+                if "planning" in spec.get("tags", []) or "context_engineering" in spec.get("tags", [])
+            ]
 
             if routing_history:
                 # Find the last specialist that ran (not router, not planning specialists)
@@ -203,7 +214,11 @@ class RouterSpecialist(BaseSpecialist):
         # Check for uploaded image (Blind Router Support)
         # If the router is text-only, it won't see the image. We must explicitly tell it.
         if state.get("artifacts", {}).get("uploaded_image.png"):
-            vision_candidates = [s for s in current_specialists if "vision" in s or "researcher" in s or "web_builder" in s]
+            # Dynamic Tag-Based Filtering
+            vision_candidates = [
+                name for name, spec in current_specialists.items() 
+                if "vision_capable" in spec.get("tags", [])
+            ]
             if vision_candidates:
                 recommendation_context += f"\n\n**CRITICAL: IMAGE DETECTED**\nThe user has uploaded an image. You cannot see it, but it is available in the artifacts. You MUST route to a specialist capable of vision analysis. Recommended: {', '.join(vision_candidates)}."
             else:

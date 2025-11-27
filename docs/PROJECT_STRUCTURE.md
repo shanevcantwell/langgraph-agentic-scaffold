@@ -299,7 +299,8 @@ The following files are critical to understanding the system architecture:
 2.  **`app/src/graph/state.py`:** The central `GraphState` data structure.
 3.  **`app/src/workflow/graph_builder.py`:** Graph construction and wiring logic.
 4.  **`app/src/workflow/graph_orchestrator.py`:** Runtime decision logic.
-5.  **`app/src/mcp/registry.py`:** MCP service registration and discovery.
-6.  **`app/src/resilience/monitor.py`:** System invariant monitoring and circuit breaker.
-7.  **`config.yaml`:** Architectural blueprint defining all system components.
-8.  **`user_settings.yaml`:** Runtime model bindings and feature toggles.
+5.  **`app/src/workflow/executors/node_executor.py`:** Safe execution wrapper and invariant enforcement.
+6.  **`app/src/mcp/registry.py`:** MCP service registration and discovery.
+7.  **`app/src/resilience/monitor.py`:** System invariant monitoring and circuit breaker.
+8.  **`config.yaml`:** Architectural blueprint defining all system components.
+9.  **`user_settings.yaml`:** Runtime model bindings and feature toggles.

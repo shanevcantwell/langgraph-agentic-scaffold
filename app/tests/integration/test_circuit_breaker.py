@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock
 from app.src.workflow.graph_orchestrator import GraphOrchestrator
+from app.src.workflow.executors.node_executor import NodeExecutor
 from app.src.specialists.base import BaseSpecialist
 from app.src.utils.errors import WorkflowError
 
@@ -33,7 +34,8 @@ def test_circuit_breaker_route_to_error_handler(orchestrator_with_circuit_breake
     """
     orchestrator = orchestrator_with_circuit_breaker
     specialist = MockSpecialist()
-    safe_executor = orchestrator.create_safe_executor(specialist)
+    node_executor = NodeExecutor(orchestrator.config)
+    safe_executor = node_executor.create_safe_executor(specialist)
 
     # Create a state that violates structural integrity (missing 'messages')
     # Note: check_state_structure requires 'messages', 'turn_count', 'routing_history', 'scratchpad'
@@ -78,7 +80,8 @@ def test_circuit_breaker_halt_action():
     }
     orchestrator = GraphOrchestrator(config, {})
     specialist = MockSpecialist()
-    safe_executor = orchestrator.create_safe_executor(specialist)
+    node_executor = NodeExecutor(config)
+    safe_executor = node_executor.create_safe_executor(specialist)
 
     invalid_state = {
         # "messages": [], # MISSING

@@ -41,14 +41,17 @@ Once all specialists are loaded and configured, the `build` method assembles the
 ### 2.1. Adding Nodes (`_add_nodes_to_graph`)
 
 *   Each successfully loaded specialist is added as a node to the graph.
-*   Crucially, every specialist's `execute` method (except for the `RouterSpecialist`) is wrapped in the `GraphOrchestrator.create_safe_executor` decorator. This wrapper is a non-negotiable gatekeeper that:
+*   Crucially, every specialist's `execute` method (except for the `RouterSpecialist`) is wrapped in the `NodeExecutor.create_safe_executor` decorator. This wrapper is a non-negotiable gatekeeper that:
     1.  **Enforces Preconditions:** Checks for `requires_artifacts` at runtime before executing the specialist.
     2.  **Handles Exceptions:** Catches any unhandled exceptions from a specialist, generates a detailed `error_report.md`, and prevents the entire graph from crashing.
     3.  **Prevents State Corruption:** Sanitizes the specialist's output to prevent forbidden modifications (e.g., changing `turn_count`).
+    4.  **Enforces Invariants:** Calls `InvariantMonitor` to ensure system stability.
 
 ### 2.2. Wiring Edges (`_wire_hub_and_spoke_edges`)
 
 This is where the agent's behavior and control flow are defined. The system uses a hybrid approach of conditional and direct edges, all managed by the `GraphOrchestrator`.
+
+The `GraphBuilder` delegates complex wiring to specialized `BaseSubgraph` implementations (e.g., `TieredChatSubgraph`, `DistillationSubgraph`, `ContextEngineeringSubgraph`, `CriticLoopSubgraph`).
 
 #### The Main Loop (Hub-and-Spoke)
 
@@ -60,11 +63,11 @@ This is where the agent's behavior and control flow are defined. The system uses
 
 #### The "Express Lanes" (Specialized Conditional Routing)
 
-The system uses explicit, high-priority conditional edges for specific, well-defined sub-workflows, bypassing the main router for efficiency.
+The system uses explicit, high-priority conditional edges for specific, well-defined sub-workflows, bypassing the main router for efficiency. These are typically managed by their respective Subgraph classes.
 
 *   **The "Generate-and-Critique" Loop (ADR-CORE-012):**
-
-    Creates a **bidirectional subgraph** for iterative refinement:
+    *   Managed by `CriticLoopSubgraph`.
+    *   Creates a **bidirectional subgraph** for iterative refinement:
 
     ```
     Router → web_builder → critic_specialist
@@ -237,14 +240,16 @@ graph TD
         A[Load config.yaml] --> B{Instantiate Specialists};
         B --> C{Inject LLM Adapters};
         C --> D[Run Pre-Flight Checks];
+        D --> D1[Initialize NodeExecutor];
+        D1 --> D2[Initialize Subgraphs];
     end
 
     subgraph "GraphBuilder: Graph Construction"
-        E[Create StateGraph] --> F[Add Nodes w/ SafeExecutor from GraphOrchestrator];
+        E[Create StateGraph] --> F[Add Nodes w/ SafeExecutor from NodeExecutor];
         F --> G{Wire Edges using GraphOrchestrator deciders};
         G -- Hub-and-Spoke --> G1(Router --> Specialists);
         G -- Hub-and-Spoke --> G2(Specialists --> check_task_completion);
-        G -- Express Lane --> G3(Critic --> after_critique_decider);
+        G -- Subgraphs --> G3(Delegate to Subgraph.build);
         G -- Termination --> G4(EndSpecialist --> END);
         G --> H[Set Entry Point];
         H --> I[Compile Graph];

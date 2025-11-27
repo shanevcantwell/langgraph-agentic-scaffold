@@ -4,7 +4,6 @@ from typing import Dict, Any, List, Tuple
 from .adapter import BaseAdapter
 from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
 from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
-from ..specialists.open_interpreter_specialist import OpenInterpreterSpecialist
 
 logger = logging.getLogger(__name__)
 

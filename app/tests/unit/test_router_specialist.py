@@ -203,6 +203,114 @@ def test_router_handles_invalid_llm_response(router_specialist):
     assert "Routing to specialist: default_responder_specialist" in ai_message.content
     assert ai_message.additional_kwargs["routing_type"] == "llm_decision" # It's still an LLM decision, just a corrected one.
 
+def test_get_available_specialists_context_aware_filtering_with_tags(router_specialist):
+    """Tests that planning specialists are filtered out after context gathering, based on TAGS."""
+    # Arrange
+    router_specialist.set_specialist_map({
+        "triage_architect": {"desc": "d1", "tags": ["planning"]},
+        "facilitator_specialist": {"desc": "d2", "tags": ["context_engineering"]},
+        "systems_architect": {"desc": "d3", "tags": ["planning"]},
+        "web_builder": {"desc": "d4", "tags": ["coding"]},
+        "chat_specialist": {"desc": "d5", "tags": ["chat"]}
+    })
+    
+    # Simulate context gathering complete
+    state = {
+        "messages": [], 
+        "artifacts": {"gathered_context": "Some context"}
+    }
+    
+    # Act
+    available = router_specialist._get_available_specialists(state)
+    
+    # Assert
+    # Should filter out anything with "planning" or "context_engineering" tags
+    assert "triage_architect" not in available
+    assert "facilitator_specialist" not in available
+    assert "systems_architect" not in available
+    
+    # Should keep others
+    assert "web_builder" in available
+    assert "chat_specialist" in available
+    assert len(available) == 2
+
+def test_get_llm_choice_vision_logic_with_tags(router_specialist):
+    """Tests that vision-capable specialists are identified via tags when an image is present."""
+    # Arrange
+    router_specialist.set_specialist_map({
+        "text_only": {"desc": "d1", "tags": ["text"]},
+        "vision_spec": {"desc": "d2", "tags": ["vision_capable"]},
+        "researcher": {"desc": "d3", "tags": ["vision_capable"]}
+    })
+    
+    state = {
+        "messages": [HumanMessage(content="Look at this image")],
+        "artifacts": {"uploaded_image.png": "some_image_data"},
+        "scratchpad": {},
+        "routing_history": []
+    }
+    
+    mock_adapter = router_specialist.llm_adapter
+    mock_adapter.invoke.return_value = {
+        "tool_calls": [{"args": {"next_specialist": "vision_spec"}, "id": "call_123"}]
+    }
+    
+    # Act
+    router_specialist._get_llm_choice(state)
+    
+    # Assert
+    # Check that the system message contains the recommendation for vision specialists
+    call_args = mock_adapter.invoke.call_args
+    request = call_args[0][0] # First arg is StandardizedLLMRequest
+    system_msg = request.messages[-1].content
+    
+    assert "**CRITICAL: IMAGE DETECTED**" in system_msg
+    
+    # Extract the recommendation part to verify only vision specialists are recommended
+    # Format: "... Recommended: spec1, spec2."
+    if "Recommended:" in system_msg:
+        recommendation_part = system_msg.split("Recommended:")[1].split(".")[0]
+        assert "vision_spec" in recommendation_part
+        assert "researcher" in recommendation_part
+        assert "text_only" not in recommendation_part
+    else:
+        pytest.fail("Recommendation string not found in system message")
+
+def test_get_llm_choice_dependency_logic_with_tags(router_specialist):
+    """Tests that dependency logic correctly excludes planning specialists based on tags."""
+    # Arrange
+    router_specialist.set_specialist_map({
+        "planner": {"desc": "d1", "tags": ["planning"]},
+        "worker": {"desc": "d2", "tags": ["coding"]},
+        "dependency_target": {"desc": "d3", "tags": ["coding"]}
+    })
+    
+    # Scenario: 'worker' ran last, and recommends 'dependency_target'. 
+    # 'planner' is in history but should be ignored for dependency check.
+    state = {
+        "messages": [HumanMessage(content="Do work")],
+        "artifacts": {},
+        "scratchpad": {"recommended_specialists": ["dependency_target"]},
+        "routing_history": ["planner", "worker"] 
+    }
+    
+    mock_adapter = router_specialist.llm_adapter
+    mock_adapter.invoke.return_value = {
+        "tool_calls": [{"args": {"next_specialist": "dependency_target"}, "id": "call_123"}]
+    }
+    
+    # Act
+    router_specialist._get_llm_choice(state)
+    
+    # Assert
+    call_args = mock_adapter.invoke.call_args
+    request = call_args[0][0]
+    system_msg = request.messages[-1].content
+    
+    # Should identify 'worker' as the recommender, not 'planner'
+    assert "**Dependency Requirement:**" in system_msg
+    assert "The 'worker' specialist cannot proceed" in system_msg
+
 def setup_module(module):
     """Set up logging for the test module."""
     logging.basicConfig(

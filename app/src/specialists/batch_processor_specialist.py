@@ -198,11 +198,18 @@ Return a BatchSortPlan with decisions for all files."""
 
         response = self.llm_adapter.invoke(request)
 
-        # Parse structured output
-        if "parsed_output" in response:
-            return response["parsed_output"]
-        else:
-            raise ValueError("LLM did not return valid BatchSortPlan")
+        # Parse structured output - adapter returns json_response, we validate with Pydantic
+        json_response = response.get("json_response")
+        if not json_response:
+            raise ValueError(
+                "LLM did not return valid JSON for BatchSortPlan. "
+                f"Response keys: {list(response.keys())}"
+            )
+
+        try:
+            return BatchSortPlan(**json_response)
+        except Exception as e:
+            raise ValueError(f"Failed to parse BatchSortPlan from LLM response: {e}")
 
     def _execute_batch_operations(self, decisions: List[FileSortDecision]) -> Dict[str, Any]:
         """

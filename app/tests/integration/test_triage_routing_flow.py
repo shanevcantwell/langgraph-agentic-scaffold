@@ -46,9 +46,9 @@ def router_specialist(initialized_specialist_factory):
 
     # Mock specialist_map with realistic specialists
     specialist.specialist_map = {
-        "triage_architect": {"description": "Analyzes user request"},
-        "facilitator_specialist": {"description": "Gathers context"},
-        "researcher_specialist": {"description": "Performs web research"},
+        "triage_architect": {"description": "Analyzes user request", "tags": ["planning", "context_engineering"]},
+        "facilitator_specialist": {"description": "Gathers context", "tags": ["planning", "context_engineering"]},
+        "researcher_specialist": {"description": "Performs web research", "tags": ["vision_capable"]},
         "chat_specialist": {"description": "Conversational responses"},
         "text_analysis_specialist": {"description": "Code review and text analysis"},
         "default_responder_specialist": {"description": "Default fallback"}

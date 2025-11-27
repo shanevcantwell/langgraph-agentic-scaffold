@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from app.src.workflow.graph_orchestrator import GraphOrchestrator
+from app.src.workflow.executors.node_executor import NodeExecutor
 from app.src.graph.state_factory import create_test_state
 from app.src.specialists.base import BaseSpecialist
 
@@ -17,14 +17,14 @@ def test_invariant_monitor_called_during_execution():
     config = {"workflow": {"recursion_limit": 10, "max_loop_cycles": 3}}
     specialists = {"mock_specialist": MockSpecialist("mock_specialist", {})}
     
-    # Patch InvariantMonitor where it is imported in graph_orchestrator
-    with patch("app.src.workflow.graph_orchestrator.InvariantMonitor") as MockMonitorClass:
+    # Patch InvariantMonitor where it is imported in node_executor
+    with patch("app.src.workflow.executors.node_executor.InvariantMonitor") as MockMonitorClass:
         mock_monitor_instance = MockMonitorClass.return_value
         
-        orchestrator = GraphOrchestrator(config, specialists)
+        node_executor = NodeExecutor(config)
         
         # Create safe executor
-        safe_exec = orchestrator.create_safe_executor(specialists["mock_specialist"])
+        safe_exec = node_executor.create_safe_executor(specialists["mock_specialist"])
         
         # Execute
         state = create_test_state(turn_count=1)

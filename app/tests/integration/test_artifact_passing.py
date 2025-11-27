@@ -36,7 +36,7 @@ def test_artifact_required_validation_missing_artifact():
         "data_extractor_specialist should require text_to_process artifact"
 
     # Create safe executor (this is what GraphOrchestrator does)
-    safe_executor = builder.orchestrator.create_safe_executor(data_extractor)
+    safe_executor = builder.node_executor.create_safe_executor(data_extractor)
 
     # Create state WITHOUT the required artifact
     state = {
@@ -120,8 +120,8 @@ def test_artifact_passing_simple_producer_consumer():
         mock_extractor_adapter.model_name = "test-model"
 
         # Create executors
-        file_executor = builder.orchestrator.create_safe_executor(file_specialist)
-        extractor_executor = builder.orchestrator.create_safe_executor(data_extractor)
+        file_executor = builder.node_executor.create_safe_executor(file_specialist)
+        extractor_executor = builder.node_executor.create_safe_executor(data_extractor)
 
         # Initial state
         state = {
@@ -230,9 +230,9 @@ def test_artifact_chain_three_specialists():
         )
 
         # Create executors
-        architect_executor = builder.orchestrator.create_safe_executor(systems_architect)
-        builder_executor = builder.orchestrator.create_safe_executor(web_builder)
-        critic_executor = builder.orchestrator.create_safe_executor(critic)
+        architect_executor = builder.node_executor.create_safe_executor(systems_architect)
+        builder_executor = builder.node_executor.create_safe_executor(web_builder)
+        critic_executor = builder.node_executor.create_safe_executor(critic)
 
         # Initial state
         state = {
@@ -338,7 +338,7 @@ def test_conditional_artifacts_any_of():
         }
     )
 
-    safe_executor = builder.orchestrator.create_safe_executor(conditional_specialist)
+    safe_executor = builder.node_executor.create_safe_executor(conditional_specialist)
 
     # --- Act & Assert: Neither artifact present ---
     state_empty = {
@@ -412,7 +412,7 @@ def test_artifact_cleanup_not_leaked():
         }
 
     with patch.object(file_specialist, '_execute_logic', side_effect=mock_file_produce_artifact):
-        executor = builder.orchestrator.create_safe_executor(file_specialist)
+        executor = builder.node_executor.create_safe_executor(file_specialist)
 
         # Run 1: Produce artifact
         state_run1 = {

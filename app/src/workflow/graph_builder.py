@@ -13,6 +13,11 @@ from ..llm.factory import AdapterFactory
 from ..utils.errors import SpecialistLoadError, WorkflowError
 from ..strategies.critique.base import BaseCritiqueStrategy
 from .graph_orchestrator import GraphOrchestrator
+from .executors.node_executor import NodeExecutor
+from .subgraphs.tiered_chat import TieredChatSubgraph
+from .subgraphs.distillation import DistillationSubgraph
+from .subgraphs.context_engineering import ContextEngineeringSubgraph
+from .subgraphs.critic_loop import CriticLoopSubgraph
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +31,7 @@ class GraphBuilder:
         self.config_loader = config_loader or ConfigLoader()
         self.config = self.config_loader.get_config()
         self.adapter_factory = adapter_factory or AdapterFactory(self.config)
+        self.node_executor = NodeExecutor(self.config)
 
         # Validate provider dependencies before attempting to load specialists
         missing_deps = self.adapter_factory.validate_provider_dependencies()
@@ -59,6 +65,14 @@ class GraphBuilder:
         }
 
         self.orchestrator = GraphOrchestrator(self.config, self.specialists, self.allowed_destinations)
+        
+        # Initialize Subgraphs
+        self.subgraphs = [
+            TieredChatSubgraph(self.specialists, self.orchestrator, self.config),
+            DistillationSubgraph(self.specialists, self.orchestrator, self.config),
+            ContextEngineeringSubgraph(self.specialists, self.orchestrator, self.config),
+            CriticLoopSubgraph(self.specialists, self.orchestrator, self.config)
+        ]
 
         workflow_config = self.config.get("workflow", {})
         raw_entry_point = workflow_config.get("entry_point", CoreSpecialist.ROUTER.value)
@@ -395,7 +409,7 @@ class GraphBuilder:
             if name == CoreSpecialist.ROUTER.value:
                 workflow.add_node(name, instance.execute)
             else:
-                workflow.add_node(name, self.orchestrator.create_safe_executor(instance))
+                workflow.add_node(name, self.node_executor.create_safe_executor(instance))
 
     def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
         router_name = CoreSpecialist.ROUTER.value
@@ -419,161 +433,28 @@ class GraphBuilder:
 
         workflow.add_conditional_edges(router_name, self.orchestrator.route_to_next_specialist, destinations)
 
-        # CORE-CHAT-002: Wire tiered chat subgraph (fan-out/join pattern)
-        # If all components are present, wire the parallel execution pattern
-        has_tiered_chat = ("progenitor_alpha_specialist" in self.specialists and
-                          "progenitor_bravo_specialist" in self.specialists and
-                          "tiered_synthesizer_specialist" in self.specialists)
+        # Delegate wiring to subgraphs
+        for subgraph in self.subgraphs:
+            subgraph.build(workflow)
 
-        if has_tiered_chat:
-            # CRITICAL: Use array syntax so synthesizer waits for BOTH progenitors
-            # This is the "join" in the fan-out/join pattern
-            workflow.add_edge(
-                ["progenitor_alpha_specialist", "progenitor_bravo_specialist"],
-                "tiered_synthesizer_specialist"
-            )
-            logger.info("Graph Edge: Added fan-in edge for tiered chat subgraph (CORE-CHAT-002)")
-
-            # Wire synthesizer to check_task_completion (it sets task_is_complete: True)
-            workflow.add_conditional_edges(
-                "tiered_synthesizer_specialist",
-                self.orchestrator.check_task_completion,
-                {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name}
-            )
-
-        # DISTILLATION SUBGRAPH: Wire graph-driven iteration pattern
-        # If all components are present, wire the coordinator-driven workflow
-        has_distillation = ("distillation_coordinator_specialist" in self.specialists and
-                           "distillation_prompt_expander_specialist" in self.specialists and
-                           "distillation_prompt_aggregator_specialist" in self.specialists and
-                           "distillation_response_collector_specialist" in self.specialists)
-
-        if has_distillation:
-            # Expansion loop: expander → aggregator → coordinator (checks if more to expand)
-            workflow.add_edge("distillation_prompt_expander_specialist", "distillation_prompt_aggregator_specialist")
-            workflow.add_conditional_edges(
-                "distillation_prompt_aggregator_specialist",
-                self.orchestrator.should_continue_expanding,
-                {
-                    "distillation_prompt_expander_specialist": "distillation_prompt_expander_specialist",  # More seeds
-                    "distillation_coordinator_specialist": "distillation_coordinator_specialist"  # Done expanding
-                }
-            )
-
-            # Collection loop: collector → coordinator (checks if more to collect)
-            workflow.add_conditional_edges(
-                "distillation_response_collector_specialist",
-                self.orchestrator.should_continue_collecting,
-                {
-                    "distillation_response_collector_specialist": "distillation_response_collector_specialist",  # More prompts
-                    "distillation_coordinator_specialist": "distillation_coordinator_specialist"  # Done collecting
-                }
-            )
-
-            # Coordinator routes based on phase and completion status
-            workflow.add_conditional_edges(
-                "distillation_coordinator_specialist",
-                self.orchestrator.check_task_completion,
-                {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name}
-            )
-
-            logger.info("Graph Edge: Added distillation subgraph with graph-driven iteration")
-
-        # CONTEXT ENGINEERING SUBGRAPH
-        # TriageArchitect -> [Facilitator | Router]
-        # Facilitator -> Router
-        if "triage_architect" in self.specialists:
-            # ADR-CORE-018: Simplified routing - all plans with actions go through Facilitator chain
-            # Facilitator → Dialogue → Router handles both context-gathering and ask_user actions
-            workflow.add_conditional_edges(
-                "triage_architect",
-                self.orchestrator.check_triage_outcome,
-                {
-                    "facilitator_specialist": "facilitator_specialist",
-                    router_name: router_name,
-                    CoreSpecialist.END.value: CoreSpecialist.END.value
-                }
-            )
-            logger.info("Graph Edge: Added TriageArchitect conditional edge (ADR-CORE-018)")
-
-        if "facilitator_specialist" in self.specialists:
-            # ADR-CORE-018: Facilitator → Dialogue → Router
-            # DialogueSpecialist checks for ASK_USER actions after automated context gathering
-            if "dialogue_specialist" in self.specialists:
-                workflow.add_edge("facilitator_specialist", "dialogue_specialist")
-                workflow.add_edge("dialogue_specialist", router_name)
-                logger.info("Graph Edge: Added Facilitator -> Dialogue -> Router chain (ADR-CORE-018)")
-            else:
-                # Fallback if DialogueSpecialist not loaded
-                workflow.add_edge("facilitator_specialist", router_name)
-                logger.info("Graph Edge: Added Facilitator -> Router edge (DialogueSpecialist not loaded)")
+        # Collect excluded specialists from all subgraphs
+        excluded_specialists = [
+            router_name,
+            CoreSpecialist.ARCHIVER.value,
+            CoreSpecialist.END.value,
+            CoreSpecialist.CRITIC.value,
+            "researcher_specialist", # MCP-only
+            "summarizer_specialist" # MCP-only
+        ]
+        
+        for subgraph in self.subgraphs:
+            excluded_specialists.extend(subgraph.get_excluded_specialists())
 
         for name in self.specialists:
-            # Exclude orchestration nodes and subgraph components from hub-and-spoke routing
-            excluded_specialists = [
-                router_name,
-                CoreSpecialist.ARCHIVER.value,
-                CoreSpecialist.END.value,
-                CoreSpecialist.CRITIC.value,
-                "web_builder",  # ADR-CORE-012
-                "triage_architect", # Context Engineering
-                "facilitator_specialist", # Context Engineering
-                "dialogue_specialist",  # ADR-CORE-018: HitL clarification
-                "researcher_specialist", # MCP-only
-                "summarizer_specialist" # MCP-only
-            ]
-
-            # CORE-CHAT-002: Exclude tiered chat subgraph components from standard routing
-            # Note: chat_specialist is NOT excluded - it's a regular specialist that can be used standalone
-            if has_tiered_chat:
-                excluded_specialists.extend([
-                    "progenitor_alpha_specialist",
-                    "progenitor_bravo_specialist",
-                    "tiered_synthesizer_specialist"
-                ])
-
-            # DISTILLATION SUBGRAPH: Exclude internal specialists from standard routing
-            # Note: coordinator IS excluded - it's accessed via virtual routing (distillation_specialist)
-            if has_distillation:
-                excluded_specialists.extend([
-                    "distillation_coordinator_specialist",
-                    "distillation_prompt_expander_specialist",
-                    "distillation_prompt_aggregator_specialist",
-                    "distillation_response_collector_specialist"
-                ])
-
             if name in excluded_specialists:
                 continue
 
             workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name})
-
-        if CoreSpecialist.CRITIC.value in self.specialists:
-            critic_config = self.config.get("specialists", {}).get(CoreSpecialist.CRITIC.value, {})
-            revision_target = critic_config.get("revision_target", router_name)
-            workflow.add_conditional_edges(
-                CoreSpecialist.CRITIC.value,
-                self.orchestrator.after_critique_decider,
-                {
-                    revision_target: revision_target,
-                    CoreSpecialist.END.value: CoreSpecialist.END.value,
-                    router_name: router_name,
-                    CoreSpecialist.CRITIC.value: CoreSpecialist.CRITIC.value # Add self to prevent default looping
-                }
-            )
-
-            # ADR-CORE-012: WEB_BUILDER ↔ CRITIC SUBGRAPH
-            # Creates a tight generate-critique-refine loop without router intervention:
-            #   1. Router → web_builder (generates UI)
-            #   2. web_builder → critic_specialist (direct edge - reviews UI)
-            #   3. critic_specialist → after_critique_decider:
-            #      - REVISE → web_builder (refine based on feedback)
-            #      - ACCEPT → check_task_completion → END
-            # This bypasses the router for efficiency and prevents false loop detection.
-            # CRITICAL: web_builder MUST be excluded from hub-and-spoke routing (line 350)
-            # Uses conditional edge to check if web_builder succeeded before routing to critic
-            if "web_builder" in self.specialists:
-                workflow.add_conditional_edges("web_builder", self.orchestrator.after_web_builder)
-                logger.info("Graph Edge: Added conditional edge web_builder → [critic_specialist|router] (ADR-CORE-012 subgraph)")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)

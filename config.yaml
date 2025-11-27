@@ -93,11 +93,13 @@ specialists:
     type: "llm"
     prompt_file: "router_prompt.md"
     description: "The master router and planner. It analyzes the user's request and routes it to the appropriate specialist. Its model should be capable of reliable tool/function calling."
+    tags: ["planning", "orchestration"]
 
   systems_architect:
     type: "llm"
     prompt_file: "systems_architect_prompt.md"
     description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
+    tags: ["planning"]
 
   critic_specialist:
     type: "llm"
@@ -123,6 +125,7 @@ specialists:
     artifact_providers:
       system_plan: "systems_architect"
       text_to_process: "file_specialist"
+    tags: ["vision_capable"]
 
   file_specialist:
     type: "llm"
@@ -314,6 +317,7 @@ specialists:
     type: "llm"
     prompt_file: "triage_architect_prompt.md"
     description: "Analyzes the user's request and creates a structured 'ContextPlan' to gather necessary information (Research, Read File, Summarize) before the main workflow begins."
+    tags: ["planning", "context_engineering"]
 
   researcher_specialist:
     type: "llm"
@@ -323,6 +327,7 @@ specialists:
     allows_iteration: true       # Can repeat legitimately (multiple web searches)
     max_iterations: 20           # Cap for extensive research workflows
     detect_stagnation: true      # Kill if same output (stuck on error)
+    tags: ["vision_capable"]
 
   summarizer_specialist:
     type: "llm"
@@ -334,18 +339,21 @@ specialists:
     type: "procedural"
     description: "Orchestrates the execution of a ContextPlan by calling Researcher, FileSpecialist, and Summarizer via MCP."
     requires_artifacts: ["context_plan"]
+    tags: ["planning", "context_engineering"]
 
   dialogue_specialist:
     type: "procedural"
-    description: "ADR-CORE-018: Presents clarification questions to the user when TriageArchitect determines the request is ambiguous (ASK_USER actions). Uses LangGraph interrupt() to pause graph execution and wait for user response."
+    description: "Presents clarification questions to the user when the request is ambiguous but appears solveable with additional user input. Do research *before* invoking this."
     # This specialist checks context_plan for ASK_USER actions AFTER FacilitatorSpecialist
     # has executed automated actions. Flow: Triage → Facilitator → Dialogue → Router
     # If no ASK_USER actions exist, it's a no-op pass-through.
+    tags: ["context_engineering"]
 
   image_specialist:
     type: "llm"
     prompt_file: "image_specialist_prompt.md"
     description: "Analyzes images using vision models. Provides detailed descriptions via MCP. Call with describe(base64_image, prompt)."
+    tags: ["vision_capable"]
 
   # --- General & Fallback ---
   prompt_specialist:
@@ -380,3 +388,4 @@ specialists:
     type: "llm"
     prompt_file: "prompt_triage_prompt.md"
     description: "A specialist that performs a pre-flight check on the user's initial prompt for sentiment, coherence, and actionability."
+    tags: ["planning"]

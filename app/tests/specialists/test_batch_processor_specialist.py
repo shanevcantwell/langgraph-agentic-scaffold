@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 from langchain_core.messages import HumanMessage, AIMessage
 
 from app.src.specialists.batch_processor_specialist import BatchProcessorSpecialist
-from app.src.specialists.schemas._batch_ops import BatchSortPlan, FileSortDecision
 
 
 @pytest.fixture
@@ -32,20 +31,22 @@ def test_successful_batch_sort(batch_processor):
                 }
             }]
         },
-        # Phase 2: Generate sort plan
+        # Phase 2: Generate sort plan - adapter returns json_response dict
         {
-            "parsed_output": BatchSortPlan(decisions=[
-                FileSortDecision(
-                    file_path="e.txt",
-                    destination="a-m/",
-                    rationale="Starts with e (falls in a-m range)"
-                ),
-                FileSortDecision(
-                    file_path="n.txt",
-                    destination="n-z/",
-                    rationale="Starts with n (falls in n-z range)"
-                )
-            ])
+            "json_response": {
+                "decisions": [
+                    {
+                        "file_path": "e.txt",
+                        "destination": "a-m/",
+                        "rationale": "Starts with e (falls in a-m range)"
+                    },
+                    {
+                        "file_path": "n.txt",
+                        "destination": "n-z/",
+                        "rationale": "Starts with n (falls in n-z range)"
+                    }
+                ]
+            }
         }
     ]
 
@@ -106,13 +107,15 @@ def test_partial_failure(batch_processor):
                 }
             }]
         },
-        # Phase 2: Generate sort plan
+        # Phase 2: Generate sort plan - adapter returns json_response dict
         {
-            "parsed_output": BatchSortPlan(decisions=[
-                FileSortDecision(file_path="e.txt", destination="a-m/", rationale="Starts with e"),
-                FileSortDecision(file_path="missing.txt", destination="a-m/", rationale="Starts with m"),
-                FileSortDecision(file_path="n.txt", destination="n-z/", rationale="Starts with n")
-            ])
+            "json_response": {
+                "decisions": [
+                    {"file_path": "e.txt", "destination": "a-m/", "rationale": "Starts with e"},
+                    {"file_path": "missing.txt", "destination": "a-m/", "rationale": "Starts with m"},
+                    {"file_path": "n.txt", "destination": "n-z/", "rationale": "Starts with n"}
+                ]
+            }
         }
     ]
 
@@ -209,15 +212,17 @@ def test_batch_sort_with_content_reading(batch_processor):
                 }
             }]
         },
-        # Phase 2: Generate sort plan
+        # Phase 2: Generate sort plan - adapter returns json_response dict
         {
-            "parsed_output": BatchSortPlan(decisions=[
-                FileSortDecision(
-                    file_path="doc1.txt",
-                    destination="docs/",
-                    rationale="Contains documentation content"
-                )
-            ])
+            "json_response": {
+                "decisions": [
+                    {
+                        "file_path": "doc1.txt",
+                        "destination": "docs/",
+                        "rationale": "Contains documentation content"
+                    }
+                ]
+            }
         }
     ]
 
@@ -265,11 +270,13 @@ def test_mcp_error_during_execution(batch_processor):
                 }
             }]
         },
-        # Phase 2: Plan
+        # Phase 2: Plan - adapter returns json_response dict
         {
-            "parsed_output": BatchSortPlan(decisions=[
-                FileSortDecision(file_path="file1.txt", destination="dest/", rationale="Test")
-            ])
+            "json_response": {
+                "decisions": [
+                    {"file_path": "file1.txt", "destination": "dest/", "rationale": "Test"}
+                ]
+            }
         }
     ]
 

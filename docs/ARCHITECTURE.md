@@ -8,8 +8,9 @@
 
 The system is composed of several agent types with a clear separation of concerns:
 1.  **Specialists (`BaseSpecialist`):** Functional, LLM-driven components that perform a single, well-defined task.
-2.  **Runtime Orchestrator (`RouterSpecialist` & `GraphOrchestrator`):** The `RouterSpecialist` is an agent that makes the turn-by-turn routing decisions *within* the graph. The `GraphOrchestrator` contains the runtime logic (decider functions, safety wrappers) that the graph itself executes.
+2. **Runtime Orchestrator (`RouterSpecialist` & `GraphOrchestrator`):** The `RouterSpecialist` is an agent that makes the turn-by-turn routing decisions *within* the graph. The `GraphOrchestrator` contains the runtime logic (decider functions) that the graph itself executes.
 3.  **Structural Orchestrator (`GraphBuilder`):** A high-level system component responsible for building the `LangGraph` instance and enforcing global rules.
+4.  **Execution Safety (`NodeExecutor`):** A dedicated component that wraps specialist execution to enforce invariants, handle errors, and manage circuit breakers.
 
 The system also includes a robust set of custom exceptions (e.g., `ProxyError`, `SafetyFilterError`, `RateLimitError`) to provide clear, actionable error messages instead of generic failures, which is critical for debugging agentic workflows.
 
@@ -520,10 +521,10 @@ The `InvariantMonitor` (`app/src/resilience/monitor.py`) is a service that runs 
 
 ### 5.2 Integration Point
 
-The monitor is integrated directly into the `GraphOrchestrator`'s `create_safe_executor` wrapper. This ensures that **no specialist** can execute if the system is in an invalid state.
+The monitor is integrated directly into the `NodeExecutor`'s `create_safe_executor` wrapper. This ensures that **no specialist** can execute if the system is in an invalid state.
 
 ```python
-# GraphOrchestrator.create_safe_executor
+# NodeExecutor.create_safe_executor
 def safe_executor(state: GraphState) -> Dict[str, Any]:
     # ...
     # Fail-fast if the system is in an invalid state
@@ -658,9 +659,10 @@ The system uses **MCP** for synchronous, direct service invocation between speci
 ### 7.1 MCP Architecture
 
 **Components:**
-- `McpRegistry`: Per-graph-instance service registry
+- `McpRegistry`: Per-graph-instance service registry (ensures test isolation)
 - `McpClient`: Convenience wrapper for making service calls
 - `McpRequest`/`McpResponse`: Pydantic schemas with UUID-based distributed tracing
+- `ExternalMcpClient`: Manages connections to external containerized services
 
 **Design Principles:**
 - Synchronous Python function calls for internal MCP
