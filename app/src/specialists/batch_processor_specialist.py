@@ -72,6 +72,15 @@ class BatchProcessorSpecialist(BaseSpecialist):
             # Phase 5: Generate report and artifacts
             report = self._generate_report(batch_request, results)
 
+            # Build reasoning for Thought Stream observability
+            reasoning_lines = [
+                f"Parsed {len(batch_request.file_paths)} files → {batch_request.destination_directories}"
+            ]
+            for decision in sort_plan.decisions:
+                reasoning_lines.append(f"  • {decision.file_path} → {decision.destination}: {decision.rationale}")
+            if results["failed"]:
+                reasoning_lines.append(f"⚠️ {len(results['failed'])} failed: {[f['file'] for f in results['failed']]}")
+
             return {
                 "messages": [AIMessage(content=self._format_summary(results))],
                 "artifacts": {
@@ -82,6 +91,9 @@ class BatchProcessorSpecialist(BaseSpecialist):
                     },
                     "batch_sort_details": results["successful"] + results["failed"],
                     "batch_sort_report.md": report
+                },
+                "scratchpad": {
+                    "batch_processor_reasoning": "\n".join(reasoning_lines)
                 },
                 "task_is_complete": True
             }

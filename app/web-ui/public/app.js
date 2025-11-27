@@ -523,6 +523,15 @@ function handleStreamEvent(event) {
                     if (data.scratchpad.router_decision) {
                         addThoughtStreamEntry('ROUTER', `Decision: ${data.scratchpad.router_decision}`, 'info');
                     }
+                    if (data.scratchpad.batch_processor_reasoning) {
+                        // Split multiline reasoning into separate entries
+                        const lines = data.scratchpad.batch_processor_reasoning.split('\n');
+                        lines.forEach(line => {
+                            if (line.trim()) {
+                                addThoughtStreamEntry('BATCH', line.trim(), 'info');
+                            }
+                        });
+                    }
                 }
 
                 // Update artifacts if present

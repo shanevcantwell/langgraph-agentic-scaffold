@@ -259,9 +259,10 @@ Specialists emit thinking traces to `scratchpad` for UI observability. These are
 | `triage_reasoning` | TriageArchitect | Explanation of context analysis and action plan |
 | `facilitator_complete` | FacilitatorSpecialist | Boolean flag when context gathering finishes |
 | `router_decision` | RouterSpecialist | Routing decision explanation |
+| `batch_processor_reasoning` | BatchProcessorSpecialist | File sorting decisions with LLM rationales |
 | `user_response_snippets` | Various specialists | **Response synthesis only** (not observability) |
 
-**Note:** Most specialists have "quiet minds" - they don't emit thinking traces. Only orchestration specialists (Triage, Facilitator, Router) currently emit observability data.
+**Note:** Most specialists have "quiet minds" - they don't emit thinking traces. Orchestration specialists (Triage, Facilitator, Router) and BatchProcessorSpecialist emit observability data.
 
 ## **5.0 Using the ApiClient**
 
