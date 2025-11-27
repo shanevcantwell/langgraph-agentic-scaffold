@@ -186,6 +186,9 @@ class BatchProcessorSpecialist(BaseSpecialist):
         """
         Use LLM to decide where each file should go.
 
+        Uses retry mechanism: if LLM truncates output and omits files,
+        retry with just the missing files and merge results.
+
         Args:
             batch_request: Parsed batch request with destinations
             file_context: Formatted file information
@@ -196,45 +199,71 @@ class BatchProcessorSpecialist(BaseSpecialist):
         Raises:
             ValueError: If LLM does not return valid plan
         """
-        planning_prompt = f"""You are sorting files into directories.
+        all_decisions = []
+        remaining_files = list(batch_request.file_paths)
+        max_retries = 3
+
+        for attempt in range(max_retries):
+            if not remaining_files:
+                break
+
+            # Build prompt for remaining files
+            file_count = len(remaining_files)
+            numbered_files = "\n".join(f"{i+1}. {f}" for i, f in enumerate(remaining_files))
+
+            planning_prompt = f"""You are sorting files into directories.
 
 Available Destinations:
 {chr(10).join(f'- {dest}' for dest in batch_request.destination_directories)}
 
-{file_context}
+IMPORTANT: You MUST return a decision for ALL {file_count} files listed below:
+{numbered_files}
 
 For each file, decide which destination directory it should go into and provide a brief rationale.
-Return a BatchSortPlan with decisions for all files."""
+Your BatchSortPlan MUST contain exactly {file_count} decisions - one for each file."""
 
-        request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=planning_prompt)],
-            output_model_class=BatchSortPlan
-        )
-
-        response = self.llm_adapter.invoke(request)
-
-        # Parse structured output - adapter returns json_response, we validate with Pydantic
-        json_response = response.get("json_response")
-        if not json_response:
-            raise ValueError(
-                "LLM did not return valid JSON for BatchSortPlan. "
-                f"Response keys: {list(response.keys())}"
+            request = StandardizedLLMRequest(
+                messages=[HumanMessage(content=planning_prompt)],
+                output_model_class=BatchSortPlan
             )
 
-        try:
-            sort_plan = BatchSortPlan(**json_response)
-        except Exception as e:
-            raise ValueError(f"Failed to parse BatchSortPlan from LLM response: {e}")
+            response = self.llm_adapter.invoke(request)
 
-        # Validate completeness: every requested file must have a decision
-        decided_files = {d.file_path for d in sort_plan.decisions}
-        requested_files = set(batch_request.file_paths)
-        missing = requested_files - decided_files
-        if missing:
-            logger.warning(f"LLM omitted {len(missing)} files from sort plan: {missing}")
-            # Don't raise - let partial results proceed, but log for observability
+            # Parse structured output
+            json_response = response.get("json_response")
+            if not json_response:
+                if attempt == max_retries - 1:
+                    raise ValueError(
+                        "LLM did not return valid JSON for BatchSortPlan. "
+                        f"Response keys: {list(response.keys())}"
+                    )
+                continue
 
-        return sort_plan
+            try:
+                partial_plan = BatchSortPlan(**json_response)
+            except Exception as e:
+                if attempt == max_retries - 1:
+                    raise ValueError(f"Failed to parse BatchSortPlan from LLM response: {e}")
+                continue
+
+            # Collect decisions and track what's still missing
+            all_decisions.extend(partial_plan.decisions)
+            decided_files = {d.file_path for d in partial_plan.decisions}
+            remaining_files = [f for f in remaining_files if f not in decided_files]
+
+            if remaining_files:
+                logger.warning(
+                    f"Attempt {attempt + 1}: LLM omitted {len(remaining_files)} files, "
+                    f"retrying with: {remaining_files}"
+                )
+
+        # Final check
+        if remaining_files:
+            logger.error(
+                f"After {max_retries} attempts, still missing decisions for: {remaining_files}"
+            )
+
+        return BatchSortPlan(decisions=all_decisions)
 
     def _execute_batch_operations(self, decisions: List[FileSortDecision]) -> Dict[str, Any]:
         """
