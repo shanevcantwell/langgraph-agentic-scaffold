@@ -121,7 +121,10 @@ class BatchProcessorSpecialist(BaseSpecialist):
                 "Please specify files and destinations clearly."
             )
 
-        return BatchSortRequest(**tool_calls[0]['args'])
+        batch_request = BatchSortRequest(**tool_calls[0]['args'])
+        logger.info(f"Phase 1 parsed: {len(batch_request.file_paths)} files={batch_request.file_paths}, "
+                    f"destinations={batch_request.destination_directories}")
+        return batch_request
 
     def _gather_file_context(self, batch_request: BatchSortRequest) -> str:
         """
@@ -207,9 +210,19 @@ Return a BatchSortPlan with decisions for all files."""
             )
 
         try:
-            return BatchSortPlan(**json_response)
+            sort_plan = BatchSortPlan(**json_response)
         except Exception as e:
             raise ValueError(f"Failed to parse BatchSortPlan from LLM response: {e}")
+
+        # Validate completeness: every requested file must have a decision
+        decided_files = {d.file_path for d in sort_plan.decisions}
+        requested_files = set(batch_request.file_paths)
+        missing = requested_files - decided_files
+        if missing:
+            logger.warning(f"LLM omitted {len(missing)} files from sort plan: {missing}")
+            # Don't raise - let partial results proceed, but log for observability
+
+        return sort_plan
 
     def _execute_batch_operations(self, decisions: List[FileSortDecision]) -> Dict[str, Any]:
         """
