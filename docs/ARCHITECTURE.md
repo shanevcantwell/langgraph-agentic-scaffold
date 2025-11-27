@@ -142,34 +142,6 @@ After context gathering completes (`gathered_context` artifact exists):
 3. "CONTEXT GATHERING COMPLETE" note added to router prompt
 4. Router chooses from filtered menu with filtered recommendations
 
-### Example: Web Search Request
-
-**Before Fix (Gemini 3.0 Migration Lost Recommendations):**
-```
-User: "Research winter weather in Colorado"
-├─ Triage: ❌ No recommendations set
-├─ Facilitator: Gathers context
-└─ Router: Blind choice from 15 specialists → text_analysis × 3 → LOOP DETECTED
-```
-
-**After Fix (Recommendations Restored):**
-```
-User: "Research winter weather in Colorado"
-├─ Triage: ✅ recommends ["researcher_specialist"]
-├─ Facilitator: Gathers context
-└─ Router: Sees recommendation → researcher_specialist ✅ → END
-```
-
-### Testing
-
-**Unit Tests:**
-- `test_context_schema.py`: ContextPlan validation (7 tests)
-- `test_triage_architect.py`: Recommendation population (4 new tests)
-- `test_router_specialist.py`: Recommendation filtering (2 new tests)
-
-**Integration Test:**
-- `test_triage_routing_flow.py`: Full flow regression test
-
 ### Design Rationale
 
 **Why Advisory vs. Mandatory?**
@@ -183,9 +155,6 @@ User: "Research winter weather in Colorado"
 - Prevents router from choosing excluded specialists
 - Ensures recommendations match available menu
 - Prevents validation failures and default_responder fallbacks
-
-**Migration Note:**
-This pattern was lost during the Triage → TriageArchitect refactoring (likely Gemini 3.0 migration). The `recommended_specialists` field was removed from the ContextPlan schema, causing routers to make blind choices after context gathering. The fix restores this critical routing guidance mechanism.
 
 ## 3.0 Architectural Best Practices & Lessons Learned
 
@@ -233,25 +202,6 @@ The process is as follows:
     *   On the next turn, the `RouterSpecialist` performs a pre-LLM check. It sees the `archive_report.md` artifact and deterministically routes to the special `END` node, cleanly completing the graph execution.
 
 This explicit, coordinated sequence ensures that completion is a robust, observable process, centralizing the finalization logic and preventing premature or disorderly graph exits.
-
-### 3.5 Pattern: Hybrid Specialist Configuration (Open Interpreter)
-
-**Context:** Some specialists, like `OpenInterpreterSpecialist`, rely on external libraries (`open-interpreter`) that have their own internal LLM handling logic. This can lead to configuration drift where the library tries to use default settings (e.g., OpenAI GPT-4) instead of the application's configured LLM.
-
-**Solution:** The specialist implementation must explicitly bridge the application's `LLMAdapter` configuration to the external library's configuration at runtime.
-
-**Implementation:**
-In `OpenInterpreterSpecialist._execute_code`, we explicitly inject the adapter's settings into the interpreter instance before execution:
-
-```python
-if self.llm_adapter:
-    interpreter.llm.api_base = self.llm_adapter.api_base
-    interpreter.llm.api_key = self.llm_adapter.api_key or "not-needed"
-    interpreter.llm.model = self.llm_adapter.model_name or "openai/gpt-4-turbo"
-    interpreter.llm.max_tokens = getattr(self.llm_adapter, 'max_tokens', 4096)
-```
-
-This ensures that `open-interpreter` respects the local model bindings defined in `user_settings.yaml` (e.g., `lmstudio_specialist`), preventing accidental API calls to cloud providers when local execution is intended.
 
 ## 4.0 Pattern: Virtual Coordinator with Parallel Execution (CORE-CHAT-002)
 
@@ -422,81 +372,19 @@ This optimization reduces LLM calls from 3 (Alpha + Bravo + EndSynthesis) to 2 (
 
 ### 4.6 Model Binding Configuration
 
-The tiered chat architecture is **model-agnostic**. Concrete model bindings are runtime configuration:
+The tiered chat architecture is **model-agnostic**. Concrete model bindings are runtime configuration in `user_settings.yaml`:
 
-**Development (zero API cost):**
 ```yaml
-# user_settings.yaml
 specialist_model_bindings:
-  progenitor_alpha_specialist: "lmstudio_specialist"
+  progenitor_alpha_specialist: "lmstudio_specialist"  # or "gemini_pro", "claude_sonnet"
   progenitor_bravo_specialist: "lmstudio_specialist"
 ```
 
-**Hybrid (mixed cost/quality):**
-```yaml
-specialist_model_bindings:
-  progenitor_alpha_specialist: "gemini_pro"
-  progenitor_bravo_specialist: "lmstudio_specialist"
-```
+### 4.7 Backward Compatibility
 
-**Production (PAYG):**
-```yaml
-specialist_model_bindings:
-  progenitor_alpha_specialist: "gemini_pro"
-  progenitor_bravo_specialist: "claude_sonnet"
-```
+When tiered chat components are NOT configured, the system falls back to single-node `chat_specialist` with no behavior changes.
 
-### 4.7 Observability
-
-**Logging:**
-- INFO level when interception occurs: "Chat routing detected - fanning out to parallel progenitors"
-- WARNING level for degraded modes with failure reasons
-- Structured logging includes `routing_mode` and `response_mode`
-
-**LangSmith Traces:**
-- `routing_history` shows: `["router_specialist", "progenitor_alpha_specialist", "progenitor_bravo_specialist", "tiered_synthesizer_specialist"]`
-- Parallel execution visible in trace timeline (both progenitors run simultaneously)
-- Each specialist's message shows execution status
-
-**Archive Report:**
-- Includes `response_mode` for post-hoc analysis
-- routing_history shows actual execution path
-- Degraded mode warnings included in report
-
-### 4.8 Backward Compatibility
-
-When tiered chat components are NOT configured:
-- Router can still choose "chat_specialist"
-- Orchestrator routes directly to single ChatSpecialist node
-- Standard single-perspective response
-- No progenitor specialists instantiated
-- Zero changes to routing behavior
-
-### 4.9 Configuration in config.yaml
-
-```yaml
-# Tiered Chat Subgraph (CORE-CHAT-002)
-progenitor_alpha_specialist:
-  type: "llm"
-  prompt_file: "progenitor_alpha_prompt.md"
-  description: "Provides analytical, structured perspective for multi-view responses"
-
-progenitor_bravo_specialist:
-  type: "llm"
-  prompt_file: "progenitor_bravo_prompt.md"
-  description: "Provides contextual, intuitive perspective for multi-view responses"
-
-tiered_synthesizer_specialist:
-  type: "procedural"
-  description: "Combines Alpha and Bravo perspectives into formatted markdown output"
-```
-
-**Key Points:**
-- Progenitors are excluded from router's tool schema (internal to subgraph)
-- `chat_specialist` node is skipped when tiered components are present
-- System auto-detects and enables tiered chat when all three specialists configured
-
-### 4.10 Related Patterns
+### 4.8 Related Patterns
 
 This Virtual Coordinator pattern is similar to the Hybrid Coordinator pattern used by EndSpecialist:
 - EndSpecialist performs inline synthesis (procedural + LLM)
@@ -538,14 +426,9 @@ The `InvariantMonitor` is instrumented with LangSmith tracing (`@traceable`). In
 
 ### 5.4 Progressive Loop Detection with Stagnation Check
 
-**Enhancement Date:** 2025-11-22
-**Status:** Implemented & Tested
-
-**Problem:** The original loop detection (`check_loop_detection()`) could not distinguish between:
+The loop detection distinguishes between:
 - **Productive iteration:** Specialist repeats legitimately with different outputs (e.g., downloading file1, file2, file3)
 - **Stuck loops:** Specialist repeats with identical output (same error repeated)
-
-This created false positives that broke legitimate research workflows requiring 15-20 iterations.
 
 **Solution: Three-Check Logic**
 
@@ -598,12 +481,6 @@ Progressive loop detection works as **first-line defense** before the Menu Filte
 1. **Tier 1a (Progressive Detection):** Allows productive iteration, kills stagnation fast
 2. **Tier 1b (Menu Filter):** If stagnation detected, removes specialist from router's menu (P=0)
 3. **Tier 2 (Circuit Breaker):** Final HALT if both tiers fail
-
-**Files:**
-- Implementation: [app/src/resilience/invariants.py](../app/src/resilience/invariants.py#L34-L188)
-- Hash Tracking: [app/src/workflow/graph_orchestrator.py](../app/src/workflow/graph_orchestrator.py#L460-L481)
-- Tests: [app/tests/unit/test_invariants.py](../app/tests/unit/test_invariants.py#L64-L273)
-- Full Specification: [ADR-CORE-016: Menu Filter Pattern](./ADR/ADR-CORE-016-Menu-Filter-Pattern.md#progressive-loop-detection-enhancement-stagnation-check)
 
 ## 6.0 Pattern: Context Engineering & Faithfulness
 
@@ -731,17 +608,14 @@ Router → web_builder → critic_specialist
 
 **Three components must align:**
 
-1. **Exclusion from Hub-and-Spoke** (`graph_builder.py:350`)
+1. **Exclusion from Hub-and-Spoke** - Handled by `CriticLoopSubgraph.get_excluded_specialists()`
+
+2. **Direct Edge** - Wired in `CriticLoopSubgraph.build()`:
    ```python
-   excluded_specialists = {'web_builder', 'triage_architect', 'facilitator_specialist'}
+   workflow.add_conditional_edges("web_builder", self.orchestrator.after_web_builder)
    ```
 
-2. **Direct Edge** (`graph_builder.py:401`)
-   ```python
-   workflow.add_edge("web_builder", "critic_specialist")
-   ```
-
-3. **Config Setting** (`config.yaml:71`)
+3. **Config Setting** (`config.yaml`):
    ```yaml
    critic_specialist:
      revision_target: "web_builder"
