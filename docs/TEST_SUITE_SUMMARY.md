@@ -1,6 +1,78 @@
 # Test Suite Summary
 
 
+## `app/tests/interface/test_context_schema.py`
+
+- **`test_context_plan_with_recommended_specialists`**
+  - *Test ContextPlan with recommended_specialists field populated.*
+- **`test_context_plan_default_empty_recommendations`**
+  - *Test ContextPlan defaults to empty list for recommended_specialists.*
+- **`test_context_plan_validates_required_fields`**
+  - *Test ContextPlan requires reasoning field.*
+- **`test_context_plan_single_recommendation`**
+  - *Test ContextPlan with single specialist recommendation.*
+- **`test_context_plan_serialization`**
+  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
+- **`test_context_plan_empty_actions_with_recommendations`**
+  - *Test ContextPlan with no actions but with recommendations.*
+- **`test_context_plan_multiple_actions_with_recommendations`**
+  - *Test ContextPlan with multiple actions and recommendations.*
+
+## `app/tests/resilience/test_menu_filter_pattern.py`
+
+- **`test_immediate_repetition_loop_activates_menu_filter`**
+  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
+- **`test_two_step_cycle_loop_forbids_both_specialists`**
+  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
+- **`test_below_threshold_does_not_trigger_menu_filter`**
+  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
+- **`test_no_loop_returns_none`**
+  - *REQUIREMENT: No loop detected should return None.*
+- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
+  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
+- **`test_menu_filter_already_active_escalates_to_tier3`**
+  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
+- **`test_extract_from_immediate_loop_error`**
+  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
+- **`test_extract_from_two_step_cycle_error`**
+  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
+- **`test_invalid_error_format_returns_empty_list`**
+  - *REQUIREMENT: If error message format is invalid, return empty list.*
+- **`test_extraction_failure_triggers_circuit_breaker`**
+  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
+- **`test_no_forbidden_list_returns_full_menu`**
+  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
+- **`test_forbidden_list_filters_specialists`**
+  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
+- **`test_multiple_forbidden_specialists_all_removed`**
+  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
+- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
+  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
+- **`test_forbidden_list_cleared_after_non_router_execution`**
+  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
+- **`test_router_execution_does_not_clear_forbidden_list`**
+  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
+- **`test_full_loop_recovery_flow`**
+  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
+- **`test_oscillation_recovery_web_builder_critic`**
+  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
+- **`test_exactly_threshold_repetitions`**
+  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
+- **`test_threshold_plus_one_triggers`**
+  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
+- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
+  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
+- **`test_structural_integrity_violation_triggers_immediate_halt`**
+  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
+- **`test_forbidden_specialists_in_scratchpad_not_root`**
+  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
+- **`test_scratchpad_merge_semantics`**
+  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
+- **`test_menu_filter_activation_logged_at_warning_level`**
+  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
+- **`test_tier3_escalation_logged_at_error_level`**
+  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
+
 ## `app/tests/integration/test_api_streaming_integration.py`
 
 - **`test_api_streams_multiple_specialist_updates`**
@@ -9,6 +81,59 @@
   - *Integration test: Verifies API streams error updates when specialists fail.*
 - **`test_api_streams_tiered_chat_specialists`**
   - *Integration test: Verifies tiered chat subgraph specialists are all streamed.*
+- **`test_api_streams_file_operations_specialist`**
+  - *Integration test: Verifies file_operations_specialist streams correctly.*
+- **`test_api_streams_artifacts_in_response`**
+  - *Integration test: Verifies artifacts are included in streamed response.*
+- **`test_api_streams_status_for_all_routed_specialists`**
+  - *Integration test: Verifies status updates are emitted for every specialist*
+
+## `app/tests/integration/test_archive_validation.py`
+
+- **`test_archive_contains_manifest`**
+  - *Verify archive contains a manifest.json file.*
+- **`test_archive_contains_report`**
+  - *Verify archive contains a report.md file.*
+- **`test_manifest_is_valid_json`**
+  - *Verify manifest.json is valid JSON.*
+- **`test_archive_files_are_readable`**
+  - *Verify all files in archive can be read without error.*
+- **`test_manifest_has_required_fields`**
+  - *Verify manifest contains all required fields.*
+- **`test_manifest_run_id_is_uuid_format`**
+  - *Verify run_id follows UUID format.*
+- **`test_manifest_timestamp_is_iso_format`**
+  - *Verify timestamp is valid ISO format.*
+- **`test_manifest_routing_history_is_list`**
+  - *Verify routing_history is a non-empty list.*
+- **`test_manifest_artifacts_have_required_fields`**
+  - *Verify each artifact entry has required fields.*
+- **`test_manifest_artifacts_exist_in_archive`**
+  - *Verify all artifacts listed in manifest exist in archive.*
+- **`test_manifest_termination_reason_is_valid`**
+  - *Verify termination_reason is a recognized value.*
+- **`test_successful_workflow_ends_properly`**
+  - *Verify successful workflows have final_response_generated=True.*
+- **`test_tiered_chat_has_progenitors`**
+  - *Verify tiered chat workflows include progenitor specialists.*
+- **`test_no_router_in_routing_history`**
+  - *Verify router_specialist does not appear in routing_history.*
+- **`test_triage_is_entry_point_when_present`**
+  - *Verify triage_architect is first when it appears in routing.*
+- **`test_log_file_exists`**
+  - *Verify server log file exists.*
+- **`test_no_unhandled_exceptions_in_recent_logs`**
+  - *Check for unhandled exceptions in recent log entries.*
+- **`test_successful_startup_in_logs`**
+  - *Verify server started successfully.*
+- **`test_specialists_initialized_in_logs`**
+  - *Verify critical specialists were initialized.*
+- **`test_recent_archives_all_have_valid_manifests`**
+  - *Verify all recent archives have valid manifest files.*
+- **`test_no_empty_archives`**
+  - *Verify no archives are empty or corrupted.*
+- **`test_archives_have_unique_run_ids`**
+  - *Verify each archive has a unique run_id.*
 
 ## `app/tests/integration/test_artifact_passing.py`
 
@@ -22,6 +147,13 @@
   - *Tests conditional artifact requirements (any-of pattern).*
 - **`test_artifact_cleanup_not_leaked`**
   - *Tests that artifacts don't leak between workflow runs.*
+
+## `app/tests/integration/test_batch_processor_live.py`
+
+- **`test_batch_sort_parses_all_explicit_files`**
+  - *Test that BatchProcessorSpecialist parses ALL explicitly listed files.*
+- **`test_batch_sort_summary_matches_file_count`**
+  - *Test that batch_sort_summary reports correct file counts.*
 
 ## `app/tests/integration/test_chat_specialist_routing.py`
 
@@ -45,6 +177,9 @@
   - *Specific validation for CriticSpecialist configuration.*
 - **`test_all_llm_specialists_have_valid_model_bindings`**
   - *Validates that all LLM specialists have valid model bindings.*
+
+## `app/tests/integration/test_external_mcp.py`
+
 
 ## `app/tests/integration/test_gradio_integration.py`
 
@@ -93,15 +228,57 @@
 - **`test_live_lmstudio_adapter_interaction`**
   - *Tests a basic interaction with a live LM Studio model via the AdapterFactory.*
 
+## `app/tests/integration/test_mcp_tools_integration.py`
+
+- **`test_file_exists_returns_false_for_missing_file`**
+  - *Verify file_exists returns False for non-existent file.*
+- **`test_file_exists_returns_true_for_existing_file`**
+  - *Verify file_exists returns True for existing file.*
+- **`test_write_and_read_file`**
+  - *Verify write_file and read_file work together.*
+- **`test_append_to_file`**
+  - *Verify append_to_file adds content to existing file.*
+- **`test_list_files`**
+  - *Verify list_files returns directory contents.*
+- **`test_create_directory`**
+  - *Verify create_directory creates new directory.*
+- **`test_rename_file`**
+  - *Verify rename_file moves/renames files.*
+- **`test_delete_file`**
+  - *Verify delete_file removes files.*
+- **`test_create_zip`**
+  - *Verify create_zip creates archive from directory.*
+- **`test_create_manifest`**
+  - *Verify create_manifest creates valid JSON manifest.*
+- **`test_search_function_registered`**
+  - *Verify search function is registered in MCP.*
+- **`test_search_returns_results`**
+  - *Verify search function returns list of results.*
+- **`test_summarize_function_registered`**
+  - *Verify summarize function is registered in MCP.*
+- **`test_summarize_returns_text`**
+  - *Verify summarize function returns summarized text.*
+- **`test_describe_function_registered`**
+  - *Verify describe function is registered in MCP.*
+- **`test_describe_returns_description`**
+  - *Verify describe function returns image description.*
+- **`test_call_nonexistent_service_raises_error`**
+  - *Verify calling non-existent service raises appropriate error.*
+- **`test_call_nonexistent_function_raises_error`**
+  - *Verify calling non-existent function raises appropriate error.*
+- **`test_call_safe_returns_false_on_error`**
+  - *Verify call_safe returns (False, error_msg) on failure.*
+- **`test_list_services_returns_all_registered`**
+  - *Verify list_services returns all registered services.*
+- **`test_registry_isolation`**
+  - *Verify each registry instance is isolated.*
+- **`test_all_mcp_services_registered_in_graph`**
+  - *Verify all expected MCP services are registered in full graph.*
+- **`test_file_specialist_accessible_from_graph`**
+  - *Verify file_specialist MCP functions work from graph context.*
+
 ## `app/tests/integration/test_parallel_execution.py`
 
-
-## `app/tests/integration/test_plan_and_execute_integration.py`
-
-- **`test_plan_and_execute_workflow`**
-  - *Tests the full "Plan and Execute" workflow within the OpenInterpreterSpecialist.*
-- **`test_plan_and_execute_handles_llm_planning_failure`**
-  - *Tests that the specialist correctly handles the case where the LLM fails*
 
 ## `app/tests/integration/test_routing_integration.py`
 
@@ -115,6 +292,72 @@
   - *End-to-end test for the original bug scenario that motivated ADR-CORE-011.*
 - **`test_router_respects_specialist_cannot_proceed`**
   - *Verifies router treats "cannot proceed" messages as blocking, not advisory.*
+- **`test_context_aware_routing_prevents_loop`**
+  - *End-to-end test verifying context-aware routing prevents infinite loop.*
+
+## `app/tests/integration/test_specialist_execution.py`
+
+- **`test_systems_architect_produces_system_plan`**
+  - *Verify SystemsArchitect creates system_plan artifact.*
+- **`test_systems_architect_raises_on_missing_json`**
+  - *Verify SystemsArchitect raises error when json_response missing.*
+- **`test_web_builder_produces_html_artifact`**
+  - *Verify WebBuilder creates HTML artifact.*
+- **`test_chat_specialist_produces_response`**
+  - *Verify ChatSpecialist produces conversational response.*
+- **`test_sentiment_classifier_classifies_positive`**
+  - *Verify SentimentClassifier identifies positive sentiment.*
+- **`test_sentiment_classifier_classifies_negative`**
+  - *Verify SentimentClassifier identifies negative sentiment.*
+- **`test_text_analysis_summarizes_content`**
+  - *Verify TextAnalysisSpecialist summarizes text content.*
+- **`test_batch_processor_initializes`**
+  - *Verify BatchProcessorSpecialist initializes correctly.*
+- **`test_researcher_initializes_with_mcp`**
+  - *Verify ResearcherSpecialist initializes and registers MCP.*
+- **`test_summarizer_produces_summary`**
+  - *Verify SummarizerSpecialist produces text summary.*
+- **`test_prompt_specialist_generates_prompt`**
+  - *Verify PromptSpecialist generates improved prompts.*
+- **`test_default_responder_handles_greeting`**
+  - *Verify DefaultResponder handles simple greetings.*
+- **`test_progenitor_alpha_produces_artifact`**
+  - *Verify ProgenitorAlpha writes to artifacts, not messages.*
+- **`test_progenitor_bravo_produces_artifact`**
+  - *Verify ProgenitorBravo writes to artifacts, not messages.*
+- **`test_synthesizer_combines_progenitor_responses`**
+  - *Verify TieredSynthesizer combines alpha and bravo responses.*
+- **`test_triage_architect_creates_context_plan`**
+  - *Verify TriageArchitect creates context_plan artifact.*
+- **`test_router_produces_routing_decision`**
+  - *Verify RouterSpecialist produces routing decision.*
+- **`test_archiver_creates_archive_package`**
+  - *Verify ArchiverSpecialist creates an Atomic Archival Package.*
+- **`test_archiver_includes_manifest`**
+  - *Verify archive includes valid manifest.json.*
+- **`test_archiver_includes_report`**
+  - *Verify archive includes report.md.*
+- **`test_end_specialist_synthesizes_response`**
+  - *Verify EndSpecialist synthesizes final response.*
+- **`test_specialist_loads_successfully`**
+  - *Verify specialist class loads without errors.*
+
+## `app/tests/integration/test_specialist_routing_matrix.py`
+
+- **`test_router_routes_to_expected_specialist`**
+  - *Verify router routes to expected specialist(s) for given prompt.*
+- **`test_triage_architect_is_entry_point`**
+  - *Verify triage_architect is the entry point for complex requests.*
+- **`test_tiered_chat_pattern_triggers_progenitors`**
+  - *Verify chat_specialist triggers the tiered chat pattern with progenitors.*
+- **`test_workflow_completes_at_end_specialist`**
+  - *Verify all workflows terminate at end_specialist.*
+- **`test_no_routing_to_internal_specialists`**
+  - *Verify router does not directly route to internal specialists.*
+- **`test_loop_detection_prevents_infinite_loops`**
+  - *Verify loop detection prevents pathological routing patterns.*
+- **`test_all_config_specialists_loadable`**
+  - *Verify all specialists defined in config.yaml loaded successfully.*
 
 ## `app/tests/integration/test_startup_validation.py`
 
@@ -151,6 +394,160 @@
   - *Tests that the state management pattern is followed correctly.*
 - **`test_tiered_chat_simple_mode_bypass`**
   - *Tests that use_simple_chat flag bypasses tiered subgraph.*
+
+## `app/tests/integration/test_triage_routing_flow.py`
+
+- **`test_web_search_request_routes_to_researcher`**
+  - *Regression test for routing issue: web search should route to researcher_specialist.*
+- **`test_greeting_bypasses_context_gathering`**
+  - *Test simple greeting flow: direct to chat_specialist without context gathering.*
+
+## `app/tests/scripts/test_add_mcp_service.py`
+
+- **`test_list_available_servers`**
+  - *Test listing all available MCP servers from registry.*
+- **`test_get_server_info_existing`**
+  - *Test retrieving service info for existing service.*
+- **`test_get_server_info_nonexistent`**
+  - *Test retrieving service info for non-existent service.*
+- **`test_validate_prerequisites_success`**
+  - *Test prerequisite validation when all checks pass.*
+- **`test_validate_prerequisites_docker_not_running`**
+  - *Test prerequisite validation when Docker is not running.*
+- **`test_validate_prerequisites_missing_template`**
+  - *Test prerequisite validation when template doesn't exist.*
+- **`test_build_docker_image_success`**
+  - *Test successful Docker image build.*
+- **`test_build_docker_image_failure`**
+  - *Test Docker image build failure.*
+- **`test_update_config_yaml_new_service`**
+  - *Test adding new MCP service to config.yaml.*
+- **`test_update_config_yaml_with_env_vars`**
+  - *Test config.yaml update includes environment variables.*
+- **`test_update_config_yaml_with_volumes`**
+  - *Test config.yaml update includes volume mounts.*
+- **`test_update_config_yaml_required_flag`**
+  - *Test config.yaml update respects required flag.*
+- **`test_update_config_yaml_atomic_write`**
+  - *Test config.yaml update uses atomic temp file + rename pattern.*
+- **`test_update_env_example_new_vars`**
+  - *Test adding environment variables to .env.example.*
+- **`test_update_env_example_no_vars`**
+  - *Test .env.example update with no environment variables.*
+- **`test_update_env_example_creates_section`**
+  - *Test .env.example update creates MCP section if missing.*
+- **`test_install_service_success`**
+  - *Test full service installation workflow.*
+- **`test_install_service_nonexistent`**
+  - *Test installation fails for non-existent service.*
+- **`test_install_service_prerequisite_failure`**
+  - *Test installation fails when prerequisites not met.*
+- **`test_install_service_with_auto_restart`**
+  - *Test installation with auto-restart option.*
+- **`test_restart_application`**
+  - *Test Docker Compose application restart.*
+- **`test_restart_application_failure`**
+  - *Test application restart handles failures gracefully.*
+
+## `app/tests/specialists/test_batch_processor_specialist.py`
+
+- **`test_successful_batch_sort`**
+  - *Test successful batch sorting of all files.*
+- **`test_partial_failure`**
+  - *Test handling of partial failures in batch operation.*
+- **`test_missing_mcp_client`**
+  - *Test error handling when MCP client is not available.*
+- **`test_empty_messages`**
+  - *Test error handling when no messages provided.*
+- **`test_llm_parse_failure`**
+  - *Test error handling when LLM cannot parse request.*
+- **`test_batch_sort_with_content_reading`**
+  - *Test batch sorting with content reading enabled.*
+- **`test_mcp_error_during_execution`**
+  - *Test graceful handling of MCP errors during file operations.*
+
+## `app/tests/specialists/test_file_operations_specialist.py`
+
+- **`test_init`**
+  - *Test FileOperationsSpecialist initializes correctly.*
+- **`test_list_files_operation`**
+  - *Test listing files via MCP.*
+- **`test_read_file_operation`**
+  - *Test reading file contents via MCP.*
+- **`test_write_file_operation`**
+  - *Test writing file via MCP.*
+- **`test_create_directory_operation`**
+  - *Test creating directory via MCP.*
+- **`test_delete_file_operation`**
+  - *Test deleting file via MCP.*
+- **`test_rename_file_operation`**
+  - *Test renaming file via MCP.*
+- **`test_no_mcp_client_error`**
+  - *Test error handling when MCP client not available.*
+- **`test_no_tool_calls_from_llm`**
+  - *Test handling when LLM doesn't return tool calls.*
+- **`test_mcp_call_failure`**
+  - *Test error handling when MCP call fails.*
+- **`test_empty_file_list_response`**
+  - *Test handling of empty directory.*
+- **`test_append_to_file_operation`**
+  - *Test appending content to file via MCP.*
+
+## `app/tests/specialists/test_image_specialist.py`
+
+- **`test_init`**
+  - *Test ImageSpecialist initializes correctly.*
+- **`test_mcp_service_registration`**
+  - *Test that ImageSpecialist registers describe service via MCP.*
+- **`test_describe_image_basic`**
+  - *Test basic image description via MCP.*
+- **`test_describe_image_custom_prompt`**
+  - *Test image description with custom prompt.*
+- **`test_describe_image_no_llm_adapter`**
+  - *Test that describe raises error if LLM adapter not attached.*
+- **`test_describe_image_empty_response`**
+  - *Test handling of empty LLM response.*
+- **`test_describe_image_llm_error`**
+  - *Test error handling when LLM invocation fails.*
+- **`test_execute_logic_with_uploaded_image`**
+  - *Test graph execution mode with uploaded image in artifacts.*
+- **`test_execute_logic_with_image_to_process`**
+  - *Test graph execution mode with image_to_process artifact.*
+- **`test_execute_logic_with_custom_prompt_artifact`**
+  - *Test graph execution with custom analysis prompt in artifacts.*
+- **`test_execute_logic_no_image`**
+  - *Test graph execution returns error when no image in artifacts.*
+- **`test_execute_logic_no_llm_adapter`**
+  - *Test graph execution raises error if no LLM adapter.*
+- **`test_execute_logic_describe_error`**
+  - *Test graph execution handles describe errors gracefully.*
+
+## `app/tests/specialists/test_router_specialist.py`
+
+- **`test_get_available_specialists_without_gathered_context`**
+  - *Test that all specialists are available when no gathered_context exists.*
+- **`test_get_available_specialists_with_gathered_context`**
+  - *Test that planning specialists are excluded when gathered_context exists.*
+- **`test_get_available_specialists_with_menu_filter`**
+  - *Test Menu Filter Pattern (ADR-CORE-016) - forbidden_specialists in scratchpad.*
+- **`test_get_available_specialists_combined_filters`**
+  - *Test that gathered_context and menu filter work together.*
+- **`test_get_available_specialists_empty_gathered_context`**
+  - *Test that empty gathered_context dict does NOT trigger exclusion.*
+- **`test_get_available_specialists_no_scratchpad`**
+  - *Test that missing scratchpad key doesn't cause errors.*
+- **`test_get_available_specialists_logging`**
+  - *Test that context-aware exclusion logs informative message.*
+- **`test_recommendation_filtering_with_gathered_context`**
+  - *Test that recommendations are filtered when specialists are excluded from menu.*
+- **`test_all_recommendations_filtered_out`**
+  - *Test behavior when all recommendations are filtered out.*
+- **`test_context_gathering_complete_note_in_prompt`**
+  - *Test that explicit guidance is added when context gathering is complete.*
+- **`test_triage_recommendations_included_in_router_prompt`**
+  - *Test that triage recommendations are properly included in router prompt.*
+- **`test_researcher_specialist_recommended_for_web_search`**
+  - *Test the specific case from user's trace: web search should route to researcher.*
 
 ## `app/tests/unit/test_adapter_contracts.py`
 
@@ -226,7 +623,7 @@
 ## `app/tests/unit/test_circuit_breaker.py`
 
 - **`test_stabilization_action_halt`**
-  - *Verifies that the monitor raises InvariantViolationError when action is HALT.*
+  - *Verifies that the monitor raises CircuitBreakerTriggered when action is HALT.*
 - **`test_stabilization_action_default_halt`**
   - *Verifies that the monitor defaults to HALT if action is not configured.*
 - **`test_violation_type_detection_structure`**
@@ -236,8 +633,8 @@
 
 ## `app/tests/unit/test_clarification_workflow.py`
 
-- **`test_check_triage_outcome_routes_to_end_on_ask_user`**
-  - *Tests that check_triage_outcome routes directly to EndSpecialist*
+- **`test_check_triage_outcome_routes_to_facilitator_on_ask_user`**
+  - *ADR-CORE-018: Tests that check_triage_outcome routes to Facilitator chain*
 - **`test_check_triage_outcome_routes_to_facilitator_on_normal_actions`**
   - *Tests that check_triage_outcome routes to Facilitator for normal actions.*
 - **`test_end_specialist_generates_clarification_response`**
@@ -351,6 +748,12 @@
 - **`test_facilitator_executes_read_file_action`**
 - **`test_facilitator_handles_missing_plan`**
 - **`test_facilitator_handles_mcp_error`**
+- **`test_facilitator_reads_artifact_instead_of_file_for_uploaded_image`**
+  - *Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem.*
+- **`test_facilitator_reads_artifact_for_uploaded_image_png_key`**
+  - *Test artifact retrieval with 'uploaded_image.png' key.*
+- **`test_facilitator_calls_file_specialist_when_artifact_not_in_state`**
+  - *Test that Facilitator falls back to file_specialist when artifact is NOT in state.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -487,16 +890,6 @@
 
 ## `app/tests/unit/test_graph_orchestrator.py`
 
-- **`test_safe_executor_handles_specialist_exception`**
-  - *Tests that the create_safe_executor wrapper catches exceptions from a specialist*
-- **`test_safe_executor_handles_generic_exception`**
-  - *Tests that the executor also catches generic exceptions and formats them correctly.*
-- **`test_safe_executor_success_path`**
-  - *Tests the safe_executor for a successful, non-error execution.*
-- **`test_safe_executor_blocks_execution_on_missing_artifact`**
-  - *Tests that the safe_executor prevents a specialist from running if a required*
-- **`test_create_missing_artifact_response_format`**
-  - *Tests the specific format of the missing artifact response.*
 - **`test_route_to_next_specialist_normal_route`**
   - *Tests that the function returns the correct specialist name from the state.*
 - **`test_route_to_next_specialist_detects_loop`**
@@ -552,6 +945,22 @@
 - **`test_check_loop_detection_immediate_loop_below_threshold`**
 - **`test_check_loop_detection_2step_cycle`**
 - **`test_check_loop_detection_2step_cycle_below_threshold`**
+- **`test_progressive_loop_detection_productive_iteration_allowed`**
+  - *PRODUCTIVE ITERATION: Specialist repeats but produces different outputs (making progress).*
+- **`test_progressive_loop_detection_stagnation_detected_kills_fast`**
+  - *STAGNATION: Specialist repeats with SAME output (stuck loop).*
+- **`test_progressive_loop_detection_max_iterations_exceeded`**
+  - *MAX ITERATIONS: Specialist exceeds max_iterations cap despite making progress.*
+- **`test_progressive_loop_detection_stagnation_check_disabled`**
+  - *STAGNATION CHECK DISABLED: Specialist repeats with same output but detect_stagnation=False.*
+- **`test_progressive_loop_detection_non_iterative_specialist_standard_check`**
+  - *NON-ITERATIVE SPECIALIST: No iteration config, standard loop detection applies.*
+- **`test_progressive_loop_detection_insufficient_hash_history`**
+  - *INSUFFICIENT HISTORY: Not enough hashes for stagnation comparison (< 2 hashes).*
+- **`test_progressive_loop_detection_no_config_fallback_to_standard`**
+  - *NO CONFIG PROVIDED: Falls back to standard loop detection.*
+- **`test_progressive_loop_detection_mixed_specialists_with_iteration`**
+  - *MIXED ROUTING: Non-iterative specialist A interspersed with iterative specialist B.*
 
 ## `app/tests/unit/test_llm_factory.py`
 
@@ -731,16 +1140,18 @@
 - **`test_empty_parameters_dict_is_valid`**
   - *Test that empty parameters dict works (for parameterless functions).*
 
-## `app/tests/unit/test_open_interpreter_specialist.py`
+## `app/tests/unit/test_node_executor.py`
 
-- **`test_open_interpreter_specialist_executes_code_successfully`**
-  - *Tests the full plan-and-execute flow for the OpenInterpreterSpecialist.*
-- **`test_open_interpreter_specialist_handles_no_tool_call_from_llm`**
-  - *Tests that the specialist handles the case where the LLM fails to generate a plan.*
-- **`test_open_interpreter_handles_list_files_prompt`**
-  - *Tests that OpenInterpreterSpecialist can correctly plan and execute a*
-- **`test_open_interpreter_specialist_raises_error_if_no_prompt_file`**
-  - *Tests that the specialist raises a ValueError if the 'prompt_file' is*
+- **`test_safe_executor_handles_specialist_exception`**
+  - *Tests that the create_safe_executor wrapper catches exceptions from a specialist*
+- **`test_safe_executor_handles_generic_exception`**
+  - *Tests that the executor also catches generic exceptions and formats them correctly.*
+- **`test_safe_executor_success_path`**
+  - *Tests the safe_executor for a successful, non-error execution.*
+- **`test_safe_executor_blocks_execution_on_missing_artifact`**
+  - *Tests that the safe_executor prevents a specialist from running if a required*
+- **`test_create_missing_artifact_response_format`**
+  - *Tests the specific format of the missing artifact response.*
 
 ## `app/tests/unit/test_parallel_reducer.py`
 
@@ -771,17 +1182,6 @@
   - *Test that workflow proceeds to ROUTER if parallel tasks are empty.*
 - **`test_check_task_completion_explicit_complete`**
   - *Test that explicit task completion overrides barrier (edge case).*
-
-## `app/tests/unit/test_plan_and_execute_integration.py`
-
-- **`test_plan_and_execute_workflow`**
-  - *Tests the full "Plan and Execute" workflow within the OpenInterpreterSpecialist.*
-- **`test_plan_and_execute_handles_llm_planning_failure`**
-  - *Tests that the specialist correctly handles the case where the LLM fails*
-- **`test_plan_and_execute_handles_interpreter_execution_failure`**
-  - *Tests that the specialist correctly handles a failure in the execution phase.*
-- **`test_plan_and_execute_handles_llm_planning_failure_with_invalid_tool_calls`**
-  - *Tests that the specialist correctly handles a failure in the planning phase*
 
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 
@@ -884,6 +1284,12 @@
   - *Tests that the router propagates an LLMInvocationError if the adapter fails.*
 - **`test_router_handles_invalid_llm_response`**
   - *Tests that the router self-corrects if the LLM returns an invalid specialist name.*
+- **`test_get_available_specialists_context_aware_filtering_with_tags`**
+  - *Tests that context_engineering specialists are filtered out after context gathering.*
+- **`test_get_llm_choice_vision_logic_with_tags`**
+  - *Tests that vision-capable specialists are identified via tags when an image is present.*
+- **`test_get_llm_choice_dependency_logic_with_tags`**
+  - *Tests that dependency logic correctly excludes planning specialists based on tags.*
 
 ## `app/tests/unit/test_router_specialist_discovery.py`
 
@@ -1022,6 +1428,14 @@
 - **`test_triage_architect_generates_plan`**
 - **`test_triage_architect_handles_no_messages`**
 - **`test_triage_architect_handles_llm_error`**
+- **`test_triage_populates_recommended_specialists`**
+  - *Test that TriageArchitect populates recommended_specialists in scratchpad.*
+- **`test_triage_empty_recommendations_for_greeting`**
+  - *Test TriageArchitect with empty actions still provides recommendations.*
+- **`test_triage_multiple_recommendations`**
+  - *Test TriageArchitect can recommend multiple specialists.*
+- **`test_triage_default_empty_recommendations_if_not_provided`**
+  - *Test TriageArchitect handles LLM not providing recommended_specialists.*
 
 ## `app/tests/unit/test_web_builder.py`
 
