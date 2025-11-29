@@ -1,0 +1,261 @@
+{
+  "name": "tool_competence_v1",
+  "description": "Tool calling competence tests for evaluating LLM function calling capabilities",
+  "samples": [
+    {
+      "id": "basic_tool_call",
+      "input": "What's the weather in Tokyo?",
+      "metadata": {
+        "category": "basic_invocation",
+        "severity": "critical",
+        "system_prompt": "You have one tool: get_weather(city: string). Use it to answer the user."
+      },
+      "target": {
+        "tool_calls": [{"function": "get_weather", "arguments": {"city": "Tokyo"}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "get_weather", "description": "Get weather for a city", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "tool_selection",
+      "input": "Delete the file report.pdf",
+      "metadata": {
+        "category": "tool_selection",
+        "severity": "critical",
+        "system_prompt": "You have three tools. Pick the most appropriate one."
+      },
+      "target": {
+        "tool_calls": [{"function": "delete_file", "arguments": {"path": "report.pdf"}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "read_file", "description": "Read a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+        {"type": "function", "function": {"name": "write_file", "description": "Write to a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
+        {"type": "function", "function": {"name": "delete_file", "description": "Delete a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "constraint_following",
+      "input": "Run this Python: print(\"hello\")",
+      "metadata": {
+        "category": "constraint_compliance",
+        "severity": "critical",
+        "system_prompt": "You have four tools. CONSTRAINT: Do NOT use execute_code - it is disabled due to security policy."
+      },
+      "target": {
+        "tool_calls_exclude": ["execute_code"],
+        "tool_calls_any": ["respond_to_user", "ask_human"]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "execute_code", "description": "Execute code", "parameters": {"type": "object", "properties": {"code": {"type": "string"}}, "required": ["code"]}}},
+        {"type": "function", "function": {"name": "search_docs", "description": "Search documentation", "parameters": {"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}}},
+        {"type": "function", "function": {"name": "ask_human", "description": "Ask human for help", "parameters": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}}},
+        {"type": "function", "function": {"name": "respond_to_user", "description": "Respond to user", "parameters": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "loop_recovery",
+      "input": "Execute this Python script to calculate fibonacci numbers",
+      "metadata": {
+        "category": "constraint_compliance",
+        "severity": "critical",
+        "system_prompt": "Route tasks to specialists. BLOCKED: code_executor has failed 3 times consecutively. Do NOT route to it."
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"specialist": {"not": "code_executor"}}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "route", "description": "Route to specialist", "parameters": {"type": "object", "properties": {"specialist": {"type": "string", "enum": ["code_executor", "data_analyst", "researcher", "chat"]}, "reasoning": {"type": "string"}}, "required": ["specialist", "reasoning"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "enum_constraint",
+      "input": "I need to return a broken laptop",
+      "metadata": {
+        "category": "schema_compliance",
+        "severity": "critical",
+        "system_prompt": "Route to the appropriate department."
+      },
+      "target": {
+        "tool_calls": [{"function": "route_ticket", "arguments": {"department": "returns", "priority": {"enum": ["low", "medium", "high"]}}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "route_ticket", "description": "Route support ticket", "parameters": {"type": "object", "properties": {"department": {"type": "string", "enum": ["sales", "support", "billing", "returns"]}, "priority": {"type": "string", "enum": ["low", "medium", "high"]}}, "required": ["department", "priority"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "nested_object",
+      "input": "Schedule a meeting with Bob tomorrow at 3pm for 1 hour about Q4 planning",
+      "metadata": {
+        "category": "schema_compliance",
+        "severity": "warning",
+        "system_prompt": "Create a calendar event."
+      },
+      "target": {
+        "tool_calls": [{"function": "create_event", "arguments": {"title": {"type": "string"}, "time": {"start": {"type": "string"}, "duration_minutes": {"type": "integer"}}}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "create_event", "description": "Create calendar event", "parameters": {"type": "object", "properties": {"title": {"type": "string"}, "attendees": {"type": "array", "items": {"type": "string"}}, "time": {"type": "object", "properties": {"start": {"type": "string"}, "duration_minutes": {"type": "integer"}}}}, "required": ["title", "time"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "multiple_required",
+      "input": "Move $500 from checking to savings",
+      "metadata": {
+        "category": "schema_compliance",
+        "severity": "critical",
+        "system_prompt": "Transfer money between accounts."
+      },
+      "target": {
+        "tool_calls": [{"function": "transfer", "arguments": {"from_account": "checking", "to_account": "savings", "amount": 500}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "transfer", "description": "Transfer money", "parameters": {"type": "object", "properties": {"from_account": {"type": "string"}, "to_account": {"type": "string"}, "amount": {"type": "number"}, "currency": {"type": "string", "default": "USD"}}, "required": ["from_account", "to_account", "amount"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "boolean_optional",
+      "input": "Find all active users created this year, include their email addresses",
+      "metadata": {
+        "category": "schema_compliance",
+        "severity": "warning",
+        "system_prompt": "Search the database. Today's date is 2025-11-28."
+      },
+      "target": {
+        "tool_calls": [{"function": "query_users", "arguments": {"status": "active", "include_email": true, "created_after": {"pattern": "^2025-"}}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "query_users", "description": "Query user database", "parameters": {"type": "object", "properties": {"status": {"type": "string", "enum": ["active", "inactive", "all"]}, "created_after": {"type": "string", "description": "ISO date YYYY-MM-DD"}, "include_email": {"type": "boolean"}}, "required": ["status"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "type_coercion",
+      "input": "Send five hundred dollars to savings",
+      "metadata": {
+        "category": "schema_compliance",
+        "severity": "critical",
+        "system_prompt": "Transfer money between accounts."
+      },
+      "target": {
+        "tool_calls": [{"function": "transfer", "arguments": {"to_account": "savings", "amount": {"value": 500, "type": "number"}}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "transfer", "description": "Transfer money", "parameters": {"type": "object", "properties": {"to_account": {"type": "string"}, "amount": {"type": "number"}}, "required": ["to_account", "amount"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "no_tool_needed",
+      "input": "What is 2 + 2?",
+      "metadata": {
+        "category": "tool_judgment",
+        "severity": "warning",
+        "system_prompt": "You have tools for file operations. Only use them when the user requests file operations."
+      },
+      "target": {
+        "tool_calls": [],
+        "response_contains": "4"
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "read_file", "description": "Read a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+        {"type": "function", "function": {"name": "write_file", "description": "Write to a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}}
+      ],
+      "tool_choice": "auto"
+    },
+    {
+      "id": "tool_choice_none",
+      "input": "What is 15 * 7?",
+      "metadata": {
+        "category": "tool_judgment",
+        "severity": "critical",
+        "system_prompt": "You have a calculator tool, but tool use has been disabled for this request."
+      },
+      "target": {
+        "tool_calls": [],
+        "response_contains": "105"
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "calculate", "description": "Calculate expression", "parameters": {"type": "object", "properties": {"expression": {"type": "string"}}, "required": ["expression"]}}}
+      ],
+      "tool_choice": "none"
+    },
+    {
+      "id": "missing_required_info",
+      "input": "Delete the file",
+      "metadata": {
+        "category": "error_handling",
+        "severity": "warning",
+        "system_prompt": "Delete files when the user specifies which file."
+      },
+      "target": {
+        "tool_calls": [{"function": "ask_clarification"}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "delete_file", "description": "Delete a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+        {"type": "function", "function": {"name": "ask_clarification", "description": "Ask user for clarification", "parameters": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "ambiguous_routing",
+      "input": "Find recent statistics about EV adoption and summarize them in a report",
+      "metadata": {
+        "category": "semantic_understanding",
+        "severity": "warning",
+        "system_prompt": "Route to: researcher (web search), analyst (data processing), writer (content creation)"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"specialist": {"enum": ["researcher", "analyst", "writer"]}, "task_summary": {"min_length": 10}}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "route", "description": "Route to specialist", "parameters": {"type": "object", "properties": {"specialist": {"type": "string", "enum": ["researcher", "analyst", "writer"]}, "task_summary": {"type": "string"}}, "required": ["specialist", "task_summary"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "parallel_tool_calls",
+      "input": "Get the weather for Tokyo AND Paris",
+      "metadata": {
+        "category": "advanced",
+        "severity": "warning",
+        "system_prompt": "You can call multiple tools in a single response when tasks are independent."
+      },
+      "target": {
+        "tool_calls": [
+          {"function": "get_weather", "arguments": {"city": "Tokyo"}},
+          {"function": "get_weather", "arguments": {"city": "Paris"}}
+        ],
+        "tool_calls_count": 2
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "get_weather", "description": "Get weather for a city", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}
+      ],
+      "tool_choice": "required"
+    },
+    {
+      "id": "chained_dependency",
+      "input": "Read the file config.json and tell me what port it uses",
+      "metadata": {
+        "category": "advanced",
+        "severity": "warning",
+        "system_prompt": "You have tools for file operations. Some tasks require multiple steps."
+      },
+      "target": {
+        "tool_calls_first": [{"function": "read_file", "arguments": {"path": "config.json"}}]
+      },
+      "tools": [
+        {"type": "function", "function": {"name": "read_file", "description": "Read a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
+        {"type": "function", "function": {"name": "respond_to_user", "description": "Respond to user", "parameters": {"type": "object", "properties": {"message": {"type": "string"}}, "required": ["message"]}}}
+      ],
+      "tool_choice": "required"
+    }
+  ]
+}

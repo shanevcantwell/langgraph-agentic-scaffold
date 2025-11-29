@@ -1,0 +1,293 @@
+{
+  "test_suite": "tool_competence_v1",
+  "version": "1.1",
+  "prompts": [
+    {
+      "id": "basic_tool_call",
+      "name": "Basic Tool Call (Sanity Check)",
+      "category": "basic_invocation",
+      "severity": "critical",
+      "system": "You have one tool: get_weather(city: string). Use it to answer the user.",
+      "user": "What's the weather in Tokyo?",
+      "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "get_weather",
+        "params": {"city": "Tokyo"},
+        "match_mode": "exact"
+      },
+      "pass_criteria": "Calls get_weather with city=Tokyo",
+      "fail_criteria": "No tool call or wrong city"
+    },
+    {
+      "id": "tool_selection",
+      "name": "Tool Selection (Pick the Right One)",
+      "category": "tool_selection",
+      "severity": "critical",
+      "system": "You have three tools. Pick the most appropriate one.",
+      "user": "Delete the file report.pdf",
+      "tools": [
+        {"type":"function","function":{"name":"read_file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"write_file","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"delete_file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}
+      ],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "delete_file",
+        "params": {"path": "report.pdf"},
+        "match_mode": "contains"
+      },
+      "pass_criteria": "Calls delete_file with path containing report.pdf",
+      "fail_criteria": "Calls read_file or write_file"
+    },
+    {
+      "id": "constraint_following",
+      "name": "Constraint Following (Forbidden Tool)",
+      "category": "constraint_compliance",
+      "severity": "critical",
+      "system": "You have four tools. CONSTRAINT: Do NOT use execute_code - it is disabled due to security policy.",
+      "user": "Run this Python: print(\"hello\")",
+      "tools": [
+        {"type":"function","function":{"name":"execute_code","parameters":{"type":"object","properties":{"code":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"search_docs","parameters":{"type":"object","properties":{"query":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"ask_human","parameters":{"type":"object","properties":{"question":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"respond_to_user","parameters":{"type":"object","properties":{"message":{"type":"string"}}}}}
+      ],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name_not": "execute_code",
+        "tool_name_any": ["respond_to_user", "ask_human"],
+        "match_mode": "exclusion"
+      },
+      "pass_criteria": "Calls respond_to_user or ask_human explaining inability",
+      "fail_criteria": "Calls execute_code"
+    },
+    {
+      "id": "enum_constraint",
+      "name": "Enum Constraint",
+      "category": "schema_compliance",
+      "severity": "critical",
+      "system": "Route to the appropriate department.",
+      "user": "I need to return a broken laptop",
+      "tools": [{"type":"function","function":{"name":"route_ticket","parameters":{"type":"object","properties":{"department":{"type":"string","enum":["sales","support","billing","returns"]},"priority":{"type":"string","enum":["low","medium","high"]}},"required":["department","priority"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "route_ticket",
+        "params": {"department": "returns"},
+        "params_enum_valid": {"priority": ["low", "medium", "high"]},
+        "match_mode": "exact_with_enum"
+      },
+      "pass_criteria": "department=returns with valid priority enum",
+      "fail_criteria": "Invalid enum value like tech_support"
+    },
+    {
+      "id": "nested_object",
+      "name": "Nested Object Schema",
+      "category": "schema_compliance",
+      "severity": "warning",
+      "system": "Create a calendar event.",
+      "user": "Schedule a meeting with Bob tomorrow at 3pm for 1 hour about Q4 planning",
+      "tools": [{"type":"function","function":{"name":"create_event","parameters":{"type":"object","properties":{"title":{"type":"string"},"attendees":{"type":"array","items":{"type":"string"}},"time":{"type":"object","properties":{"start":{"type":"string"},"duration_minutes":{"type":"integer"}}}},"required":["title","time"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "create_event",
+        "params_structure": {
+          "title": "string",
+          "time": {"start": "string", "duration_minutes": "integer"}
+        },
+        "match_mode": "structure"
+      },
+      "pass_criteria": "Valid nested time object with start and duration_minutes",
+      "fail_criteria": "Flat structure or missing nested properties"
+    },
+    {
+      "id": "multiple_required",
+      "name": "Multiple Required Params",
+      "category": "schema_compliance",
+      "severity": "critical",
+      "system": "Transfer money between accounts.",
+      "user": "Move $500 from checking to savings",
+      "tools": [{"type":"function","function":{"name":"transfer","parameters":{"type":"object","properties":{"from_account":{"type":"string"},"to_account":{"type":"string"},"amount":{"type":"number"},"currency":{"type":"string","default":"USD"}},"required":["from_account","to_account","amount"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "transfer",
+        "params_required": ["from_account", "to_account", "amount"],
+        "params_types": {"amount": "number"},
+        "match_mode": "required_present"
+      },
+      "pass_criteria": "All three required params present with amount as number",
+      "fail_criteria": "Missing any required param or amount as string"
+    },
+    {
+      "id": "no_tool_needed",
+      "name": "No Tool Needed (Should Decline)",
+      "category": "tool_judgment",
+      "severity": "warning",
+      "system": "You have tools for file operations. Only use them when the user requests file operations.",
+      "user": "What is 2 + 2?",
+      "tools": [
+        {"type":"function","function":{"name":"read_file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}},
+        {"type":"function","function":{"name":"write_file","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}}}}}
+      ],
+      "tool_choice": "auto",
+      "expected": {
+        "response_type": "text",
+        "response_contains": "4",
+        "no_tool_call": true,
+        "match_mode": "text_only"
+      },
+      "pass_criteria": "Returns text response containing '4' without tool call",
+      "fail_criteria": "Calls a file tool unnecessarily"
+    },
+    {
+      "id": "tool_choice_none",
+      "name": "Tool Choice None (Must Not Call)",
+      "category": "tool_judgment",
+      "severity": "critical",
+      "system": "You have a calculator tool, but tool use has been disabled for this request.",
+      "user": "What is 15 * 7?",
+      "tools": [{"type":"function","function":{"name":"calculate","parameters":{"type":"object","properties":{"expression":{"type":"string"}},"required":["expression"]}}}],
+      "tool_choice": "none",
+      "expected": {
+        "response_type": "text",
+        "response_contains": "105",
+        "no_tool_call": true,
+        "match_mode": "text_only"
+      },
+      "pass_criteria": "Returns text answer without tool call",
+      "fail_criteria": "Attempts to call calculate tool"
+    },
+    {
+      "id": "ambiguous_routing",
+      "name": "Ambiguous Intent (Routing Test)",
+      "category": "semantic_understanding",
+      "severity": "warning",
+      "system": "Route to: researcher (web search), analyst (data processing), writer (content creation)",
+      "user": "Find recent statistics about EV adoption and summarize them in a report",
+      "tools": [{"type":"function","function":{"name":"route","parameters":{"type":"object","properties":{"specialist":{"type":"string","enum":["researcher","analyst","writer"]},"task_summary":{"type":"string"}},"required":["specialist","task_summary"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "route",
+        "params_enum_valid": {"specialist": ["researcher", "analyst", "writer"]},
+        "params_required": ["specialist", "task_summary"],
+        "match_mode": "valid_choice"
+      },
+      "pass_criteria": "Any valid enum choice with coherent task_summary",
+      "fail_criteria": "Invalid enum or empty/incoherent task_summary"
+    },
+    {
+      "id": "boolean_optional",
+      "name": "Boolean + Optional Params",
+      "category": "schema_compliance",
+      "severity": "warning",
+      "system": "Search the database. Today's date is 2025-11-28.",
+      "user": "Find all active users created this year, include their email addresses",
+      "tools": [{"type":"function","function":{"name":"query_users","parameters":{"type":"object","properties":{"status":{"type":"string","enum":["active","inactive","all"]},"created_after":{"type":"string","description":"ISO date format YYYY-MM-DD"},"include_email":{"type":"boolean"}},"required":["status"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "query_users",
+        "params": {"status": "active", "include_email": true},
+        "params_pattern": {"created_after": "^2025-"},
+        "match_mode": "exact_with_pattern"
+      },
+      "pass_criteria": "status=active, include_email=true, created_after starts with 2025-",
+      "fail_criteria": "Missing required status, wrong boolean, or 2024 date"
+    },
+    {
+      "id": "loop_recovery",
+      "name": "Loop Recovery Constraint Test",
+      "category": "constraint_compliance",
+      "severity": "critical",
+      "system": "Route tasks to specialists. BLOCKED: code_executor has failed 3 times consecutively. Do NOT route to it.",
+      "user": "Execute this Python script to calculate fibonacci numbers",
+      "tools": [{"type":"function","function":{"name":"route","parameters":{"type":"object","properties":{"specialist":{"type":"string","enum":["code_executor","data_analyst","researcher","chat"]},"reasoning":{"type":"string"}},"required":["specialist","reasoning"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "route",
+        "params_not": {"specialist": "code_executor"},
+        "params_any": {"specialist": ["data_analyst", "researcher", "chat"]},
+        "match_mode": "exclusion"
+      },
+      "pass_criteria": "Routes to data_analyst, researcher, or chat with reasoning acknowledging constraint",
+      "fail_criteria": "Routes to code_executor"
+    },
+    {
+      "id": "missing_required_info",
+      "name": "Missing Required Info (Empty Handling)",
+      "category": "error_handling",
+      "severity": "warning",
+      "system": "Delete files when the user specifies which file.",
+      "user": "Delete the file",
+      "tools": [
+        {"type":"function","function":{"name":"delete_file","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}},
+        {"type":"function","function":{"name":"ask_clarification","parameters":{"type":"object","properties":{"question":{"type":"string"}},"required":["question"]}}}
+      ],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "ask_clarification",
+        "match_mode": "exact"
+      },
+      "pass_criteria": "Calls ask_clarification to get filename",
+      "fail_criteria": "Calls delete_file with empty/fabricated path"
+    },
+    {
+      "id": "type_coercion",
+      "name": "Type Coercion (String vs Number)",
+      "category": "schema_compliance",
+      "severity": "critical",
+      "system": "Transfer money between accounts.",
+      "user": "Send five hundred dollars to savings",
+      "tools": [{"type":"function","function":{"name":"transfer","parameters":{"type":"object","properties":{"to_account":{"type":"string"},"amount":{"type":"number"}},"required":["to_account","amount"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "transfer",
+        "params": {"amount": 500},
+        "params_types": {"amount": "number"},
+        "match_mode": "type_strict"
+      },
+      "pass_criteria": "amount=500 as number (not string \"500\" or \"five hundred\")",
+      "fail_criteria": "amount as string type"
+    },
+    {
+      "id": "parallel_tool_calls",
+      "name": "Parallel Tool Calls",
+      "category": "advanced",
+      "severity": "warning",
+      "system": "You can call multiple tools in a single response when tasks are independent.",
+      "user": "Get the weather for Tokyo AND Paris",
+      "tools": [{"type":"function","function":{"name":"get_weather","parameters":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}}}],
+      "tool_choice": "required",
+      "expected": {
+        "tool_calls_count": 2,
+        "tool_calls": [
+          {"tool_name": "get_weather", "params": {"city": "Tokyo"}},
+          {"tool_name": "get_weather", "params": {"city": "Paris"}}
+        ],
+        "match_mode": "parallel"
+      },
+      "pass_criteria": "Two separate get_weather calls for Tokyo and Paris",
+      "fail_criteria": "Single call, or missing one city"
+    },
+    {
+      "id": "chained_dependency",
+      "name": "Chained Dependency (Sequential)",
+      "category": "advanced",
+      "severity": "warning",
+      "system": "You have tools for file operations. Some tasks require multiple steps.",
+      "user": "Read the file config.json and tell me what port it uses",
+      "tools": [
+        {"type":"function","function":{"name":"read_file","parameters":{"type":"object","properties":{"path":{"type":"string"}},"required":["path"]}}},
+        {"type":"function","function":{"name":"respond_to_user","parameters":{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}}}
+      ],
+      "tool_choice": "required",
+      "expected": {
+        "tool_name": "read_file",
+        "params": {"path": "config.json"},
+        "match_mode": "first_step",
+        "notes": "Model should call read_file first, then would need file contents to answer"
+      },
+      "pass_criteria": "Calls read_file with config.json as first step",
+      "fail_criteria": "Calls respond_to_user immediately without reading file"
+    }
+  ]
+}
