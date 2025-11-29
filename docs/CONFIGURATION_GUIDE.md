@@ -85,6 +85,46 @@ volumes:
 
 This pattern ensures the FileSpecialist sandbox boundary, ConfigLoader path validation, and Docker volume mount all coordinate through a single definition in `.env`. Without env var interpolation, these three layers would be independent sources of truth that could drift out of sync.
 
+## 1.1 Distributed Inference (Multi-GPU Box Setup)
+
+For advanced setups where you want to run different models on different machines (e.g., Router on an RTX-3090, Specialists on an RTX-8000), you can use **named server references**.
+
+**Step 1: Define physical machines in `.env` (Tier 1)**
+```bash
+# Default server (fallback if no named server specified)
+LMSTUDIO_BASE_URL=http://localhost:1234/v1
+
+# Named servers - physical machine names mapped to URLs
+# Format: "name1=url1,name2=url2" (uses = since URLs contain :)
+LMSTUDIO_SERVERS="rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1,basement=http://192.168.1.102:1234/v1"
+```
+
+**Step 2: Reference physical machines in `user_settings.yaml` (Tier 3)**
+```yaml
+llm_providers:
+  lmstudio_router:
+    type: "lmstudio"
+    server: "rtx3090"  # → fast GPU for routing
+    api_identifier: "gpt-oss-20b"
+
+  lmstudio_specialist:
+    type: "lmstudio"
+    server: "rtx8000"  # → bigger GPU for specialists
+    api_identifier: "qwen3-30b"
+
+  lmstudio_local:
+    type: "lmstudio"
+    # No server specified → falls back to LMSTUDIO_BASE_URL
+    api_identifier: "gemma-3-12b"
+```
+
+**Key Points:**
+- `.env` defines **hardware** (physical machine names) - stable, infrastructure-level
+- `user_settings.yaml` defines **roles** (which provider uses which machine) - changes as you experiment
+- Adding a new provider doesn't require touching `.env`
+- Moving a workload to different hardware only changes `user_settings.yaml`
+- Providers without a `server` field fall back to `LMSTUDIO_BASE_URL`
+
 ## 2.0 Container Naming Convention
 
 The `docker-compose.yml` file uses explicit container names (`langgraph-app` and `langgraph-proxy`). This is to prevent conflicts with other projects and to make the containers easily identifiable. It is strongly recommended not to change these names, as it can lead to unexpected behavior and orphaned containers.

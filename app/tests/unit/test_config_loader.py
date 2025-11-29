@@ -236,3 +236,153 @@ specialist_model_bindings:
 
         with pytest.raises(ConfigError, match="Required environment variable 'REQUIRED_VAR' is not set"):
             ConfigLoader()
+
+
+# ===================================================================
+# LMSTUDIO_SERVERS Distributed Inference Tests
+# ===================================================================
+
+CONFIG_WITH_LMSTUDIO = """
+workflow:
+  entry_point: 'router_specialist'
+
+specialists:
+  router_specialist:
+    type: 'llm'
+    prompt_file: 'router.md'
+    description: 'Routes things'
+"""
+
+USER_SETTINGS_WITH_SERVER = """
+llm_providers:
+  lmstudio_router:
+    type: 'lmstudio'
+    server: 'rtx3090'
+    api_identifier: 'gpt-oss-20b'
+  lmstudio_specialist:
+    type: 'lmstudio'
+    server: 'rtx8000'
+    api_identifier: 'qwen3-30b'
+  lmstudio_local:
+    type: 'lmstudio'
+    api_identifier: 'gemma-12b'
+specialist_model_bindings:
+  router_specialist: 'lmstudio_router'
+"""
+
+
+def test_lmstudio_servers_parsing(mocker):
+    """Tests that LMSTUDIO_SERVERS env var is parsed correctly."""
+    def mock_open_side_effect(file, mode='r', encoding=None):
+        if 'config.yaml' in str(file):
+            return mock_open(read_data=CONFIG_WITH_LMSTUDIO)().__enter__()
+        if 'user_settings.yaml' in str(file):
+            return mock_open(read_data=USER_SETTINGS_WITH_SERVER)().__enter__()
+        raise FileNotFoundError(file)
+
+    mocker.patch("builtins.open", side_effect=mock_open_side_effect)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch.dict("os.environ", {
+        "LMSTUDIO_SERVERS": "rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1",
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+    })
+
+    loader = ConfigLoader()
+    config = loader.get_config()
+
+    # Check that server references resolve correctly
+    assert config["llm_providers"]["lmstudio_router"]["base_url"] == "http://192.168.1.100:1234/v1"
+    assert config["llm_providers"]["lmstudio_specialist"]["base_url"] == "http://192.168.1.101:1234/v1"
+    # Provider without server should fall back to LMSTUDIO_BASE_URL
+    assert config["llm_providers"]["lmstudio_local"]["base_url"] == "http://localhost:1234/v1"
+
+
+def test_lmstudio_servers_missing_server_name(mocker):
+    """Tests warning when server name not found in LMSTUDIO_SERVERS."""
+    user_settings_bad_server = """
+llm_providers:
+  lmstudio_router:
+    type: 'lmstudio'
+    server: 'nonexistent'
+    api_identifier: 'gpt-oss-20b'
+specialist_model_bindings:
+  router_specialist: 'lmstudio_router'
+"""
+
+    def mock_open_side_effect(file, mode='r', encoding=None):
+        if 'config.yaml' in str(file):
+            return mock_open(read_data=CONFIG_WITH_LMSTUDIO)().__enter__()
+        if 'user_settings.yaml' in str(file):
+            return mock_open(read_data=user_settings_bad_server)().__enter__()
+        raise FileNotFoundError(file)
+
+    mocker.patch("builtins.open", side_effect=mock_open_side_effect)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch.dict("os.environ", {
+        "LMSTUDIO_SERVERS": "rtx3090=http://192.168.1.100:1234/v1",
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+    })
+
+    loader = ConfigLoader()
+    config = loader.get_config()
+
+    # Server not found should result in None base_url
+    assert config["llm_providers"]["lmstudio_router"]["base_url"] is None
+
+
+def test_lmstudio_servers_empty(mocker):
+    """Tests fallback to LMSTUDIO_BASE_URL when LMSTUDIO_SERVERS is empty."""
+    user_settings_with_server = """
+llm_providers:
+  lmstudio_router:
+    type: 'lmstudio'
+    server: 'rtx3090'
+    api_identifier: 'gpt-oss-20b'
+specialist_model_bindings:
+  router_specialist: 'lmstudio_router'
+"""
+
+    def mock_open_side_effect(file, mode='r', encoding=None):
+        if 'config.yaml' in str(file):
+            return mock_open(read_data=CONFIG_WITH_LMSTUDIO)().__enter__()
+        if 'user_settings.yaml' in str(file):
+            return mock_open(read_data=user_settings_with_server)().__enter__()
+        raise FileNotFoundError(file)
+
+    mocker.patch("builtins.open", side_effect=mock_open_side_effect)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch.dict("os.environ", {
+        "LMSTUDIO_SERVERS": "",  # Empty
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+    })
+
+    loader = ConfigLoader()
+    config = loader.get_config()
+
+    # With empty LMSTUDIO_SERVERS, server reference should result in None
+    assert config["llm_providers"]["lmstudio_router"]["base_url"] is None
+
+
+def test_lmstudio_servers_with_spaces(mocker):
+    """Tests that LMSTUDIO_SERVERS handles whitespace gracefully."""
+    def mock_open_side_effect(file, mode='r', encoding=None):
+        if 'config.yaml' in str(file):
+            return mock_open(read_data=CONFIG_WITH_LMSTUDIO)().__enter__()
+        if 'user_settings.yaml' in str(file):
+            return mock_open(read_data=USER_SETTINGS_WITH_SERVER)().__enter__()
+        raise FileNotFoundError(file)
+
+    mocker.patch("builtins.open", side_effect=mock_open_side_effect)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch.dict("os.environ", {
+        # Extra whitespace around entries
+        "LMSTUDIO_SERVERS": " rtx3090 = http://192.168.1.100:1234/v1 , rtx8000 = http://192.168.1.101:1234/v1 ",
+        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+    })
+
+    loader = ConfigLoader()
+    config = loader.get_config()
+
+    # Should handle whitespace correctly
+    assert config["llm_providers"]["lmstudio_router"]["base_url"] == "http://192.168.1.100:1234/v1"
+    assert config["llm_providers"]["lmstudio_specialist"]["base_url"] == "http://192.168.1.101:1234/v1"

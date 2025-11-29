@@ -10,6 +10,12 @@
 # This section defines your named LLM provider configurations. Each configuration
 # must have a `type` (which maps to an adapter) and an `api_identifier` (the model name).
 # You can also include a `parameters` section for model-specific sampling settings.
+#
+# DISTRIBUTED INFERENCE (Multi-GPU Box Setup):
+# Define physical machines in .env: LMSTUDIO_SERVERS="rtx3090=http://...,rtx8000=http://..."
+# Reference by name here: server: "rtx3090"
+# If no server specified, falls back to LMSTUDIO_BASE_URL
+#
 llm_providers:
   # For cloud providers, this is the API model name.
   gemini_flash:
