@@ -99,6 +99,30 @@ class ContextPlan(BaseModel):
     )
 ```
 
+## 2.3 Resilience Patterns (Escape Hatches)
+
+To prevent "Hallucination Loops" where agents guess filenames or invent data, the system implements a set of **Escape Hatch Protocols** across all specialists.
+
+### The "Polyglot Constraint" Strategy
+Each specialist has a specific "Anti-Hallucination Dialect" tailored to its failure mode:
+
+1.  **Epistemological Constraint (Researcher):** "Only cite facts explicitly present in search snippets. Do not use internal training data."
+2.  **Ontological Constraint (Data Extractor):** "If data is missing, return `null`. Do not invent values to fill the schema."
+3.  **Operational Constraint (File Ops):** "Atomic Planning Rule: You cannot READ a file you have not LISTED. Ignore context errors if a valid list exists."
+4.  **Scope Constraint (Web Builder):** "If requirements are vague, build a Wireframe/Prototype. Do not guess the design."
+
+### The Strategy Pattern for Tool Execution
+To support modular tool implementations (e.g., switching search providers), the system uses a **Strategy Pattern** in the `ContextAction` schema.
+
+```python
+class ContextAction(BaseModel):
+    type: ContextActionType
+    target: str
+    strategy: Optional[str] = None  # e.g., "google", "fast", "deep_dive"
+```
+
+This allows the **Triage Architect** (Governance) to specify *how* a task should be performed, while the **Specialist** (Capability) selects the appropriate concrete implementation (Strategy) at runtime.
+
 **2. TriageArchitect** (`app/src/specialists/triage_architect.py`):
 - Analyzes user request and creates structured ContextPlan
 - Recommends 1-3 specialists based on task type

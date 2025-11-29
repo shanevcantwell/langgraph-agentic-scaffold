@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 57 | 384 |
-| Integration | 21 | 133 |
-| Other | 7 | 99 |
-| **Total** | **85** | **616** |
+| Unit | 59 | 411 |
+| Integration | 21 | 136 |
+| Other | 8 | 101 |
+| **Total** | **88** | **648** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -81,6 +81,13 @@
   - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
 - **`test_tier3_escalation_logged_at_error_level`**
   - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
+
+## `app/tests/resilience/test_strategy_pattern.py`
+
+- **`test_context_action_supports_strategy`**
+  - *Verify that ContextAction accepts a strategy field.*
+- **`test_context_action_strategy_defaults_to_none`**
+  - *Verify that strategy is optional.*
 
 ## `app/tests/integration/test_api_streaming_integration.py`
 
@@ -303,6 +310,12 @@
   - *Verifies router treats "cannot proceed" messages as blocking, not advisory.*
 - **`test_context_aware_routing_prevents_loop`**
   - *End-to-end test verifying context-aware routing prevents infinite loop.*
+- **`test_router_removes_declining_specialist_from_routing_decision`**
+  - *Integration test verifying the Router's actual _get_llm_choice method*
+- **`test_specialist_decline_full_workflow`**
+  - *Full end-to-end integration test for the "not me" pattern.*
+- **`test_decline_signal_is_consumed_after_routing`**
+  - *Verifies the Router consumes (clears) the decline signal after routing.*
 
 ## `app/tests/integration/test_specialist_execution.py`
 
@@ -614,6 +627,15 @@
 - **`test_web_content_schema_validation`**
   - *Explicitly tests the WebContent schema.*
 
+## `app/tests/unit/test_base_specialist.py`
+
+- **`test_task_is_complete_at_root_level_passes_validation`**
+  - *When task_is_complete is correctly at root level, validation passes.*
+- **`test_task_is_complete_in_scratchpad_raises_error`**
+  - *FAIL-FAST: When task_is_complete is mistakenly in scratchpad,*
+- **`test_no_task_is_complete_passes_validation`**
+  - *When no task_is_complete signal exists, validation passes.*
+
 ## `app/tests/unit/test_chat_specialist.py`
 
 - **`test_chat_specialist_initialization`**
@@ -690,6 +712,14 @@
   - *Tests that env vars are substituted with actual env value when set.*
 - **`test_env_var_substitution_required_missing`**
   - *Tests that missing required env var (no default) raises ConfigError.*
+- **`test_lmstudio_servers_parsing`**
+  - *Tests that LMSTUDIO_SERVERS env var is parsed correctly.*
+- **`test_lmstudio_servers_missing_server_name`**
+  - *Tests warning when server name not found in LMSTUDIO_SERVERS.*
+- **`test_lmstudio_servers_empty`**
+  - *Tests fallback to LMSTUDIO_BASE_URL when LMSTUDIO_SERVERS is empty.*
+- **`test_lmstudio_servers_with_spaces`**
+  - *Tests that LMSTUDIO_SERVERS handles whitespace gracefully.*
 
 ## `app/tests/unit/test_context_engineering_graph.py`
 
@@ -1310,6 +1340,16 @@
   - *Verifies that RouterSpecialist handles edge case of no available specialists*
 - **`test_router_ignores_specialists_without_descriptions`**
   - *Verifies that specialists without descriptions are still included in the*
+- **`test_router_removes_declining_specialist_from_recommendations`**
+  - *When a specialist declines with decline_task=True, it should be*
+- **`test_router_clears_recommendations_when_all_decline`**
+  - *When all recommended specialists have declined, recommendations*
+- **`test_decline_does_not_affect_recommendations_if_not_in_list`**
+  - *If a declining specialist isn't in the recommendations list,*
+- **`test_decline_without_recommendations_has_no_effect`**
+  - *Decline with no recommendations should not cause errors.*
+- **`test_router_scratchpad_clears_all_decline_signals`**
+  - *REGRESSION GUARD: Router MUST clear all decline-related signals in its return.*
 
 ## `app/tests/unit/test_sentiment_classifier_specialist.py`
 
@@ -1324,6 +1364,23 @@
   - *Tests that the specialist does not run if no HumanMessage is available.*
 - **`test_sentiment_classifier_uses_last_human_message`**
   - *Tests that the specialist specifically analyzes the last HumanMessage.*
+
+## `app/tests/unit/test_specialist_helpers.py`
+
+- **`test_decline_response_basic`**
+  - *Test basic decline response structure.*
+- **`test_decline_response_with_recommendations`**
+  - *Test decline response with alternative specialist recommendations.*
+- **`test_decline_response_message_format`**
+  - *Test that decline message follows expected format for UI display.*
+- **`test_error_message_basic`**
+  - *Test basic error message structure.*
+- **`test_error_message_with_recommendations`**
+  - *Test error message with specialist recommendations.*
+- **`test_llm_message_with_adapter`**
+  - *Test message creation with adapter.*
+- **`test_llm_message_without_adapter`**
+  - *Test message creation without adapter defaults to unknown_model.*
 
 ## `app/tests/unit/test_specialist_loader.py`
 
@@ -1383,6 +1440,14 @@
   - *Tests that an LLMInvocationError is propagated correctly.*
 - **`test_text_analysis_handles_malformed_llm_response`**
   - *Tests that the specialist raises an error if the LLM response is not valid JSON.*
+- **`test_text_analysis_sets_task_is_complete`**
+  - *Test that successful analysis sets task_is_complete at root level.*
+- **`test_text_analysis_no_task_complete_on_missing_text`**
+  - *Test that task_is_complete is NOT set when text is missing (self-correction path).*
+- **`test_text_analysis_treats_content_as_context`**
+  - *Test that the specialist treats uploaded content as context, not target.*
+- **`test_text_analysis_preserves_user_message`**
+  - *Test that the user's original message is preserved in the context.*
 
 ## `app/tests/unit/test_tiered_chat_state_management.py`
 
@@ -1445,6 +1510,14 @@
   - *Test TriageArchitect can recommend multiple specialists.*
 - **`test_triage_default_empty_recommendations_if_not_provided`**
   - *Test TriageArchitect handles LLM not providing recommended_specialists.*
+- **`test_triage_appends_system_note_for_text_to_process`**
+  - *Test that TriageArchitect appends a system note when text_to_process is in artifacts.*
+- **`test_triage_no_system_note_without_text_to_process`**
+  - *Test that no system note is appended when text_to_process is NOT in artifacts.*
+- **`test_triage_appends_system_note_for_uploaded_image`**
+  - *Test that TriageArchitect appends a system note when uploaded_image.png is in artifacts.*
+- **`test_triage_both_text_and_image_get_system_notes`**
+  - *Test that both text and image system notes are appended when both are present.*
 
 ## `app/tests/unit/test_web_builder.py`
 
