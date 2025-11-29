@@ -1,0 +1,209 @@
+{
+  "name": "las_router_tests",
+  "description": "Realistic LAS Router routing tests with full specialist menus and contextual prompts",
+  "samples": [
+    {
+      "id": "router_simple_chat",
+      "input": "What is the capital of France?",
+      "metadata": {
+        "category": "simple_routing",
+        "expected": "chat_specialist",
+        "system_prompt": "You are a Router specialist in an agentic system. Your job is to analyze the user's request and route it to the most appropriate specialist.\n\nBased on the current context, you MUST choose a specialist from the following list:\n\n- chat_specialist: Handles general conversational queries, questions, and casual interactions.\n- text_analysis_specialist: Analyzes, summarizes, or extracts specific information from documents.\n- file_operations_specialist: User interface for file system operations.\n- batch_processor_specialist: Handles batch file operations.\n- web_builder: Builds or modifies web UIs.\n- systems_architect: Creates high-level technical plans.\n- data_extractor_specialist: Extracts structured data from unstructured text.\n- sentiment_classifier_specialist: Classifies sentiment.\n- researcher_specialist: Performs web searches and research.\n- image_specialist: Analyzes images.\n- end_specialist: Completes workflow."
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "chat_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "description": "Route to specialist", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "batch_processor_specialist", "web_builder", "systems_architect", "data_extractor_specialist", "sentiment_classifier_specialist", "researcher_specialist", "image_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_file_list",
+      "input": "List all the files in the workspace directory",
+      "metadata": {
+        "category": "simple_routing",
+        "expected": "file_operations_specialist"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "file_operations_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "batch_processor_specialist", "web_builder", "systems_architect", "researcher_specialist", "image_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_batch_sort",
+      "input": "Sort all the PDF files into folders by year",
+      "metadata": {
+        "category": "simple_routing",
+        "expected": "batch_processor_specialist"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "batch_processor_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "batch_processor_specialist", "web_builder", "systems_architect", "researcher_specialist", "image_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_web_ui",
+      "input": "Create a simple landing page with a hero section and contact form",
+      "metadata": {
+        "category": "simple_routing",
+        "expected": "web_builder"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "web_builder"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "file_operations_specialist", "web_builder", "systems_architect", "researcher_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_ambiguous_analysis_vs_chat",
+      "input": "What do you think about the current state of AI?",
+      "metadata": {
+        "category": "ambiguous_routing",
+        "notes": "Opinion question = chat, not analysis"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "chat_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "researcher_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_ambiguous_research_vs_chat",
+      "input": "What are the latest developments in quantum computing?",
+      "metadata": {
+        "category": "ambiguous_routing",
+        "notes": "Latest developments = needs current info = researcher"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "researcher_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "researcher_specialist", "text_analysis_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_triage_advisory",
+      "input": "Can you summarize this article about climate change?",
+      "metadata": {
+        "category": "triage_advisory",
+        "notes": "Triage suggested correctly, should follow",
+        "system_prompt": "You are a Router specialist. Route to the most appropriate specialist.\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: text_analysis_specialist, chat_specialist.\nThese are suggestions based on initial analysis."
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "text_analysis_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "researcher_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_dependency_requirement",
+      "input": "Build me a dashboard for monitoring server health",
+      "metadata": {
+        "category": "dependency_handling",
+        "notes": "Must follow dependency requirement, not re-route to web_builder",
+        "system_prompt": "You are a Router specialist.\n\n**Dependency Requirement:**\nThe 'web_builder' specialist cannot proceed without artifacts from 'systems_architect'. Please route to 'systems_architect' next.\n\n(Note: Routing back to 'web_builder' before running 'systems_architect' will result in the same failure.)"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "systems_architect"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "web_builder", "systems_architect", "file_operations_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_context_complete",
+      "input": "Based on the files you found, what should I do next?",
+      "metadata": {
+        "category": "context_complete",
+        "notes": "Conversational follow-up question",
+        "gathered_context": "Found 3 Python files in /workspace:\n- main.py (245 lines)\n- utils.py (89 lines)\n- config.py (34 lines)"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "chat_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "web_builder", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_image_detected",
+      "input": "What's in this image?",
+      "metadata": {
+        "category": "image_handling",
+        "notes": "Must follow image detection directive",
+        "system_prompt": "You are a Router specialist.\n\n**CRITICAL: IMAGE DETECTED**\nThe user has uploaded an image. You cannot see it, but it is available in the artifacts. You MUST route to a specialist capable of vision analysis. Recommended: image_specialist."
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "image_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "image_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_blocked_specialist",
+      "input": "Create a simple webpage for my portfolio",
+      "metadata": {
+        "category": "loop_recovery",
+        "notes": "Must NOT choose web_builder despite being relevant",
+        "system_prompt": "You are a Router specialist.\n\n**LOOP RECOVERY ACTIVE**\nThe following specialists are temporarily BLOCKED due to repeated failures: web_builder\nDo NOT route to blocked specialists. Choose an alternative approach."
+      },
+      "target": {
+        "tool_calls_exclude": ["web_builder"],
+        "tool_calls_any": [{"function": "route", "arguments": {"next_specialist": "systems_architect"}}, {"function": "route", "arguments": {"next_specialist": "chat_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "web_builder", "systems_architect", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_sentiment_clear",
+      "input": "Is this customer review positive or negative? 'The product arrived broken and customer service was unhelpful.'",
+      "metadata": {
+        "category": "simple_routing",
+        "expected": "sentiment_classifier_specialist"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "sentiment_classifier_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "sentiment_classifier_specialist", "file_operations_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_complex_multistep",
+      "input": "I want to build a full-stack e-commerce application with user authentication, shopping cart, and payment integration",
+      "metadata": {
+        "category": "complex_routing",
+        "notes": "Complex task should start with systems_architect for planning"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "systems_architect"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "file_operations_specialist", "web_builder", "systems_architect", "researcher_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_extract_data",
+      "input": "Extract all the names, dates, and dollar amounts from this invoice",
+      "metadata": {
+        "category": "simple_routing",
+        "notes": "Structured extraction = data_extractor, not text_analysis"
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "data_extractor_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "text_analysis_specialist", "data_extractor_specialist", "file_operations_specialist", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    },
+    {
+      "id": "router_end_workflow",
+      "input": "That looks great, thanks!",
+      "metadata": {
+        "category": "workflow_completion",
+        "notes": "User satisfied, task complete, should route to end",
+        "routing_history": ["systems_architect", "web_builder", "critic_specialist"]
+      },
+      "target": {
+        "tool_calls": [{"function": "route", "arguments": {"next_specialist": "end_specialist"}}]
+      },
+      "tools": [{"type": "function", "function": {"name": "route", "parameters": {"type": "object", "properties": {"next_specialist": {"type": "string", "enum": ["chat_specialist", "web_builder", "systems_architect", "end_specialist"]}}, "required": ["next_specialist"]}}}],
+      "tool_choice": "required"
+    }
+  ]
+}
