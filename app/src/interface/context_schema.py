@@ -13,6 +13,10 @@ class ContextAction(BaseModel):
     type: ContextActionType
     target: str = Field(..., description="The query, file path, or text to process")
     description: str = Field(..., description="Why this action is needed")
+    strategy: Optional[str] = Field(
+        default=None,
+        description="The specific strategy or provider to use (e.g. 'google', 'duckduckgo', 'fast', 'detailed'). Leave null for default."
+    )
 
 class ContextPlan(BaseModel):
     actions: List[ContextAction] = Field(default_factory=list)
