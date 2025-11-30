@@ -259,6 +259,15 @@ class GraphBuilder:
                         raise NotImplementedError(f"Critique strategy type '{strategy_type}' is not supported.")
 
                     instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
+                
+                elif name == "researcher_specialist":
+                    # TASK: Inject Search Strategy
+                    from ..strategies.search.duckduckgo_strategy import DuckDuckGoSearchStrategy
+                    # TODO: Read from config to allow switching strategies (e.g. Tavily, Google)
+                    # For now, default to DuckDuckGo
+                    search_strategy_instance = DuckDuckGoSearchStrategy()
+                    instance = SpecialistClass(specialist_name=name, specialist_config=config, search_strategy=search_strategy_instance)
+
                 else:
                     instance = SpecialistClass(specialist_name=name, specialist_config=config)
 

@@ -1,10 +1,11 @@
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from langchain_core.messages import SystemMessage, HumanMessage
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
 from ..utils.prompt_loader import load_prompt
+from ..strategies.search.base import BaseSearchStrategy, SearchRequest
 
 logger = logging.getLogger(__name__)
 
@@ -13,9 +14,13 @@ class SearchQuery(BaseModel):
     max_results: int = Field(5, description="Max results to return")
 
 class ResearcherSpecialist(BaseSpecialist):
-    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any], search_strategy: Optional[BaseSearchStrategy] = None):
         super().__init__(specialist_name, specialist_config)
-        # LLM adapter is injected by GraphBuilder
+        self.search_strategy = search_strategy
+        if self.search_strategy:
+            logger.info(f"ResearcherSpecialist initialized with strategy: {self.search_strategy.__class__.__name__}")
+        else:
+            logger.warning("ResearcherSpecialist initialized WITHOUT a search strategy. Search will fail.")
 
     def register_mcp_services(self, registry):
         """Expose search capability via MCP."""
@@ -25,25 +30,15 @@ class ResearcherSpecialist(BaseSpecialist):
 
     def _perform_search(self, query: str, max_results: int = 5) -> List[Dict[str, str]]:
         """
-        Executes a web search.
-        Currently a MOCK implementation.
-        TODO: Integrate real search tool (Tavily, DuckDuckGo, etc.)
+        Executes a web search using the injected strategy.
         """
-        logger.info(f"Researcher performing search for: '{query}'")
-        
-        # Mock results
-        return [
-            {
-                "title": f"Search Result 1 for '{query}'",
-                "url": "https://example.com/result1",
-                "snippet": f"This is a simulated search result for the query '{query}'. It contains relevant information."
-            },
-            {
-                "title": f"Search Result 2 for '{query}'",
-                "url": "https://example.com/result2",
-                "snippet": f"Another simulated result with more details about '{query}'."
-            }
-        ]
+        if not self.search_strategy:
+            error_msg = "No search strategy configured for ResearcherSpecialist."
+            logger.error(error_msg)
+            return [{"title": "Configuration Error", "url": "", "snippet": error_msg}]
+
+        request = SearchRequest(query=query, max_results=max_results)
+        return self.search_strategy.execute(request)
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         if not self.llm_adapter:
