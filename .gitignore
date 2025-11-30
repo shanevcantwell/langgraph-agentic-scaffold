@@ -64,3 +64,4 @@ scripts/prepare_qlora_data.py
 config.yaml
 .*
 ROADMAP_Project_Bedrock_v4.0_ The Atomic Roadmap for Governed Resilience.md
+session_notes/
