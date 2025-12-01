@@ -58,7 +58,7 @@ class GraphBuilder:
         # TASK 1.2: Build allowed destinations for route validation
         # Include all specialists except router (which can't be a routing destination)
         router_name = CoreSpecialist.ROUTER.value
-        mcp_only_specialists = ["researcher_specialist", "summarizer_specialist"]
+        mcp_only_specialists = ["web_specialist", "summarizer_specialist", "plan_executor_specialist"]
         self.allowed_destinations = {
             name for name in self.specialists 
             if name != router_name and name not in mcp_only_specialists
@@ -260,7 +260,7 @@ class GraphBuilder:
 
                     instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
                 
-                elif name == "researcher_specialist":
+                elif name == "web_specialist":
                     # TASK: Inject Search Strategy
                     from ..strategies.search.duckduckgo_strategy import DuckDuckGoSearchStrategy
                     # TODO: Read from config to allow switching strategies (e.g. Tavily, Google)
@@ -356,6 +356,8 @@ class GraphBuilder:
             "file_specialist",               # MCP-only service layer - use file_operations_specialist for user requests
             "researcher_specialist",         # MCP-only specialist (Task 5.2) - no graph routing
             "summarizer_specialist",         # MCP-only specialist (Task 5.3) - no graph routing
+            "web_specialist",                # Internal to SystemPlan loop - not directly routable by LLM
+            "plan_executor_specialist",      # Internal to SystemPlan loop - not directly routable by LLM
             # DISTILLATION SUBGRAPH: Exclude internal specialists from router
             "distillation_prompt_expander_specialist",   # Internal to distillation subgraph
             "distillation_prompt_aggregator_specialist", # Internal to distillation subgraph
@@ -453,7 +455,9 @@ class GraphBuilder:
             CoreSpecialist.END.value,
             CoreSpecialist.CRITIC.value,
             "researcher_specialist", # MCP-only
-            "summarizer_specialist" # MCP-only
+            "summarizer_specialist", # MCP-only
+            "web_specialist",        # Handled by custom wiring
+            "plan_executor_specialist" # Handled by custom wiring
         ]
         
         for subgraph in self.subgraphs:
@@ -464,6 +468,31 @@ class GraphBuilder:
                 continue
 
             workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name})
+
+        # Custom Wiring for WebSpecialist Loop
+        if "web_specialist" in self.specialists and "plan_executor_specialist" in self.specialists:
+            # WebSpecialist -> PlanExecutor (Conditional based on context)
+            # If part of a plan -> PlanExecutor. If standalone -> Router.
+            workflow.add_conditional_edges(
+                "web_specialist",
+                self.orchestrator.get_worker_destination,
+                {
+                    "plan_executor_specialist": "plan_executor_specialist",
+                    router_name: router_name
+                }
+            )
+            
+            # PlanExecutor -> Router (via check_plan_status logic in Orchestrator)
+            workflow.add_conditional_edges(
+                "plan_executor_specialist", 
+                self.orchestrator.check_plan_status,
+                {
+                    "web_specialist": "web_specialist", # Loop back if more steps
+                    "dialogue_specialist": "dialogue_specialist", # HitL
+                    router_name: router_name # Done or Failed
+                }
+            )
+            logger.info("Wired WebSpecialist <-> PlanExecutor loop.")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)

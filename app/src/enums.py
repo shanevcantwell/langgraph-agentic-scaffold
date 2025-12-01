@@ -19,3 +19,4 @@ class CoreSpecialist(str, Enum):
     END = "end_specialist"
     TRIAGE_ARCHITECT = "triage_architect"
     DIALOGUE = "dialogue_specialist"  # ADR-CORE-018: HitL clarification
+    WEB = "web_specialist" # Deep Research Primitive

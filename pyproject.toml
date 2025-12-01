@@ -38,6 +38,7 @@ dependencies = [
     "langgraph-checkpoint-sqlite",  # SQLite checkpointing for HitL interrupt/resume (ADR-CORE-018)
     # Add pip-tools as a core dependency to break the bootstrap cycle
     "pip-tools",
+    "duckduckgo-search", # For Researcher Specialist default search
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 

@@ -307,15 +307,15 @@ specialists:
     description: "Analyzes the user's request and creates a structured 'ContextPlan' to gather necessary information (Research, Read File, Summarize) before the main workflow begins."
     tags: ["planning", "context_engineering"]
 
-  researcher_specialist:
-    type: "llm"
-    prompt_file: "researcher_prompt.md"
-    description: "Performs web searches to gather real-time information. Can be called by TriageArchitect or Router."
-    # Progressive loop detection: Allow iteration for multi-step research
-    allows_iteration: true       # Can repeat legitimately (multiple web searches)
-    max_iterations: 20           # Cap for extensive research workflows
-    detect_stagnation: true      # Kill if same output (stuck on error)
+  web_specialist:
+    type: "procedural"
+    description: "Executes web research steps defined in a SystemPlan. Uses MCP tools (DuckDuckGo) to perform searches and browse pages. Does NOT use an LLM."
     tags: ["vision_capable"]
+
+  plan_executor_specialist:
+    type: "procedural"
+    description: "The 'Project Manager' that updates the SystemPlan after a worker specialist (like WebSpecialist) completes a step. Marks steps as completed and advances the plan."
+
 
   summarizer_specialist:
     type: "llm"
