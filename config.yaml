@@ -307,15 +307,16 @@ specialists:
     description: "Analyzes the user's request and creates a structured 'ContextPlan' to gather necessary information (Research, Read File, Summarize) before the main workflow begins."
     tags: ["planning", "context_engineering"]
 
+  project_director:
+    type: "llm"
+    prompt_file: "project_director_prompt.md"
+    description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Uses an emergent state machine to gather information, refine understanding, and synthesize answers."
+    tags: ["planning", "research", "complex_tasks"]
+
   web_specialist:
     type: "procedural"
-    description: "Executes web research steps defined in a SystemPlan. Uses MCP tools (DuckDuckGo) to perform searches and browse pages. Does NOT use an LLM."
+    description: "A primitive worker that executes a single web task from the scratchpad (search or browse) and returns the raw result. Does not manage plans or state."
     tags: ["vision_capable"]
-
-  plan_executor_specialist:
-    type: "procedural"
-    description: "The 'Project Manager' that updates the SystemPlan after a worker specialist (like WebSpecialist) completes a step. Marks steps as completed and advances the plan."
-
 
   summarizer_specialist:
     type: "llm"

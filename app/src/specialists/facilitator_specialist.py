@@ -36,9 +36,9 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.info(f"Facilitator: Executing action {action.type} -> {action.target}")
                 
                 if action.type == ContextActionType.RESEARCH:
-                    # Call Researcher via MCP
+                    # Call WebSpecialist via MCP
                     results = self.mcp_client.call(
-                        service_name="researcher_specialist",
+                        service_name="web_specialist",
                         function_name="search",
                         query=action.target
                     )

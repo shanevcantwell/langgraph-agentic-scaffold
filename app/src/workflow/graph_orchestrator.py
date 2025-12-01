@@ -167,63 +167,6 @@ class GraphOrchestrator:
                     return True
         return False
 
-    def get_worker_destination(self, state: GraphState) -> str:
-        """
-        Determines where a worker specialist (like WebSpecialist) should go next.
-        - If working on a SystemPlan -> PlanExecutor (to report results).
-        - Else -> Router (standard flow).
-        """
-        artifacts = state.get("artifacts", {})
-        plan_data = artifacts.get("system_plan")
-        
-        if plan_data:
-            # Check if the plan is actually active/in-progress
-            status = plan_data.get("status")
-            if status in ["in_progress", "pending"]:
-                logger.info("Worker finished. Active SystemPlan detected. Routing to PlanExecutor.")
-                return "plan_executor_specialist"
-        
-        logger.info("Worker finished. No active SystemPlan. Returning to Router.")
-        return CoreSpecialist.ROUTER.value
-
-    def check_plan_status(self, state: GraphState) -> str:
-        """
-        Checks the status of the active SystemPlan.
-        - If IN_PROGRESS: Routes to the specialist assigned to the next step.
-        - If CLARIFICATION_REQUIRED: Routes to DialogueSpecialist.
-        - If COMPLETED/FAILED: Routes back to Router.
-        """
-        artifacts = state.get("artifacts", {})
-        plan_data = artifacts.get("system_plan")
-        
-        if not plan_data:
-            return CoreSpecialist.ROUTER.value
-            
-        # We don't have the SystemPlan class imported here, so we work with the dict
-        status = plan_data.get("status")
-        
-        if status == "clarification_required":
-            logger.info("SystemPlan requires clarification. Routing to DialogueSpecialist.")
-            return "dialogue_specialist"
-            
-        if status == "in_progress":
-            steps = plan_data.get("steps", [])
-            # Find the first pending step
-            for step in steps:
-                if step.get("status") == "pending":
-                    assigned_to = step.get("assigned_to")
-                    # Map 'web_specialist' to the actual specialist name if needed
-                    # Currently they match, but good to be aware
-                    logger.info(f"SystemPlan in progress. Next step assigned to: {assigned_to}")
-                    return assigned_to
-            
-            # If no pending steps but status is in_progress, something is wrong or it's actually done
-            logger.warning("SystemPlan is in_progress but no pending steps found. Returning to Router.")
-            return CoreSpecialist.ROUTER.value
-            
-        logger.info(f"SystemPlan status is {status}. Returning to Router.")
-        return CoreSpecialist.ROUTER.value
-
     def route_to_next_specialist(self, state: GraphState) -> str | list[str]:
         """
         Routes from RouterSpecialist to the next specialist(s).
@@ -265,22 +208,6 @@ class GraphOrchestrator:
                 )
                 logger.error(error_msg)
                 raise WorkflowError(error_msg)
-
-        # Intercept routing to PlanExecutor if a new plan is detected
-        # This ensures the PlanExecutor is the entry point for any new plan
-        artifacts = state.get("artifacts", {})
-        plan_data = artifacts.get("system_plan")
-        if plan_data:
-            status = plan_data.get("status")
-            # If plan is pending/in_progress and we are not already routing to PlanExecutor
-            # and not routing to a specific worker (which might be a manual override)
-            if status in ["pending", "in_progress"] and "plan_executor_specialist" not in destinations_to_validate:
-                 # Only intercept if the Router didn't explicitly pick a worker
-                 # But Router usually picks 'web_specialist' directly?
-                 # If Router picks 'web_specialist', that's fine, it will loop back to PlanExecutor.
-                 # But if Router picks 'plan_executor_specialist', that's also fine.
-                 # If Router picks something else, we might want to warn?
-                 pass
 
         # TASK 3.3: Result Aggregation (Scatter-Gather Synchronization)
         # If routing to multiple specialists, initialize the parallel_tasks list in state.
@@ -388,3 +315,30 @@ class GraphOrchestrator:
         else:
             logger.info(f"Distillation: All prompts collected ({collection_index}/{len(expanded_prompts)}) - returning to coordinator")
             return "distillation_coordinator_specialist"
+
+    def after_project_director(self, state: GraphState) -> str:
+        """
+        Decides next step after ProjectDirector.
+        """
+        scratchpad = state.get("scratchpad", {})
+        next_worker = scratchpad.get("next_worker")
+        
+        if next_worker == "web_specialist":
+            return "web_specialist"
+        elif next_worker == "router":
+            return CoreSpecialist.ROUTER.value
+        else:
+            logger.warning(f"ProjectDirector returned unknown next_worker: {next_worker}. Defaulting to Router.")
+            return CoreSpecialist.ROUTER.value
+
+    def after_web_specialist(self, state: GraphState) -> str:
+        """
+        Decides next step after WebSpecialist.
+        If part of a Project (Emergent Subgraph), return to ProjectDirector.
+        Else, return to Router.
+        """
+        artifacts = state.get("artifacts", {})
+        if artifacts.get("project_context"):
+            return "project_director"
+        
+        return CoreSpecialist.ROUTER.value
