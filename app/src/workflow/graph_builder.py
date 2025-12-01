@@ -18,6 +18,7 @@ from .subgraphs.tiered_chat import TieredChatSubgraph
 from .subgraphs.distillation import DistillationSubgraph
 from .subgraphs.context_engineering import ContextEngineeringSubgraph
 from .subgraphs.critic_loop import CriticLoopSubgraph
+from .subgraphs.emergent_project import EmergentProjectSubgraph
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,8 @@ class GraphBuilder:
             TieredChatSubgraph(self.specialists, self.orchestrator, self.config),
             DistillationSubgraph(self.specialists, self.orchestrator, self.config),
             ContextEngineeringSubgraph(self.specialists, self.orchestrator, self.config),
-            CriticLoopSubgraph(self.specialists, self.orchestrator, self.config)
+            CriticLoopSubgraph(self.specialists, self.orchestrator, self.config),
+            EmergentProjectSubgraph(self.specialists, self.orchestrator, self.config)
         ]
 
         workflow_config = self.config.get("workflow", {})
@@ -452,8 +454,6 @@ class GraphBuilder:
             CoreSpecialist.END.value,
             CoreSpecialist.CRITIC.value,
             "summarizer_specialist", # MCP-only
-            "web_specialist",        # Custom wiring (Emergent Subgraph)
-            "project_director",      # Custom wiring (Emergent Subgraph)
         ]
         
         for subgraph in self.subgraphs:
@@ -464,29 +464,6 @@ class GraphBuilder:
                 continue
 
             workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name})
-
-        # Emergent Project Subgraph Wiring
-        if "project_director" in self.specialists:
-            workflow.add_conditional_edges(
-                "project_director",
-                self.orchestrator.after_project_director,
-                {
-                    "web_specialist": "web_specialist",
-                    router_name: router_name
-                }
-            )
-            logger.info("Wired ProjectDirector edges.")
-
-        if "web_specialist" in self.specialists:
-            workflow.add_conditional_edges(
-                "web_specialist",
-                self.orchestrator.after_web_specialist,
-                {
-                    "project_director": "project_director",
-                    router_name: router_name
-                }
-            )
-            logger.info("Wired WebSpecialist edges.")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)
