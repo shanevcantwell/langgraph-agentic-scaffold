@@ -32,6 +32,7 @@ You can plan the following actions:
     *   **Purpose**: Ask the user for clarification if the request is ambiguous, incomplete, or impossible to fulfill without making assumptions (hallucinating). **IMPORTANT**: Prefer gathering context via LIST_DIRECTORY, READ_FILE, or RESEARCH before resorting to ASK_USER. Use this only when context gathering cannot resolve the ambiguity.
     *   **Target**: The question to ask the user.
     *   **Example**: `{"type": "ask_user", "target": "Which specific python file are you referring to?", "description": "Ambiguous file reference"}`
+    *   **Constraint**: If the user asks for help creating content (writing, coding, prompting) and provides sufficient instructions, do NOT ask for clarification. Assume the user wants you to proceed with the provided details.
 
 ### Escape Hatch Protocol
 If you encounter a situation where you cannot determine the correct action or file path with high confidence:
