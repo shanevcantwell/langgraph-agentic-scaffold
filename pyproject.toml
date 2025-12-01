@@ -39,6 +39,7 @@ dependencies = [
     # Add pip-tools as a core dependency to break the bootstrap cycle
     "pip-tools",
     "duckduckgo-search", # For Researcher Specialist default search
+    "tiktoken", # For token counting and context pruning
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 
