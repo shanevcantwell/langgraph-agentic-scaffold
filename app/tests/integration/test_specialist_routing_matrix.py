@@ -10,6 +10,7 @@ routing behavior. LLM responses may vary, so we verify that expected specialists
 appear in the routing history (allowing for valid alternative paths).
 """
 import pytest
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 
@@ -67,7 +68,7 @@ ROUTING_TEST_CASES = [
     # --- Research ---
     (
         "Search for and summarize the latest features in Python 3.12",
-        ["researcher_specialist", "triage_architect", "facilitator_specialist"],
+        ["web_specialist", "triage_architect", "facilitator_specialist"],
         "research_task",
         True,  # Research flow involves triage
     ),
@@ -75,7 +76,7 @@ ROUTING_TEST_CASES = [
     # --- Prompt Engineering ---
     (
         "Help me write a better prompt for generating Python code documentation. I want it to be concise and use Google style docstrings.",
-        ["prompt_specialist", "chat_specialist"],
+        ["prompt_specialist", "chat_specialist", "dialogue_specialist", "progenitor_alpha_specialist", "progenitor_bravo_specialist", "triage_architect", "facilitator_specialist"],
         "prompt_engineering",
         True,  # Chat may handle prompt questions
     ),

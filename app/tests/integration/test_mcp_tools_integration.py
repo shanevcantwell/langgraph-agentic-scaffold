@@ -72,13 +72,15 @@ def file_specialist_with_registry(mcp_registry, tmp_path):
 
 
 @pytest.fixture
-def researcher_specialist_with_registry(mcp_registry):
-    """Create ResearcherSpecialist with MCP registration."""
-    from app.src.specialists.researcher_specialist import ResearcherSpecialist
+def web_specialist_with_registry(mcp_registry):
+    """Create WebSpecialist with MCP registration."""
+    from app.src.specialists.web_specialist import WebSpecialist
+    from app.src.strategies.search.duckduckgo_strategy import DuckDuckGoSearchStrategy
 
-    specialist = ResearcherSpecialist(
-        specialist_name="researcher_specialist",
-        specialist_config={}
+    specialist = WebSpecialist(
+        specialist_name="web_specialist",
+        specialist_config={},
+        search_strategy=DuckDuckGoSearchStrategy()
     )
 
     # Register MCP services
@@ -364,29 +366,29 @@ class TestFileSpecialistMcp:
 
 
 # =============================================================================
-# RESEARCHER SPECIALIST MCP TESTS
+# WEB SPECIALIST MCP TESTS
 # =============================================================================
 
-class TestResearcherSpecialistMcp:
-    """Test researcher_specialist MCP functions."""
+class TestWebSpecialistMcp:
+    """Test web_specialist MCP functions."""
 
     def test_search_function_registered(
-        self, mcp_client, researcher_specialist_with_registry
+        self, mcp_client, web_specialist_with_registry
     ):
         """Verify search function is registered in MCP."""
         services = mcp_client.list_services()
 
-        assert "researcher_specialist" in services
-        assert "search" in services["researcher_specialist"]
+        assert "web_specialist" in services
+        assert "search" in services["web_specialist"]
 
     def test_search_returns_results(
-        self, mcp_client, researcher_specialist_with_registry
+        self, mcp_client, web_specialist_with_registry
     ):
         """Verify search function returns list of results."""
-        # Note: researcher_specialist.search() is currently a mock
+        # Note: web_specialist.search() uses DuckDuckGo strategy
         # This test verifies the MCP plumbing works
         result = mcp_client.call(
-            "researcher_specialist",
+            "web_specialist",
             "search",
             query="test query",
             max_results=5
@@ -573,7 +575,7 @@ class TestMcpGraphIntegration:
         # These services should be registered
         expected_services = [
             "file_specialist",
-            "researcher_specialist",
+            # "researcher_specialist", # Removed in Phase 1
             "summarizer_specialist",
             "image_specialist",
         ]

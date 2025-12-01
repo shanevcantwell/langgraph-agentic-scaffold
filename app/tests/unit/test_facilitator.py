@@ -33,7 +33,7 @@ def test_facilitator_executes_research_action(facilitator):
     assert "### Research: LangGraph" in result["artifacts"]["gathered_context"]
     
     facilitator.mcp_client.call.assert_called_with(
-        service_name="researcher_specialist",
+        service_name="web_specialist",
         function_name="search",
         query="LangGraph"
     )

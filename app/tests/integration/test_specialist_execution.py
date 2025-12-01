@@ -248,24 +248,6 @@ class TestBatchProcessorExecution:
 
 
 # =============================================================================
-# RESEARCHER SPECIALIST TESTS
-# =============================================================================
-
-class TestResearcherSpecialistExecution:
-    """Test ResearcherSpecialist execution."""
-
-    def test_researcher_initializes_with_mcp(
-        self, initialized_specialist_factory
-    ):
-        """Verify ResearcherSpecialist initializes and registers MCP."""
-        researcher = initialized_specialist_factory("ResearcherSpecialist")
-        assert researcher is not None
-
-        # Verify MCP registration method exists
-        assert hasattr(researcher, 'register_mcp_services')
-
-
-# =============================================================================
 # SUMMARIZER SPECIALIST TESTS
 # =============================================================================
 
@@ -613,7 +595,7 @@ class TestSpecialistLoading:
         "SentimentClassifierSpecialist",
         "TextAnalysisSpecialist",
         "BatchProcessorSpecialist",
-        "ResearcherSpecialist",
+        # "ResearcherSpecialist", # Removed in Phase 1
         "SummarizerSpecialist",
         "PromptSpecialist",
         "DefaultResponderSpecialist",

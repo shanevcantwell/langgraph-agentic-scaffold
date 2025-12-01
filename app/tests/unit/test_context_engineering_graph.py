@@ -22,7 +22,7 @@ def test_context_engineering_graph_wiring(
         "router_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "router.md"},
         "triage_architect": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "triage.md"},
         "facilitator_specialist": {"type": "procedural", "description": "Facilitator"},
-        "researcher_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "researcher.md"},
+        # "researcher_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "researcher.md"},
         "summarizer_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "summarizer.md"},
         "end_specialist": {"type": "procedural", "llm_config": "gemini-test", "synthesis_prompt_file": "end.md"},
     }
