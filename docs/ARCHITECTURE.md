@@ -76,7 +76,7 @@ User Request
     ↓
 TriageArchitect (analyzes request, creates ContextPlan)
     ├─ actions: [RESEARCH, READ_FILE, etc.]
-    └─ recommended_specialists: ["researcher_specialist", "chat_specialist"]  ← Advisory guidance
+    └─ recommended_specialists: ["project_director", "chat_specialist"]  ← Advisory guidance
     ↓
 FacilitatorSpecialist (executes actions, gathers context)
     ↓

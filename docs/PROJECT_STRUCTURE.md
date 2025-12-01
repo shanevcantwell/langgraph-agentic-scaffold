@@ -79,8 +79,9 @@ This is the main Python package for the application.
     -   `systems_architect.py`: Creates high-level technical plans and architectural designs.
     -   `summarizer_specialist.py`: MCP service for text summarization and condensation.
 
-    **Research & External Data** (2 specialists):
-    -   `researcher_specialist.py`: MCP service for web search and external data retrieval.
+    **Research & External Data** (3 specialists):
+    -   `project_director.py`: Manages complex research projects using an emergent state machine (ProjectContext).
+    -   `web_specialist.py`: Procedural worker for executing atomic web tasks (search/browse).
     -   `open_interpreter_specialist.py`: Executes code via open-interpreter framework (may migrate to MCP container).
 
     **Distillation Subgraph** (4 specialists):
@@ -289,7 +290,7 @@ User workspace for file operations and external document storage. Mounted into c
 **Total Specialists:** 35 specialist modules
 - **LLM-driven:** ~20 specialists (router, chat, progenitors, data analysis, generation, etc.)
 - **Procedural:** ~15 specialists (file_specialist, facilitator, archiver, synthesizers, etc.)
-- **MCP Services:** 3 (file_specialist, researcher_specialist, summarizer_specialist)
+- **MCP Services:** 3 (file_specialist, web_specialist, summarizer_specialist)
 
 ## Key Architectural Files
 
