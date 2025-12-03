@@ -115,13 +115,24 @@ Without HitL infrastructure, the Whetstone Process must be simulated through pro
 
 ## Implementation Dependency
 
-**CORE-018 is a prerequisite for robust Deep Research error handling.**
+**DialogueSpecialist (CORE-018 Part 3) is sufficient for streaming HitL flows.**
 
-The minimal path:
-1. Implement CORE-018 Part 1 (PostgreSQL checkpointing)
-2. Implement CORE-018 Part 3 (DialogueSpecialist)
-3. Add `clarification_required` status to StepResult
-4. Wire Orchestrator to route to DialogueSpecialist on clarification
+IMPORTANT ARCHITECTURAL CLARIFICATION:
+
+| Pattern | Connection Model | Checkpointing |
+|---------|-----------------|---------------|
+| **Streaming HitL** | Client stays connected during `interrupt()` | NOT needed - LangGraph manages state in-memory |
+| **RECESS/ESM** | Stateless API (client disconnects between turns) | REQUIRED - state must survive HTTP boundaries |
+
+The minimal path for Deep Research HitL:
+1. Implement DialogueSpecialist with `interrupt()` (CORE-018 Part 3)
+2. Add `clarification_required` status to StepResult
+3. Wire Orchestrator to route to DialogueSpecialist on clarification
+
+PostgreSQL/checkpointing (CORE-018 Part 1) is only needed if:
+- Implementing RECESS "Subgraph as a Service" pattern
+- Supporting page refresh during clarification flow
+- Deploying behind load balancer (requests may hit different servers)
 
 This can proceed in parallel with Deep Research Phase 1 (WebSpecialist primitive), converging when pipeline execution is implemented.
 
