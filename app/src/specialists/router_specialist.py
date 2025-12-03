@@ -241,9 +241,18 @@ class RouterSpecialist(BaseSpecialist):
             else:
                 recommendation_context += "\n\n**CRITICAL: IMAGE DETECTED**\nThe user has uploaded an image. You cannot see it. Please route to a specialist that can handle images."
 
+        # BUG-RESEARCH-001 Fix: Include gathered_context content so Router can see search results/failures
+        gathered_context_section = ""
+        if gathered_context:
+            # Truncate to reasonable size for context window, preserving start (most relevant)
+            preview = gathered_context[:1500] if len(gathered_context) > 1500 else gathered_context
+            truncation_note = "... (truncated)" if len(gathered_context) > 1500 else ""
+            gathered_context_section = f"\n\n**GATHERED CONTEXT (use this to inform your routing decision):**\n```\n{preview}{truncation_note}\n```"
+            logger.info(f"Router: Including {len(preview)} chars of gathered_context in LLM prompt")
+
         # Put CRITICAL dependency requirements FIRST, before specialist list
         # This ensures LLM sees it before making a decision
-        contextual_prompt_addition = f"{context_gathering_note}{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
+        contextual_prompt_addition = f"{context_gathering_note}{gathered_context_section}{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
