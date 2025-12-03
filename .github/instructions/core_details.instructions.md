@@ -39,7 +39,8 @@ This project is **Phase I** of a multi-phase journey toward a **Governed, State-
     *   **Router**: Decides **WHAT** (capability needed).
     *   **Orchestrator**: Decides **HOW** (implementation/fan-out).
 *   **IT Boundary (The "Call I.T." Rule)**: Do not modify server infrastructure (`.env`, `user_settings.yaml`, Docker configs). Accept these settings as immutable facts. If a failure occurs due to environment/server configuration, STOP and report it to the user. You are not credentialed to handle the server layer.
-*   **Escape Hatch (Clarification)
+*   **Proactive Stewardship**: If you encounter configuration oddities (e.g., `.gitignore` ignoring itself, recursive paths, or illogical settings), **flag them to the user immediately**. Do not silently work around them unless necessary for the immediate task, and even then, leave a note.
+*   **Escape Hatch (Clarification)**
 
 ## Key Design Patterns
 *   **Virtual Coordinator**: Router chooses capability -> Orchestrator intercepts and decides implementation (e.g., fan-out).
