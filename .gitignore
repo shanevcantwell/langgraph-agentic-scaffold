@@ -65,3 +65,5 @@ config.yaml
 ROADMAP_Project_Bedrock_v4.0_ The Atomic Roadmap for Governed Resilience.md
 session_notes/
 docs/design-docs/ARCHITECTURAL_PAUSE_NOTES.md
+.docker_tmp/
+data/*
