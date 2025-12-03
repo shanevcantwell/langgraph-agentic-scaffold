@@ -1,72 +1,105 @@
 """
-Checkpoint Manager for HitL (Human-in-the-Loop) workflows.
+Checkpoint Manager for stateless multi-request workflows (RECESS/ESM pattern).
 
-ADR-CORE-018: Provides state persistence for interrupt/resume patterns.
+IMPORTANT ARCHITECTURAL DISTINCTION:
+
+    1. ADR-CORE-018 HitL (DialogueSpecialist):
+       - Client maintains streaming connection during interrupt()
+       - LangGraph holds state IN-MEMORY while paused
+       - NO external checkpointing required for basic clarification flow
+
+    2. RECESS/ESM "Subgraph as a Service":
+       - Stateless API: client disconnects between turns
+       - State must survive across HTTP request boundaries
+       - REQUIRES external persistence (PostgreSQL/Redis/SQLite)
+
+This module provides checkpointing for pattern #2 (RECESS/ESM).
+Do NOT enable checkpointing for basic streaming/chat workflows - it adds
+unnecessary overhead when LangGraph already manages state in-memory.
+
+See: design-docs/RECESS/docs/DESIGN_ The Emergent State Machine (ESM).md
+     Section 6: Service Architecture Considerations (Checkpointing)
 
 Usage:
-    checkpointer = get_checkpointer(user_settings)
-    graph = workflow.compile(checkpointer=checkpointer)
+    # In FastAPI lifespan (async context) - ONLY for RECESS-style workflows:
+    async with create_checkpointer_context(config) as checkpointer:
+        graph = workflow.compile(checkpointer=checkpointer)
+        yield  # app runs
+        # checkpointer automatically cleaned up
 
 Configuration (user_settings.yaml):
     checkpointing:
-      enabled: true
+      enabled: false  # Default OFF - only enable for RECESS/ESM
       backend: "sqlite"  # or "postgres" for production
       sqlite_path: "./data/checkpoints.db"
       # postgres_url: "${DATABASE_URL}"  # for production
 """
 import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 logger = logging.getLogger(__name__)
 
 
-def get_checkpointer(config: dict) -> Optional[object]:
+@asynccontextmanager
+async def create_checkpointer_context(config: dict) -> AsyncIterator[Optional[object]]:
     """
-    Initialize and return the appropriate checkpointer based on configuration.
+    Create a checkpointer as an async context manager.
+
+    This handles the lifecycle of async checkpointers (like AsyncSqliteSaver)
+    which require async setup/teardown.
+
+    Usage:
+        async with create_checkpointer_context(config) as checkpointer:
+            graph = workflow.compile(checkpointer=checkpointer)
+            # use graph...
+        # checkpointer automatically cleaned up
 
     Args:
         config: User settings dictionary containing checkpointing configuration.
 
-    Returns:
+    Yields:
         A LangGraph checkpointer instance, or None if checkpointing is disabled.
-
-    Raises:
-        ImportError: If required checkpoint backend package is not installed.
-        ValueError: If unknown backend is specified.
     """
     checkpoint_config = config.get("checkpointing", {})
 
     if not checkpoint_config.get("enabled", False):
         logger.info("Checkpointing is disabled in configuration")
-        return None
+        yield None
+        return
 
     backend = checkpoint_config.get("backend", "sqlite")
 
     if backend == "sqlite":
-        return _init_sqlite_checkpointer(checkpoint_config)
+        async with _create_sqlite_context(checkpoint_config) as checkpointer:
+            yield checkpointer
     elif backend == "postgres":
-        return _init_postgres_checkpointer(checkpoint_config)
+        async with _create_postgres_context(checkpoint_config) as checkpointer:
+            yield checkpointer
     else:
         raise ValueError(f"Unknown checkpointing backend: {backend}")
 
 
-def _init_sqlite_checkpointer(config: dict):
+@asynccontextmanager
+async def _create_sqlite_context(config: dict) -> AsyncIterator[Optional[object]]:
     """
-    Initialize SQLite-based checkpointer for local development.
+    Create AsyncSqliteSaver as an async context manager.
 
-    Low complexity, single-process. Good for dev/testing.
-    Returns None with warning if package not installed (graceful degradation).
+    AsyncSqliteSaver requires async initialization because aiosqlite connections
+    are async. The sync SqliteSaver doesn't support LangGraph's async streaming
+    methods (astream, ainvoke).
     """
     try:
-        from langgraph.checkpoint.sqlite import SqliteSaver
+        from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
     except ImportError:
         logger.warning(
             "langgraph-checkpoint-sqlite not installed. Checkpointing DISABLED. "
             "Install with: pip install langgraph-checkpoint-sqlite"
         )
-        return None
+        yield None
+        return
 
     db_path = config.get("sqlite_path", "./data/checkpoints.db")
 
@@ -74,28 +107,33 @@ def _init_sqlite_checkpointer(config: dict):
     db_dir = Path(db_path).parent
     db_dir.mkdir(parents=True, exist_ok=True)
 
-    # SqliteSaver expects a connection string
-    conn_string = f"sqlite:///{db_path}"
+    logger.info(f"Initializing AsyncSqliteSaver at: {db_path}")
 
-    logger.info(f"Initializing SQLite checkpointer at: {db_path}")
-    return SqliteSaver.from_conn_string(conn_string)
+    # AsyncSqliteSaver.from_conn_string is an async context manager
+    # that yields the properly initialized saver
+    async with AsyncSqliteSaver.from_conn_string(db_path) as saver:
+        logger.info("AsyncSqliteSaver initialized successfully")
+        yield saver
+
+    logger.info("AsyncSqliteSaver connection closed")
 
 
-def _init_postgres_checkpointer(config: dict):
+@asynccontextmanager
+async def _create_postgres_context(config: dict) -> AsyncIterator[Optional[object]]:
     """
-    Initialize PostgreSQL-based checkpointer for production.
+    Create PostgresSaver as an async context manager.
 
-    Supports multi-process access, pgvector for future Codex integration.
-    Returns None with warning if package not installed (graceful degradation).
+    PostgreSQL supports async natively and handles concurrent access well.
     """
     try:
-        from langgraph.checkpoint.postgres import PostgresSaver
+        from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
     except ImportError:
         logger.warning(
             "langgraph-checkpoint-postgres not installed. Checkpointing DISABLED. "
             "Install with: pip install langgraph-checkpoint-postgres"
         )
-        return None
+        yield None
+        return
 
     postgres_url = config.get("postgres_url")
 
@@ -112,5 +150,70 @@ def _init_postgres_checkpointer(config: dict):
         if not postgres_url:
             raise ValueError(f"Environment variable {env_var} is not set")
 
-    logger.info("Initializing PostgreSQL checkpointer")
-    return PostgresSaver.from_conn_string(postgres_url)
+    logger.info("Initializing AsyncPostgresSaver")
+
+    async with AsyncPostgresSaver.from_conn_string(postgres_url) as saver:
+        # Setup tables if needed
+        await saver.setup()
+        logger.info("AsyncPostgresSaver initialized successfully")
+        yield saver
+
+    logger.info("AsyncPostgresSaver connection closed")
+
+
+# Legacy sync function for backwards compatibility (limited functionality)
+def get_checkpointer(config: dict) -> Optional[object]:
+    """
+    DEPRECATED: Use create_checkpointer_context() for async support.
+
+    This sync version only works with LangGraph's sync methods (invoke).
+    For streaming (astream), you MUST use create_checkpointer_context().
+    """
+    checkpoint_config = config.get("checkpointing", {})
+
+    if not checkpoint_config.get("enabled", False):
+        logger.info("Checkpointing is disabled in configuration")
+        return None
+
+    backend = checkpoint_config.get("backend", "sqlite")
+
+    if backend == "sqlite":
+        return _init_sync_sqlite_checkpointer(checkpoint_config)
+    elif backend == "postgres":
+        logger.warning(
+            "Sync PostgresSaver not recommended. Use create_checkpointer_context() instead."
+        )
+        return None
+    else:
+        raise ValueError(f"Unknown checkpointing backend: {backend}")
+
+
+def _init_sync_sqlite_checkpointer(config: dict):
+    """
+    Initialize SYNC SqliteSaver for invoke-only workflows.
+
+    WARNING: This does NOT support astream/ainvoke. Use only for testing
+    or workflows that exclusively use sync invoke().
+    """
+    try:
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        import sqlite3
+    except ImportError:
+        logger.warning(
+            "langgraph-checkpoint-sqlite not installed. Checkpointing DISABLED."
+        )
+        return None
+
+    db_path = config.get("sqlite_path", "./data/checkpoints.db")
+
+    db_dir = Path(db_path).parent
+    db_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.warning(
+        f"Using SYNC SqliteSaver at: {db_path}. "
+        "This does NOT support streaming (astream). "
+        "Use create_checkpointer_context() for full async support."
+    )
+
+    conn = sqlite3.connect(db_path, check_same_thread=False)
+    return SqliteSaver(conn)

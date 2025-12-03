@@ -14,7 +14,7 @@ from ..utils.errors import ConfigError
 from ..utils.cancellation_manager import CancellationManager
 from ..graph.state import GraphState
 from ..graph.state_factory import create_initial_state
-from ..persistence.checkpoint_manager import get_checkpointer
+from ..persistence.checkpoint_manager import get_checkpointer, create_checkpointer_context
 from .graph_builder import GraphBuilder
 
 logger = logging.getLogger(__name__)
@@ -51,6 +51,9 @@ class WorkflowRunner:
         """
         Initializes the WorkflowRunner by instantiating the GraphBuilder
         and compiling the LangGraph application.
+
+        NOTE: For async checkpointing (required for streaming), call
+        set_async_checkpointer() from the FastAPI lifespan context after init.
         """
         self.builder = GraphBuilder()
         self.config = self.builder.config
@@ -58,14 +61,31 @@ class WorkflowRunner:
         self._perform_pre_flight_checks()
         self.recursion_limit = self.config.get("workflow", {}).get("recursion_limit", 25)
 
-        # ADR-CORE-018: Initialize checkpointer for HitL interrupt/resume
-        self.checkpointer = get_checkpointer(self.config)
+        # Checkpointer is OPTIONAL - only needed for RECESS/ESM multi-request patterns.
+        # For basic streaming (astream) with interrupt(), LangGraph manages state in-memory.
+        # See checkpoint_manager.py docstring for architectural distinction.
+        self.checkpointer = None
+        self.app = self.builder.build(checkpointer=None)
+
+        logger.info("WorkflowRunner initialized (async checkpointer will be set in lifespan)")
+
+    def set_async_checkpointer(self, checkpointer):
+        """
+        Set the async checkpointer and rebuild the graph.
+
+        This must be called from an async context (e.g., FastAPI lifespan)
+        after the checkpointer has been initialized via create_checkpointer_context().
+
+        Args:
+            checkpointer: An async checkpointer instance (e.g., AsyncSqliteSaver)
+        """
+        self.checkpointer = checkpointer
         self.app = self.builder.build(checkpointer=self.checkpointer)
 
         if self.checkpointer:
-            logger.info(f"WorkflowRunner initialized with checkpointing enabled ({type(self.checkpointer).__name__}).")
+            logger.info(f"WorkflowRunner: async checkpointer set ({type(self.checkpointer).__name__})")
         else:
-            logger.info("WorkflowRunner initialized (checkpointing disabled).")
+            logger.info("WorkflowRunner: checkpointing disabled")
 
     def reload(self, overrides: Dict[str, Any] = None):
         """
@@ -156,8 +176,14 @@ class WorkflowRunner:
             use_simple_chat=use_simple_chat
         )
 
+        config = {"recursion_limit": self.recursion_limit}
+        if self.checkpointer:
+            thread_id = str(uuid.uuid4())
+            config["configurable"] = {"thread_id": thread_id}
+            logger.info(f"Running workflow with thread_id: {thread_id}")
+
         try:
-            final_state = self.app.invoke(initial_state, config={"recursion_limit": self.recursion_limit})
+            final_state = self.app.invoke(initial_state, config=config)
             logger.info("--- Workflow completed successfully ---")
 
             # Return the entire final state so the API layer can decide what to do with it.
@@ -191,8 +217,14 @@ class WorkflowRunner:
         # Yield the run_id immediately so the client can start tracking traces
         yield {"run_id": str(run_id)}
 
+        config = {"recursion_limit": self.recursion_limit, "run_id": run_id}
+        if self.checkpointer:
+            # Use the same ID for thread_id to keep things consistent for this run
+            config["configurable"] = {"thread_id": str(run_id)}
+            logger.info(f"Streaming workflow with thread_id: {run_id}")
+
         try:
-            async for event in self.app.astream(initial_state, config={"recursion_limit": self.recursion_limit, "run_id": run_id}):
+            async for event in self.app.astream(initial_state, config=config):
                 # Check for cancellation request
                 if CancellationManager.is_cancelled(str(run_id)):
                     logger.warning(f"Run {run_id} was cancelled by user request.")
@@ -211,11 +243,16 @@ class WorkflowRunner:
 
     async def resume(self, thread_id: str, user_input: str) -> Dict[str, Any]:
         """
-        ADR-CORE-018: Resume a workflow from an interrupt point.
+        RECESS/ESM: Resume a workflow from a checkpointed interrupt point.
 
-        This is called when a DialogueSpecialist has triggered an interrupt()
-        and the user has provided clarification. The graph resumes from the
-        checkpoint stored under thread_id.
+        NOTE: This method is for STATELESS multi-request patterns where the client
+        disconnects between turns. For basic streaming with interrupt(), the client
+        stays connected and LangGraph manages state in-memory - no resume() needed.
+
+        Use cases requiring resume():
+        - RECESS "Subgraph as a Service" (client makes separate HTTP requests per turn)
+        - Long-running workflows where process may restart
+        - Load-balanced deployments where requests hit different servers
 
         Args:
             thread_id: The unique identifier for this conversation thread.
