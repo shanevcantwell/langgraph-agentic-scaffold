@@ -13,6 +13,12 @@ Flow:
 Key Distinction:
     - DialogueSpecialist: Active, directed - "I need X, Y, Z from you to proceed"
     - DefaultResponderSpecialist: Passive fallback - "Generic response because nothing else fit"
+
+Connection Model:
+    - STREAMING (default): Client stays connected during interrupt(). LangGraph holds
+      state in-memory. User response arrives in same stream. No checkpointing needed.
+    - STATELESS (RECESS/ESM): Client disconnects between turns. Requires checkpointing
+      to persist state across HTTP boundaries. Uses runner.resume() to continue.
 """
 import logging
 from typing import Dict, Any, List
