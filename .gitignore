@@ -62,7 +62,6 @@ run_finetune.sh
 scripts/create_finetuning_data.py
 scripts/prepare_qlora_data.py
 config.yaml
-.*
 ROADMAP_Project_Bedrock_v4.0_ The Atomic Roadmap for Governed Resilience.md
 session_notes/
 docs/design-docs/ARCHITECTURAL_PAUSE_NOTES.md
