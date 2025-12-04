@@ -158,6 +158,19 @@ This is the main Python package for the application.
     -   `external_client.py`: `ExternalMcpClient` - async client for external MCP servers (Node.js, Docker containers) with JSON-RPC over stdio (ADR-MCP-003).
     -   `__init__.py`: Exports public MCP API (McpRegistry, McpClient, McpRequest, McpResponse, ExternalMcpClient).
 
+    ### `app/src/mcp/services/`
+
+    Standalone MCP services that provide capabilities exclusively via MCP invocation. Unlike specialists, these do NOT inherit from `BaseSpecialist` and cannot be routed to by the graph.
+
+    **When to use Services vs Specialists:**
+    - **Service**: Capability is only called directly by other components, never routed to by RouterSpecialist
+    - **Specialist**: Capability needs to participate in graph routing, manage state, or be user-addressable
+
+    -   `__init__.py`: Package exports for MCP services.
+    -   `fara_service.py`: `FaraService` - Visual UI verification using Fara-7B vision model with transparent resolution scaling. Provides `screenshot()`, `verify()`, `locate()`, `click()`, and `type_text()` operations.
+
+    See `MCP_GUIDE.md` Section 12.0 for detailed guidance on Services vs Specialists.
+
     ### `app/src/interface/`
 
     Interface adapters and translators for different client types.
@@ -292,12 +305,15 @@ User workspace for file operations and external document storage. Mounted into c
 
 -   `design-docs/`: External design documents and ADRs (git submodule or sibling repo).
 
-## Specialist Count
+## Component Counts
 
 **Total Specialists:** 35 specialist modules
 - **LLM-driven:** ~20 specialists (router, chat, progenitors, data analysis, generation, etc.)
 - **Procedural:** ~15 specialists (file_specialist, facilitator, archiver, synthesizers, etc.)
-- **MCP Services:** 3 (file_specialist, web_specialist, summarizer_specialist)
+- **MCP-only Specialists:** 3 (file_specialist, web_specialist, summarizer_specialist)
+
+**Standalone MCP Services:** 1 (in `app/src/mcp/services/`)
+- `FaraService` - Visual UI verification (LLM-requiring, vision model)
 
 ## Key Architectural Files
 

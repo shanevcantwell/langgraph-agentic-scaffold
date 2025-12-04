@@ -8,6 +8,26 @@ A Specialist is a modular, reusable component responsible for a single, well-def
 
 By creating new Specialists, you can extend the capabilities of the system to perform new tasks.
 
+## Before You Start: Service or Specialist?
+
+Before creating a new specialist, consider whether your capability should be a **Specialist** or an **MCP Service**:
+
+| Question | If YES → | If NO → |
+|----------|----------|---------|
+| Can users request this via natural language? | Specialist | Service |
+| Does it need to be routed to by RouterSpecialist? | Specialist | Service |
+| Does it manage graph state (messages, artifacts)? | Specialist | Service |
+| Is it only called directly by other code (never routed)? | Service | Specialist |
+| Is it a standalone atomic capability (vision, embedding)? | Service | Specialist |
+
+**Examples:**
+- **Specialist**: `ChatSpecialist`, `ResearcherSpecialist`, `FileOperationsSpecialist`
+- **MCP Service**: `FaraService` (visual UI verification - only called by testing code)
+
+**If you need an MCP Service**, see `MCP_GUIDE.md` Section 12.0 for implementation guidance. Services are placed in `app/src/mcp/services/` and do NOT inherit from `BaseSpecialist`.
+
+**If you need a Specialist**, continue reading this guide.
+
 ## Creating a Standard Specialist
 
 ### The Files You Will Touch

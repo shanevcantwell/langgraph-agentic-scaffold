@@ -1319,6 +1319,221 @@ tools = await self.external_mcp_client.list_tools("filesystem")
 
 ---
 
+## 12.0 MCP Services vs Specialists
+
+The system provides two distinct patterns for implementing MCP-accessible capabilities:
+
+### 12.1 Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        MCP Capabilities                          │
+├─────────────────────────────────┬───────────────────────────────┤
+│         SPECIALISTS             │           SERVICES            │
+│  app/src/specialists/*.py       │   app/src/mcp/services/*.py   │
+├─────────────────────────────────┼───────────────────────────────┤
+│ ✓ Inherit from BaseSpecialist   │ ✗ Standalone classes          │
+│ ✓ Have _execute_logic()         │ ✗ No graph execution          │
+│ ✓ Can be routed to by Router    │ ✗ Never routed to             │
+│ ✓ Can ALSO expose MCP services  │ ✓ ONLY MCP invocation         │
+│ ✓ Managed by GraphBuilder       │ ✓ Registered explicitly       │
+│ ✓ Can require LLM adapter       │ ✓ Can require LLM adapter     │
+└─────────────────────────────────┴───────────────────────────────┘
+```
+
+### 12.2 When to Use Each Pattern
+
+**Use a Specialist (in `app/src/specialists/`) when:**
+- The capability needs to be routable by the RouterSpecialist
+- It participates in graph execution workflows
+- It needs to return state updates (`messages`, `artifacts`, etc.)
+- It needs access to full `GraphState`
+- Examples: `ChatSpecialist`, `ResearcherSpecialist`, `FileOperationsSpecialist`
+
+**Use an MCP Service (in `app/src/mcp/services/`) when:**
+- The capability is ONLY invoked directly by other components
+- It should never be routed to by the graph
+- It provides atomic operations without state management
+- It's a standalone capability (vision, embedding, etc.)
+- Examples: `FaraService` (visual UI verification)
+
+### 12.3 Service Implementation Pattern
+
+MCP Services are simpler than Specialists - they don't inherit from any base class:
+
+```python
+# app/src/mcp/services/my_service.py
+
+from dataclasses import dataclass, field
+from typing import Dict, Any, Optional
+
+@dataclass
+class MyService:
+    """
+    A standalone MCP service providing specific capabilities.
+
+    This service is NOT a specialist - it cannot be routed to by the graph.
+    It provides capabilities exclusively via MCP invocation.
+    """
+
+    # Optional dependencies (injected at construction)
+    llm_adapter: Optional["BaseAdapter"] = None
+    some_config: Dict[str, Any] = field(default_factory=dict)
+
+    def my_operation(self, input: str) -> str:
+        """An MCP-callable operation."""
+        return f"Processed: {input}"
+
+    def another_operation(self, data: Dict) -> Dict:
+        """Another MCP-callable operation."""
+        return {"result": data.get("value", 0) * 2}
+
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Register this service's functions with MCP."""
+        registry.register_service("my_service", {
+            "my_operation": self.my_operation,
+            "another_operation": self.another_operation,
+        })
+```
+
+### 12.4 LLM-Requiring Services
+
+Services can require an LLM adapter, making them "non-procedural" while still being service-only:
+
+```python
+# Example: FaraService (visual UI verification)
+
+@dataclass
+class FaraService:
+    """
+    Visual UI verification using Fara-7B vision model.
+
+    This is an LLM-requiring service - it needs a vision model adapter
+    but is NEVER routed to by the graph.
+    """
+
+    llm_adapter: Optional["BaseAdapter"] = None  # Vision model
+    native_resolutions: Dict[str, Tuple[int, int]] = field(
+        default_factory=lambda: {
+            "square": (1024, 1024),
+            "landscape": (1428, 896),
+            "portrait": (896, 1428),
+        }
+    )
+
+    def verify(self, element_description: str, screenshot_b64: Optional[str] = None) -> Dict:
+        """
+        Verify UI element presence using vision model.
+        Requires llm_adapter to be set.
+        """
+        if not self.llm_adapter:
+            raise ValueError("FaraService requires an LLM adapter (vision model)")
+
+        # Scale image, call vision model, scale coordinates back
+        # ... implementation ...
+```
+
+### 12.5 Service Registration
+
+Services are registered during graph initialization, typically in `GraphBuilder`:
+
+```python
+# In GraphBuilder or application startup
+
+from app.src.mcp.services import FaraService
+
+# Create service instance with dependencies
+fara_service = FaraService(
+    llm_adapter=vision_adapter,  # From adapter factory
+    native_resolutions=config.get("fara_resolutions", {})
+)
+
+# Register with MCP
+fara_service.register_mcp_services(mcp_registry)
+```
+
+### 12.6 Calling Services
+
+Services are called like any other MCP service:
+
+```python
+# From a specialist or other component
+result = self.mcp_client.call("fara_service", "verify",
+    element_description="Submit button",
+    screenshot_b64=screenshot_data
+)
+```
+
+### 12.7 Directory Structure
+
+```
+app/src/mcp/
+├── __init__.py           # Exports McpRegistry, McpClient, etc.
+├── registry.py           # McpRegistry implementation
+├── client.py             # McpClient implementation
+├── external_client.py    # ExternalMcpClient for containers
+├── schemas.py            # McpRequest/McpResponse
+└── services/             # Standalone MCP services
+    ├── __init__.py       # Package exports
+    └── fara_service.py   # Visual UI verification service
+```
+
+### 12.8 Decision Flowchart
+
+```
+                    ┌─────────────────────┐
+                    │ New capability needed│
+                    └──────────┬──────────┘
+                               │
+                    ┌──────────▼──────────┐
+                    │ Needs graph routing? │
+                    │ (RouterSpecialist   │
+                    │  can route to it)   │
+                    └──────────┬──────────┘
+                               │
+              ┌────────────────┼────────────────┐
+              │ YES            │                │ NO
+              ▼                │                ▼
+    ┌─────────────────┐        │      ┌─────────────────┐
+    │   SPECIALIST    │        │      │ Direct MCP only?│
+    │ app/src/        │        │      │ (Never routed)  │
+    │ specialists/    │        │      └────────┬────────┘
+    └─────────────────┘        │               │
+                               │      ┌────────┼────────┐
+                               │      │ YES            │ NO
+                               │      ▼                ▼
+                               │ ┌─────────────┐  ┌─────────────┐
+                               │ │  SERVICE    │  │ SPECIALIST  │
+                               │ │ app/src/mcp/│  │ with MCP    │
+                               │ │ services/   │  │ methods     │
+                               │ └─────────────┘  └─────────────┘
+```
+
+**Key Questions:**
+1. **Can the user ask for this directly?** → Specialist (routable)
+2. **Is it only called by other code?** → Service
+3. **Does it manage graph state?** → Specialist
+4. **Is it a standalone atomic capability?** → Service
+
+### 12.9 Current Services
+
+| Service | Location | LLM Required | Description |
+|---------|----------|--------------|-------------|
+| `FaraService` | `app/src/mcp/services/fara_service.py` | Yes (Vision) | Visual UI verification using Fara-7B |
+
+### 12.10 Migrating Specialists to Services
+
+When refactoring an MCP-only specialist to a service:
+
+1. **Remove BaseSpecialist inheritance** - Services are standalone
+2. **Remove `_execute_logic()`** - Services don't participate in graph
+3. **Keep `register_mcp_services()`** - This is the MCP interface
+4. **Move to `app/src/mcp/services/`** - Correct location
+5. **Update imports** - Export from `services/__init__.py`
+6. **Update registration** - Register in `GraphBuilder` or startup
+
+---
+
 **For More Information:**
 - **ADR-MCP-003**: [External MCP Container Integration](ADR/ADR-MCP-003-External-MCP-Container-Integration.md)
 - **ADR-CORE-014**: [Async Graph Execution Migration](ADR/ADR-CORE-014-Async-Graph-Execution-Migration.md)
