@@ -1,0 +1,5 @@
+# Screenshots are local test assets - add specific ones with git add -f
+*.png
+*.jpg
+*.jpeg
+!.gitkeep
