@@ -12,11 +12,26 @@
 # You can also include a `parameters` section for model-specific sampling settings.
 #
 # DISTRIBUTED INFERENCE (Multi-GPU Box Setup):
-# Define physical machines in .env: LMSTUDIO_SERVERS="rtx3090=http://...,rtx8000=http://..."
-# Reference by name here: server: "rtx3090"
-# If no server specified, falls back to LMSTUDIO_BASE_URL
+# Define physical machines in .env (Tier 1), reference by name here (Tier 3).
+#
+# In .env: LMSTUDIO_SERVERS="rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1"
+#
+# Then reference by physical machine name:
+#   lmstudio_router:
+#     type: "lmstudio"
+#     server: "rtx3090"  # → fast GPU for routing
+#     api_identifier: "gpt-oss-20b"
+#   lmstudio_specialist:
+#     type: "lmstudio"
+#     server: "rtx8000"  # → bigger GPU for specialists
+#     api_identifier: "qwen3-30b"
+#
+# If no `server` is specified, falls back to LMSTUDIO_BASE_URL env var.
 #
 llm_providers:
+  # ===========================================================================
+  # CLOUD PROVIDERS
+  # ===========================================================================
   # For cloud providers, this is the API model name.
   gemini_flash:
     type: "gemini"
@@ -25,26 +40,72 @@ llm_providers:
     type: "gemini"
     api_identifier: "gemini-2.5-pro"
 
+  # Gemini Web UI adapter for distillation (thinking extraction)
+  # NOTE: Requires valid session cookies for authentication
+  # See docs/ADR/ADR-DISTILL-006_GeminiWebUI_Adapter.md for setup
+  # gemini_webui_thinking:
+  #   type: "gemini_webui"
+  #   session_cookies: "./config/gemini_cookies.json"  # Path to saved session cookies
+  #   rate_limit_delay: 20.0  # Conservative delay for web UI (20s ±20%)
+
+  # ===========================================================================
+  # LOCAL PROVIDERS (LM Studio)
+  # ===========================================================================
   # For local providers (like LM Studio), this is typically the model file path/name
   # that the server is loading. Include parameters for model-specific sampling.
+
+  # Router model - fast, lightweight, good at classification
   lmstudio_router:
     type: "lmstudio"
+    # server: "rtx3090"  # Uncomment for distributed inference
     api_identifier: "gpt-oss-20b"   # Tested to be excellent router when prompted well
     parameters:
       temperature: 0.7
       top_p: 0.8      # Nucleus sampling - important for MoE models
       top_k: 64       # Top-k sampling - model-specific tuning
+
+  # Specialist model - larger, more capable
   lmstudio_specialist:
     type: "lmstudio"
+    # server: "rtx8000"  # Uncomment for distributed inference
     api_identifier: "QuantFactory/Meta-Llama-3-8B-Instruct-GGUF/meta-llama-3-8b-instruct.Q8_0.gguf"
     parameters:
       temperature: 0.7
       top_p: 0.9
 
-  # OLLAMA SUPPORT - Use https://github.com/shanevcantwell/ollama-shim
+  # ===========================================================================
+  # VISION MODELS (LM Studio)
+  # ===========================================================================
+  # Vision models for multimodal tasks (image understanding)
+
+  lmstudio_vision:
+    type: "lmstudio"
+    # server: "rtx8000"  # Larger VRAM typically needed for vision models
+    api_identifier: "lfm2-vl-1.6b"
+    # parameters:
+    #   top_p: 0.8
+    #   temperature: 0.8
+
+  # Fara-7B - Visual UI verification for computer use
+  # Used by FaraService (app/src/mcp/services/fara_service.py)
+  # See docs/MCP_GUIDE.md Section 12.0 for MCP Services documentation
+  fara_vision:
+    type: "lmstudio"
+    # server: "rtx8000"  # Vision models need good VRAM
+    api_identifier: "fara-7b"
+    # Native resolutions for vision model (model's training resolution)
+    # Images are scaled to these before inference, coordinates scaled back after
+    native_resolutions:
+      square: [1024, 1024]      # For 1:1 aspect ratio images
+      landscape: [1428, 896]   # For wide images (16:9, etc.)
+      portrait: [896, 1428]    # For tall images (9:16, etc.)
+
+  # ===========================================================================
+  # OLLAMA SUPPORT (Not Yet Implemented)
+  # ===========================================================================
+  # Use https://github.com/shanevcantwell/ollama-shim
   # The Ollama adapter is planned but not currently available.
   # See app/src/llm/factory.py line 17 for implementation status.
-  # Uncomment the section below once Ollama support is added:
   # ollama_local:
   #   type: "ollama"
   #   api_identifier: "llama3:8b"
@@ -70,8 +131,10 @@ specialist_model_bindings:
   summarizer_specialist: "lmstudio_specialist"
 
   # --- Hybrid Specialist Bindings ---
+  # The Open Interpreter specialist is hybrid, requiring an LLM for planning.
   # The End Specialist is hybrid, using an LLM for response synthesis.
-  # You MUST bind it to an LLM provider here for it to work.
+  # You MUST bind them to an LLM provider here for them to work.
+  # open_interpreter_specialist: "lmstudio_router"
   # end_specialist: "gemini_flash"  # Uncomment if you want LLM synthesis
 
   # --- Tiered Chat Subgraph Bindings (CORE-CHAT-002) ---
@@ -126,22 +189,72 @@ specialist_model_bindings:
   # progenitor_alpha_specialist: "gemini_flash"  # Speed-optimized
   # progenitor_bravo_specialist: "gemini_pro"    # Quality-optimized
 
+  # Note: tiered_synthesizer_specialist is procedural and doesn't need a model binding
+  # It simply formats the progenitor responses into tiered markdown output.
+
+  # --- Distillation Subgraph Bindings ---
+  # ===========================================================================
+  # DISTILLATION MODEL ASSIGNMENT STRATEGY (Multi-Model - Q3=B)
+  # ===========================================================================
+  # The distillation workflow uses DIFFERENT models for expansion vs. collection:
+  #
+  # EXPANSION (Prompt Variation Generation):
+  # - Use cheaper/faster models (Gemini Flash, GPT-3.5)
+  # - Task: Generate 3 variations of a seed prompt
+  # - Cost optimization: ~240 prompts generated per full run
+  # - Recommended: gemini_flash (fast, cheap, good quality)
+  #
+  # COLLECTION (Teacher Model Responses):
+  # - Use premium model with thinking capability
+  # - Task: Generate high-quality training responses
+  # - Thinking extraction: Web UI adapter required (ADR-DISTILL-006)
+  # - Recommended: gemini_webui_thinking (captures reasoning chains)
+  # - NOTE: Requires session cookies (see gemini_webui_thinking provider config)
+  #
+  # COORDINATOR & AGGREGATOR:
+  # - Procedural specialists (no model binding needed)
+  # ===========================================================================
+
+  # distillation_prompt_expander_specialist: "gemini_flash"  # Cheap model for variations
+  # distillation_response_collector_specialist: "gemini_webui_thinking"  # Premium + thinking
+  # NOTE: Disabled until Docker image is rebuilt with Playwright (Dockerfile already fixed)
+
+  # Note: coordinator and aggregator are procedural (no model binding needed)
+
+
 # --- 3. Set the Default ---
 # The default LLM configuration to use for any specialist that is not
 # explicitly bound above. This must match a key from the providers defined above.
 default_llm_config: "lmstudio_specialist"
 
-# --- 4. Checkpointing (ADR-CORE-018: Human-in-the-Loop) ---
-# Enables state persistence for interrupt/resume workflows.
-# When DialogueSpecialist needs user clarification, the graph state is saved.
+
+# --- 4. UI Module ---
+# Choose which UI module to load at startup.
+# Available modules are in app/src/interface/gradio_*.py
+ui_module: "gradio_app"       # Standard clean UI (default)
+# ui_module: "gradio_vegas"   # Retro sci-fi terminal UI (V.E.G.A.S.)
+# ui_module: "gradio_lassi"   # Mango yogurt drink themed UI
+
+
+# --- 5. Checkpointing Configuration (ADR-CORE-018) ---
+# ===========================================================================
+# HUMAN-IN-THE-LOOP CHECKPOINTING
+# ===========================================================================
+# Enables graph state persistence for interrupt/resume workflows.
+# Required for DialogueSpecialist to pause graph execution while waiting
+# for user clarification, then resume from the same state.
+#
+# BACKEND OPTIONS:
+# - sqlite: Local development, single-process (low complexity)
+# - postgres: Production, multi-container, pgvector support (future: Codex)
+#
+# NOTE: Upgrade to PostgreSQL when:
+# - Multi-process/multi-container access needed
+# - pgvector embeddings actively used (The Codex)
+# - Production deployment requires connection pooling
+# ===========================================================================
 checkpointing:
   enabled: true
   backend: "sqlite"  # "sqlite" for dev, "postgres" for production
   sqlite_path: "./data/checkpoints.db"
   # postgres_url: "${DATABASE_URL}"  # Uncomment for production
-
-# --- 5. UI Module ---
-# Standard clean UI (default)
-ui_module: "gradio_app"     # most basic sample UI
-# ui_module: "gradio_vegas"   # retro scifi terminal UI
-# ui_module: "gradio_lassi"   # mango yogurt drink UI
