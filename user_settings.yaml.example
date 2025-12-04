@@ -127,7 +127,8 @@ specialist_model_bindings:
   triage_architect: "lmstudio_router"
 
   # --- Research & Context Gathering ---
-  researcher_specialist: "lmstudio_specialist"
+  # Note: Web research is handled by the Context Engineering flow (TriageArchitect → Facilitator → WebSpecialist)
+  # WebSpecialist is MCP-only (not routable) - no model binding needed
   summarizer_specialist: "lmstudio_specialist"
 
   # --- Hybrid Specialist Bindings ---

@@ -210,6 +210,77 @@ class TestSearchFailureRecognition:
         assert results[0]["title"] == "No Results"
         assert "No results found" in results[0]["snippet"]
 
+    def test_duckduckgo_rate_limit_retries_with_backoff(self):
+        """
+        Verify DuckDuckGoSearchStrategy retries on rate limit with exponential backoff.
+
+        When DuckDuckGo rate limits us, the strategy should:
+        1. Retry up to MAX_RETRIES times
+        2. Wait with exponential backoff between attempts
+        3. Return "Rate Limited" marker if all retries fail
+        """
+        from app.src.strategies.search.base import SearchRequest
+
+        strategy = DuckDuckGoSearchStrategy()
+
+        # Mock to simulate rate limiting
+        with patch('duckduckgo_search.DDGS') as mock_ddgs, \
+             patch('duckduckgo_search.exceptions.RatelimitException', Exception), \
+             patch.object(strategy, 'INITIAL_BACKOFF_SECONDS', 0.01), \
+             patch.object(strategy, 'MAX_RETRIES', 2):
+
+            # Import actual exception after patching DDGS
+            from duckduckgo_search.exceptions import RatelimitException
+
+            mock_ddgs_instance = MagicMock()
+            mock_ddgs_instance.__enter__ = MagicMock(return_value=mock_ddgs_instance)
+            mock_ddgs_instance.__exit__ = MagicMock(return_value=False)
+            mock_ddgs_instance.text.side_effect = RatelimitException("202 Ratelimit")
+            mock_ddgs.return_value = mock_ddgs_instance
+
+            request = SearchRequest(query="test query")
+
+            # Act
+            results = strategy.execute(request)
+
+        # Assert: Should return rate limited marker after retries exhausted
+        assert len(results) == 1
+        assert results[0]["title"] == "Rate Limited"
+        assert "rate limited" in results[0]["snippet"].lower()
+
+    def test_duckduckgo_rate_limit_succeeds_on_retry(self):
+        """
+        Verify DuckDuckGoSearchStrategy succeeds if retry works.
+        """
+        from app.src.strategies.search.base import SearchRequest
+        from duckduckgo_search.exceptions import RatelimitException
+
+        strategy = DuckDuckGoSearchStrategy()
+
+        with patch('duckduckgo_search.DDGS') as mock_ddgs, \
+             patch.object(strategy, 'INITIAL_BACKOFF_SECONDS', 0.01):
+
+            mock_ddgs_instance = MagicMock()
+            mock_ddgs_instance.__enter__ = MagicMock(return_value=mock_ddgs_instance)
+            mock_ddgs_instance.__exit__ = MagicMock(return_value=False)
+
+            # First call fails with rate limit, second succeeds
+            mock_ddgs_instance.text.side_effect = [
+                RatelimitException("202 Ratelimit"),
+                [{"title": "Success", "href": "http://example.com", "body": "Found it"}]
+            ]
+            mock_ddgs.return_value = mock_ddgs_instance
+
+            request = SearchRequest(query="test query")
+
+            # Act
+            results = strategy.execute(request)
+
+        # Assert: Should succeed on retry
+        assert len(results) == 1
+        assert results[0]["title"] == "Success"
+        assert results[0]["url"] == "http://example.com"
+
 
 # --- BUG-RESEARCH-003: WebSpecialist Graph Node Invocation ---
 
