@@ -20,6 +20,7 @@ The root of the project contains configuration, dependency management, and high-
 -   `runverify.sh`: Script to run end-to-end tests.
 -   `ui.sh`: Script to run the Gradio UI.
 -   `.gitignore`: Specifies files and directories to be ignored by Git.
+-   `TECHNICAL_DEBT.md`: Tracks known issues, workarounds, and planned refactoring tasks.
 
 ## `app/`
 
@@ -98,6 +99,12 @@ This is the main Python package for the application.
     A Python package containing all Pydantic models that define the data contracts for specialist inputs and outputs.
 
     -   `__init__.py`: Exposes all schemas for clean, unified imports.
+
+    ### `app/src/utils/`
+
+    General utility modules used across the application.
+
+    -   `manifest_manager.py`: Implements "The Heap" - a structured context management system for merging, deduplicating, and retrieving context items (files, research, etc.) across specialist turns.
     -   `_archiver.py`: Schema for archiver specialist.
     -   `_base.py`: Defines the `SpecialistOutput` envelope and other base schema components.
     -   `_critique.py`: Schema for critique specialist.

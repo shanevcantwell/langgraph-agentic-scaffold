@@ -46,6 +46,18 @@ This guide serves as the central hub for all developer documentation. The docume
 
 ## Quick Reference
 
+### Running Tests (CRITICAL)
+
+**ALWAYS run tests inside Docker.** Local execution is not supported for integration tests.
+
+```bash
+# Run all tests
+docker compose run --rm app pytest
+
+# Run specific test file
+docker compose run --rm app pytest app/tests/integration/test_api_streaming_integration.py
+```
+
 ### Common Tasks
 
 *   **Add a new LLM provider:** Edit `user_settings.yaml`

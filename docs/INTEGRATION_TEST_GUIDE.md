@@ -1,5 +1,15 @@
 # How to Write Integration Tests
 
+> **CRITICAL: ALWAYS RUN TESTS IN DOCKER**
+>
+> Integration tests **MUST** be run inside the Docker container. Running them locally will fail due to environment mismatches, network configuration issues, and missing dependencies.
+>
+> **Correct Command:**
+> ```bash
+> docker compose run --rm app pytest app/tests/integration/
+> ```
+> **NEVER** run `pytest` directly in your local shell for integration tests.
+
 This guide provides a step-by-step walkthrough for writing integration tests for the langgraph-agentic-scaffold. It is intended for developers who want to add comprehensive test coverage beyond unit tests.
 
 ## Introduction: What Are Integration Tests?

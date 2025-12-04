@@ -49,6 +49,14 @@ The system's configuration is a three-tiered hierarchy. Understanding this model
         type: "gemini"
         api_identifier: "gemini-1.5-flash-latest"
 
+3.  **User configures Checkpointing (Optional):**
+    ```yaml
+    # user_settings.yaml
+    checkpointing:
+      enabled: false # Default: false. Set to true only for RECESS architecture.
+    ```
+    *   **Note:** Checkpointing is currently **disabled by default** (`false`) to prevent conflicts with asynchronous streaming endpoints. Enable only if you are working on the RECESS architecture and understand the `SqliteSaver` limitations.
+
     specialist_model_bindings:
       router_specialist: "my_strong_model"
     ```

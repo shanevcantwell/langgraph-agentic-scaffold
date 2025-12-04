@@ -64,7 +64,19 @@ def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
 - Artifacts provide structured cross-specialist contracts
 - Clear boundaries prevent specialist-specific fields from polluting root state
 
-## 2.2 Triage Recommendations Flow
+## 2.2 The Heap (Manifest Manager)
+
+"The Heap" is the system's structured context management layer, implemented via the `ManifestManager`. It solves the problem of context fragmentation by providing a unified interface for merging, deduplicating, and retrieving context from multiple sources.
+
+*   **Purpose:** To maintain a coherent view of the "world state" across multiple specialist turns.
+*   **Mechanism:**
+    *   **Merging:** Intelligently combines new context with existing context, resolving conflicts.
+    *   **Deduplication:** Prevents redundant information from cluttering the context window.
+    *   **Manifest:** A structured record of all active context items.
+
+The `ManifestManager` is used by specialists (e.g., `DialogueSpecialist`) to process incoming information before it is presented to the LLM or stored in artifacts.
+
+## 2.3 Triage Recommendations Flow
 
 The system implements an **advisory routing guidance pattern** where the `TriageArchitect` specialist analyzes the user's request and recommends appropriate specialists to handle the task after context gathering completes.
 
