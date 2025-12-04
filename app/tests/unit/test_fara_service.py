@@ -659,3 +659,202 @@ class TestResolutionScaling:
         native = DEFAULT_NATIVE_RESOLUTIONS["landscape"]
         assert sent_w == native[0]
         assert sent_h == native[1]
+
+
+# =============================================================================
+# Tool Call Parsing Tests (Fara-7B Native Format)
+# =============================================================================
+
+class TestToolCallParsing:
+    """Tests for parsing Fara-7B's native <tool_call> output format."""
+
+    def test_extract_json_from_tool_call_tags(self, mock_llm_adapter):
+        """Test extraction of JSON from <tool_call> tags."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        text = '''I'll click the EXECUTE button to run the command.
+<tool_call>
+{"name": "computer", "arguments": {"action": "left_click", "coordinate": [624, 280]}}
+</tool_call>'''
+
+        result = fara._extract_json(text)
+
+        assert result["found"] is True
+        assert result["x"] == 624
+        assert result["y"] == 280
+        assert result["action"] == "left_click"
+
+    def test_extract_json_tool_call_single_line(self, mock_llm_adapter):
+        """Test extraction from single-line tool_call."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        text = '<tool_call>{"name": "computer", "arguments": {"action": "left_click", "coordinate": [100, 200]}}</tool_call>'
+
+        result = fara._extract_json(text)
+
+        assert result["found"] is True
+        assert result["x"] == 100
+        assert result["y"] == 200
+
+    def test_normalize_tool_call_computer_click(self, mock_llm_adapter):
+        """Test normalization of computer tool click action."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        tool_json = {
+            "name": "computer",
+            "arguments": {
+                "action": "left_click",
+                "coordinate": [500, 300]
+            }
+        }
+
+        result = fara._normalize_tool_call(tool_json)
+
+        assert result["found"] is True
+        assert result["x"] == 500
+        assert result["y"] == 300
+        assert result["action"] == "left_click"
+        assert result["confidence"] == 1.0
+
+    def test_normalize_tool_call_computer_right_click(self, mock_llm_adapter):
+        """Test normalization of right-click action."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        tool_json = {
+            "name": "computer",
+            "arguments": {
+                "action": "right_click",
+                "coordinate": [250, 150]
+            }
+        }
+
+        result = fara._normalize_tool_call(tool_json)
+
+        assert result["found"] is True
+        assert result["x"] == 250
+        assert result["y"] == 150
+        assert result["action"] == "right_click"
+
+    def test_normalize_tool_call_serpico_terminate(self, mock_llm_adapter):
+        """Test normalization of serpico terminate action."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        tool_json = {
+            "name": "serpico",
+            "arguments": {"action": "terminate"}
+        }
+
+        result = fara._normalize_tool_call(tool_json)
+
+        assert result["found"] is False
+        assert result["action"] == "terminate"
+
+    def test_normalize_tool_call_serpico_with_coordinates(self, mock_llm_adapter):
+        """Test normalization of serpico with found + x coordinate array."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        # Fara sometimes returns coordinates via serpico:
+        # {"name": "serpico", "arguments": {"found": true, "x": [614, 280]}}
+        tool_json = {
+            "name": "serpico",
+            "arguments": {"found": True, "x": [614, 280]}
+        }
+
+        result = fara._normalize_tool_call(tool_json)
+
+        assert result["found"] is True
+        assert result["x"] == 614
+        assert result["y"] == 280
+        assert result["confidence"] == 1.0
+
+    def test_normalize_tool_call_computer_no_coordinates(self, mock_llm_adapter):
+        """Test normalization of computer action without coordinates."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        tool_json = {
+            "name": "computer",
+            "arguments": {"action": "screenshot"}
+        }
+
+        result = fara._normalize_tool_call(tool_json)
+
+        assert result["found"] is True
+        assert result["action"] == "screenshot"
+        assert "x" not in result
+        assert "y" not in result
+
+    def test_normalize_tool_call_unknown_tool(self, mock_llm_adapter):
+        """Test normalization of unknown tool returns None."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        tool_json = {
+            "name": "unknown_tool",
+            "arguments": {"foo": "bar"}
+        }
+
+        result = fara._normalize_tool_call(tool_json)
+
+        assert result is None
+
+    def test_extract_json_prefers_tool_call_over_raw_json(self, mock_llm_adapter):
+        """Test that <tool_call> format is preferred over raw JSON."""
+        fara = FaraService(llm_adapter=mock_llm_adapter)
+
+        # Text with both formats - tool_call should win
+        text = '''{"found": false}
+<tool_call>
+{"name": "computer", "arguments": {"action": "left_click", "coordinate": [100, 100]}}
+</tool_call>'''
+
+        result = fara._extract_json(text)
+
+        # Should extract from tool_call, not the raw JSON
+        assert result["found"] is True
+        assert result["x"] == 100
+        assert result["y"] == 100
+
+    def test_locate_handles_tool_call_format(
+        self, mock_llm_adapter, small_test_image
+    ):
+        """Test that locate() handles Fara's native tool_call format end-to-end."""
+        fara = FaraService(
+            llm_adapter=mock_llm_adapter,
+            default_screenshot=small_test_image
+        )
+
+        # Fara returns tool_call format (coordinates in native space)
+        mock_llm_adapter.invoke.return_value = {
+            "text_response": '''<tool_call>
+{"name": "computer", "arguments": {"action": "left_click", "coordinate": [512, 512]}}
+</tool_call>'''
+        }
+
+        result = fara.locate("Execute button", screenshot=small_test_image)
+
+        assert result["found"] is True
+        # Coordinates scaled from 1024x1024 native to 100x100 original
+        expected_x = int(512 * (100 / 1024))
+        expected_y = int(512 * (100 / 1024))
+        assert result["x"] == expected_x
+        assert result["y"] == expected_y
+
+    def test_verify_handles_serpico_terminate(
+        self, mock_llm_adapter, small_test_image
+    ):
+        """Test that verify() handles serpico terminate as 'not found'."""
+        fara = FaraService(
+            llm_adapter=mock_llm_adapter,
+            default_screenshot=small_test_image
+        )
+
+        # Fara returns serpico terminate when it can't find element
+        mock_llm_adapter.invoke.return_value = {
+            "text_response": '''I cannot find that element.
+<tool_call>
+{"name": "serpico", "arguments": {"action": "terminate"}}
+</tool_call>'''
+        }
+
+        result = fara.verify("Missing element", screenshot=small_test_image)
+
+        assert result["exists"] is False

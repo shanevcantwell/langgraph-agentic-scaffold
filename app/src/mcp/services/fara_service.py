@@ -559,10 +559,37 @@ class FaraService:
         """
         Extract JSON from model response text.
 
-        Handles cases where model wraps JSON in markdown or adds explanation.
+        Handles multiple formats Fara-7B might return:
+        1. <tool_call> XML tags (native Fara format for computer use)
+        2. Markdown code blocks
+        3. Raw JSON
+
+        Fara's native format:
+            <tool_call>
+            {"name": "computer", "arguments": {"action": "left_click", "coordinate": [624, 280]}}
+            </tool_call>
+
+        This gets normalized to our standard format:
+            {"found": true, "x": 624, "y": 280}
         """
         import json
         import re
+
+        # Try <tool_call> XML tags (Fara-7B native format)
+        tool_call_match = re.search(
+            r"<tool_call>\s*({.*?})\s*</tool_call>",
+            text,
+            re.DOTALL
+        )
+        if tool_call_match:
+            try:
+                tool_json = json.loads(tool_call_match.group(1))
+                # Convert Fara's tool_call format to our standard format
+                result = self._normalize_tool_call(tool_json)
+                if result:
+                    return result
+            except json.JSONDecodeError:
+                pass
 
         # Try markdown code block
         match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
@@ -584,3 +611,63 @@ class FaraService:
         # Fallback: return not found
         logger.warning(f"FaraService._extract_json: Could not parse: {text[:200]}")
         return {"found": False, "error": "Could not parse model response"}
+
+    def _normalize_tool_call(self, tool_json: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Normalize Fara's tool_call format to our standard response format.
+
+        Fara returns tool calls in various formats:
+            {"name": "computer", "arguments": {"action": "left_click", "coordinate": [624, 280]}}
+            {"name": "serpico", "arguments": {"found": true, "x": [614, 280]}}
+            {"name": "serpico", "arguments": {"action": "terminate"}}
+
+        We normalize to:
+            {"found": True, "x": 624, "y": 280, "action": "left_click"}
+        """
+        name = tool_json.get("name", "")
+        args = tool_json.get("arguments", {})
+
+        if name == "computer":
+            action = args.get("action", "")
+            coordinate = args.get("coordinate", [])
+
+            if coordinate and len(coordinate) >= 2:
+                return {
+                    "found": True,
+                    "x": coordinate[0],
+                    "y": coordinate[1],
+                    "action": action,
+                    "confidence": 1.0  # Fara doesn't return confidence with tool_call
+                }
+            else:
+                # Computer action without coordinates (e.g., screenshot, scroll)
+                return {
+                    "found": True,
+                    "action": action
+                }
+
+        elif name == "serpico":
+            # Serpico can be used for:
+            # 1. Termination: {"action": "terminate"}
+            # 2. Location results: {"found": true, "x": [614, 280]}
+            action = args.get("action", "")
+            if action == "terminate":
+                return {"found": False, "action": "terminate"}
+
+            # Check for coordinate response (found + x array)
+            found = args.get("found", False)
+            x_coord = args.get("x", [])
+            if found and x_coord and len(x_coord) >= 2:
+                return {
+                    "found": True,
+                    "x": x_coord[0],
+                    "y": x_coord[1],
+                    "confidence": 1.0
+                }
+
+            # Fallback for other serpico actions
+            return {"found": found, "action": action}
+
+        # Unknown tool - try to extract what we can
+        logger.warning(f"FaraService: Unknown tool_call name: {name}")
+        return None
