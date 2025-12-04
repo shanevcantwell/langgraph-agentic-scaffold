@@ -76,7 +76,15 @@ def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
 
 The `ManifestManager` is used by specialists (e.g., `DialogueSpecialist`) to process incoming information before it is presented to the LLM or stored in artifacts.
 
-## 2.3 Triage Recommendations Flow
+## 2.3 Convening of the Tribes (Orchestration)
+
+The "Convening of the Tribes" (ADR-CORE-023) is the system's advanced orchestration layer, designed to manage multi-model collaboration and persistent state.
+
+*   **TribeConductor (The CPU):** The central node that manages the execution cycle. It handles context switching (loading/saving branches), coordinates synchronous debates (Fishbowl), and triggers synthesis events.
+*   **AgentRouter (The Dispatcher):** Maps abstract `AgentAffinity` (e.g., `ARCHITECTURE`, `IMPLEMENTATION`) to concrete specialist IDs. This allows the system to be model-agnostic.
+*   **SemanticFirewall (The Filter):** A security and hygiene layer that sits between the Heap (Disk) and the Stack (Context Window). It sanitizes inputs to prevent injection attacks and sanitizes outputs to prevent "slop" from polluting the permanent record.
+
+## 2.4 Triage Recommendations Flow
 
 The system implements an **advisory routing guidance pattern** where the `TriageArchitect` specialist analyzes the user's request and recommends appropriate specialists to handle the task after context gathering completes.
 

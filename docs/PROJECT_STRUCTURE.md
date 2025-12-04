@@ -45,8 +45,9 @@ This is the main Python package for the application.
     -   `base.py`: Defines the `BaseSpecialist` abstract base class that all specialists must inherit from. Includes `_get_enriched_messages()` helper for context injection.
     -   `helpers.py`: Provides helper functions to reduce boilerplate in specialists, such as creating standardized "self-correction" responses.
 
-    **Workflow & Orchestration** (6 specialists):
+    **Workflow & Orchestration** (7 specialists):
     -   `router_specialist.py`: The master router and planner. Decides which specialist to route to next.
+    -   `tribe_conductor.py`: The "CPU" of the Convening architecture. Orchestrates execution cycles, context switching, and synthesis.
     -   `triage_architect.py`: Pre-flight context engineering. Creates plans for gathering context before routing (ContextPlan with LIST_DIRECTORY, READ_FILE, RESEARCH actions).
     -   `facilitator_specialist.py`: Executes context-gathering plans from Triage (LIST_DIRECTORY, READ_FILE, RESEARCH actions).
     -   `prompt_triage_specialist.py`: Pre-flight prompt checks (deprecated/replaced by triage_architect).
@@ -93,6 +94,13 @@ This is the main Python package for the application.
 
     **System Utilities** (1 specialist):
     -   `archiver_specialist.py`: Archives workflow completion reports to `./logs/archive/*.md` with state snapshots.
+
+    ### `app/src/convening/`
+
+    Components for the "Convening of the Tribes" orchestration layer (ADR-CORE-023).
+
+    -   `agent_router.py`: Maps abstract `AgentAffinity` (from Manifest) to concrete specialist IDs.
+    -   `semantic_firewall.py`: Security and hygiene layer between The Heap (Disk) and The Stack (Context Window).
 
     ### `app/src/specialists/schemas/`
 
