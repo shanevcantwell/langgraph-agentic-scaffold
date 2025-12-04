@@ -40,6 +40,7 @@ dependencies = [
     "pip-tools",
     "duckduckgo-search", # For Researcher Specialist default search
     "tiktoken", # For token counting and context pruning
+    "pillow",  # Image manipulation for vision model scaling (FaraService, ImageSpecialist)
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 
@@ -73,6 +74,8 @@ pythonpath = [
 markers = [
     "live_llm: marks tests that require a live LLM connection and API keys",
     "integration: marks integration tests that test full workflow paths",
-    "archive: marks tests that validate archive/log output from completed workflows"
+    "archive: marks tests that validate archive/log output from completed workflows",
+    "esm: marks tests for Emergent State Machine (ESM) scenarios requiring state tracking",
+    "fara: marks tests for Fara-7B visual UI verification"
 ]
 asyncio_mode = "auto" # Recommended for pytest-asyncio to handle async tests automatically
