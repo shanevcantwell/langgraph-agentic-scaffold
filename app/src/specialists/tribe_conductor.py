@@ -75,16 +75,56 @@ class TribeConductor(BaseSpecialist):
 
         # --- 3. Branch Assessment & Routing ---
         if not active_branch_id:
-            # No active branch -> Triage / Root
-            # For now, we default to creating a root branch or routing to Triage
-            # This logic will be expanded.
-            logger.info("TribeConductor: No active branch, routing to Triage/Default")
-            return {
-                "scratchpad": {
-                    "next_specialist": "triage_architect", # Or router_specialist
-                    "routing_reason": "No active branch"
+            artifacts = state.get("artifacts", {})
+            
+            # Case A: Context Gathered -> Create Branch
+            if "gathered_context" in artifacts:
+                # We have context, time to start work.
+                # Create a default branch.
+                branch_id = "main"
+                
+                # Ensure manifest exists
+                if not manager.manifest:
+                    manager.create_project("p1", "Emergent Project", "trunk.md")
+                
+                # Create branch if missing
+                if branch_id not in manager.manifest.branches:
+                    manager.add_branch(
+                        branch_id=branch_id,
+                        title="Main Branch",
+                        filepath="branches/main.md",
+                        context_snippet=artifacts["gathered_context"][:500],
+                        affinity=AgentAffinity.DEFAULT
+                    )
+                
+                logger.info(f"TribeConductor: Created/Selected active branch '{branch_id}'")
+                return {
+                    "active_branch_id": branch_id,
+                    "scratchpad": {
+                        "next_specialist": self.agent_router.route(AgentAffinity.DEFAULT),
+                        "routing_reason": "Context gathered, starting main branch"
+                    }
                 }
-            }
+
+            # Case B: Plan Exists -> Execute Plan
+            elif "context_plan" in artifacts:
+                logger.info("TribeConductor: Context plan found, routing to Facilitator")
+                return {
+                    "scratchpad": {
+                        "next_specialist": "facilitator_specialist",
+                        "routing_reason": "Executing context plan"
+                    }
+                }
+
+            # Case C: Start -> Triage
+            else:
+                logger.info("TribeConductor: No active branch or context, routing to Triage")
+                return {
+                    "scratchpad": {
+                        "next_specialist": "triage_architect",
+                        "routing_reason": "Initial triage"
+                    }
+                }
 
         # Load branch metadata
         try:

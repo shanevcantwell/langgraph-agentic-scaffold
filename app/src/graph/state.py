@@ -145,3 +145,10 @@ class GraphState(TypedDict):
     # Uses operator.ior reducer to merge dictionary updates from specialists.
     # See ADR-DISTILL-002 for complete state management patterns.
     distillation_state: Annotated[Optional[DistillationState], operator.ior]
+
+    # --- Convening Architecture State (ADR-CORE-023) ---
+    manifest_path: Optional[str]
+    active_branch_id: Optional[str]
+    fishbowl_active: Optional[bool]
+    synthesis_pending: Optional[bool]
+    hitl_required: Optional[bool]

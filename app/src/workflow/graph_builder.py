@@ -19,6 +19,7 @@ from .subgraphs.distillation import DistillationSubgraph
 from .subgraphs.context_engineering import ContextEngineeringSubgraph
 from .subgraphs.critic_loop import CriticLoopSubgraph
 from .subgraphs.emergent_project import EmergentProjectSubgraph
+from ..specialists.tribe_conductor import TribeConductor
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,12 @@ class GraphBuilder:
             checkpointer: Optional LangGraph checkpointer for HitL interrupt/resume
                           (ADR-CORE-018). Pass SqliteSaver or PostgresSaver instance.
         """
+        # Feature Flag: Check for Convening Architecture
+        architecture = self.config.get("architecture", "default")
+        if architecture == "convening":
+            logger.info("---GraphBuilder: Building 'Convening of the Tribes' architecture---")
+            return self._build_convening_graph(streaming_callback, checkpointer)
+
         workflow = StateGraph(GraphState)
         self._add_nodes_to_graph(workflow, streaming_callback)
         self._wire_hub_and_spoke_edges(workflow)
@@ -468,3 +475,84 @@ class GraphBuilder:
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)
             logger.info(f"Graph Edge: Added final edge from {CoreSpecialist.END.value} to END.")
+
+    def _build_convening_graph(self, streaming_callback, checkpointer) -> StateGraph:
+        """
+        Builds the 'Convening of the Tribes' graph (ADR-CORE-023).
+        """
+        workflow = StateGraph(GraphState)
+        
+        # 1. Add TribeConductor
+        conductor_name = CoreSpecialist.TRIBE_CONDUCTOR.value
+        if conductor_name in self.specialists:
+            conductor = self.specialists[conductor_name]
+        else:
+            # Instantiate manually if not in config
+            conductor = TribeConductor(conductor_name, self.config)
+            
+        workflow.add_node(conductor_name, conductor.execute)
+        
+        # 2. Add other specialists (Spokes)
+        # We add all available specialists as nodes, except the old router
+        for name, specialist in self.specialists.items():
+            if name == CoreSpecialist.ROUTER.value: continue 
+            if name == conductor_name: continue
+            workflow.add_node(name, specialist.execute)
+            
+        # 3. Set Entry Point
+        workflow.set_entry_point(conductor_name)
+        
+        # 4. Wire Edges
+        # Conductor -> Specialists
+        # We use the AgentRouter logic to determine destinations.
+        router_mapping = conductor.agent_router.mapping
+        destinations = list(router_mapping.values())
+        
+        # Also add special destinations
+        destinations.extend([
+            CoreSpecialist.TRIAGE_ARCHITECT.value, 
+            CoreSpecialist.DIALOGUE.value, 
+            CoreSpecialist.END.value
+        ])
+        
+        # Filter destinations to only those that exist in the graph
+        valid_destinations = {}
+        for d in destinations:
+            if d in self.specialists:
+                valid_destinations[d] = d
+            elif d == CoreSpecialist.END.value:
+                valid_destinations[d] = END
+        
+        # Add explicit "end" key for fallback
+        valid_destinations["end"] = END
+        
+        def route_from_conductor(state: GraphState):
+            scratchpad = state.get("scratchpad", {})
+            next_node = scratchpad.get("next_specialist")
+            if next_node and next_node in valid_destinations:
+                return next_node
+            return "end"
+
+        workflow.add_conditional_edges(
+            conductor_name,
+            route_from_conductor,
+            valid_destinations
+        )
+        
+        # Specialists -> Conductor (Return to CPU)
+        for name in self.specialists:
+            if name == CoreSpecialist.ROUTER.value: continue
+            if name == conductor_name: continue
+            
+            # All specialists return to Conductor
+            workflow.add_edge(name, conductor_name)
+            
+        # Compile
+        if checkpointer:
+            compiled_graph = workflow.compile(checkpointer=checkpointer)
+            logger.info(f"---GraphBuilder: Convening Graph compiled with checkpointer ({type(checkpointer).__name__}).---")
+        else:
+            compiled_graph = workflow.compile()
+            logger.info(f"---GraphBuilder: Convening Graph compiled successfully.---")
+
+        return compiled_graph

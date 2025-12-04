@@ -136,3 +136,16 @@ llm_providers:
 ## 2.0 Container Naming Convention
 
 The `docker-compose.yml` file uses explicit container names (`langgraph-app` and `langgraph-proxy`). This is to prevent conflicts with other projects and to make the containers easily identifiable. It is strongly recommended not to change these names, as it can lead to unexpected behavior and orphaned containers.
+
+## 3.0 Architecture Selection
+
+The system supports multiple architectural patterns, controlled by the `architecture` flag in `user_settings.yaml`.
+
+*   **`default`**: The classic Router-centric architecture. A central Router Specialist dispatches tasks to other specialists.
+*   **`convening`**: The "Convening of the Tribes" architecture (ADR-CORE-023). A `TribeConductor` orchestrates a persistent "Heap" of context, using an `AgentRouter` for dispatch and a `SemanticFirewall` for safety.
+
+**Example:**
+```yaml
+# user_settings.yaml
+architecture: "convening" # Defaults to "default" if omitted
+```
