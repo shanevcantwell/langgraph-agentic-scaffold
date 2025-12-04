@@ -68,11 +68,7 @@ class SemanticFirewall:
         for pattern in self.slop_regex:
             if pattern.search(content):
                 logger.warning(f"SemanticFirewall: Rejected output matching slop pattern: {pattern.pattern}")
-                # In a real system, we might want to raise an error or ask for a retry.
-                # For now, we log it. We still return the content because blocking it entirely 
-                # might stall the workflow, but we flag it.
-                # TODO: Decide on strict blocking vs. tagging.
-                pass
+                return None
 
         # 2. PII/Secret Redaction (Placeholder)
         # TODO: Integrate with a PII scrubber (e.g., Microsoft Presidio) if needed.

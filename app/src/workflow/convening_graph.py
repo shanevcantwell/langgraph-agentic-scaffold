@@ -62,11 +62,13 @@ class ConveningGraphBuilder:
         workflow.set_entry_point("tribe_conductor")
 
         # Add Conditional Edges from Conductor
+        # TODO: In Stage 3 (Integration), these END targets will be replaced with actual specialist nodes.
+        # The AgentRouter returns these string IDs, which must match the node names in the final graph.
         workflow.add_conditional_edges(
             "tribe_conductor",
             self._route_from_conductor,
             {
-                "progenitor_alpha_specialist": END, # Placeholder: Should route to actual node
+                "progenitor_alpha_specialist": END, 
                 "progenitor_bravo_specialist": END,
                 "project_director": END,
                 "dialogue_specialist": END,

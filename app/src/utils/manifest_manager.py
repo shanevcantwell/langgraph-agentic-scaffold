@@ -165,6 +165,42 @@ class ManifestManager:
         self.manifest.branches[branch_id].updated_at = datetime.now(timezone.utc)
         self._save()
 
+    def write_branch_content(self, branch_id: str, content: str):
+        """
+        Atomically write content to the file associated with a branch.
+        """
+        if not self.manifest:
+            self.load()
+        
+        if branch_id not in self.manifest.branches:
+            raise KeyError(f"Branch {branch_id} not found")
+            
+        branch = self.manifest.branches[branch_id]
+        full_path = self.project_root / branch.filepath
+        
+        # Ensure directory exists
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Atomic write pattern
+        with tempfile.NamedTemporaryFile('w', dir=full_path.parent, delete=False, suffix='.tmp') as tf:
+            temp_path = Path(tf.name)
+            try:
+                tf.write(content)
+                tf.flush()
+                os.fsync(tf.fileno())
+            except Exception:
+                tf.close()
+                if temp_path.exists():
+                    os.unlink(temp_path)
+                raise
+                
+        try:
+            os.replace(temp_path, full_path)
+        except OSError:
+            if temp_path.exists():
+                os.unlink(temp_path)
+            raise
+
     def log_contribution(
         self,
         branch_id: str,

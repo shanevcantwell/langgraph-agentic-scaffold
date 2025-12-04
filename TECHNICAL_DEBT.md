@@ -11,7 +11,7 @@ The goal is to acknowledge these items without blocking progress, while ensuring
 | **Missing `tokens_consumed`** | `BranchPointer` lacks cost tracking. | No visibility into token usage per branch. | Additive change. Can be added later. |
 | **Missing `schema_version`** | `ProjectManifest` lacks versioning. | Harder to migrate schema in the future. | Additive change. Default to "1.0.0" when added. |
 | **Missing `load_or_create()`** | `ManifestManager` lacks this convenience method. | Minor inconvenience for consumers. | Additive change. Can be added later. |
-| **Hash Chain Formula** | Implementation uses `SHA256(previous_hash + content_hash)` instead of ADR specific formula (if different). | None, as long as it's consistent and tamper-evident. | Documented here. No action needed unless interoperability is required. |
+| **Hash Chain Formula** | Implementation uses `SHA256(prev_entry.previous_hash + prev_entry.content_hash)` instead of standard Merkle pattern. | Valid and tamper-evident, but non-standard. | Accepted divergence. Ensure verification logic matches this formula. |
 
 ## General
 

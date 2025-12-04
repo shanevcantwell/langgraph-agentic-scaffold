@@ -16,7 +16,7 @@ class TestConveningWiring:
     def test_semantic_firewall_slop(self):
         firewall = SemanticFirewall()
         slop = "I cannot fulfill this request because I am an AI."
-        assert firewall.sanitize_output(slop) is not None # Currently just logs, doesn't block
+        assert firewall.sanitize_output(slop) is None # Should block slop
         # If we change logic to block, this test should update.
         
     def test_semantic_firewall_truncation(self):

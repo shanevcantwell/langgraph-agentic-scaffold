@@ -32,11 +32,15 @@ class TribeConductor(BaseSpecialist):
         """
         Retrieve or initialize the ManifestManager based on state.
         """
+        # Priority: State > Config > Default
         manifest_path = state.get("manifest_path")
         if not manifest_path:
-            # Fallback to default location if not in state (e.g., for testing)
-            # In production, this should probably raise an error or come from config.
-            manifest_path = "manifest.json" 
+            manifest_path = self.specialist_config.get("manifest_path")
+        
+        if not manifest_path:
+            # Fallback to workspace default
+            manifest_path = "workspace/manifest.json"
+            logger.warning(f"TribeConductor: No manifest_path in state or config. Defaulting to {manifest_path}")
         
         if not self.manifest_manager or str(self.manifest_manager.manifest_path) != manifest_path:
             self.manifest_manager = ManifestManager(manifest_path)
@@ -167,8 +171,8 @@ class TribeConductor(BaseSpecialist):
         # 1. Write to file
         branch = manager.manifest.branches.get(branch_id)
         if branch:
-            full_path = manager.project_root / branch.filepath
-            full_path.write_text(clean_content, encoding='utf-8')
+            # Use atomic write via manager
+            manager.write_branch_content(branch_id, clean_content)
             
             # 2. Log contribution
             manager.log_contribution(
