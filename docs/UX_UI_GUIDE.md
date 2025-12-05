@@ -1,6 +1,6 @@
 # **UX/UI & API Integration Guide**
 
-# **Version: 4.0**
+# **Version: 4.1**
 
 # **Status: ACTIVE**
 
@@ -34,6 +34,53 @@ The area where the final output of the agent's work is presented.
 
 *   **Description:** A flexible component that can render different types of final products (HTML, Markdown, images, archive reports).
 *   **API Interaction:** Final artifacts are delivered in the last SSE event from `/v1/graph/stream` with keys: `final_state`, `archive`, `html`, `image`.
+
+#### **2.3.1 Artifact Display Guidelines**
+
+**Content Display Rules:**
+- **No content truncation:** Full artifact content is sent from the backend. UI handles scroll for large content.
+- **Max height with scroll:** Large artifacts should display in scrollable containers (recommended: ~20 lines visible, ~480px max-height).
+- **HTML content escaping:** All artifact content is HTML-escaped server-side to prevent layout breaking when rendered inside code blocks.
+
+**Code Block Toolbar:**
+Each artifact code block should include a sticky toolbar with the following buttons:
+- **COPY:** Copies the raw content to clipboard
+- **FULLSCREEN:** Opens content in a modal for easier reading
+- **RENDER (HTML only):** For `.html` artifacts, opens the rendered HTML in a new browser tab
+
+**HTML Detection Logic:**
+```javascript
+// Detect HTML content by filename or content pattern
+let isHtml = false;
+// Check preceding header for .html filename
+if (prevH3 && prevH3.textContent.includes('.html')) isHtml = true;
+// Check content (may be escaped)
+const content = pre.textContent.trim();
+if (content.startsWith('<!DOCTYPE') || content.startsWith('<html') ||
+    content.startsWith('&lt;!DOCTYPE') || content.startsWith('&lt;html')) {
+    isHtml = true;
+}
+```
+
+**RENDER Button Implementation:**
+```javascript
+// Unescape HTML entities before rendering
+let htmlContent = getCleanContent();
+const textarea = document.createElement('textarea');
+textarea.innerHTML = htmlContent;  // Browser decodes entities
+htmlContent = textarea.value;
+
+const blob = new Blob([htmlContent], { type: 'text/html' });
+const url = URL.createObjectURL(blob);
+window.open(url, '_blank');
+```
+
+#### **2.3.2 Archive Download Links**
+
+Archive zip files are rendered as clickable download links instead of raw file paths:
+- **Backend:** `state_pruner.py` converts `archive_package_path` artifacts to markdown links
+- **Link Format:** `[📥 Download Archive: {filename}](/v1/archives/{filename})`
+- **Endpoint:** `GET /v1/archives/{filename}` serves the file with proper headers
 
 ### **2.4 The Thought Stream (Real-time Observability)**
 
@@ -403,6 +450,18 @@ Any UI must handle these core data flows:
   - `app/web-ui/` - Node.js V.E.G.A.S. Terminal with Thought Stream
 - **State Schema:** `app/src/graph/state.py` - GraphState TypedDict definition
 
+### **3.3 `GET /v1/archives/{filename}`**
+
+*   **Description:** Serves archive zip files for download. Files are stored in `logs/archive/` directory.
+*   **Path Parameter:** `filename` - The zip file name (e.g., `archive_2024-01-15_143052.zip`)
+*   **Security:**
+    - Only `.zip` files are allowed
+    - Path traversal is prevented (no `/` or `\` in filename)
+*   **Success Response (200 OK):** `FileResponse` with `media_type="application/zip"`
+*   **Error Responses:**
+    - `400 Bad Request`: Invalid filename (not .zip or contains path separators)
+    - `404 Not Found`: Archive file does not exist
+
 ### **Testing Endpoints**
 
 ```bash
@@ -418,6 +477,9 @@ curl -X POST http://localhost:8000/v1/graph/invoke \
 curl -X POST http://localhost:8000/v1/graph/stream \
   -H "Content-Type: application/json" \
   -d '{"input_prompt": "Hello", "use_simple_chat": true}'
+
+# Download archive file
+curl -O http://localhost:8000/v1/archives/archive_2024-01-15_143052.zip
 ```
 
 ### **Common Gotchas**

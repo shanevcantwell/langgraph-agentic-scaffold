@@ -100,6 +100,14 @@ response = mcp_client.call_safe(
 3. Review similar implementations in `tests/`
 4. Only then create new code
 
+### Workspace Directory - DO NOT USE
+**NEVER look in `./workspace/` for existing code or write persistent application files there.**
+
+- `./workspace/` is the Docker container's mounted root for LAS-scoped file operations
+- It contains design docs, user data, and runtime artifacts - NOT application source code
+- Application code lives in `app/src/`, `app/tests/`, `docs/`, etc.
+- ADRs and design documents are stored in `./workspace/design-docs/`
+
 ### Statistical Anomalies
 **NEVER dismiss statistical anomalies as coincidence.**
 

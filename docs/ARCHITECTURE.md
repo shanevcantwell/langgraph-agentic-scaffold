@@ -721,10 +721,16 @@ The `ArchiverSpecialist` generates workflow completion reports in `./logs/archiv
 - Artifact inventories
 - Execution path (routing_history)
 - Performance metrics
+- Downloadable zip packages via `GET /v1/archives/{filename}` endpoint
+
+**Archive Download API:**
+- Archives are served via `GET /v1/archives/{filename}`
+- Security: Only `.zip` files allowed, path traversal prevented
+- UI displays archive paths as clickable download links
 
 **Common Debugging Workflow:**
 1. Check `./logs/agentic_server.log` for errors during startup or execution
-2. Review archive reports in `./logs/archive/` for completed workflows
+2. Review archive reports in `./logs/archive/` for completed workflows (downloadable via UI)
 3. Use LangSmith UI for visual trace inspection (retrieve specific trace URLs as needed)
 
 ## 10.0 Model-Agnostic Architecture
