@@ -41,6 +41,7 @@ dependencies = [
     "duckduckgo-search", # For Researcher Specialist default search
     "tiktoken", # For token counting and context pruning
     "pillow",  # Image manipulation for vision model scaling (FaraService, ImageSpecialist)
+    "beautifulsoup4", # For web scraping (BrowseSpecialist)
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 

@@ -56,6 +56,9 @@ class GraphBuilder:
         self.external_mcp_client = None
 
         self.specialists = self._load_and_configure_specialists()
+        
+        # Register internal MCP services (e.g. InferenceService)
+        self._register_internal_mcp_services()
 
         # TASK 1.2: Build allowed destinations for route validation
         # Include all specialists except router (which can't be a routing destination)
@@ -556,3 +559,34 @@ class GraphBuilder:
             logger.info(f"---GraphBuilder: Convening Graph compiled successfully.---")
 
         return compiled_graph
+
+    def _register_internal_mcp_services(self):
+        """
+        Registers internal MCP services that are not specialists (e.g. InferenceService).
+        """
+        try:
+            from ..mcp.services.inference_service import InferenceService
+            
+            service_name = "inference_service"
+            
+            # Check if service is already registered (e.g. by tests)
+            if hasattr(self.mcp_registry, '_services') and service_name in self.mcp_registry._services:
+                return
+
+            # Create adapter
+            # AdapterFactory looks up binding by name. Ensure 'inference_service' is bound in user_settings.yaml
+            adapter = self.adapter_factory.create_adapter(service_name, "")
+            
+            if adapter:
+                service = InferenceService(llm_adapter=adapter)
+                self.mcp_registry.register_service(service_name, service.get_mcp_functions())
+                logger.info(f"Registered internal MCP service: {service_name}")
+            else:
+                # If no adapter found (e.g. no binding), we can't register the service
+                # This is acceptable if the user hasn't configured it yet
+                logger.debug(f"Could not create adapter for {service_name}. Service not registered.")
+                
+        except ImportError:
+            logger.warning("Could not import InferenceService. Skipping registration.")
+        except Exception as e:
+            logger.error(f"Failed to register internal MCP service {service_name}: {e}")

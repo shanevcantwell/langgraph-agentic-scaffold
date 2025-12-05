@@ -378,3 +378,21 @@ specialists:
     prompt_file: "prompt_triage_prompt.md"
     description: "A specialist that performs a pre-flight check on the user's initial prompt for sentiment, coherence, and actionability."
     tags: ["planning"]
+
+  # --- Deep Research (ADR-CORE-024) ---
+  research_orchestrator:
+    type: "llm"
+    prompt_file: "research_orchestrator_prompt.md"
+    description: "Coordinates deep research investigations (Search -> Browse -> Judge -> Synthesize)."
+    tags: ["research", "orchestration"]
+
+  browse_specialist:
+    type: "procedural"
+    description: "Fetches and parses web content. A dumb tool for the research pipeline."
+    tags: ["research", "tool"]
+
+  synthesizer_specialist:
+    type: "llm"
+    prompt_file: "synthesizer_prompt.md"
+    description: "Synthesizes research findings into comprehensive reports."
+    tags: ["research", "synthesis"]
