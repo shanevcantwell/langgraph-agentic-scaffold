@@ -13,7 +13,7 @@ Prerequisites:
 - V.E.G.A.S. Terminal screenshots in test assets
 
 Test asset locations:
-- app/tests/assets/screenshots/vegas_terminal_4k.png
+- app/tests/assets/screenshots/lassi_ui.png
 - app/tests/assets/screenshots/vegas_terminal_after_execute.png
 
 To run these tests:
@@ -309,7 +309,7 @@ class TestVegasTerminalMocked:
 # Live Tests (Require Fara-7B running)
 # =============================================================================
 
-VEGAS_SCREENSHOT = TEST_ASSETS_DIR / "vegas_terminal_4k.png"
+VEGAS_SCREENSHOT = TEST_ASSETS_DIR / "lassi_ui.png"
 
 
 @pytest.mark.live_llm
@@ -328,7 +328,7 @@ class TestVegasTerminalLive:
 
     def test_locate_execute_button_live(self, live_fara_service):
         """Live test: Locate EXECUTE button."""
-        screenshot = load_test_screenshot("vegas_terminal_4k.png")
+        screenshot = load_test_screenshot("lassi_ui.png")
 
         result = live_fara_service.locate(
             description="The green EXECUTE button",
@@ -342,7 +342,7 @@ class TestVegasTerminalLive:
 
     def test_verify_all_major_elements_live(self, live_fara_service):
         """Live test: Verify major UI elements exist."""
-        screenshot = load_test_screenshot("vegas_terminal_4k.png")
+        screenshot = load_test_screenshot("lassi_ui.png")
 
         elements_to_verify = [
             "V.E.G.A.S. Terminal header",
