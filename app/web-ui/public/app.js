@@ -659,11 +659,19 @@ function addToolbarsToPreBlocks() {
         const toolbar = document.createElement('div');
         toolbar.className = 'code-toolbar';
 
+        // Get the raw content (without toolbar button text)
+        const getCleanContent = () => {
+            const clone = pre.cloneNode(true);
+            const toolbarClone = clone.querySelector('.code-toolbar');
+            if (toolbarClone) toolbarClone.remove();
+            return clone.textContent.trim();
+        };
+
         const copyBtn = document.createElement('button');
         copyBtn.className = 'toolbar-btn';
         copyBtn.textContent = 'COPY';
         copyBtn.onclick = () => {
-            navigator.clipboard.writeText(pre.textContent.replace('COPYFULLSCREEN', '').trim());
+            navigator.clipboard.writeText(getCleanContent());
             copyBtn.textContent = 'COPIED!';
             setTimeout(() => copyBtn.textContent = 'COPY', 2000);
         };
@@ -674,12 +682,39 @@ function addToolbarsToPreBlocks() {
         fullBtn.onclick = () => {
             modalBody.innerHTML = `<pre>${pre.innerHTML}</pre>`;
             // Re-add toolbars to the modal content
-            setTimeout(addToolbarsToPreBlocks, 100); 
+            setTimeout(addToolbarsToPreBlocks, 100);
             zoomModal.style.display = 'block';
         };
 
         toolbar.appendChild(copyBtn);
         toolbar.appendChild(fullBtn);
+
+        // Check if this is HTML content - add RENDER button
+        // Look for .html in preceding h3, or detect HTML content
+        let isHtml = false;
+        const prevH3 = pre.previousElementSibling;
+        if (prevH3 && prevH3.tagName === 'H3' && prevH3.textContent.includes('.html')) {
+            isHtml = true;
+        }
+        // Also detect by content (<!DOCTYPE or <html)
+        const content = pre.textContent;
+        if (content.trim().startsWith('<!DOCTYPE') || content.trim().startsWith('<html')) {
+            isHtml = true;
+        }
+
+        if (isHtml) {
+            const renderBtn = document.createElement('button');
+            renderBtn.className = 'toolbar-btn';
+            renderBtn.textContent = 'RENDER';
+            renderBtn.onclick = () => {
+                const htmlContent = getCleanContent();
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+            };
+            toolbar.appendChild(renderBtn);
+        }
+
         pre.appendChild(toolbar);
     });
 }

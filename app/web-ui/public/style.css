@@ -295,6 +295,8 @@ pre, .markdown-body pre {
     background: var(--panel-bg);
     padding: 10px;
     overflow-x: auto;
+    overflow-y: auto;
+    max-height: 480px;           /* ~20 rows at 24px line height */
     border: 1px solid var(--secondary-color);
     white-space: pre-wrap;       /* CSS3 */
     word-wrap: break-word;       /* Internet Explorer 5.5+ */
@@ -305,16 +307,14 @@ pre, .markdown-body pre {
 
 /* Code Block Toolbar */
 .code-toolbar {
-    position: absolute;
+    position: sticky;
     top: 0;
-    right: 0;
+    float: right;
     display: flex;
     gap: 2px;
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-.markdown-body pre:hover .code-toolbar {
-    opacity: 1;
+    background: var(--panel-bg);
+    padding: 2px;
+    z-index: 10;
 }
 .toolbar-btn {
     background: var(--secondary-color);
