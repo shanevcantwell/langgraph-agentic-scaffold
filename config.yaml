@@ -97,9 +97,9 @@ specialists:
     # CRITICAL: Must match the specialist that generates the artifact being critiqued (web_builder)
     # Setting this to "router_specialist" breaks the subgraph and creates unproductive loops
     revision_target: "web_builder"
-    requires_artifacts: ["ui_artifact"]
+    requires_artifacts: ["html_document.html"]
     artifact_providers:
-      ui_artifact: "web_builder"
+      html_document.html: "web_builder"
     critique_strategy:
       type: "llm"
       prompt_file: "critic_prompt.md"

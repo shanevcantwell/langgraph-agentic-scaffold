@@ -174,7 +174,7 @@ def test_artifact_chain_three_specialists():
     This validates multi-hop artifact dependencies where:
     - systems_architect produces system_plan
     - web_builder consumes system_plan and produces html_document.html
-    - critic_specialist consumes ui_artifact (aliased from html_document.html in test)
+    - critic_specialist consumes html_document.html and produces critique.md
 
     This is a more complex real-world scenario.
     """
@@ -258,11 +258,7 @@ def test_artifact_chain_three_specialists():
         state["artifacts"].update(state_after_builder.get("artifacts", {}))
         state["messages"].extend(state_after_builder.get("messages", []))
 
-        # WORKAROUND: Critic expects ui_artifact but web_builder produces html_document.html
-        # This is a real config mismatch - for testing, manually add ui_artifact
-        state["artifacts"]["ui_artifact"] = state["artifacts"]["html_document.html"]
-
-        # Step 3: Critic consumes ui_artifact
+        # Step 3: Critic consumes html_document.html
         state_after_critic = critic_executor(state)
 
         # Update state with critic's outputs
@@ -274,8 +270,6 @@ def test_artifact_chain_three_specialists():
         assert "system_plan" in state["artifacts"], \
             "Systems architect should produce system_plan artifact"
 
-        # NOTE: web_builder produces "html_document.html" not "ui_artifact"
-        # This is a real config mismatch (critic expects ui_artifact but web_builder produces html_document.html)
         assert "html_document.html" in state["artifacts"], \
             "Web builder should produce html_document.html artifact"
 
@@ -288,7 +282,7 @@ def test_artifact_chain_three_specialists():
         assert "error" not in state_after_builder, \
             "Web builder should not error when system_plan present"
         assert "error" not in state_after_critic, \
-            "Critic should not error when ui_artifact present"
+            "Critic should not error when html_document.html present"
 
         # Verify LLM invocations
         assert mock_architect_adapter.invoke.call_count == 1, \
@@ -301,7 +295,7 @@ def test_artifact_chain_three_specialists():
         print("\n✓ Artifact chain works correctly")
         print(f"  ✓ Step 1: systems_architect → system_plan")
         print(f"  ✓ Step 2: web_builder (consumes system_plan) → html_document.html")
-        print(f"  ✓ Step 3: critic (consumes ui_artifact) → critique.md")
+        print(f"  ✓ Step 3: critic (consumes html_document.html) → critique.md")
         print(f"  ✓ All specialists executed successfully")
 
 
