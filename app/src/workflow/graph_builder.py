@@ -278,7 +278,29 @@ class GraphBuilder:
                     # TODO: Read from config to allow switching strategies (e.g. Tavily, Google)
                     # For now, default to DuckDuckGo
                     search_strategy_instance = DuckDuckGoSearchStrategy()
-                    instance = SpecialistClass(specialist_name=name, specialist_config=config, search_strategy=search_strategy_instance)
+
+                    # Inject Visual Browser if Fara is configured
+                    visual_browser_instance = None
+                    fara_config = config.get("visual_browser", {})
+                    if fara_config.get("enabled", False):
+                        try:
+                            from ..mcp.services.visual_browser_service import VisualBrowserService
+                            # Note: fara_adapter will be attached later in deferred config
+                            # For now, create without adapter - it can be set post-init
+                            visual_browser_instance = VisualBrowserService(
+                                headless=fara_config.get("headless", True),
+                                viewport=tuple(fara_config.get("viewport", [1920, 1080])),
+                            )
+                            logger.info("Visual browser (Fara+Playwright) enabled for web_specialist")
+                        except ImportError as e:
+                            logger.warning(f"Could not load VisualBrowserService: {e}")
+
+                    instance = SpecialistClass(
+                        specialist_name=name,
+                        specialist_config=config,
+                        search_strategy=search_strategy_instance,
+                        visual_browser=visual_browser_instance
+                    )
 
                 else:
                     instance = SpecialistClass(specialist_name=name, specialist_config=config)

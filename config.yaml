@@ -317,6 +317,11 @@ specialists:
     type: "procedural"
     description: "A primitive worker that executes a single web task from the scratchpad (search or browse) and returns the raw result. Does not manage plans or state."
     tags: ["vision_capable"]
+    # Optional: Enable Fara+Playwright visual browsing
+    # visual_browser:
+    #   enabled: true
+    #   headless: true
+    #   viewport: [1920, 1080]
 
   summarizer_specialist:
     type: "llm"
