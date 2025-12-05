@@ -276,6 +276,8 @@ class TestServerLogs:
                     "test_",  # Test-related
                     "MCP invocation error",  # Expected MCP errors in tests
                     "expected error",  # Intentional test errors
+                    "CRITICAL:",  # Prompt text (e.g., "CRITICAL: Satisfy Dependency...")
+                    "HIGHEST PRIORITY",  # Prompt instructions
                 ]
 
                 if not any(expected in context for expected in expected_errors):
@@ -293,9 +295,7 @@ class TestServerLogs:
 
     def test_specialists_initialized_in_logs(self, server_log):
         """Verify critical specialists were initialized."""
-        # Get recent portion of logs
-        recent_logs = server_log[-200000:] if len(server_log) > 200000 else server_log
-
+        # Check full log since startup messages are at the beginning
         critical_specialists = [
             "router_specialist",
             "triage_architect",
@@ -304,7 +304,7 @@ class TestServerLogs:
 
         for specialist in critical_specialists:
             pattern = f"Successfully instantiated specialist: {specialist}"
-            assert pattern in recent_logs, f"Specialist not initialized: {specialist}"
+            assert pattern in server_log, f"Specialist not initialized: {specialist}"
 
 
 # =============================================================================

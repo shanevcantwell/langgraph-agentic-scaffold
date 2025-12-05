@@ -309,10 +309,13 @@ class TestVegasTerminalMocked:
 # Live Tests (Require Fara-7B running)
 # =============================================================================
 
+VEGAS_SCREENSHOT = TEST_ASSETS_DIR / "vegas_terminal_4k.png"
+
+
 @pytest.mark.live_llm
 @pytest.mark.skipif(
-    not TEST_ASSETS_DIR.exists(),
-    reason=f"Test assets directory not found: {TEST_ASSETS_DIR}"
+    not VEGAS_SCREENSHOT.exists(),
+    reason=f"V.E.G.A.S. Terminal screenshot not found: {VEGAS_SCREENSHOT}"
 )
 class TestVegasTerminalLive:
     """
