@@ -1355,7 +1355,7 @@ The system provides two distinct patterns for implementing MCP-accessible capabi
 - It should never be routed to by the graph
 - It provides atomic operations without state management
 - It's a standalone capability (vision, embedding, etc.)
-- Examples: `FaraService` (visual UI verification)
+- Examples: `FaraService` (visual UI verification), `InferenceService` (semantic judgment)
 
 ### 12.3 Service Implementation Pattern
 

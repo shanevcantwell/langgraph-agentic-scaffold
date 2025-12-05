@@ -84,7 +84,16 @@ The "Convening of the Tribes" (ADR-CORE-023) is the system's advanced orchestrat
 *   **AgentRouter (The Dispatcher):** Maps abstract `AgentAffinity` (e.g., `ARCHITECTURE`, `IMPLEMENTATION`) to concrete specialist IDs. This allows the system to be model-agnostic.
 *   **SemanticFirewall (The Filter):** A security and hygiene layer that sits between the Heap (Disk) and the Stack (Context Window). It sanitizes inputs to prevent injection attacks and sanitizes outputs to prevent "slop" from polluting the permanent record.
 
-## 2.4 Triage Recommendations Flow
+## 2.4 Deep Research (Focused Investigation)
+
+The "Deep Research" pipeline (ADR-CORE-024) provides a focused investigation capability that separates execution from judgment.
+
+*   **ResearchOrchestrator:** The controller that manages the Search → Browse → Judge → Synthesize loop.
+*   **Primitives ("Dumb Tools"):** `WebSpecialist` (Search) and `BrowseSpecialist` (Fetch) are pure execution workers with no internal LLM loop.
+*   **InferenceService (Judgment):** An MCP service that provides pure semantic judgment (Relevance, Contradiction, Quality) without side effects.
+*   **Synthesizer:** An agent that consumes research findings to generate comprehensive reports.
+
+## 2.5 Triage Recommendations Flow
 
 The system implements an **advisory routing guidance pattern** where the `TriageArchitect` specialist analyzes the user's request and recommends appropriate specialists to handle the task after context gathering completes.
 

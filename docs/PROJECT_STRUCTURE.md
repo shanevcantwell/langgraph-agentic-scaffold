@@ -81,10 +81,13 @@ This is the main Python package for the application.
     -   `systems_architect.py`: Creates high-level technical plans and architectural designs.
     -   `summarizer_specialist.py`: MCP service for text summarization and condensation.
 
-    **Research & External Data** (3 specialists):
+    **Research & External Data** (6 specialists):
     -   `project_director.py`: Manages complex research projects using an emergent state machine (ProjectContext).
     -   `web_specialist.py`: Procedural worker for executing atomic web tasks (search/browse).
     -   `open_interpreter_specialist.py`: Executes code via open-interpreter framework (may migrate to MCP container).
+    -   `research_orchestrator.py`: Coordinates the Deep Research pipeline (Search -> Browse -> Judge -> Synthesize).
+    -   `browse_specialist.py`: "Dumb tool" primitive for fetching and parsing web content.
+    -   `synthesizer_specialist.py`: Synthesizes research findings into comprehensive reports.
 
     **Distillation Subgraph** (4 specialists):
     -   `distillation_coordinator_specialist.py`: Coordinates the distillation workflow.
@@ -176,6 +179,7 @@ This is the main Python package for the application.
 
     -   `__init__.py`: Package exports for MCP services.
     -   `fara_service.py`: `FaraService` - Visual UI verification using Fara-7B vision model with transparent resolution scaling. Provides `screenshot()`, `verify()`, `locate()`, `click()`, and `type_text()` operations.
+    -   `inference_service.py`: `InferenceService` - Pure semantic judgment without tools or side effects. Provides `judge_relevance()`, `detect_contradiction()`, and `assess_source_quality()` operations.
 
     See `MCP_GUIDE.md` Section 12.0 for detailed guidance on Services vs Specialists.
 
