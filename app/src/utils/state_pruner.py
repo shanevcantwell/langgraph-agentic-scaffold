@@ -1,6 +1,7 @@
 # app/src/utils/state_pruner.py
 import html
 import json
+import os
 from typing import Dict, Any
 
 from ..specialists.schemas._archiver import SuccessReport
@@ -75,8 +76,16 @@ def generate_success_report(report_data: SuccessReport) -> str:
                      # Simple heuristic: if it's a long string without spaces, assume base64
                      if len(value) > 100 and ' ' not in value:
                          image_src = f"data:image/png;base64,{value}"
-                
+
                 artifacts_str += f"### 🖼️ {key}\n\n![{key}]({image_src})\n\n"
+                continue
+
+            # Handle archive paths - render as download links
+            if key == "archive_package_path" and isinstance(value, str) and value.endswith(".zip"):
+                # Extract just the filename from the path
+                filename = os.path.basename(value)
+                download_url = f"/v1/archives/{filename}"
+                artifacts_str += f"### 📦 {key}\n\n[📥 Download Archive: {filename}]({download_url})\n\n"
                 continue
 
             # Send full content - UI handles scrolling

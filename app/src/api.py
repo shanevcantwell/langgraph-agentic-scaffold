@@ -10,8 +10,9 @@ from typing import Dict, Optional, Any
 import json
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 import gradio as gr
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
@@ -415,3 +416,27 @@ async def stream_graph_events(request: InvokeRequest):
     except WorkflowError as e:
         logger.error(f"Workflow streaming error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")
+
+
+@app.get("/v1/archives/{filename}")
+async def download_archive(filename: str):
+    """
+    Serves archive zip files for download.
+    Files are stored in logs/archive/ directory.
+    """
+    # Security: only allow .zip files and prevent path traversal
+    if not filename.endswith(".zip") or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+
+    # Archive directory relative to app root
+    archive_dir = Path(__file__).parent.parent / "logs" / "archive"
+    file_path = archive_dir / filename
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="Archive not found")
+
+    return FileResponse(
+        path=file_path,
+        filename=filename,
+        media_type="application/zip"
+    )
