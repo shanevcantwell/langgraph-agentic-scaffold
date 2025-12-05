@@ -696,9 +696,10 @@ function addToolbarsToPreBlocks() {
         if (prevH3 && prevH3.tagName === 'H3' && prevH3.textContent.includes('.html')) {
             isHtml = true;
         }
-        // Also detect by content (<!DOCTYPE or <html)
-        const content = pre.textContent;
-        if (content.trim().startsWith('<!DOCTYPE') || content.trim().startsWith('<html')) {
+        // Also detect by content (escaped or unescaped)
+        const content = pre.textContent.trim();
+        if (content.startsWith('<!DOCTYPE') || content.startsWith('<html') ||
+            content.startsWith('&lt;!DOCTYPE') || content.startsWith('&lt;html')) {
             isHtml = true;
         }
 
@@ -707,7 +708,12 @@ function addToolbarsToPreBlocks() {
             renderBtn.className = 'toolbar-btn';
             renderBtn.textContent = 'RENDER';
             renderBtn.onclick = () => {
-                const htmlContent = getCleanContent();
+                // Unescape HTML entities (content is escaped for safe display)
+                let htmlContent = getCleanContent();
+                const textarea = document.createElement('textarea');
+                textarea.innerHTML = htmlContent;
+                htmlContent = textarea.value;
+
                 const blob = new Blob([htmlContent], { type: 'text/html' });
                 const url = URL.createObjectURL(blob);
                 window.open(url, '_blank');
