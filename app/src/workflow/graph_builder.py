@@ -279,27 +279,23 @@ class GraphBuilder:
                     # For now, default to DuckDuckGo
                     search_strategy_instance = DuckDuckGoSearchStrategy()
 
-                    # Inject Visual Browser if Fara is configured
-                    visual_browser_instance = None
+                    # Inject FaraService if visual browsing is configured
+                    fara_service_instance = None
                     fara_config = config.get("visual_browser", {})
                     if fara_config.get("enabled", False):
                         try:
-                            from ..mcp.services.visual_browser_service import VisualBrowserService
-                            # Note: fara_adapter will be attached later in deferred config
-                            # For now, create without adapter - it can be set post-init
-                            visual_browser_instance = VisualBrowserService(
-                                headless=fara_config.get("headless", True),
-                                viewport=tuple(fara_config.get("viewport", [1920, 1080])),
-                            )
-                            logger.info("Visual browser (Fara+Playwright) enabled for web_specialist")
+                            from ..mcp.services.fara_service import FaraService
+                            # Note: llm_adapter will be attached later in deferred config
+                            fara_service_instance = FaraService()
+                            logger.info("FaraService enabled for web_specialist visual browsing")
                         except ImportError as e:
-                            logger.warning(f"Could not load VisualBrowserService: {e}")
+                            logger.warning(f"Could not load FaraService: {e}")
 
                     instance = SpecialistClass(
                         specialist_name=name,
                         specialist_config=config,
                         search_strategy=search_strategy_instance,
-                        visual_browser=visual_browser_instance
+                        fara_service=fara_service_instance
                     )
 
                 else:

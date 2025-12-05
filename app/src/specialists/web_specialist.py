@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 from typing import Dict, Any, List, Optional, TYPE_CHECKING
 
@@ -8,7 +9,7 @@ from .base import BaseSpecialist
 from ..strategies.search.base import BaseSearchStrategy, SearchRequest
 
 if TYPE_CHECKING:
-    from ..mcp.services.visual_browser_service import VisualBrowserService
+    from ..mcp.services.fara_service import FaraService
 
 logger = logging.getLogger(__name__)
 
@@ -42,21 +43,25 @@ class WebSpecialist(BaseSpecialist):
         specialist_name: str,
         specialist_config: Dict[str, Any],
         search_strategy: Optional[BaseSearchStrategy] = None,
-        visual_browser: Optional["VisualBrowserService"] = None
+        fara_service: Optional["FaraService"] = None
     ):
         super().__init__(specialist_name, specialist_config)
         self.search_strategy = search_strategy
-        self.visual_browser = visual_browser
+        self.fara_service = fara_service
+
+        # Visual browser config
+        self._headless = specialist_config.get("visual_browser", {}).get("headless", True)
+        self._viewport = tuple(specialist_config.get("visual_browser", {}).get("viewport", [1920, 1080]))
 
         if self.search_strategy:
             logger.info(f"WebSpecialist initialized with search strategy: {self.search_strategy.__class__.__name__}")
         else:
             logger.warning("WebSpecialist initialized WITHOUT a search strategy. Search will fail.")
 
-        if self.visual_browser:
-            logger.info("WebSpecialist initialized with visual browser (Fara+Playwright)")
+        if self.fara_service:
+            logger.info("WebSpecialist initialized with FaraService (visual browsing enabled)")
         else:
-            logger.info("WebSpecialist initialized WITHOUT visual browser. Visual browse will fall back to static.")
+            logger.info("WebSpecialist initialized WITHOUT FaraService. Visual browse will fall back to static.")
 
     def register_mcp_services(self, registry):
         """Expose search and visual browse capabilities via MCP."""
@@ -64,14 +69,11 @@ class WebSpecialist(BaseSpecialist):
             "search": self._perform_search,
         }
 
-        # Add visual browser functions if available
-        if self.visual_browser:
+        # Add Fara-based visual functions if available
+        if self.fara_service:
             services.update({
-                "visual_navigate": self._visual_navigate,
-                "visual_click": self._visual_click,
-                "visual_type": self._visual_type,
+                "visual_locate": self._visual_locate,
                 "visual_verify": self._visual_verify,
-                "visual_screenshot": self._visual_screenshot,
             })
 
         registry.register_service(self.specialist_name, services)
@@ -96,7 +98,7 @@ class WebSpecialist(BaseSpecialist):
         """
         scratchpad = state.get("scratchpad", {})
         task = scratchpad.get("web_task")
-        
+
         if not task:
             logger.warning("WebSpecialist executed but no 'web_task' found in scratchpad.")
             return {"error": "No web_task found in scratchpad."}
@@ -104,18 +106,18 @@ class WebSpecialist(BaseSpecialist):
         try:
             capability = task.get("capability")
             params = task.get("params", {})
-            
+
             logger.info(f"WebSpecialist executing capability: {capability}")
-            
+
             if capability == "search":
                 query = params.get("query")
                 if not query:
                     return {"error": "Missing 'query' parameter for search."}
-                
+
                 # Execute Search Strategy
                 results = self._perform_search(query)
                 return {"search_results": results}
-            
+
             elif capability == "browse":
                 url = params.get("url")
                 actions = params.get("actions", [])
@@ -123,12 +125,12 @@ class WebSpecialist(BaseSpecialist):
                 if not url:
                     return {"error": "Missing 'url' parameter for browse."}
 
-                # Use visual browser if available, otherwise fall back to static browse
-                if self.visual_browser:
+                # Use Fara+Playwright if available, otherwise fall back to static browse
+                if self.fara_service:
                     return self._execute_visual_browse(url, actions)
                 else:
                     return self._execute_static_browse(url)
-            
+
             else:
                 return {"error": f"Unknown capability: {capability}"}
 
@@ -160,17 +162,33 @@ class WebSpecialist(BaseSpecialist):
         return asyncio.run(self._async_visual_browse(url, actions))
 
     async def _async_visual_browse(self, url: str, actions: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Async implementation of visual browse."""
+        """Async implementation of visual browse using FaraService."""
+        from playwright.async_api import async_playwright
+
         results = []
+        playwright = None
+        browser = None
 
         try:
-            # Launch browser and navigate
-            await self.visual_browser.launch()
-            nav_result = await self.visual_browser.navigate(url)
+            # Launch Playwright browser
+            playwright = await async_playwright().start()
+            browser = await playwright.chromium.launch(headless=self._headless)
+            context = await browser.new_context(
+                viewport={"width": self._viewport[0], "height": self._viewport[1]}
+            )
+            page = await context.new_page()
 
-            if not nav_result.get("success"):
-                return {"error": f"Navigation failed: {nav_result.get('error')}", "url": url}
+            # Attach page to FaraService for click/type operations
+            self.fara_service.browser_controller = page
 
+            # Navigate
+            logger.info(f"WebSpecialist: Navigating to {url}")
+            response = await page.goto(url, wait_until="networkidle", timeout=30000)
+            nav_result = {
+                "success": True,
+                "url": page.url,
+                "status": response.status if response else None
+            }
             results.append({"action": "navigate", "url": url, "result": nav_result})
 
             # Execute each action
@@ -178,13 +196,38 @@ class WebSpecialist(BaseSpecialist):
                 action = action_spec.get("action")
                 description = action_spec.get("description", "")
 
+                # Capture screenshot for Fara
+                screenshot_bytes = await page.screenshot()
+                screenshot_b64 = base64.b64encode(screenshot_bytes).decode("utf-8")
+
                 if action == "click":
-                    result = await self.visual_browser.visual_click(description)
+                    # Use Fara to locate, then click
+                    locate_result = self.fara_service.locate(description, screenshot_b64)
+                    if locate_result.get("found"):
+                        x, y = locate_result["x"], locate_result["y"]
+                        await page.mouse.click(x, y)
+                        await asyncio.sleep(0.3)  # Let UI respond
+                        result = {"success": True, "x": x, "y": y, "description": description}
+                    else:
+                        result = {"success": False, "error": f"Element not found: {description}"}
+
                 elif action == "type":
                     text = action_spec.get("text", "")
-                    result = await self.visual_browser.visual_type(description, text)
+                    # First click to focus
+                    locate_result = self.fara_service.locate(description, screenshot_b64)
+                    if locate_result.get("found"):
+                        x, y = locate_result["x"], locate_result["y"]
+                        await page.mouse.click(x, y)
+                        await page.keyboard.press("Control+a")
+                        await page.keyboard.type(text, delay=50)
+                        result = {"success": True, "x": x, "y": y, "text_length": len(text)}
+                    else:
+                        result = {"success": False, "error": f"Element not found: {description}"}
+
                 elif action == "verify":
-                    result = await self.visual_browser.visual_verify(description)
+                    verify_result = self.fara_service.verify(description, screenshot_b64)
+                    result = {"exists": verify_result.get("exists", False), "confidence": verify_result.get("confidence")}
+
                 else:
                     result = {"error": f"Unknown action: {action}"}
 
@@ -196,7 +239,8 @@ class WebSpecialist(BaseSpecialist):
                     break
 
             # Capture final screenshot
-            final_screenshot = await self.visual_browser.screenshot()
+            final_screenshot_bytes = await page.screenshot()
+            final_screenshot = base64.b64encode(final_screenshot_bytes).decode("utf-8")
 
             return {
                 "url": url,
@@ -211,12 +255,17 @@ class WebSpecialist(BaseSpecialist):
             return {"error": str(e), "url": url, "status": "error"}
 
         finally:
-            await self.visual_browser.close()
+            # Cleanup
+            self.fara_service.browser_controller = None
+            if browser:
+                await browser.close()
+            if playwright:
+                await playwright.stop()
 
     def _execute_static_browse(self, url: str) -> Dict[str, Any]:
         """
         Fallback static browse using requests+BeautifulSoup.
-        Used when visual browser is not available.
+        Used when FaraService is not available.
         """
         import requests
         from bs4 import BeautifulSoup
@@ -253,35 +302,17 @@ class WebSpecialist(BaseSpecialist):
             return {"url": url, "error": str(e), "status": "error"}
 
     # =========================================================================
-    # MCP Service Wrappers for Visual Browser
+    # MCP Service Wrappers for FaraService
     # =========================================================================
 
-    def _visual_navigate(self, url: str) -> Dict[str, Any]:
-        """MCP wrapper: Navigate to URL."""
-        if not self.visual_browser:
-            return {"error": "Visual browser not configured"}
-        return asyncio.run(self.visual_browser.navigate(url))
+    def _visual_locate(self, description: str, screenshot: str) -> Dict[str, Any]:
+        """MCP wrapper: Locate element by description."""
+        if not self.fara_service:
+            return {"error": "FaraService not configured"}
+        return self.fara_service.locate(description, screenshot)
 
-    def _visual_click(self, description: str) -> Dict[str, Any]:
-        """MCP wrapper: Click element by description."""
-        if not self.visual_browser:
-            return {"error": "Visual browser not configured"}
-        return asyncio.run(self.visual_browser.visual_click(description))
-
-    def _visual_type(self, description: str, text: str) -> Dict[str, Any]:
-        """MCP wrapper: Type into element by description."""
-        if not self.visual_browser:
-            return {"error": "Visual browser not configured"}
-        return asyncio.run(self.visual_browser.visual_type(description, text))
-
-    def _visual_verify(self, description: str) -> Dict[str, Any]:
+    def _visual_verify(self, description: str, screenshot: str) -> Dict[str, Any]:
         """MCP wrapper: Verify element exists by description."""
-        if not self.visual_browser:
-            return {"error": "Visual browser not configured"}
-        return asyncio.run(self.visual_browser.visual_verify(description))
-
-    def _visual_screenshot(self) -> str:
-        """MCP wrapper: Capture screenshot."""
-        if not self.visual_browser:
-            return ""
-        return asyncio.run(self.visual_browser.screenshot())
+        if not self.fara_service:
+            return {"error": "FaraService not configured"}
+        return self.fara_service.verify(description, screenshot)
