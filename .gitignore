@@ -55,6 +55,7 @@ docs/blueprint/*
 docs/roadmap/*
 proxy/*
 !proxy/squid.conf.example
+!proxy/Dockerfile
 audit_manifest.md
 .continue/*
 finetuning_data*.json*

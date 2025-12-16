@@ -48,7 +48,9 @@ services:
 
   proxy:
     container_name: langgraph-proxy
-    image: ubuntu/squid:latest
+    # Build locally instead of pulling from Docker Hub (offline-capable)
+    build:
+      context: ./proxy
     volumes:
       # Mount our custom, restrictive configuration file into the container.
       - ./proxy:/etc/squid
