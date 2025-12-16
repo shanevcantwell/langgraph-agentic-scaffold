@@ -35,6 +35,16 @@ else
     echo -e "${YELLOW}⚠${NC} Docker not found (will use local Python)"
 fi
 
+# Check for navigation-mcp sibling repo
+NAV_MCP_DIR="$PROJECT_ROOT/../navigation-mcp"
+if [ -d "$NAV_MCP_DIR" ]; then
+    NAV_MCP_AVAILABLE=true
+    echo -e "${GREEN}✓${NC} navigation-mcp detected at $NAV_MCP_DIR"
+else
+    NAV_MCP_AVAILABLE=false
+    echo -e "${YELLOW}⚠${NC} navigation-mcp not found (optional: browser/filesystem navigation)"
+fi
+
 # Check Python version
 if command -v python3 &> /dev/null; then
     PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
@@ -84,6 +94,35 @@ if [ "$DOCKER_AVAILABLE" = false ] && [ "$PYTHON_OK" = false ]; then
 fi
 
 read -p "Enter choice (1 or 2): " INSTALL_MODE
+
+# ============================================================================
+# STEP 2.5: Optional navigation-mcp Setup
+# ============================================================================
+if [ "$NAV_MCP_AVAILABLE" = false ]; then
+    echo ""
+    echo -e "${BLUE}[Optional] Navigation MCP Setup${NC}"
+    echo ""
+    echo "navigation-mcp provides browser automation and filesystem navigation"
+    echo "via visual grounding (Fara-7B). This enables specialists to:"
+    echo "  • Navigate web pages using natural language"
+    echo "  • Click buttons, fill forms without CSS selectors"
+    echo "  • Read/write files with sandbox security"
+    echo ""
+    read -p "Clone navigation-mcp? (y/N): " CLONE_NAV_MCP
+
+    if [[ "$CLONE_NAV_MCP" =~ ^[Yy]$ ]]; then
+        echo "Cloning navigation-mcp..."
+        git clone https://github.com/shanevcantwell/navigation-mcp.git "$NAV_MCP_DIR"
+        if [ $? -eq 0 ]; then
+            NAV_MCP_AVAILABLE=true
+            echo -e "${GREEN}✓${NC} navigation-mcp cloned to $NAV_MCP_DIR"
+        else
+            echo -e "${RED}✗${NC} Failed to clone navigation-mcp (continuing without it)"
+        fi
+    else
+        echo "Skipping navigation-mcp (you can add it later)"
+    fi
+fi
 
 # ============================================================================
 # STEP 3: LLM Provider Selection
@@ -289,8 +328,18 @@ if [ "$INSTALL_MODE" = "1" ]; then
     docker compose build --quiet
     echo -e "${GREEN}✓${NC} Docker build complete"
 
+    # Build navigation-mcp if available
+    if [ "$NAV_MCP_AVAILABLE" = true ]; then
+        echo "Building navigation-mcp container..."
+        docker compose -f "$NAV_MCP_DIR/docker-compose.yml" build --quiet
+        echo -e "${GREEN}✓${NC} navigation-mcp build complete"
+    fi
+
     echo "Starting services..."
     docker compose up -d
+    if [ "$NAV_MCP_AVAILABLE" = true ]; then
+        docker compose -f "$NAV_MCP_DIR/docker-compose.yml" up -d
+    fi
     echo -e "${GREEN}✓${NC} Services started"
 
     # Wait for services to be ready
@@ -358,6 +407,11 @@ fi
 
 if [ -n "$LMSTUDIO_BASE_URL" ]; then
     echo -e "${YELLOW}Note:${NC} Ensure LM Studio server is running at $LMSTUDIO_BASE_URL"
+fi
+
+if [ "$NAV_MCP_AVAILABLE" = true ]; then
+    echo -e "${GREEN}Note:${NC} navigation-mcp is available for browser/filesystem navigation"
+    echo "  Docs: $NAV_MCP_DIR/README.md"
 fi
 
 echo ""

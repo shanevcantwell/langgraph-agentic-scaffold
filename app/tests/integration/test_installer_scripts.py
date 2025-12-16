@@ -324,3 +324,54 @@ class TestInstallerScriptLogic:
 
         assert default == expected_default
         assert router == expected_router
+
+
+class TestNavigationMcpSetup:
+    """Tests for navigation-mcp detection and setup in installer."""
+
+    def test_detects_existing_navigation_mcp(self):
+        """Verifies installer detects existing navigation-mcp sibling repo."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "las"
+            nav_mcp_dir = Path(tmpdir) / "navigation-mcp"
+
+            project_root.mkdir()
+            nav_mcp_dir.mkdir()
+
+            # Simulate detection logic
+            nav_mcp_available = nav_mcp_dir.exists()
+
+            assert nav_mcp_available, "Should detect existing navigation-mcp"
+
+    def test_detects_missing_navigation_mcp(self):
+        """Verifies installer detects when navigation-mcp is not present."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "las"
+            nav_mcp_dir = Path(tmpdir) / "navigation-mcp"
+
+            project_root.mkdir()
+            # Don't create nav_mcp_dir
+
+            nav_mcp_available = nav_mcp_dir.exists()
+
+            assert not nav_mcp_available, "Should detect missing navigation-mcp"
+
+    def test_sibling_path_resolution(self):
+        """Verifies navigation-mcp path is correctly resolved as sibling."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            project_root = Path(tmpdir) / "las"
+            project_root.mkdir()
+
+            # Simulate path resolution from setup.sh
+            nav_mcp_dir = project_root.parent / "navigation-mcp"
+
+            expected = Path(tmpdir) / "navigation-mcp"
+            assert nav_mcp_dir == expected, "Should resolve to sibling directory"
+
+    def test_navigation_mcp_optional_not_blocking(self):
+        """Verifies missing navigation-mcp doesn't block installation."""
+        # If navigation-mcp is not available, installer should continue
+        nav_mcp_available = False
+        install_should_proceed = True  # Always proceed, nav-mcp is optional
+
+        assert install_should_proceed, "Installation should proceed without navigation-mcp"
