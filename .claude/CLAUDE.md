@@ -186,8 +186,18 @@ Areas: RESEARCH, ROUTER, MCP, STATE, TRIAGE, SPECIALIST
 
 ## Testing
 
+### Docker Required for Integration Tests - CRITICAL
+**Integration tests MUST run inside Docker.** The `.env` file is configured for the proxy container setup, so running integration tests from the host will always fail for LMStudio/3090 connectivity.
+
+- **Unit tests**: Can run from host (`pytest app/tests/unit/`)
+- **Integration tests**: Must run inside Docker container
+- **Never dismiss integration test failures** as "pre-existing" or "environmental" without confirming Docker context
+
 ```bash
-# Run all tests
+# Unit tests only (from host)
+pytest app/tests/unit/ -v
+
+# All tests (inside Docker)
 pytest
 
 # Run with coverage

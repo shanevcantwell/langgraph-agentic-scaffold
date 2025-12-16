@@ -4,6 +4,8 @@ import requests
 import yaml
 from dotenv import load_dotenv
 
+from .environment import is_docker
+
 # Load env vars
 load_dotenv()
 
@@ -24,8 +26,18 @@ def check_url(url, name, timeout=5):
         return False
 
 def main():
+    print("--- Environment Check ---")
+    if is_docker():
+        print("Running inside Docker")
+    else:
+        print("Running on HOST (not Docker)")
+        print("  -> Integration tests will fail (LMStudio/3090 requires Docker proxy)")
+        print("  -> Unit tests will work fine")
+        print("  -> For full testing: docker compose exec app pytest")
+    print()
+
     print("--- Connectivity Verification ---")
-    
+
     # 1. Check Proxy / Internet
     # We check a reliable external site to verify the proxy is working and allowing traffic.
     if not check_url("https://www.google.com", "Internet (Google)"):

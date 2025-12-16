@@ -6,10 +6,65 @@ creating a modular and resilient testing architecture.
 """
 
 import importlib
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+
+# =============================================================================
+# ENVIRONMENT DETECTION
+# =============================================================================
+
+def is_docker() -> bool:
+    """Detect if running inside Docker container."""
+    return os.path.exists("/.dockerenv") or bool(os.environ.get("DOCKER_CONTAINER"))
+
+
+def pytest_configure(config):
+    """Print environment banner at test session start."""
+    if not is_docker():
+        print("\n" + "=" * 70)
+        print("  RUNNING OUTSIDE DOCKER")
+        print("  Tests in integration/ folder will be skipped automatically")
+        print("  Reason: .env is configured for Docker proxy to reach LMStudio/3090")
+        print("  For full test suite: docker compose exec app pytest")
+        print("=" * 70 + "\n")
+
+
+@pytest.fixture(autouse=True)
+def skip_integration_outside_docker(request):
+    """
+    For tests requiring Docker environment:
+    - Skip with informative message explaining the limitation
+    - This is NOT silent - pytest shows the skip reason prominently
+
+    Triggers on:
+    - Markers: integration, live_llm, archive
+    - Location: tests/integration/ folder (regardless of markers)
+    """
+    if is_docker():
+        return  # All tests run inside Docker
+
+    # Check markers
+    markers = {m.name for m in request.node.iter_markers()}
+    docker_required_markers = {"integration", "live_llm", "archive"}
+
+    # Check if test is in integration folder
+    test_path = str(request.fspath)
+    in_integration_folder = "/integration/" in test_path
+
+    if (markers & docker_required_markers) or in_integration_folder:
+        pytest.skip(
+            "This test requires Docker. "
+            "Reason: .env is configured for Docker proxy and Docker paths (/app/logs/). "
+            "Fix: Run 'docker compose exec app pytest' instead."
+        )
+
+
+# =============================================================================
+# TEST FIXTURES (ADR-TS-001)
+# =============================================================================
 
 @pytest.fixture
 def mock_config_loader() -> MagicMock:
