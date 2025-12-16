@@ -70,4 +70,13 @@ docs/design-docs/ARCHITECTURAL_PAUSE_NOTES.md
 data/*
 
 # symlink
-.docker-images  
+.docker-images
+
+# generated
+requirements*.txt
+
+# backups
+*.bak
+
+# local config
+langgraph-agentic-scaffold.code-workspace
