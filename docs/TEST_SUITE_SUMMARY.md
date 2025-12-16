@@ -4,90 +4,11 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 59 | 411 |
-| Integration | 21 | 136 |
+| Unit | 64 | 528 |
+| Integration | 26 | 158 |
 | Other | 8 | 101 |
-| **Total** | **88** | **648** |
+| **Total** | **98** | **787** |
 
-
-## `app/tests/interface/test_context_schema.py`
-
-- **`test_context_plan_with_recommended_specialists`**
-  - *Test ContextPlan with recommended_specialists field populated.*
-- **`test_context_plan_default_empty_recommendations`**
-  - *Test ContextPlan defaults to empty list for recommended_specialists.*
-- **`test_context_plan_validates_required_fields`**
-  - *Test ContextPlan requires reasoning field.*
-- **`test_context_plan_single_recommendation`**
-  - *Test ContextPlan with single specialist recommendation.*
-- **`test_context_plan_serialization`**
-  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
-- **`test_context_plan_empty_actions_with_recommendations`**
-  - *Test ContextPlan with no actions but with recommendations.*
-- **`test_context_plan_multiple_actions_with_recommendations`**
-  - *Test ContextPlan with multiple actions and recommendations.*
-
-## `app/tests/resilience/test_menu_filter_pattern.py`
-
-- **`test_immediate_repetition_loop_activates_menu_filter`**
-  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
-- **`test_two_step_cycle_loop_forbids_both_specialists`**
-  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
-- **`test_below_threshold_does_not_trigger_menu_filter`**
-  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
-- **`test_no_loop_returns_none`**
-  - *REQUIREMENT: No loop detected should return None.*
-- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
-  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
-- **`test_menu_filter_already_active_escalates_to_tier3`**
-  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
-- **`test_extract_from_immediate_loop_error`**
-  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
-- **`test_extract_from_two_step_cycle_error`**
-  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
-- **`test_invalid_error_format_returns_empty_list`**
-  - *REQUIREMENT: If error message format is invalid, return empty list.*
-- **`test_extraction_failure_triggers_circuit_breaker`**
-  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
-- **`test_no_forbidden_list_returns_full_menu`**
-  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
-- **`test_forbidden_list_filters_specialists`**
-  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
-- **`test_multiple_forbidden_specialists_all_removed`**
-  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
-- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
-  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
-- **`test_forbidden_list_cleared_after_non_router_execution`**
-  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
-- **`test_router_execution_does_not_clear_forbidden_list`**
-  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
-- **`test_full_loop_recovery_flow`**
-  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
-- **`test_oscillation_recovery_web_builder_critic`**
-  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
-- **`test_exactly_threshold_repetitions`**
-  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
-- **`test_threshold_plus_one_triggers`**
-  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
-- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
-  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
-- **`test_structural_integrity_violation_triggers_immediate_halt`**
-  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
-- **`test_forbidden_specialists_in_scratchpad_not_root`**
-  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
-- **`test_scratchpad_merge_semantics`**
-  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
-- **`test_menu_filter_activation_logged_at_warning_level`**
-  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
-- **`test_tier3_escalation_logged_at_error_level`**
-  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
-
-## `app/tests/resilience/test_strategy_pattern.py`
-
-- **`test_context_action_supports_strategy`**
-  - *Verify that ContextAction accepts a strategy field.*
-- **`test_context_action_strategy_defaults_to_none`**
-  - *Verify that strategy is optional.*
 
 ## `app/tests/integration/test_api_streaming_integration.py`
 
@@ -194,8 +115,67 @@
 - **`test_all_llm_specialists_have_valid_model_bindings`**
   - *Validates that all LLM specialists have valid model bindings.*
 
+## `app/tests/integration/test_convening_integration.py`
+
+- **`test_graph_builder_wires_convening_architecture`**
+- **`test_default_architecture_fallback`**
+
+## `app/tests/integration/test_emergent_project_subgraph.py`
+
+
+## `app/tests/integration/test_esm_scenarios.py`
+
+- **`test_research_exhaustion_tracking`**
+  - *ESM Scenario: Research with source exhaustion tracking.*
+- **`test_research_no_retry_exhausted_sources`**
+  - *Negative test: Verify ESM prevents retry of exhausted sources.*
+- **`test_iterative_refinement_with_rollback`**
+  - *ESM Scenario: Database schema design with constraint validation and rollback.*
+- **`test_rollback_targets_specific_decision`**
+  - *Granular test: Verify rollback targets the specific failing decision.*
+- **`test_approval_workflow_state_machine`**
+  - *ESM Scenario: Press release with review cycles and escalation.*
+- **`test_approval_escalates_after_threshold`**
+  - *Test that approval workflow correctly escalates after N rejections.*
+- **`test_hypothesis_elimination_debugging`**
+  - *ESM Scenario: Debugging with hypothesis tracking.*
+- **`test_eliminated_hypothesis_not_retested`**
+  - *Negative test: Verify eliminated hypotheses are not re-tested.*
+- **`test_constraint_satisfaction_backtracking`**
+  - *ESM Scenario: Meeting scheduling with constraint backtracking.*
+- **`test_backtrack_is_targeted_not_full_restart`**
+  - *Granular test: Verify backtracking goes to specific decision point.*
+
 ## `app/tests/integration/test_external_mcp.py`
 
+
+## `app/tests/integration/test_fara_smoke.py`
+
+- **`test_fara_responds_to_synthetic_image`**
+  - *SMOKE TEST: Send a synthetic image to Fara and print the response.*
+- **`test_fara_verify_element_exists`**
+  - *SMOKE TEST: Ask Fara if an element exists in the image.*
+
+## `app/tests/integration/test_fara_vegas_terminal.py`
+
+- **`test_locate_execute_button`**
+  - *Fara can locate the EXECUTE button in V.E.G.A.S. Terminal.*
+- **`test_locate_status_indicator`**
+  - *Fara can locate the status indicator panel.*
+- **`test_verify_terminal_header`**
+  - *Fara can verify the V.E.G.A.S. Terminal header exists.*
+- **`test_verify_missing_element`**
+  - *Fara correctly reports missing elements.*
+- **`test_full_ping_workflow_mocked`**
+  - *Test the full integration ping workflow with mocked responses.*
+- **`test_locate_execute_button_live`**
+  - *Live test: Locate EXECUTE button.*
+- **`test_verify_all_major_elements_live`**
+  - *Live test: Verify major UI elements exist.*
+- **`test_full_integration_ping_live`**
+  - *Live test: Full integration ping through V.E.G.A.S. Terminal.*
+- **`test_coordinate_in_expected_region`**
+  - *Test that located coordinates fall within expected regions.*
 
 ## `app/tests/integration/test_gradio_integration.py`
 
@@ -335,8 +315,6 @@
   - *Verify TextAnalysisSpecialist summarizes text content.*
 - **`test_batch_processor_initializes`**
   - *Verify BatchProcessorSpecialist initializes correctly.*
-- **`test_researcher_initializes_with_mcp`**
-  - *Verify ResearcherSpecialist initializes and registers MCP.*
 - **`test_summarizer_produces_summary`**
   - *Verify SummarizerSpecialist produces text summary.*
 - **`test_prompt_specialist_generates_prompt`**
@@ -471,6 +449,68 @@
 - **`test_restart_application_failure`**
   - *Test application restart handles failures gracefully.*
 
+## `app/tests/resilience/test_menu_filter_pattern.py`
+
+- **`test_immediate_repetition_loop_activates_menu_filter`**
+  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
+- **`test_two_step_cycle_loop_forbids_both_specialists`**
+  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
+- **`test_below_threshold_does_not_trigger_menu_filter`**
+  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
+- **`test_no_loop_returns_none`**
+  - *REQUIREMENT: No loop detected should return None.*
+- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
+  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
+- **`test_menu_filter_already_active_escalates_to_tier3`**
+  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
+- **`test_extract_from_immediate_loop_error`**
+  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
+- **`test_extract_from_two_step_cycle_error`**
+  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
+- **`test_invalid_error_format_returns_empty_list`**
+  - *REQUIREMENT: If error message format is invalid, return empty list.*
+- **`test_extraction_failure_triggers_circuit_breaker`**
+  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
+- **`test_no_forbidden_list_returns_full_menu`**
+  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
+- **`test_forbidden_list_filters_specialists`**
+  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
+- **`test_multiple_forbidden_specialists_all_removed`**
+  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
+- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
+  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
+- **`test_forbidden_list_cleared_after_non_router_execution`**
+  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
+- **`test_router_execution_does_not_clear_forbidden_list`**
+  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
+- **`test_full_loop_recovery_flow`**
+  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
+- **`test_oscillation_recovery_web_builder_critic`**
+  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
+- **`test_exactly_threshold_repetitions`**
+  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
+- **`test_threshold_plus_one_triggers`**
+  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
+- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
+  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
+- **`test_structural_integrity_violation_triggers_immediate_halt`**
+  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
+- **`test_forbidden_specialists_in_scratchpad_not_root`**
+  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
+- **`test_scratchpad_merge_semantics`**
+  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
+- **`test_menu_filter_activation_logged_at_warning_level`**
+  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
+- **`test_tier3_escalation_logged_at_error_level`**
+  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
+
+## `app/tests/resilience/test_strategy_pattern.py`
+
+- **`test_context_action_supports_strategy`**
+  - *Verify that ContextAction accepts a strategy field.*
+- **`test_context_action_strategy_defaults_to_none`**
+  - *Verify that strategy is optional.*
+
 ## `app/tests/specialists/test_batch_processor_specialist.py`
 
 - **`test_successful_batch_sort`**
@@ -570,6 +610,23 @@
   - *Test that triage recommendations are properly included in router prompt.*
 - **`test_researcher_specialist_recommended_for_web_search`**
   - *Test the specific case from user's trace: web search should route to researcher.*
+
+## `app/tests/interface/test_context_schema.py`
+
+- **`test_context_plan_with_recommended_specialists`**
+  - *Test ContextPlan with recommended_specialists field populated.*
+- **`test_context_plan_default_empty_recommendations`**
+  - *Test ContextPlan defaults to empty list for recommended_specialists.*
+- **`test_context_plan_validates_required_fields`**
+  - *Test ContextPlan requires reasoning field.*
+- **`test_context_plan_single_recommendation`**
+  - *Test ContextPlan with single specialist recommendation.*
+- **`test_context_plan_serialization`**
+  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
+- **`test_context_plan_empty_actions_with_recommendations`**
+  - *Test ContextPlan with no actions but with recommendations.*
+- **`test_context_plan_multiple_actions_with_recommendations`**
+  - *Test ContextPlan with multiple actions and recommendations.*
 
 ## `app/tests/unit/test_adapter_contracts.py`
 
@@ -726,6 +783,14 @@
 - **`test_context_engineering_graph_wiring`**
   - *Tests that the Context Engineering subgraph is correctly wired:*
 
+## `app/tests/unit/test_convening_wiring.py`
+
+- **`test_agent_router_defaults`**
+- **`test_semantic_firewall_slop`**
+- **`test_semantic_firewall_truncation`**
+- **`test_tribe_conductor_init`**
+- **`test_tribe_conductor_routing`**
+
 ## `app/tests/unit/test_critic_specialist.py`
 
 - **`test_critic_specialist_accepts_and_completes_task`**
@@ -793,6 +858,109 @@
   - *Test artifact retrieval with 'uploaded_image.png' key.*
 - **`test_facilitator_calls_file_specialist_when_artifact_not_in_state`**
   - *Test that Facilitator falls back to file_specialist when artifact is NOT in state.*
+
+## `app/tests/unit/test_fara_service.py`
+
+- **`test_locate_result_found`**
+  - *Test LocateResult when element is found.*
+- **`test_locate_result_not_found`**
+  - *Test LocateResult when element not found.*
+- **`test_verify_result`**
+  - *Test VerifyResult schema.*
+- **`test_action_result_success`**
+  - *Test ActionResult for successful action.*
+- **`test_action_result_failure`**
+  - *Test ActionResult for failed action.*
+- **`test_get_mcp_functions_returns_dict`**
+  - *Test that get_mcp_functions returns correct structure.*
+- **`test_mcp_functions_are_callable`**
+  - *Test that all MCP functions are callable.*
+- **`test_screenshot_uses_default_when_set`**
+  - *Test that default_screenshot is returned when set.*
+- **`test_screenshot_from_browser`**
+  - *Test screenshot capture from browser controller.*
+- **`test_screenshot_raises_without_browser_or_default`**
+  - *Test that screenshot raises when no source available.*
+- **`test_verify_element_found`**
+  - *Test verify when element exists.*
+- **`test_verify_element_not_found`**
+  - *Test verify when element doesn't exist.*
+- **`test_verify_captures_screenshot_if_not_provided`**
+  - *Test that verify captures screenshot when not provided.*
+- **`test_verify_raises_without_adapter`**
+  - *Test that verify raises when no LLM adapter.*
+- **`test_locate_element_found`**
+  - *Test locate returns coordinates when found (scaled to original).*
+- **`test_locate_element_not_found`**
+  - *Test locate when element doesn't exist.*
+- **`test_locate_handles_markdown_json`**
+  - *Test that locate handles JSON wrapped in markdown.*
+- **`test_locate_handles_extra_text`**
+  - *Test that locate extracts JSON from verbose response.*
+- **`test_click_success`**
+  - *Test successful click action.*
+- **`test_click_failure`**
+  - *Test click action failure.*
+- **`test_click_raises_without_browser`**
+  - *Test that click raises without browser controller.*
+- **`test_type_success`**
+  - *Test successful type action.*
+- **`test_type_failure`**
+  - *Test type action failure.*
+- **`test_type_raises_without_browser`**
+  - *Test that type raises without browser controller.*
+- **`test_locate_then_click_workflow`**
+  - *Test typical locate-then-click workflow.*
+- **`test_verify_before_action_workflow`**
+  - *Test verify-before-action safety pattern.*
+- **`test_get_image_dimensions`**
+  - *Test that image dimensions are correctly extracted.*
+- **`test_get_image_dimensions_with_data_url`**
+  - *Test dimensions extraction with data URL prefix.*
+- **`test_select_best_resolution_landscape`**
+  - *Test that landscape images select landscape resolution.*
+- **`test_select_best_resolution_portrait`**
+  - *Test that portrait images select portrait resolution.*
+- **`test_select_best_resolution_square`**
+  - *Test that square-ish images select square resolution.*
+- **`test_scale_to_native`**
+  - *Test that images are scaled to native resolution.*
+- **`test_scale_coordinates_2x`**
+  - *Test coordinate scaling with 2x factor.*
+- **`test_scale_coordinates_4k_to_native`**
+  - *Test coordinate scaling from native to 4K.*
+- **`test_locate_scales_coordinates_to_original`**
+  - *Test that locate returns coordinates in original resolution.*
+- **`test_locate_with_portrait_image`**
+  - *Test that portrait images use portrait native resolution.*
+- **`test_custom_native_resolutions`**
+  - *Test that custom native resolutions are respected.*
+- **`test_verify_does_not_return_coordinates`**
+  - *Test that verify doesn't include scaled coordinates.*
+- **`test_scaled_image_sent_to_model`**
+  - *Test that the scaled image (not original) is sent to the model.*
+- **`test_extract_json_from_tool_call_tags`**
+  - *Test extraction of JSON from <tool_call> tags.*
+- **`test_extract_json_tool_call_single_line`**
+  - *Test extraction from single-line tool_call.*
+- **`test_normalize_tool_call_computer_click`**
+  - *Test normalization of computer tool click action.*
+- **`test_normalize_tool_call_computer_right_click`**
+  - *Test normalization of right-click action.*
+- **`test_normalize_tool_call_serpico_terminate`**
+  - *Test normalization of serpico terminate action.*
+- **`test_normalize_tool_call_serpico_with_coordinates`**
+  - *Test normalization of serpico with found + x coordinate array.*
+- **`test_normalize_tool_call_computer_no_coordinates`**
+  - *Test normalization of computer action without coordinates.*
+- **`test_normalize_tool_call_unknown_tool`**
+  - *Test normalization of unknown tool returns None.*
+- **`test_extract_json_prefers_tool_call_over_raw_json`**
+  - *Test that <tool_call> format is preferred over raw JSON.*
+- **`test_locate_handles_tool_call_format`**
+  - *Test that locate() handles Fara's native tool_call format end-to-end.*
+- **`test_verify_handles_serpico_terminate`**
+  - *Test that verify() handles serpico terminate as 'not found'.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -949,6 +1117,53 @@
   - *Tests that fanout validation catches when hardcoded fanout destinations*
 - **`test_route_validation_disabled_when_no_allowed_destinations`**
   - *Tests that route validation is gracefully disabled when allowed_destinations*
+
+## `app/tests/unit/test_heap_invariants.py`
+
+- **`test_branch_pointer_forbids_extra_fields`**
+  - *BranchPointer must reject unknown fields.*
+- **`test_project_manifest_forbids_extra_fields`**
+  - *ProjectManifest must reject unknown fields.*
+- **`test_contribution_entry_forbids_extra_fields`**
+  - *ContributionEntry must reject unknown fields.*
+- **`test_valid_namespaced_keys_accepted`**
+  - *Properly namespaced keys should be accepted.*
+- **`test_reserved_keys_accepted_without_namespace`**
+  - *Reserved keys (priority, source, tags) don't need namespacing.*
+- **`test_naked_key_rejected`**
+  - *Keys without namespace (and not reserved) must be rejected.*
+- **`test_empty_namespace_rejected`**
+  - *Keys with empty namespace (.key) must be rejected.*
+- **`test_mixed_valid_and_reserved_keys`**
+  - *Mix of namespaced and reserved keys should work.*
+- **`test_branch_status_values`**
+  - *BranchStatus must have all ADR-specified values.*
+- **`test_branch_phase_values`**
+  - *BranchPhase must have all ADR-specified values.*
+- **`test_agent_affinity_values`**
+  - *AgentAffinity must have all ADR-specified values.*
+- **`test_atomic_write_survives_replace_failure`**
+  - *If os.replace() fails after temp file is written,*
+- **`test_temp_file_cleaned_on_failure`**
+  - *If os.replace() fails, the temp file should be cleaned up.*
+- **`test_relative_traversal_rejected`**
+  - *Classic ../ traversal must be rejected.*
+- **`test_absolute_path_outside_root_rejected`**
+  - *Absolute paths outside project root must be rejected.*
+- **`test_encoded_traversal_rejected`**
+  - *URL-encoded or tricky traversal attempts must be rejected.*
+- **`test_hash_chain_integrity`**
+  - *Verify that each entry correctly hashes the previous entry.*
+- **`test_content_hash_computation`**
+  - *Verify that content_hash is computed correctly from the content string.*
+- **`test_detects_content_tampering`**
+  - *If content_hash doesn't match content, flag it.*
+- **`test_get_branches_by_status`**
+  - *Should filter branches by status.*
+- **`test_get_branches_by_affinity`**
+  - *Should filter branches by affinity.*
+- **`test_check_dependencies_satisfied`**
+  - *Should correctly identify if dependencies are complete.*
 
 ## `app/tests/unit/test_hello_world_specialist.py`
 
@@ -1282,11 +1497,61 @@
 - **`test_prompt_triage_no_specialist_map_configured`**
   - *Tests behavior when specialist_map is empty.*
 
-## `app/tests/unit/test_researcher.py`
+## `app/tests/unit/test_react_mixin.py`
 
-- **`test_researcher_performs_search`**
-- **`test_researcher_registers_mcp`**
-- **`test_researcher_handles_no_messages`**
+- **`test_full_name_property`**
+  - *Test that full_name returns 'service.function' format.*
+- **`test_optional_description`**
+  - *Test that description is optional.*
+- **`test_basic_creation`**
+  - *Test basic ToolCall creation.*
+- **`test_empty_args`**
+  - *Test ToolCall with no arguments.*
+- **`test_success_result`**
+  - *Test successful tool result.*
+- **`test_error_result`**
+  - *Test error tool result.*
+- **`test_immediate_final_response_no_tools`**
+  - *Test that LLM returning text (no tools) completes immediately.*
+- **`test_single_tool_call_then_final_response`**
+  - *Test: LLM calls tool → sees result → returns final response.*
+- **`test_multiple_tool_calls_in_sequence`**
+  - *Test: LLM makes multiple sequential tool calls.*
+- **`test_max_iterations_exceeded`**
+  - *Test that MaxIterationsExceeded is raised when limit hit.*
+- **`test_unknown_tool_returns_error_to_llm`**
+  - *Test that unknown tool name is reported as error to LLM.*
+- **`test_tool_execution_error_reported_to_llm`**
+  - *Test that MCP errors are reported to LLM when stop_on_error=False.*
+- **`test_tool_execution_error_raises_when_stop_on_error`**
+  - *Test that MCP errors raise when stop_on_error=True.*
+- **`test_missing_llm_adapter_raises`**
+  - *Test that missing llm_adapter raises ValueError.*
+- **`test_missing_mcp_client_returns_error`**
+  - *Test that missing mcp_client returns error result.*
+- **`test_tool_result_appended_as_tool_message`**
+  - *Test that tool results are formatted as ToolMessage.*
+- **`test_error_result_formatted_correctly`**
+  - *Test that error results are formatted with 'Error:' prefix.*
+
+## `app/tests/unit/test_research_flow.py`
+
+- **`test_router_llm_prompt_includes_gathered_context_content`**
+  - *BUG-RESEARCH-001: Router should include gathered_context CONTENT in LLM prompt.*
+- **`test_router_logs_gathered_context_for_debugging`**
+  - *BUG-RESEARCH-004: Router should log what context it sees for debugging.*
+- **`test_router_prompt_contains_failure_indicator_for_llm_decision`**
+  - *BUG-RESEARCH-002: Verify Router provides failure information to LLM.*
+- **`test_duckduckgo_no_results_returns_distinct_failure_marker`**
+  - *Verify DuckDuckGoSearchStrategy returns a recognizable failure pattern.*
+- **`test_duckduckgo_rate_limit_retries_with_backoff`**
+  - *Verify DuckDuckGoSearchStrategy retries on rate limit with exponential backoff.*
+- **`test_duckduckgo_rate_limit_succeeds_on_retry`**
+  - *Verify DuckDuckGoSearchStrategy succeeds if retry works.*
+- **`test_web_specialist_graph_node_requires_web_task`**
+  - *BUG-RESEARCH-003: When Router routes to web_specialist, scratchpad.web_task*
+- **`test_web_specialist_mcp_path_vs_graph_path`**
+  - *Document the two invocation paths for WebSpecialist.*
 
 ## `app/tests/unit/test_router_parallel.py`
 
@@ -1350,6 +1615,45 @@
   - *Decline with no recommendations should not cause errors.*
 - **`test_router_scratchpad_clears_all_decline_signals`**
   - *REGRESSION GUARD: Router MUST clear all decline-related signals in its return.*
+
+## `app/tests/unit/test_search_strategies.py`
+
+- **`test_requires_api_key`**
+  - *Strategy returns error when no API key configured.*
+- **`test_api_key_from_extra_params`**
+  - *API key can be passed via extra_params.*
+- **`test_successful_search`**
+  - *Successful search returns formatted results.*
+- **`test_rate_limited_response`**
+  - *Returns Rate Limited marker on 429 status.*
+- **`test_auth_error_response`**
+  - *Returns Auth Error on 401 status.*
+- **`test_quota_exceeded_response`**
+  - *Returns Quota Exceeded on 422 status.*
+- **`test_empty_results`**
+  - *Returns No Results marker when search finds nothing.*
+- **`test_timeout_handling`**
+  - *Returns Timeout Error on request timeout.*
+- **`test_requires_at_least_one_strategy`**
+  - *Raises error if no strategies provided.*
+- **`test_first_strategy_success`**
+  - *Returns results from first strategy if successful.*
+- **`test_fallback_on_rate_limit`**
+  - *Falls back to second strategy on rate limit.*
+- **`test_fallback_on_exception`**
+  - *Falls back to second strategy on exception.*
+- **`test_all_strategies_fail`**
+  - *Returns last error when all strategies fail.*
+- **`test_no_results_is_not_retryable`**
+  - *'No Results' is not considered a retryable error.*
+- **`test_multiple_results_not_retryable`**
+  - *Multiple results are never considered retryable errors.*
+- **`test_add_strategy_append`**
+  - *add_strategy appends by default.*
+- **`test_add_strategy_with_priority`**
+  - *add_strategy can insert at specific index.*
+- **`test_duckduckgo_to_brave_fallback`**
+  - *DuckDuckGo rate limit triggers Brave fallback.*
 
 ## `app/tests/unit/test_sentiment_classifier_specialist.py`
 
