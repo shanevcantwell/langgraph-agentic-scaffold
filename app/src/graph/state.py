@@ -123,6 +123,11 @@ class GraphState(TypedDict):
     turn_count: int
     task_is_complete: bool
     next_specialist: Optional[str]
+
+    # --- LLM Trace Capture (Training Data) ---
+    # Accumulates raw LLM prompt/response traces for fine-tuning datasets.
+    # Written to llm_traces.jsonl in the archive by ArchiverSpecialist.
+    llm_traces: Annotated[List[Dict[str, Any]], operator.add]
     
     # --- Parallel Execution State (Task 3.3) ---
     # Tracks currently active parallel tasks for scatter-gather synchronization.

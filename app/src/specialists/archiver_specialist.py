@@ -124,7 +124,22 @@ class ArchiverSpecialist(BaseSpecialist):
                     size_bytes=os.path.getsize(file_path)
                 ))
 
-            # 3. Create Manifest
+            # 3. Write LLM Traces (for fine-tuning datasets)
+            llm_traces = state.get("llm_traces", [])
+            if llm_traces:
+                traces_path = os.path.join(package_dir, "llm_traces.jsonl")
+                with open(traces_path, "w", encoding="utf-8") as f:
+                    for trace in llm_traces:
+                        f.write(json.dumps(trace) + "\n")
+                logger.info(f"Wrote {len(llm_traces)} LLM trace(s) to llm_traces.jsonl")
+                artifact_manifests.append(ArtifactManifest(
+                    filename="llm_traces.jsonl",
+                    original_key="llm_traces",
+                    content_type="application/jsonl",
+                    size_bytes=os.path.getsize(traces_path)
+                ))
+
+            # 4. Create Manifest
             manifest = AtomicManifest(
                 run_id=run_id,
                 routing_history=state.get("routing_history", []),
@@ -132,11 +147,11 @@ class ArchiverSpecialist(BaseSpecialist):
                 final_response_generated=bool(state.get("artifacts", {}).get("final_user_response.md")),
                 termination_reason=state.get("scratchpad", {}).get("termination_reason", "success")
             )
-            
+
             with open(os.path.join(package_dir, "manifest.json"), "w", encoding="utf-8") as f:
                 f.write(manifest.model_dump_json(indent=2))
 
-            # 4. Zip Package
+            # 5. Zip Package
             zip_path = shutil.make_archive(package_dir, 'zip', package_dir)
             logger.info(f"Created Atomic Archival Package: {zip_path}")
             

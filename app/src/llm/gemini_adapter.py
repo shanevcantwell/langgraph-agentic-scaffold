@@ -1,6 +1,7 @@
 # app/src/llm/gemini_adapter.py
 import logging
 import json
+import time
 from typing import Dict, Optional, Any
 
 import google.generativeai as genai
@@ -9,6 +10,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, SafetyFilterError, RateLimitError, ProxyError
 from . import adapters_helpers
+from .tracing import capture_trace
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +87,9 @@ class GeminiAdapter(BaseAdapter):
         else:
             logger.info("GeminiAdapter: Invoking in Text mode.")
 
+        # Start timing for trace capture
+        start_time = time.perf_counter()
+
         try:
             response = self.model.generate_content(
                 gemini_api_messages, # Use the prepared messages
@@ -92,7 +97,13 @@ class GeminiAdapter(BaseAdapter):
                 tools=tools_to_pass,
                 tool_config=tool_config,
             )
-            return self._parse_and_format_response(request, response)
+            result = self._parse_and_format_response(request, response)
+
+            # Capture successful trace
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, result, latency_ms, self.model_name)
+
+            return result
 
         # Be specific about the exceptions we can handle gracefully.
         except google_exceptions.ResourceExhausted as e:

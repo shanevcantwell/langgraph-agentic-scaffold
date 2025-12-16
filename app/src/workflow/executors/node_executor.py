@@ -1,4 +1,5 @@
 import logging
+import time
 import traceback
 import hashlib
 from typing import Dict, Any, Callable
@@ -12,6 +13,12 @@ from ...utils import state_pruner
 from ...utils.errors import SpecialistError, WorkflowError, RateLimitError, CircuitBreakerTriggered
 from ...utils.report_schema import ErrorReport
 from ...resilience.monitor import InvariantMonitor
+from ...llm.tracing import (
+    set_current_specialist,
+    clear_current_specialist,
+    flush_adapter_traces,
+    build_specialist_turn_trace,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,12 +123,58 @@ class NodeExecutor:
                 if streaming_callback:
                     streaming_callback(f"Entering node: {specialist_name}\n")
 
-                # Log the system prompt for LLM-based specialists for better observability.
+                # --- TRACE CAPTURE: Pre-execution context ---
+                start_time = time.perf_counter()
+                artifacts_before = list(state.get("artifacts", {}).keys())
+                routing_history = state.get("routing_history", [])
+                from_source = routing_history[-1] if routing_history else "user"
+                step = len(routing_history)
+
+                # Get system prompt for trace
+                system_prompt = None
                 if hasattr(specialist_instance, 'llm_adapter') and specialist_instance.llm_adapter:
                     if hasattr(specialist_instance.llm_adapter, 'system_prompt'):
-                        logger.debug(f"System prompt for '{specialist_name}':\n---PROMPT---\n{specialist_instance.llm_adapter.system_prompt}\n---ENDPROMPT---")
+                        system_prompt = specialist_instance.llm_adapter.system_prompt
+                        logger.debug(f"System prompt for '{specialist_name}':\n---PROMPT---\n{system_prompt}\n---ENDPROMPT---")
+
+                # LLM TRACE CAPTURE: Set current specialist for trace attribution
+                set_current_specialist(specialist_name)
 
                 update = specialist_instance.execute(state)
+
+                # --- TRACE CAPTURE: Build complete specialist turn trace ---
+                adapter_traces = flush_adapter_traces()
+                if adapter_traces:
+                    # Compute artifacts produced (new keys in update)
+                    artifacts_after = list(update.get("artifacts", {}).keys())
+                    artifacts_produced = [a for a in artifacts_after if a not in artifacts_before]
+
+                    # Extract scratchpad signals written
+                    scratchpad_signals = update.get("scratchpad", {})
+
+                    # Extract routing decision (for router specialist)
+                    routing_decision = update.get("next_specialist")
+
+                    # Get specialist type from config
+                    specialist_type = specialist_config.get("type", "unknown")
+
+                    # Build complete trace
+                    turn_trace = build_specialist_turn_trace(
+                        adapter_traces=adapter_traces,
+                        step=step,
+                        specialist_name=specialist_name,
+                        specialist_type=specialist_type,
+                        from_source=from_source,
+                        system_prompt=system_prompt,
+                        context_artifacts_before=artifacts_before,
+                        artifacts_produced=artifacts_produced,
+                        scratchpad_signals=scratchpad_signals,
+                        routing_decision=routing_decision,
+                    )
+
+                    # Add trace to state
+                    update["llm_traces"] = [turn_trace.model_dump()]
+                    logger.debug(f"Captured specialist turn trace for '{specialist_name}' (step {step})")
 
                 # CENTRALIZED ROUTING HISTORY TRACKING (post-execution)
                 # Remove any routing_history that specialist tried to add (enforces centralization)
@@ -187,6 +240,8 @@ class NodeExecutor:
             except RateLimitError as e:
                 # Rate limit errors are FATAL - halt workflow immediately (fail-fast pattern)
                 logger.error(f"Rate limit exceeded in specialist '{specialist_name}': {e}")
+                clear_current_specialist()  # Clean up trace context
+                flush_adapter_traces()  # Discard any partial traces
                 raise WorkflowError(
                     f"Rate limit exceeded for specialist '{specialist_name}'. "
                     f"Please wait before retrying. Error: {e}"
@@ -194,9 +249,13 @@ class NodeExecutor:
             except GraphInterrupt:
                 # ADR-CORE-018: Let interrupt() propagate for HitL workflows
                 logger.info(f"Specialist '{specialist_name}' triggered interrupt for user clarification")
+                clear_current_specialist()  # Clean up trace context
+                # Note: Don't flush traces here - workflow will resume and may want accumulated traces
                 raise
             except (SpecialistError, Exception) as e:
                 logger.error(f"Caught unhandled exception from specialist '{specialist_name}': {e}", exc_info=True)
+                clear_current_specialist()  # Clean up trace context
+                flush_adapter_traces()  # Discard any partial traces from failed execution
                 tb_str = traceback.format_exc()
                 pruned_state = state_pruner.prune_state(state)
                 report_data = ErrorReport(

@@ -2,6 +2,7 @@
 import logging
 import json
 import os
+import time
 import tiktoken
 from typing import Dict, Any, List, Optional, Type
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
@@ -12,6 +13,7 @@ from pydantic import BaseModel
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, RateLimitError, ProxyError
 from . import adapters_helpers
+from .tracing import capture_trace
 import html
 
 logger = logging.getLogger(__name__)
@@ -231,6 +233,9 @@ class LMStudioAdapter(BaseAdapter):
         else:
             logger.info("LMStudioAdapter: Invoking in Text mode.")
 
+        # Start timing for trace capture
+        start_time = time.perf_counter()
+
         try:
             completion = self.client.chat.completions.create(**api_kwargs, timeout=self.timeout)
             message = completion.choices[0].message
@@ -247,14 +252,20 @@ class LMStudioAdapter(BaseAdapter):
                         formatted_tool_calls.append({"name": tool_call.function.name, "args": args, "id": tool_call.id})
                     except json.JSONDecodeError:
                         logger.error(f"Failed to decode tool call arguments: {tool_call.function.arguments}", exc_info=True)
-                return {"tool_calls": formatted_tool_calls}
+                result = {"tool_calls": formatted_tool_calls}
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, result, latency_ms, self.model_name)
+                return result
 
             # If a tool call was forced (either by 'required' or by name) but not provided,
             # it's a failure. Return an empty list to signal this to the caller (e.g., the Router).
             tool_choice = api_kwargs.get("tool_choice")
             if tool_choice and tool_choice != "auto":
                 logger.warning(f"LMStudioAdapter had tool_choice='{tool_choice}' but the model returned a text response instead of a tool call.")
-                return {"tool_calls": []}
+                result = {"tool_calls": []}
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, result, latency_ms, self.model_name)
+                return result
 
             # If we requested a JSON schema, parse the content as JSON.
             if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":
@@ -271,16 +282,22 @@ class LMStudioAdapter(BaseAdapter):
                     json_response = self._robustly_parse_json_from_text(content)
 
                 if json_response:
-                    return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+                    result = {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
                 else:
                     # If extraction also fails, log the failure and return as text.
                     logger.error(
                         f"Failed to parse or extract JSON from the model's response."
                     )
-                    return {"text_response": content, "json_response": {}}
+                    result = {"text_response": content, "json_response": {}}
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, result, latency_ms, self.model_name)
+                return result
             else:
                 # Standard text response.
-                return {"text_response": message.content or ""}
+                result = {"text_response": message.content or ""}
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, result, latency_ms, self.model_name)
+                return result
         
         except OpenAIRateLimitError as e:
             error_message = f"LMStudio API rate limit exceeded: {e}"
