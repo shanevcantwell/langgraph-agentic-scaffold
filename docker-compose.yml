@@ -41,7 +41,7 @@ services:
       - "8000:8000"
       - "5003:5003"
     command: ["/bin/bash", "/app/start.sh"]
-    # Ensure the proxy is running before the app starts.
+    # Ensure proxy is running before the app starts.
     depends_on:
       - proxy
     restart: unless-stopped
@@ -76,7 +76,9 @@ services:
     restart: unless-stopped
 
   # Navigation MCP - Tree traversal for filesystem and browser (ADR-CORE-027)
+  # Optional service - use: docker-compose --profile navigator up
   navigator:
+    profiles: ["navigator"]  # Only starts with --profile navigator
     container_name: navigator-mcp
     build:
       context: ../navigation-mcp  # Sibling project
