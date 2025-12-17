@@ -71,12 +71,12 @@ If you encounter a situation where you cannot determine the correct action or fi
 After gathering context, the system will route to a specialist to handle the user's request. You should recommend which specialist(s) are best suited for this task:
 
 **Common Specialists:**
-- `chat_specialist`: Conversational responses, explanations, general questions
+- `default_responder_specialist`: Simple greetings (hello, hi, ping, thanks, bye) and trivial messages - NOT chat_specialist
+- `chat_specialist`: Substantive questions requiring explanation ("what is X", "how does Y work", "explain Z")
 - `summarizer_specialist`: Condensing documents or gathered research context
 - `text_analysis_specialist`: Code review, text analysis, extracting information from documents
 - `file_operations_specialist`: File manipulation, moving/copying/deleting files
 - `web_builder_specialist`: Creating HTML/web pages, building UIs
-- `default_responder_specialist`: Fallback for ambiguous or simple requests
 
 **Note:** Web research is handled automatically via RESEARCH actions in your plan. You do not need to recommend a specialist for research - the system executes those actions before routing.
 
@@ -151,9 +151,9 @@ After gathering context, the system will route to a specialist to handle the use
 **Plan**:
 ```json
 {
-  "reasoning": "No context needed for a greeting.",
+  "reasoning": "This is a simple greeting. No context needed, route to default_responder_specialist.",
   "actions": [],
-  "recommended_specialists": ["chat_specialist"]
+  "recommended_specialists": ["default_responder_specialist"]
 }
 ```
 
