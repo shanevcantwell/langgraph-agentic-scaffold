@@ -329,6 +329,125 @@ class ExternalMcpClient:
         """
         return list(self.sessions.keys())
 
+    async def connect_from_config(self, service_name: str) -> Optional[List[str]]:
+        """
+        Connect to an external MCP service using its config.yaml definition.
+
+        Supports two connection modes:
+        1. container_name mode (ADR-CORE-027): Connects to running container via docker exec
+        2. command/args mode: Launches new subprocess with explicit command
+
+        Config format (in config.yaml → mcp.external_mcp.services.{service_name}):
+            # Mode 1: Use existing running container (docker-compose managed)
+            navigator:
+              enabled: true
+              required: false
+              container_name: "navigator-mcp"  # Uses: docker exec -i {name} {name}
+              entrypoint: "navigator-mcp"      # Optional, defaults to container_name
+              timeout_ms: 30000
+
+            # Mode 2: Launch subprocess directly
+            some_service:
+              enabled: true
+              command: "npx"
+              args: ["-y", "@some/mcp-server"]
+
+        Args:
+            service_name: Key in config.yaml services dict (e.g., "navigator")
+
+        Returns:
+            List of available tools if connected, None if service disabled/unavailable
+
+        Raises:
+            ValueError: If service config malformed
+            RuntimeError: If required service fails to connect
+        """
+        services_config = self.config.get("services", {})
+        service_cfg = services_config.get(service_name, {})
+
+        if not service_cfg.get("enabled", False):
+            logger.info(f"External MCP service '{service_name}' is disabled in config")
+            return None
+
+        is_required = service_cfg.get("required", False)
+
+        # Determine connection mode
+        container_name = service_cfg.get("container_name")
+        command = service_cfg.get("command")
+        args = service_cfg.get("args", [])
+
+        if container_name:
+            # Mode 1: docker exec to running container
+            # Default entrypoint is container_name (e.g., "navigator-mcp")
+            entrypoint = service_cfg.get("entrypoint", container_name)
+            command = "docker"
+            args = ["exec", "-i", container_name, entrypoint]
+            logger.info(
+                f"Connecting to '{service_name}' via docker exec: "
+                f"docker exec -i {container_name} {entrypoint}"
+            )
+        elif command:
+            # Mode 2: Direct subprocess command
+            logger.info(
+                f"Connecting to '{service_name}' via subprocess: {command} {' '.join(args)}"
+            )
+        else:
+            msg = (
+                f"External MCP service '{service_name}' has no connection config. "
+                f"Must specify either 'container_name' (docker exec) or 'command' (subprocess)."
+            )
+            if is_required:
+                raise ValueError(msg)
+            logger.warning(msg)
+            return None
+
+        try:
+            tools = await self.connect_service(
+                service_name=service_name,
+                command=command,
+                args=args
+            )
+            return tools
+        except Exception as e:
+            if is_required:
+                raise RuntimeError(
+                    f"Required external MCP service '{service_name}' failed to connect: {e}"
+                ) from e
+            logger.warning(
+                f"Optional external MCP service '{service_name}' unavailable: {e}"
+            )
+            return None
+
+    async def connect_all_from_config(self) -> Dict[str, List[str]]:
+        """
+        Connect to all enabled external MCP services from config.
+
+        Iterates through config.yaml → mcp.external_mcp.services and connects
+        to each enabled service. Non-required services fail gracefully.
+
+        Returns:
+            Dict mapping service_name → list of available tools
+
+        Raises:
+            RuntimeError: If any required service fails to connect
+        """
+        if not self.config.get("enabled", True):
+            logger.info("External MCP globally disabled in config")
+            return {}
+
+        services_config = self.config.get("services", {})
+        connected = {}
+
+        for service_name in services_config:
+            tools = await self.connect_from_config(service_name)
+            if tools is not None:
+                connected[service_name] = tools
+
+        logger.info(
+            f"External MCP startup complete: {len(connected)} services connected"
+        )
+        return connected
+
 
 def sync_call_external_mcp(
     external_client: ExternalMcpClient,

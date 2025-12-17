@@ -74,3 +74,30 @@ services:
     depends_on:
       - app
     restart: unless-stopped
+
+  # Navigation MCP - Tree traversal for filesystem and browser (ADR-CORE-027)
+  navigator:
+    container_name: navigator-mcp
+    build:
+      context: ../navigation-mcp  # Sibling project
+    stdin_open: true  # Required for MCP stdio transport
+    tty: true
+    environment:
+      # LM Studio / Fara Configuration - reuse existing LMSTUDIO_SERVERS
+      - LMSTUDIO_SERVERS=${LMSTUDIO_SERVERS}
+      - FARA_MODEL_IDS=${FARA_MODEL_IDS:-microsoft_fara-7b}
+      - FARA_MAX_FAILURES=${FARA_MAX_FAILURES:-2}
+      - FARA_MIN_CONFIDENCE=${FARA_MIN_CONFIDENCE:-0.7}
+      - FARA_MAX_AGENT_STEPS=${FARA_MAX_AGENT_STEPS:-20}
+      # Filesystem Configuration
+      - NAVIGATOR_FS_SANDBOX=true
+      - NAVIGATOR_LOG_LEVEL=${NAVIGATOR_LOG_LEVEL:-INFO}
+      # Session Configuration
+      - NAVIGATOR_MAX_SESSIONS=10
+      - NAVIGATOR_SESSION_TIMEOUT_SECONDS=3600
+    volumes:
+      # Same workspace mount as app service
+      - ./workspace:/workspace
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

@@ -157,50 +157,21 @@ class GraphBuilder:
         logger.info("Initializing external MCP services...")
         self.external_mcp_client = ExternalMcpClient(self.config)
 
-        # Connect to configured services
-        services = external_config.get("services", {})
-        for service_name, service_config in services.items():
-            if not service_config.get("enabled", False):
-                logger.debug(f"External MCP service '{service_name}' is disabled")
-                continue
-
-            command = service_config.get("command")
-            args = service_config.get("args", [])
-            required = service_config.get("required", False)
-
-            if not command or not args:
-                logger.warning(
-                    f"External MCP service '{service_name}' missing command or args, skipping"
-                )
-                continue
-
-            try:
-                tools = await self.external_mcp_client.connect_service(
-                    service_name=service_name,
-                    command=command,
-                    args=args
-                )
+        # Connect to all configured services using config-driven initialization
+        # Supports both container_name mode (docker exec) and command/args mode (subprocess)
+        # See ADR-CORE-027 for container_name pattern
+        try:
+            connected_services = await self.external_mcp_client.connect_all_from_config()
+            for service_name, tools in connected_services.items():
                 logger.info(
                     f"✓ External MCP service '{service_name}' connected successfully "
                     f"({len(tools)} tools available)"
                 )
-
-            except Exception as e:
-                error_msg = (
-                    f"Failed to connect external MCP service '{service_name}': {e}\n"
-                    f"Command: {command} {' '.join(args)}"
-                )
-
-                if required:
-                    logger.error(f"CRITICAL: {error_msg}")
-                    # Cleanup any successfully connected services before failing
-                    await self.external_mcp_client.cleanup()
-                    raise RuntimeError(
-                        f"Critical external MCP service '{service_name}' failed to start. "
-                        "Application cannot continue. See logs for details."
-                    ) from e
-                else:
-                    logger.warning(f"Optional service unavailable: {error_msg}")
+        except RuntimeError as e:
+            # Required service failed - cleanup and re-raise
+            logger.error(f"CRITICAL: External MCP service startup failed: {e}")
+            await self.external_mcp_client.cleanup()
+            raise
 
         # Attach external_mcp_client to specialists that need it
         # Currently all specialists get access (they can choose whether to use it)

@@ -64,9 +64,17 @@ mcp:
     # Toggle LangSmith trace spans for external MCP calls
     tracing_enabled: true
     # Configuration for individual external MCP services
-    services: {}
+    services:
       # NOTE: mcp/filesystem removed - using internal FileSpecialist instead
-      # Add other external MCP services here as needed
+
+      # Navigator MCP - Tree traversal for filesystem and browser (ADR-CORE-027)
+      # Infrastructure defined in docker-compose.yml, secrets in .env
+      # This section only controls whether/how LAS connects to the service
+      navigator:
+        enabled: true
+        required: false  # Graceful degradation if navigator unavailable
+        container_name: "navigator-mcp"  # Use docker exec instead of docker run
+        timeout_ms: 30000
 
 # ==============================================================================
 # SPECIALIST CONFIGURATION
