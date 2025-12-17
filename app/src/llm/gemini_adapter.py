@@ -1,11 +1,15 @@
 # app/src/llm/gemini_adapter.py
+"""
+Gemini adapter using the new google-genai SDK.
+Migrated from deprecated google-generativeai package.
+"""
 import logging
 import json
 import time
 from typing import Dict, Optional, Any
 
-import google.generativeai as genai
-from google.api_core import exceptions as google_exceptions
+from google import genai
+from google.genai import types
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, SafetyFilterError, RateLimitError, ProxyError
@@ -14,16 +18,15 @@ from .tracing import capture_trace
 
 logger = logging.getLogger(__name__)
 
+
 class GeminiAdapter(BaseAdapter):
     def __init__(self, model_config: Dict[str, Any], api_key: str, system_prompt: str):
         super().__init__(model_config)
         self._api_key = api_key
-        genai.configure(api_key=api_key)
-        # Initialize model WITHOUT system_instruction here, as we'll inject it into messages
-        self.model = genai.GenerativeModel(
-            self.config['api_identifier']
-        )
-        self.static_system_prompt = system_prompt # Store the static system prompt
+        # New SDK: Create a Client instead of configuring globally
+        self.client = genai.Client(api_key=api_key)
+        self.model_id = self.config['api_identifier']
+        self.static_system_prompt = system_prompt
         logger.info(f"INITIALIZED GeminiAdapter (Model: {self.model_name})")
 
     @property
@@ -55,35 +58,49 @@ class GeminiAdapter(BaseAdapter):
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=4, max=10),
-        reraise=True # Re-raise the exception after the final attempt
+        reraise=True
     )
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
-        gemini_api_messages = adapters_helpers.format_gemini_messages(
+        # Format messages for Gemini API
+        gemini_contents = adapters_helpers.format_gemini_messages(
             messages=request.messages,
             static_system_prompt=self.static_system_prompt
         )
 
-        generation_config = self.config.get('parameters', {}).copy()
+        # Build generation config from parameters
+        params = self.config.get('parameters', {}).copy()
 
-        # Initialize API call parameters
-        tools_to_pass = None
-        tool_config = None
+        # Build the config object
+        config_kwargs: Dict[str, Any] = {
+            "system_instruction": self.static_system_prompt,
+        }
 
-        # Determine request type and configure API call parameters
+        # Add generation parameters if present
+        if 'temperature' in params:
+            config_kwargs['temperature'] = params['temperature']
+        if 'max_output_tokens' in params:
+            config_kwargs['max_output_tokens'] = params['max_output_tokens']
+        if 'top_p' in params:
+            config_kwargs['top_p'] = params['top_p']
+        if 'top_k' in params:
+            config_kwargs['top_k'] = params['top_k']
+
+        # Determine request type and configure
         if request.output_model_class:
             logger.info("GeminiAdapter: Invoking in JSON mode.")
-            generation_config["response_mime_type"] = "application/json"
+            config_kwargs['response_mime_type'] = 'application/json'
         elif request.tools:
             logger.info("GeminiAdapter: Invoking in Tool-calling mode.")
-            tools_to_pass = request.tools
-            # Force the model to call a tool. This is critical for the router,
-            # which should never return a text response.
+            # Convert tools to the new format
+            config_kwargs['tools'] = self._convert_tools(request.tools)
+
             if request.force_tool_call:
                 logger.info("GeminiAdapter: Forcing a tool call using mode: ANY.")
-                tool_config = {"function_calling_config": {"mode": "ANY"}}
+                config_kwargs['tool_config'] = types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode='ANY')
+                )
             else:
                 logger.info("GeminiAdapter: Allowing model to choose between tool call and text response.")
-                tool_config = None
         else:
             logger.info("GeminiAdapter: Invoking in Text mode.")
 
@@ -91,11 +108,11 @@ class GeminiAdapter(BaseAdapter):
         start_time = time.perf_counter()
 
         try:
-            response = self.model.generate_content(
-                gemini_api_messages, # Use the prepared messages
-                generation_config=generation_config,
-                tools=tools_to_pass,
-                tool_config=tool_config,
+            # New SDK: Use client.models.generate_content()
+            response = self.client.models.generate_content(
+                model=self.model_id,
+                contents=gemini_contents,
+                config=types.GenerateContentConfig(**config_kwargs),
             )
             result = self._parse_and_format_response(request, response)
 
@@ -105,24 +122,25 @@ class GeminiAdapter(BaseAdapter):
 
             return result
 
-        # Be specific about the exceptions we can handle gracefully.
-        except google_exceptions.ResourceExhausted as e:
-            error_message = f"Gemini API rate limit exceeded: {e}"
-            logger.error(error_message, exc_info=True)
-            raise RateLimitError(error_message) from e
-        
-        except google_exceptions.RetryError as e:
-            clean_message = ("A network error occurred, which is often due to a proxy blocking the request. "
-                             "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
-            # Log the full error for debugging, but raise a clean message.
-            logger.error(f"{clean_message} Original error: {e}", exc_info=True)
-            # Re-raise as a specific, catchable error.
-            raise ProxyError(clean_message) from e
-
         except Exception as e:
-            # A generic catch-all for other proxy-related issues, like receiving an HTML error page.
-            if "proxy" in str(e).lower() or "<html>" in str(e).lower():
+            error_str = str(e).lower()
+
+            # Check for rate limiting
+            if 'resource_exhausted' in error_str or 'quota' in error_str or '429' in error_str:
+                error_message = f"Gemini API rate limit exceeded: {e}"
+                logger.error(error_message, exc_info=True)
+                raise RateLimitError(error_message) from e
+
+            # Check for proxy issues
+            if 'proxy' in error_str or '<html>' in str(e).lower():
                 clean_message = ("A proxy error occurred, likely due to a blocked request. "
+                                 "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
+                logger.error(f"{clean_message} Original error: {e}", exc_info=True)
+                raise ProxyError(clean_message) from e
+
+            # Check for network/retry errors
+            if 'retry' in error_str or 'connection' in error_str:
+                clean_message = ("A network error occurred, which is often due to a proxy blocking the request. "
                                  "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
                 logger.error(f"{clean_message} Original error: {e}", exc_info=True)
                 raise ProxyError(clean_message) from e
@@ -130,57 +148,62 @@ class GeminiAdapter(BaseAdapter):
             logger.error(f"Gemini API error during invoke: {e}", exc_info=True)
             raise LLMInvocationError(f"Gemini API error: {e}") from e
 
+    def _convert_tools(self, tools: list) -> list:
+        """Convert tool definitions to the new SDK format."""
+        # The new SDK can accept function declarations directly
+        # If tools are already in the right format, pass through
+        return tools
+
     def _parse_and_format_response(self, request: StandardizedLLMRequest, response: Any) -> Dict[str, Any]:
         """
         Parses the raw response from the Gemini API and formats it into the
-        standardized dictionary expected by the specialists. This includes
-        handling safety filtering, JSON, tool calls, and text responses.
+        standardized dictionary expected by the specialists.
         """
-        # Robustness check for safety filtering
+        # Check for candidates
         try:
             candidate = response.candidates[0]
         except (IndexError, AttributeError):
-             # First, check for a documented safety block. This is the most likely reason for an empty response.
-             if hasattr(response, 'prompt_feedback') and getattr(response.prompt_feedback, 'block_reason', None):
-                 block_reason = response.prompt_feedback.block_reason
-                 ratings = response.prompt_feedback.safety_ratings
-                 error_message = (f"Gemini response blocked due to safety filters. "
-                                  f"Reason: {block_reason}. Ratings: {ratings}")
-                 logger.error(error_message)
-                 raise SafetyFilterError(error_message)
-             else:
-                 # If there are no candidates and no documented block reason, it's a different, more generic API issue.
-                 error_message = "Gemini API returned an empty response with no candidates and no specific safety block reason. This could be a transient API issue."
-                 logger.error(f"{error_message} Full response object: {response}")
-                 raise LLMInvocationError(error_message)
+            # Check for safety block
+            if hasattr(response, 'prompt_feedback') and getattr(response.prompt_feedback, 'block_reason', None):
+                block_reason = response.prompt_feedback.block_reason
+                ratings = getattr(response.prompt_feedback, 'safety_ratings', [])
+                error_message = (f"Gemini response blocked due to safety filters. "
+                                 f"Reason: {block_reason}. Ratings: {ratings}")
+                logger.error(error_message)
+                raise SafetyFilterError(error_message)
+            else:
+                error_message = "Gemini API returned an empty response with no candidates."
+                logger.error(f"{error_message} Full response object: {response}")
+                raise LLMInvocationError(error_message)
 
         # --- Response Parsing Logic ---
-        # The order of checks is important: Tool Call -> JSON -> Text
+        # Check for tool call first
+        if candidate.content and candidate.content.parts:
+            for part in candidate.content.parts:
+                # New SDK: function_call is an attribute on the part
+                if hasattr(part, 'function_call') and part.function_call:
+                    function_call = part.function_call
 
-        # 1. Check for a tool call response.
-        if candidate.content.parts and hasattr(candidate.content.parts[0], 'function_call') and candidate.content.parts[0].function_call:
-            part = candidate.content.parts[0] # type: ignore
-            function_call = part.function_call
+                    if not function_call.name:
+                        logger.warning("GeminiAdapter received a tool call with an empty name.")
+                        return {"tool_calls": []}
 
-            if not function_call.name:
-                logger.warning("GeminiAdapter received a tool call with an empty name. Treating as a failed tool call.")
-                return {"tool_calls": []}
+                    # Extract arguments
+                    args = dict(function_call.args) if function_call.args else {}
+                    tool_call_id = f"call_{function_call.name}"
+                    tool_call_response = {
+                        "tool_calls": [{"name": function_call.name, "args": args, "id": tool_call_id}]
+                    }
+                    logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
+                    return tool_call_response
 
-            args = {key: value for key, value in function_call.args.items()} if function_call.args else {}
-            tool_call_id = f"call_{function_call.name}"
-            tool_call_response = {
-                "tool_calls": [{"name": function_call.name, "args": args, "id": tool_call_id}]
-            }
-            logger.info(f"GeminiAdapter returned tool call: {tool_call_response}")
-            return tool_call_response
-
-        # 2. Check for a JSON response.
+        # Check for JSON response
         if request.output_model_class:
             logger.info("GeminiAdapter returned JSON response.")
             content = response.text or "{}"
             try:
                 json_response = json.loads(content)
-                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)} # Use the hook
+                return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
             except json.JSONDecodeError as e:
                 logger.warning(
                     f"GeminiAdapter direct JSON parse failed: {e}. Attempting robust extraction. Content: {content[:500]}..."
@@ -192,6 +215,6 @@ class GeminiAdapter(BaseAdapter):
                     logger.error("Failed to parse or extract JSON from the Gemini model's response.")
                     return {"text_response": content, "json_response": {}}
 
-        # 3. Fallback to a standard text response.
+        # Fallback to text response
         logger.info("GeminiAdapter returned text response.")
         return {"text_response": response.text}

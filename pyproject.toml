@@ -31,7 +31,7 @@ dependencies = [
     "psycopg2-binary",
     "gradio",
     # "open-interpreter",  # REMOVED - replaced by MCP services (drops litellm + 45 dependencies)
-    "google-generativeai",
+    "google-genai",  # Replaces deprecated google-generativeai
     "playwright",
     "inflection",
     "mcp",  # Model Context Protocol SDK for external MCP containers (ADR-MCP-003)
