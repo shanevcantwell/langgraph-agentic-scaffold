@@ -34,6 +34,25 @@ class ArchiverSpecialist(BaseSpecialist):
         self.pruning_strategy = self.specialist_config.get("pruning_strategy", "none")
         self.pruning_max_count = self.specialist_config.get("pruning_max_count", 50)
         os.makedirs(self.archive_dir, exist_ok=True)
+        self._cleanup_orphaned_directories()
+
+    def _cleanup_orphaned_directories(self) -> None:
+        """
+        Removes orphaned directories in the archive folder from failed/interrupted runs.
+        Called at startup to ensure clean slate.
+        """
+        try:
+            all_entries = [os.path.join(self.archive_dir, f) for f in os.listdir(self.archive_dir)]
+            orphaned_dirs = [f for f in all_entries if os.path.isdir(f)]
+
+            for orphan in orphaned_dirs:
+                logger.warning(f"Cleaning up orphaned archive directory from failed run: {orphan}")
+                shutil.rmtree(orphan)
+
+            if orphaned_dirs:
+                logger.info(f"Cleaned up {len(orphaned_dirs)} orphaned archive directory(ies) at startup.")
+        except Exception as e:
+            logger.error(f"Failed to cleanup orphaned directories: {e}")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -221,7 +240,15 @@ class ArchiverSpecialist(BaseSpecialist):
     def _prune_archive(self):
         """Prunes the archive directory based on the configured strategy."""
         if self.pruning_strategy == "count":
-            files = sorted([os.path.join(self.archive_dir, f) for f in os.listdir(self.archive_dir)], key=os.path.getmtime)
+            # Only prune regular files (not directories from failed/incomplete archives)
+            all_entries = [os.path.join(self.archive_dir, f) for f in os.listdir(self.archive_dir)]
+            files = sorted([f for f in all_entries if os.path.isfile(f)], key=os.path.getmtime)
+
+            # Warn about any orphaned directories (failed archive cleanup)
+            orphaned_dirs = [f for f in all_entries if os.path.isdir(f)]
+            if orphaned_dirs:
+                logger.warning(f"Found {len(orphaned_dirs)} orphaned archive directories (likely from failed runs): {orphaned_dirs}")
+
             while len(files) > self.pruning_max_count:
                 os.remove(files.pop(0))
-                logger.info(f"Pruned old report file.")
+                logger.info(f"Pruned old archive file.")

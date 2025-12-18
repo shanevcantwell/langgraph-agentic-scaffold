@@ -53,11 +53,18 @@ class NavigatorSpecialist(BaseSpecialist):
         self._current_session_id: Optional[str] = None
 
     def _perform_pre_flight_checks(self) -> bool:
-        """Check if navigator service is available."""
-        if not self.external_mcp_client:
-            logger.warning(f"{self.specialist_name}: external_mcp_client not injected")
-            return False
+        """
+        Check if navigator service is available.
 
+        Note: external_mcp_client is injected AFTER specialist loading by GraphBuilder,
+        so we can't verify it at load time. Return True to allow loading; runtime
+        checks in _execute_logic handle service unavailability gracefully.
+        """
+        # At load time, external_mcp_client isn't injected yet - allow loading
+        if not self.external_mcp_client:
+            return True
+
+        # At runtime, check if service is actually connected
         if not self.external_mcp_client.is_connected(self.SERVICE_NAME):
             logger.warning(f"{self.specialist_name}: navigator service not connected")
             return False
@@ -221,7 +228,11 @@ class NavigatorSpecialist(BaseSpecialist):
         Uses LLM to interpret the request, then executes appropriate
         navigator operations.
         """
-        # Check if navigator is available
+        # Runtime check: external_mcp_client must be injected
+        if not self.external_mcp_client:
+            return self._handle_navigator_unavailable(state)
+
+        # Check if navigator service is connected
         if not self._perform_pre_flight_checks():
             return self._handle_navigator_unavailable(state)
 

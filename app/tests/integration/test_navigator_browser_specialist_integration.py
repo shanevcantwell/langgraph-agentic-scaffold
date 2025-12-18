@@ -102,11 +102,16 @@ class TestNavigatorBrowserPreflightIntegration:
         assert connected_specialist._perform_pre_flight_checks() is True
 
     @pytest.mark.asyncio
-    async def test_preflight_fails_without_navigator(self, specialist_config):
-        """Test that pre-flight check fails without navigator."""
+    async def test_preflight_passes_without_client_for_loading(self, specialist_config):
+        """Test that pre-flight passes without client (allows loading).
+
+        external_mcp_client is injected AFTER specialist loading by GraphBuilder,
+        so pre-flight must return True to allow the specialist to be loaded.
+        Runtime checks handle unavailability gracefully.
+        """
         specialist = NavigatorBrowserSpecialist("navigator_browser_specialist", specialist_config)
-        # Don't attach client
-        assert specialist._perform_pre_flight_checks() is False
+        # Don't attach client - simulates load-time check
+        assert specialist._perform_pre_flight_checks() is True
 
 
 # =============================================================================
@@ -122,10 +127,10 @@ class TestMcpBrowserAvailabilityIntegration:
         assert connected_specialist._mcp_is_available() is True
 
     @pytest.mark.asyncio
-    async def test_mcp_is_available_when_not_connected(self, specialist_config):
-        """Test is_available returns False when not connected."""
+    async def test_mcp_is_available_when_client_not_injected(self, specialist_config):
+        """Test is_available returns True when client not yet injected (allows loading)."""
         specialist = NavigatorBrowserSpecialist("navigator_browser_specialist", specialist_config)
-        assert specialist._mcp_is_available() is False
+        assert specialist._mcp_is_available() is True
 
 
 # =============================================================================

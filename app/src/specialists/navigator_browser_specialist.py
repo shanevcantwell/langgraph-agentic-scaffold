@@ -71,11 +71,18 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
     ]
 
     def _perform_pre_flight_checks(self) -> bool:
-        """Check if navigator browser is available."""
-        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
-            logger.warning("NavigatorBrowserSpecialist: ExternalMcpClient not injected")
-            return False
+        """
+        Check if navigator browser is available.
 
+        Note: external_mcp_client is injected AFTER specialist loading by GraphBuilder,
+        so we can't verify it at load time. Return True to allow loading; runtime
+        checks in _execute_logic handle service unavailability gracefully.
+        """
+        # At load time, external_mcp_client isn't injected yet - allow loading
+        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+            return True
+
+        # At runtime, check if service is actually connected
         if not self.external_mcp_client.is_connected("navigator"):
             logger.warning("NavigatorBrowserSpecialist: Navigator not connected")
             return False
@@ -543,7 +550,11 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
         - Let session timeout naturally (default 1 hour)
         - Start with persist_session=False
         """
-        # Check pre-flight
+        # Runtime check: external_mcp_client must be injected
+        if not hasattr(self, 'external_mcp_client') or not self.external_mcp_client:
+            return self._handle_browser_unavailable(state)
+
+        # Check if navigator service is connected
         if not self._perform_pre_flight_checks():
             return self._handle_browser_unavailable(state)
 

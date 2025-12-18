@@ -106,19 +106,51 @@ def test_prune_archive_removes_oldest_files(archiver_specialist):
     """Tests that _prune_archive correctly removes the oldest files."""
     # Create more files than max_archive_files
     mock_files = [f"run_{i}.zip" for i in range(7)]
-    
+
     with patch("os.listdir", return_value=mock_files) as mock_listdir, \
          patch("os.path.getmtime", side_effect=range(len(mock_files))) as mock_getmtime, \
          patch("os.remove") as mock_remove, \
-         patch("os.path.join", side_effect=os.path.join): 
-        
+         patch("os.path.isfile", return_value=True), \
+         patch("os.path.isdir", return_value=False), \
+         patch("os.path.join", side_effect=os.path.join):
+
         archiver_specialist._prune_archive()
-        
+
         mock_listdir.assert_called_once_with(archiver_specialist.archive_dir)
         # Should remove the 2 oldest files to get down to 5
         assert mock_remove.call_count == 2
         mock_remove.assert_any_call(os.path.join(archiver_specialist.archive_dir, "run_0.zip"))
         mock_remove.assert_any_call(os.path.join(archiver_specialist.archive_dir, "run_1.zip"))
+
+
+def test_cleanup_orphaned_directories(tmp_path, initialized_specialist_factory):
+    """Tests that _cleanup_orphaned_directories removes orphaned dirs at startup."""
+    archive_dir = tmp_path / "test_archives"
+    archive_dir.mkdir()
+
+    # Create an orphaned directory (simulating failed archive cleanup)
+    orphaned_dir = archive_dir / "run_20251211_012706_orphaned"
+    orphaned_dir.mkdir()
+    (orphaned_dir / "partial_file.md").write_text("incomplete")
+
+    # Create a legitimate zip file (should not be touched)
+    zip_file = archive_dir / "run_20251214_235734_cc5cf831.zip"
+    zip_file.write_bytes(b"fake zip content")
+
+    # Initialize archiver - cleanup happens in __init__
+    with patch.dict(os.environ, {"AGENTIC_SCAFFOLD_ARCHIVE_PATH": str(archive_dir)}):
+        specialist = initialized_specialist_factory(
+            "ArchiverSpecialist",
+            specialist_name_override="archiver_specialist",
+            config_override={},
+        )
+
+    # Orphaned directory should be removed
+    assert not orphaned_dir.exists(), "Orphaned directory should be cleaned up"
+
+    # Legitimate zip should remain
+    assert zip_file.exists(), "Legitimate archive files should be preserved"
+
 
 def test_execute_logic_handles_missing_final_response(archiver_specialist, initial_state):
     """Tests edge case where final_user_response.md is missing."""

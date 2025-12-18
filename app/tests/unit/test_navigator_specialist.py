@@ -60,9 +60,14 @@ class TestNavigatorSpecialistInit:
         assert navigator_specialist.specialist_config == specialist_config
         assert navigator_specialist.external_mcp_client is None
 
-    def test_preflight_fails_without_client(self, navigator_specialist):
-        """Test pre-flight check fails when client not injected."""
-        assert navigator_specialist._perform_pre_flight_checks() is False
+    def test_preflight_passes_without_client_for_loading(self, navigator_specialist):
+        """Test pre-flight passes when client not injected (allows loading).
+
+        external_mcp_client is injected AFTER specialist loading by GraphBuilder,
+        so pre-flight must return True to allow the specialist to be loaded.
+        Runtime checks handle unavailability gracefully.
+        """
+        assert navigator_specialist._perform_pre_flight_checks() is True
 
     def test_preflight_fails_when_not_connected(self, navigator_specialist, mock_external_client):
         """Test pre-flight check fails when navigator not connected."""
@@ -333,9 +338,15 @@ class TestMcpRegistration:
         """Test is_available MCP service."""
         assert connected_specialist._mcp_is_available() is True
 
-    def test_mcp_is_available_when_not_connected(self, navigator_specialist):
-        """Test is_available returns False when not connected."""
+    def test_mcp_is_available_when_not_connected(self, navigator_specialist, mock_external_client):
+        """Test is_available returns False when client injected but not connected."""
+        mock_external_client.is_connected.return_value = False
+        navigator_specialist.external_mcp_client = mock_external_client
         assert navigator_specialist._mcp_is_available() is False
+
+    def test_mcp_is_available_when_client_not_injected(self, navigator_specialist):
+        """Test is_available returns True when client not yet injected (allows loading)."""
+        assert navigator_specialist._mcp_is_available() is True
 
 
 # =============================================================================
