@@ -14,6 +14,7 @@ from ..utils.errors import SpecialistLoadError, WorkflowError
 from ..strategies.critique.base import BaseCritiqueStrategy
 from .graph_orchestrator import GraphOrchestrator
 from .executors.node_executor import NodeExecutor
+from .specialist_categories import SpecialistCategories
 from .subgraphs.tiered_chat import TieredChatSubgraph
 from .subgraphs.distillation import DistillationSubgraph
 from .subgraphs.context_engineering import ContextEngineeringSubgraph
@@ -62,11 +63,11 @@ class GraphBuilder:
 
         # TASK 1.2: Build allowed destinations for route validation
         # Include all specialists except router (which can't be a routing destination)
+        # ADR-CORE-028: Use centralized exclusion logic
         router_name = CoreSpecialist.ROUTER.value
-        mcp_only_specialists = ["summarizer_specialist"]
         self.allowed_destinations = {
-            name for name in self.specialists 
-            if name != router_name and name not in mcp_only_specialists
+            name for name in self.specialists
+            if name != router_name and name not in SpecialistCategories.get_node_exclusions()
         }
 
         self.orchestrator = GraphOrchestrator(self.config, self.specialists, self.allowed_destinations)
@@ -79,6 +80,15 @@ class GraphBuilder:
             CriticLoopSubgraph(self.specialists, self.orchestrator, self.config),
             EmergentProjectSubgraph(self.specialists, self.orchestrator, self.config)
         ]
+
+        # ADR-CORE-028: Configure router AFTER subgraphs are initialized
+        # because router exclusions now dynamically query subgraph exclusions
+        all_configs = self.config.get("specialists", {})
+        try:
+            if CoreSpecialist.ROUTER.value in self.specialists:
+                self._configure_router(self.specialists, all_configs)
+        except (IOError, FileNotFoundError) as e:
+            raise SpecialistLoadError(f"Could not load specialist '{CoreSpecialist.ROUTER.value}' due to a prompt loading error: {e}") from e
 
         workflow_config = self.config.get("workflow", {})
         raw_entry_point = workflow_config.get("entry_point", CoreSpecialist.ROUTER.value)
@@ -111,15 +121,8 @@ class GraphBuilder:
         self._wire_hub_and_spoke_edges(workflow)
         workflow.set_entry_point(self.entry_point)
 
-        # ADR-CORE-018: Enable checkpointing for HitL workflows
-        if checkpointer:
-            compiled_graph = workflow.compile(checkpointer=checkpointer)
-            logger.info(f"---GraphBuilder: Graph compiled with checkpointer ({type(checkpointer).__name__}) and entry point '{self.entry_point}'.---")
-        else:
-            compiled_graph = workflow.compile()
-            logger.info(f"---GraphBuilder: Graph compiled successfully with entry point '{self.entry_point}'.---")
-
-        return compiled_graph
+        # ADR-CORE-028: Use extracted compile helper
+        return self._compile_graph(workflow, checkpointer, "default")
 
     async def initialize_external_mcp(self):
         """
@@ -294,12 +297,9 @@ class GraphBuilder:
         # --- Deferred Configuration and Adapter Attachment ---
         all_configs = self.config.get("specialists", {})
 
-        try:
-            if CoreSpecialist.ROUTER.value in loaded_specialists:
-                self._configure_router(loaded_specialists, all_configs)
-        except (IOError, FileNotFoundError) as e:
-            raise SpecialistLoadError(f"Could not load specialist '{CoreSpecialist.ROUTER.value}' due to a prompt loading error: {e}") from e
-        
+        # Note: Router configuration is deferred until after subgraphs are initialized
+        # in __init__ because it needs to query subgraph exclusions (ADR-CORE-028).
+        # Triage configuration can happen now as it doesn't depend on subgraphs.
         if CoreSpecialist.TRIAGE.value in loaded_specialists:
             self._configure_triage(loaded_specialists, all_configs)
 
@@ -309,14 +309,17 @@ class GraphBuilder:
             # No special configuration needed for now, uses standard prompt loading
             pass
 
-        # Now that all specialists, including router/triage, have their final
+        # Now that all specialists, including triage, have their final
         # configurations, iterate through and attach adapters. This loop will
         # only attach adapters to specialists that don't already have one.
         # This is crucial because deferred configuration methods like _configure_router
         # and _configure_triage have already attached adapters with dynamic,
         # context-aware prompts. This check prevents this generic loop from
         # overwriting those specialized adapters.
-        for instance in loaded_specialists.values():
+        # ADR-CORE-028: Router is configured AFTER subgraphs in __init__, so skip it here
+        for name, instance in loaded_specialists.items():
+            if name == CoreSpecialist.ROUTER.value:
+                continue  # Router configured after subgraphs in __init__
             if not instance.llm_adapter:
                 self._attach_llm_adapter(instance)
 
@@ -347,20 +350,13 @@ class GraphBuilder:
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
         base_prompt = load_prompt(router_config.get("prompt_file", ""))
 
-        # CORE-CHAT-002: Exclude tiered chat subgraph components from router's tool choices
-        # They are triggered via hardcoded routing logic in GraphOrchestrator, not LLM decision
-        excluded_from_router = [
-            CoreSpecialist.ROUTER.value,
-            "progenitor_alpha_specialist",   # Internal to tiered chat subgraph
-            "progenitor_bravo_specialist",   # Internal to tiered chat subgraph
-            "tiered_synthesizer_specialist", # Internal to tiered chat subgraph
-            "file_specialist",               # MCP-only service layer - use file_operations_specialist for user requests
-            "summarizer_specialist",         # MCP-only specialist (Task 5.3) - no graph routing
-            # DISTILLATION SUBGRAPH: Exclude internal specialists from router
-            "distillation_prompt_expander_specialist",   # Internal to distillation subgraph
-            "distillation_prompt_aggregator_specialist", # Internal to distillation subgraph
-            "distillation_response_collector_specialist" # Internal to distillation subgraph
-        ]
+        # ADR-CORE-028: Dynamically collect exclusions from subgraphs
+        # This replaces the hardcoded list and stays in sync with subgraph definitions
+        subgraph_exclusions = []
+        for subgraph in self.subgraphs:
+            subgraph_exclusions.extend(subgraph.get_router_excluded_specialists())
+
+        excluded_from_router = SpecialistCategories.get_router_exclusions(subgraph_exclusions)
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded_from_router}
         router_instance.set_specialist_map(available_specialists)
         standup_report = "\n\n--- AVAILABLE SPECIALISTS ---\n" + "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])
@@ -407,12 +403,12 @@ class GraphBuilder:
     def _add_nodes_to_graph(self, workflow: StateGraph, streaming_callback: Callable[[str], None] = None):
         # CORE-CHAT-002: Both simple and tiered chat patterns coexist in graph
         # Runtime decision in GraphOrchestrator determines which path to use
-        
-        # MCP-only specialists that should not be graph nodes
-        mcp_only_specialists = ["summarizer_specialist"]
+
+        # ADR-CORE-028: Use centralized node exclusion logic
+        node_exclusions = SpecialistCategories.get_node_exclusions()
 
         for name, instance in self.specialists.items():
-            if name in mcp_only_specialists:
+            if name in node_exclusions:
                 continue
 
             if name == CoreSpecialist.ROUTER.value:
@@ -422,13 +418,15 @@ class GraphBuilder:
 
     def _wire_hub_and_spoke_edges(self, workflow: StateGraph):
         router_name = CoreSpecialist.ROUTER.value
-        mcp_only_specialists = ["summarizer_specialist"]
+
+        # ADR-CORE-028: Use centralized node exclusion logic
+        node_exclusions = SpecialistCategories.get_node_exclusions()
 
         # Build destinations dict for router conditional edges
         # Include all specialists except router itself
         destinations = {
-            name: name for name in self.specialists 
-            if name != router_name and name not in mcp_only_specialists
+            name: name for name in self.specialists
+            if name != router_name and name not in node_exclusions
         }
 
         # CORE-CHAT-002: chat_specialist is now always a node (both patterns coexist)
@@ -446,17 +444,12 @@ class GraphBuilder:
         for subgraph in self.subgraphs:
             subgraph.build(workflow)
 
-        # Collect excluded specialists from all subgraphs
-        excluded_specialists = [
-            router_name,
-            CoreSpecialist.ARCHIVER.value,
-            CoreSpecialist.END.value,
-            CoreSpecialist.CRITIC.value,
-            "summarizer_specialist", # MCP-only
-        ]
-        
+        # ADR-CORE-028: Collect exclusions using centralized logic
+        subgraph_exclusions = []
         for subgraph in self.subgraphs:
-            excluded_specialists.extend(subgraph.get_excluded_specialists())
+            subgraph_exclusions.extend(subgraph.get_excluded_specialists())
+
+        excluded_specialists = SpecialistCategories.get_hub_spoke_exclusions(subgraph_exclusions)
 
         for name in self.specialists:
             if name in excluded_specialists:
@@ -539,14 +532,35 @@ class GraphBuilder:
             # All specialists return to Conductor
             workflow.add_edge(name, conductor_name)
             
-        # Compile
+        # ADR-CORE-028: Use extracted compile helper
+        return self._compile_graph(workflow, checkpointer, "Convening")
+
+    def _compile_graph(self, workflow: StateGraph, checkpointer, architecture_name: str = "default"):
+        """
+        Compiles the workflow graph with optional checkpointer.
+
+        Args:
+            workflow: The StateGraph to compile
+            checkpointer: Optional LangGraph checkpointer for HitL support
+            architecture_name: Name for logging (e.g., "default", "Convening")
+
+        Returns:
+            Compiled Pregel graph
+
+        See ADR-CORE-028 for details on this extraction.
+        """
         if checkpointer:
             compiled_graph = workflow.compile(checkpointer=checkpointer)
-            logger.info(f"---GraphBuilder: Convening Graph compiled with checkpointer ({type(checkpointer).__name__}).---")
+            logger.info(
+                f"---GraphBuilder: {architecture_name} Graph compiled with checkpointer "
+                f"({type(checkpointer).__name__}) and entry point '{self.entry_point}'.---"
+            )
         else:
             compiled_graph = workflow.compile()
-            logger.info(f"---GraphBuilder: Convening Graph compiled successfully.---")
-
+            logger.info(
+                f"---GraphBuilder: {architecture_name} Graph compiled successfully "
+                f"with entry point '{self.entry_point}'.---"
+            )
         return compiled_graph
 
     def _register_internal_mcp_services(self):

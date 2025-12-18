@@ -28,3 +28,14 @@ class BaseSubgraph(ABC):
         and should be excluded from standard hub-and-spoke routing.
         """
         pass
+
+    def get_router_excluded_specialists(self) -> list[str]:
+        """
+        Returns specialists that should be excluded from router's tool schema.
+
+        Default implementation returns same as get_excluded_specialists().
+        Override if router exclusions differ from edge exclusions.
+
+        See ADR-CORE-028 for details.
+        """
+        return self.get_excluded_specialists()

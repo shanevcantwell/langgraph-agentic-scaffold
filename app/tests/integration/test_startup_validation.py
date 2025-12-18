@@ -258,10 +258,10 @@ def test_startup_validation_specialist_pre_flight_checks():
 
     # --- Assert ---
     # All specialists that passed pre-flight should be in the graph
-    # EXCEPT MCP-only specialists (researcher, summarizer)
-    mcp_only_specialists = {'researcher_specialist', 'summarizer_specialist'}
+    # EXCEPT MCP-only specialists (ADR-CORE-028: use centralized definition)
+    from app.src.workflow.specialist_categories import SpecialistCategories
     for name in builder.specialists.keys():
-        if name not in mcp_only_specialists:
+        if name not in SpecialistCategories.MCP_ONLY:
             assert name in graph.nodes, \
                 f"Specialist '{name}' passed pre-flight but not in graph"
 

@@ -1,0 +1,80 @@
+"""
+Single source of truth for specialist categorization.
+
+This module centralizes the logic for categorizing specialists for:
+- Graph node inclusion/exclusion
+- Router tool schema exclusions
+- Hub-and-spoke edge wiring exclusions
+
+See ADR-CORE-028 for details.
+"""
+from typing import Set, List
+
+from ..enums import CoreSpecialist
+
+
+class SpecialistCategories:
+    """
+    Immutable categorization of specialists for routing and graph construction.
+
+    Categories:
+    - MCP_ONLY: Not added as graph nodes, accessed only via MCP
+    - CORE_INFRASTRUCTURE: Router, archiver, end, critic - special graph roles
+    - SERVICE_LAYER: MCP-only internal services (not user-facing)
+    """
+
+    # MCP-only: Not added as graph nodes, accessed only via MCP
+    MCP_ONLY: frozenset = frozenset([
+        "summarizer_specialist",
+    ])
+
+    # Core infrastructure: Special graph roles
+    CORE_INFRASTRUCTURE: frozenset = frozenset([
+        CoreSpecialist.ROUTER.value,
+        CoreSpecialist.ARCHIVER.value,
+        CoreSpecialist.END.value,
+        CoreSpecialist.CRITIC.value,
+    ])
+
+    # Service layer: MCP-only internal services
+    SERVICE_LAYER: frozenset = frozenset([
+        "file_specialist",  # MCP-only service, use file_operations_specialist for user requests
+    ])
+
+    @classmethod
+    def get_router_exclusions(cls, subgraph_exclusions: List[str] = None) -> Set[str]:
+        """
+        Returns specialists that should NOT appear in router's tool schema.
+
+        Combines:
+        - MCP-only specialists (not graph nodes)
+        - Service layer specialists (internal services)
+        - Subgraph-managed specialists (from subgraph.get_router_excluded_specialists())
+        - Router itself (cannot route to itself)
+        """
+        exclusions = set(cls.MCP_ONLY) | set(cls.SERVICE_LAYER) | {CoreSpecialist.ROUTER.value}
+        if subgraph_exclusions:
+            exclusions.update(subgraph_exclusions)
+        return exclusions
+
+    @classmethod
+    def get_hub_spoke_exclusions(cls, subgraph_exclusions: List[str] = None) -> Set[str]:
+        """
+        Returns specialists excluded from standard hub-and-spoke edge wiring.
+
+        These specialists either:
+        - Have special routing handled elsewhere (CORE_INFRASTRUCTURE)
+        - Are not graph nodes (MCP_ONLY)
+        - Are wired by their subgraph (subgraph_exclusions)
+        """
+        exclusions = set(cls.CORE_INFRASTRUCTURE) | set(cls.MCP_ONLY)
+        if subgraph_exclusions:
+            exclusions.update(subgraph_exclusions)
+        return exclusions
+
+    @classmethod
+    def get_node_exclusions(cls) -> Set[str]:
+        """
+        Returns specialists that should NOT be added as graph nodes.
+        """
+        return set(cls.MCP_ONLY)
