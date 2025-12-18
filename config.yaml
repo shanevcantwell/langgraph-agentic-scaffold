@@ -139,6 +139,11 @@ specialists:
     prompt_file: "navigator_specialist_prompt.md"
     description: "Handles complex file operations requiring tree traversal: recursive directory deletion, glob pattern search, and bulk operations. Use this for 'delete folder X and all contents', 'find all .py files', or operations spanning multiple directories."
 
+  navigator_browser_specialist:
+    type: "hybrid"
+    prompt_file: "navigator_browser_specialist_prompt.md"
+    description: "Web browsing with visual grounding. Navigates URLs, clicks elements by natural language description, fills forms, and extracts page content. Use for 'go to example.com', 'click the Submit button', 'type hello in the search box'."
+
   batch_processor_specialist:
     type: "llm"
     prompt_file: "batch_processor_prompt.md"
