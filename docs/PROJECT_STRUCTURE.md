@@ -60,6 +60,10 @@ This is the main Python package for the application.
     -   `batch_processor_specialist.py`: Handles batch file operations with internal iteration pattern (e.g., "move all txt files to appropriate folders").
     -   `image_specialist.py`: Image analysis and processing specialist.
 
+    **Navigation & External MCP** (2 specialists - ADR-CORE-027):
+    -   `navigator_specialist.py`: Complex filesystem operations via external navigation-mcp container (recursive delete, glob search, tree traversal). Uses ExternalMcpClient.
+    -   `navigator_browser_specialist.py`: Web navigation with visual grounding via Fara AI model. Supports URL navigation, natural language element clicking, form filling, screenshots. Session persistence for multi-turn conversations.
+
     **Analysis & Data Processing** (5 specialists):
     -   `text_analysis_specialist.py`: Text analysis and natural language processing.
     -   `data_extractor_specialist.py`: Extracting structured data from unstructured sources.
@@ -319,13 +323,17 @@ User workspace for file operations and external document storage. Mounted into c
 
 ## Component Counts
 
-**Total Specialists:** 35 specialist modules
+**Total Specialists:** 37 specialist modules
 - **LLM-driven:** ~20 specialists (router, chat, progenitors, data analysis, generation, etc.)
 - **Procedural:** ~15 specialists (file_specialist, facilitator, archiver, synthesizers, etc.)
-- **MCP-only Specialists:** 3 (file_specialist, web_specialist, summarizer_specialist)
+- **External MCP:** 2 (navigator_specialist, navigator_browser_specialist) - uses ExternalMcpClient
+- **MCP-only Specialists:** 3 (file_specialist, web_specialist, summarizer_specialist) - internal MCP
 
 **Standalone MCP Services:** 1 (in `app/src/mcp/services/`)
 - `FaraService` - Visual UI verification (LLM-requiring, vision model)
+
+**Specialist Mixins:** (in `app/src/specialists/mixins/`)
+- `ReActMixin` - Iterative LLM→tool→LLM loop for agentic specialists (see ADR-CORE-027)
 
 ## Key Architectural Files
 

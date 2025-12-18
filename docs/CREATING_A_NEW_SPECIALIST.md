@@ -774,6 +774,184 @@ class OpenInterpreterSpecialist(BaseSpecialist):
         }
 ```
 
+## Advanced: ReActMixin for Iterative Tool Use
+
+The **ReActMixin** enables specialists to perform ReAct-style loops where the LLM iteratively calls tools until it produces a final answer. This is distinct from BatchProcessor (LLM plans once, procedural execution) and graph routing (each tool call is a separate node).
+
+ReActMixin keeps the loop internal to a single specialist execution, ideal for:
+- Tight iteration with visual tools (Fara)
+- Debugging workflows
+- Scenarios where LLM needs to see tool results and decide next steps
+
+### Basic Usage
+
+```python
+from app.src.specialists.base import BaseSpecialist
+from app.src.specialists.mixins import ReActMixin, ToolDef, MaxIterationsExceeded
+
+class MyAgenticSpecialist(BaseSpecialist, ReActMixin):
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Define available tools (MCP services)
+        tools = {
+            "screenshot": ToolDef(service="fara", function="screenshot"),
+            "verify": ToolDef(service="fara", function="verify_element"),
+            "click": ToolDef(service="fara", function="click"),
+        }
+
+        try:
+            final_response, history = self.execute_with_tools(
+                messages=state["messages"],
+                tools=tools,
+                max_iterations=15
+            )
+        except MaxIterationsExceeded as e:
+            # Handle runaway loops
+            return {
+                "messages": [AIMessage(content=f"Task incomplete after {e.iterations} iterations")],
+                "artifacts": {"react_trace": [h.model_dump() for h in e.history]}
+            }
+
+        return {
+            "artifacts": {"react_trace": [h.model_dump() for h in history]},
+            "messages": [AIMessage(content=final_response)]
+        }
+```
+
+### How It Works
+
+1. **Send messages + tool definitions** to LLM
+2. **If LLM returns tool_calls**: Execute them via MCP, append results to messages
+3. **Loop back** to step 1
+4. **If LLM returns text** (no tool_calls): Return as final response
+
+### Tool Definitions
+
+```python
+class ToolDef(BaseModel):
+    service: str   # MCP service name (e.g., 'fara', 'file_specialist')
+    function: str  # Function within the service
+    description: Optional[str]  # For LLM context
+
+# Example
+tools = {
+    "read_file": ToolDef(
+        service="file_specialist",
+        function="read_file",
+        description="Read contents of a file"
+    ),
+    "list_dir": ToolDef(
+        service="navigator_specialist",
+        function="list_directory",
+        description="List directory contents"
+    ),
+}
+```
+
+### Error Handling
+
+```python
+# Fail fast on first error
+final_response, history = self.execute_with_tools(
+    messages=messages,
+    tools=tools,
+    stop_on_error=True  # Raises ToolExecutionError
+)
+
+# Or continue and report errors to LLM
+final_response, history = self.execute_with_tools(
+    messages=messages,
+    tools=tools,
+    stop_on_error=False  # Default: LLM sees error, may retry
+)
+```
+
+## Advanced: External MCP Integration Pattern
+
+Specialists that use **external MCP containers** (like NavigatorSpecialist) face a timing challenge: `external_mcp_client` is injected AFTER specialist loading, so it's `None` during pre-flight checks.
+
+### The Two-Stage Validation Pattern
+
+```python
+class NavigatorSpecialist(BaseSpecialist):
+    SERVICE_NAME = "navigator"
+
+    def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
+        super().__init__(specialist_name, specialist_config)
+        self.external_mcp_client = None  # Injected by GraphBuilder LATER
+
+    def _perform_pre_flight_checks(self) -> bool:
+        """
+        Stage 1 (Load time): Allow loading even without client
+        Stage 2 (Runtime): Verify service connection
+        """
+        # Load time: client not injected yet - allow loading
+        if not self.external_mcp_client:
+            return True
+
+        # Runtime: verify actual connection
+        if not self.external_mcp_client.is_connected(self.SERVICE_NAME):
+            logger.warning(f"{self.specialist_name}: {self.SERVICE_NAME} not connected")
+            return False
+        return True
+
+    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        # Runtime check: client must now be injected
+        if not self.external_mcp_client:
+            return self._handle_unavailable(state)
+
+        # Runtime check: service must be connected
+        if not self._perform_pre_flight_checks():
+            return self._handle_unavailable(state)
+
+        # ... proceed with operation ...
+```
+
+### Graceful Degradation
+
+Always provide a fallback when external services are unavailable:
+
+```python
+def _handle_unavailable(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    """Return helpful message when service unavailable."""
+    return {
+        "messages": [AIMessage(
+            content="The Navigator service is currently unavailable. "
+                    "For simple file operations, use File Operations instead.\n\n"
+                    "Navigator is needed for:\n"
+                    "- Recursive directory deletion\n"
+                    "- Glob pattern file search"
+        )]
+    }
+```
+
+### Configuration
+
+External MCP specialists need config in `config.yaml`:
+
+```yaml
+specialists:
+  navigator_specialist:
+    type: "hybrid"
+    description: "Complex filesystem operations (recursive delete, glob search)"
+    tags:
+      - "external_mcp"
+      - "filesystem"
+```
+
+And the service in MCP config:
+
+```yaml
+mcp:
+  external_mcp:
+    enabled: true
+    services:
+      navigator:
+        command: ["docker", "compose", "run", "--rm", "-i", "navigator"]
+        enabled: true
+```
+
+**See:** [MCP_GUIDE.md](MCP_GUIDE.md#910-navigation-mcp-filesystem--browser-operations) for full Navigation-MCP details.
+
 ## Conclusion
 
 That's it! You have successfully created a new specialist agent. The `GraphBuilder` class will automatically discover and integrate your new specialist at build time. By following these steps, you can extend the system with new capabilities. Remember to always keep your specialists focused on a single task to maintain a clean and modular architecture.

@@ -953,6 +953,114 @@ class FileOperationsSpecialist(BaseSpecialist):
 - **Future**: External filesystem MCP container
 - **Benefit**: Reduced specialist count (ADR-CORE-013)
 
+### 9.10 Navigation-MCP: Filesystem & Browser Operations
+
+**Navigation-MCP** is a custom external MCP container providing advanced navigation capabilities beyond what FileSpecialist offers. It runs as an optional Docker profile service.
+
+**Capabilities:**
+- **Filesystem driver**: Recursive deletion, glob pattern search, tree navigation
+- **Browser driver**: Web navigation with visual grounding (Fara AI model integration)
+
+**Architecture:**
+```
+User Request → NavigatorSpecialist → ExternalMcpClient → navigator container
+                                                              ↓
+                                                        Filesystem / Browser Driver
+                                                              ↓
+                                                        Fara (LMStudio) for visual grounding
+```
+
+**Starting Navigator:**
+```bash
+# Navigator is an optional profile service
+docker-compose --profile navigator up -d
+```
+
+**Navigator Specialists:**
+
+| Specialist | Driver | Capabilities |
+|------------|--------|--------------|
+| `NavigatorSpecialist` | `fs` | Recursive delete, glob search, tree traversal |
+| `NavigatorBrowserSpecialist` | `web` | URL navigation, element clicking, form filling, screenshots |
+
+**Example: NavigatorSpecialist**
+```python
+from ..mcp import sync_call_external_mcp
+
+class NavigatorSpecialist(BaseSpecialist):
+    SERVICE_NAME = "navigator"
+    DRIVER_FS = "fs"
+
+    def delete_recursive(self, session_id: str, path: str) -> Dict[str, Any]:
+        """Delete directory and all contents - capability FileSpecialist lacks."""
+        return self._call_navigator("delete", session_id, target=path, recursive=True)
+
+    def find_files(self, session_id: str, pattern: str) -> Dict[str, Any]:
+        """Find files matching glob pattern (e.g., '**/*.py')."""
+        return self._call_navigator("find", session_id, pattern=pattern)
+```
+
+**Example: NavigatorBrowserSpecialist**
+```python
+class NavigatorBrowserSpecialist(BaseSpecialist):
+    def click_element(self, session_id: str, element_description: str) -> Dict[str, Any]:
+        """Click element by natural language description (visual grounding)."""
+        # "the blue Submit button" → Fara finds coordinates → click
+        return sync_call_external_mcp(
+            self.external_mcp_client,
+            "navigator",
+            "click",
+            {"session_id": session_id, "driver": "web", "target": element_description}
+        )
+```
+
+**Pre-flight Check Pattern:**
+
+Navigator specialists use a two-stage validation pattern because `external_mcp_client` is injected AFTER specialist loading:
+
+```python
+def _perform_pre_flight_checks(self) -> bool:
+    # At load time: Allow loading (client not injected yet)
+    if not self.external_mcp_client:
+        return True
+    # At runtime: Verify connection
+    return self.external_mcp_client.is_connected(self.SERVICE_NAME)
+
+def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    # Runtime check: client must be injected
+    if not self.external_mcp_client:
+        return self._handle_navigator_unavailable(state)
+    # ... proceed with operation
+```
+
+**Browser Session Persistence (Multi-turn):**
+
+Browser sessions can persist across conversation turns:
+```python
+# Sessions stored in artifacts
+BROWSER_SESSION_ARTIFACT_KEY = "browser_session"
+
+def _get_or_create_session(self, state, persist=True):
+    existing = self._get_existing_session(state)
+    if existing and self._validate_session(existing):
+        return existing  # Reuse valid session
+    return self._create_browser_session()  # Create new
+```
+
+**Configuration:**
+```yaml
+mcp:
+  external_mcp:
+    enabled: true
+    services:
+      navigator:
+        command: ["docker", "compose", "-f", "docker-compose.yml", "run", "--rm", "-i", "navigator"]
+        enabled: true
+        timeout_seconds: 30
+```
+
+**See:** ADR-CORE-027 for full architectural details.
+
 ---
 
 ## 10.0 Adding New MCP Services (Automation)
