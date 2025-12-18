@@ -106,14 +106,47 @@ SpecialistConfig = Union[LLMSpecialistConfig, ProceduralSpecialistConfig, Hybrid
 
 
 class ExternalMcpServiceConfig(BaseModel):
-    """Configuration for a single external MCP service (Docker container, Node.js server, etc.)."""
+    """
+    Configuration for a single external MCP service (Docker container, Node.js server, etc.).
+
+    Supports two connection modes (ADR-CORE-027):
+    1. container_name mode: Connect to running container via docker exec
+    2. command/args mode: Launch subprocess directly
+
+    Example (container_name mode):
+        navigator:
+          enabled: true
+          container_name: "navigator-mcp"  # Uses: docker exec -i {name} {entrypoint}
+          entrypoint: "navigator-mcp"      # Optional, defaults to container_name
+
+    Example (command/args mode):
+        filesystem:
+          enabled: true
+          command: "docker"
+          args: ["run", "-i", "--rm", "mcp/filesystem"]
+    """
 
     model_config = ConfigDict(extra="allow")
 
     enabled: bool = Field(default=False, description="Whether this external MCP service is enabled.")
     required: bool = Field(default=False, description="If true, application fails to start if service unavailable.")
-    command: str = Field(..., description="Executable command (e.g., 'docker').")
+
+    # Connection mode 1: container_name (docker exec to running container)
+    container_name: Optional[str] = Field(
+        default=None,
+        description="Container name for docker exec mode. Uses: docker exec -i {name} {entrypoint}"
+    )
+    entrypoint: Optional[str] = Field(
+        default=None,
+        description="Entrypoint command for container_name mode. Defaults to container_name if not specified."
+    )
+
+    # Connection mode 2: command/args (direct subprocess)
+    command: Optional[str] = Field(default=None, description="Executable command (e.g., 'docker', 'npx').")
     args: list[str] = Field(default_factory=list, description="Command arguments.")
+
+    # Common settings
+    timeout_ms: Optional[int] = Field(default=30000, description="Timeout in milliseconds for tool calls.")
 
 
 class ExternalMcpConfig(BaseModel):

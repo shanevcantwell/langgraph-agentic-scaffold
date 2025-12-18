@@ -379,7 +379,8 @@ class ExternalMcpClient:
         if container_name:
             # Mode 1: docker exec to running container
             # Default entrypoint is container_name (e.g., "navigator-mcp")
-            entrypoint = service_cfg.get("entrypoint", container_name)
+            # Use `or` because Pydantic may set entrypoint to explicit None in dict
+            entrypoint = service_cfg.get("entrypoint") or container_name
             command = "docker"
             args = ["exec", "-i", container_name, entrypoint]
             logger.info(
