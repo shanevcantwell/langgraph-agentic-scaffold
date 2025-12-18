@@ -428,8 +428,8 @@ class TestExecuteLogic:
 
         assert "unavailable" in result["messages"][0].content.lower()
 
-    def test_execute_creates_and_destroys_session(self, connected_specialist):
-        """Test execution creates and destroys session."""
+    def test_execute_creates_session_and_persists_by_default(self, connected_specialist):
+        """Test execution creates session and persists it by default (Phase 4)."""
         state = {"messages": [HumanMessage(content="go to https://example.com")]}
 
         mock_session_result = MagicMock()
@@ -442,7 +442,10 @@ class TestExecuteLogic:
                 with patch.object(connected_specialist, '_destroy_session') as mock_destroy:
                     result = connected_specialist._execute_logic(state)
 
-        mock_destroy.assert_called_once_with("test-session")
+        # Session is NOT destroyed by default (persist_session=True)
+        mock_destroy.assert_not_called()
+        # Session info should be in artifacts for reuse
+        assert "browser_session" in result["artifacts"]
 
 
 # =============================================================================
@@ -515,3 +518,200 @@ class TestResultParsing:
         parsed = browser_specialist._parse_result(None)
 
         assert "error" in parsed
+
+
+# =============================================================================
+# TEST: Session Persistence (ADR-CORE-027 Phase 4)
+# =============================================================================
+
+class TestSessionPersistence:
+    """Test session persistence across invocations."""
+
+    def test_get_existing_session_from_artifacts(self, browser_specialist):
+        """Test extracting existing session from state artifacts."""
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "existing-session-123",
+                    "persist": True
+                }
+            }
+        }
+        session_id = browser_specialist._get_existing_session(state)
+        assert session_id == "existing-session-123"
+
+    def test_get_existing_session_returns_none_when_missing(self, browser_specialist):
+        """Test that None is returned when no session artifact exists."""
+        state = {"artifacts": {}}
+        session_id = browser_specialist._get_existing_session(state)
+        assert session_id is None
+
+    def test_get_existing_session_returns_none_for_empty_state(self, browser_specialist):
+        """Test that None is returned for empty state."""
+        state = {}
+        session_id = browser_specialist._get_existing_session(state)
+        assert session_id is None
+
+    def test_validate_session_returns_true_for_valid_session(self, connected_specialist):
+        """Test session validation succeeds for valid session."""
+        mock_result = MagicMock()
+        mock_result.content = [MagicMock(text='{"current": "/"}')]
+
+        with patch('app.src.specialists.navigator_browser_specialist.sync_call_external_mcp', return_value=mock_result):
+            is_valid = connected_specialist._validate_session("valid-session-123")
+
+        assert is_valid is True
+
+    def test_validate_session_returns_false_for_error(self, connected_specialist):
+        """Test session validation fails when navigator returns error."""
+        mock_result = MagicMock()
+        mock_result.content = [MagicMock(text='{"error": "Session not found"}')]
+
+        with patch('app.src.specialists.navigator_browser_specialist.sync_call_external_mcp', return_value=mock_result):
+            is_valid = connected_specialist._validate_session("invalid-session-123")
+
+        assert is_valid is False
+
+    def test_validate_session_returns_false_on_exception(self, connected_specialist):
+        """Test session validation fails on exception."""
+        with patch('app.src.specialists.navigator_browser_specialist.sync_call_external_mcp', side_effect=Exception("Connection error")):
+            is_valid = connected_specialist._validate_session("session-123")
+
+        assert is_valid is False
+
+    def test_get_or_create_session_reuses_valid_session(self, connected_specialist):
+        """Test that valid existing session is reused."""
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "existing-session-123",
+                    "persist": True
+                }
+            }
+        }
+
+        with patch.object(connected_specialist, '_validate_session', return_value=True):
+            session_id = connected_specialist._get_or_create_session(state, persist=True)
+
+        assert session_id == "existing-session-123"
+
+    def test_get_or_create_session_creates_new_when_invalid(self, connected_specialist):
+        """Test that new session is created when existing is invalid."""
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "expired-session-123",
+                    "persist": True
+                }
+            }
+        }
+
+        with patch.object(connected_specialist, '_validate_session', return_value=False):
+            with patch.object(connected_specialist, '_create_browser_session', return_value="new-session-456"):
+                session_id = connected_specialist._get_or_create_session(state, persist=True)
+
+        assert session_id == "new-session-456"
+
+    def test_get_or_create_session_creates_new_when_not_persisting(self, connected_specialist):
+        """Test that new session is always created when persist=False."""
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "existing-session-123",
+                    "persist": True
+                }
+            }
+        }
+
+        with patch.object(connected_specialist, '_create_browser_session', return_value="new-session-456"):
+            session_id = connected_specialist._get_or_create_session(state, persist=False)
+
+        assert session_id == "new-session-456"
+
+    def test_merge_result_with_session_adds_artifact(self, browser_specialist):
+        """Test that session info is merged into result artifacts."""
+        result = {
+            "messages": [AIMessage(content="Done")],
+            "artifacts": {"browser_operation": {"type": "navigate"}}
+        }
+
+        merged = browser_specialist._merge_result_with_session(result, "session-123", persist=True)
+
+        assert "browser_session" in merged["artifacts"]
+        assert merged["artifacts"]["browser_session"]["session_id"] == "session-123"
+        # Original artifact preserved
+        assert "browser_operation" in merged["artifacts"]
+
+    def test_merge_result_with_session_skips_when_not_persisting(self, browser_specialist):
+        """Test that merge is skipped when persist=False."""
+        result = {
+            "messages": [AIMessage(content="Done")],
+            "artifacts": {"browser_operation": {"type": "navigate"}}
+        }
+
+        merged = browser_specialist._merge_result_with_session(result, "session-123", persist=False)
+
+        assert "browser_session" not in merged.get("artifacts", {})
+
+    def test_cleanup_session_destroys_existing_session(self, connected_specialist):
+        """Test that cleanup destroys the existing session."""
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "session-to-cleanup-123",
+                    "persist": True
+                }
+            }
+        }
+
+        with patch.object(connected_specialist, '_destroy_session') as mock_destroy:
+            result = connected_specialist.cleanup_session(state)
+
+        mock_destroy.assert_called_once_with("session-to-cleanup-123")
+        assert result["artifacts"]["browser_session"] is None
+        assert "session ended" in result["messages"][0].content.lower()
+
+    def test_cleanup_session_handles_no_existing_session(self, connected_specialist):
+        """Test that cleanup handles missing session gracefully."""
+        state = {"artifacts": {}}
+
+        with patch.object(connected_specialist, '_destroy_session') as mock_destroy:
+            result = connected_specialist.cleanup_session(state)
+
+        mock_destroy.assert_not_called()
+        assert result["artifacts"]["browser_session"] is None
+
+    def test_execute_logic_persists_session_by_default(self, connected_specialist):
+        """Test that execute_logic persists session by default."""
+        state = {"messages": [HumanMessage(content="go to https://example.com")]}
+
+        mock_session_result = MagicMock()
+        mock_session_result.content = [MagicMock(text='{"session_id": "new-session-123"}')]
+
+        with patch('app.src.specialists.navigator_browser_specialist.sync_call_external_mcp', return_value=mock_session_result):
+            with patch.object(connected_specialist, 'navigate_to', return_value={"url": "https://example.com"}):
+                with patch.object(connected_specialist, '_destroy_session') as mock_destroy:
+                    result = connected_specialist._execute_logic(state)
+
+        # Session should NOT be destroyed when persisting
+        mock_destroy.assert_not_called()
+        # Session should be in artifacts
+        assert "browser_session" in result["artifacts"]
+        assert result["artifacts"]["browser_session"]["session_id"] == "new-session-123"
+
+    def test_execute_logic_destroys_session_when_not_persisting(self, connected_specialist):
+        """Test that execute_logic destroys session when persist_session=False."""
+        state = {"messages": [HumanMessage(content="go to https://example.com")]}
+
+        mock_session_result = MagicMock()
+        mock_session_result.content = [MagicMock(text='{"session_id": "temp-session-123"}')]
+
+        with patch('app.src.specialists.navigator_browser_specialist.sync_call_external_mcp', return_value=mock_session_result):
+            with patch.object(connected_specialist, 'navigate_to', return_value={"url": "https://example.com"}):
+                with patch.object(connected_specialist, '_destroy_session') as mock_destroy:
+                    result = connected_specialist._execute_logic(state, persist_session=False)
+
+        # Session should be destroyed when not persisting
+        mock_destroy.assert_called_once_with("temp-session-123")
+        # Session should NOT be in artifacts
+        assert "browser_session" not in result.get("artifacts", {})

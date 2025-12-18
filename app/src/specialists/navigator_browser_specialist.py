@@ -432,11 +432,117 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
         }
 
     # =========================================================================
+    # Session Persistence (ADR-CORE-027 Phase 4)
+    # =========================================================================
+
+    # Artifact key for storing persistent session info
+    BROWSER_SESSION_ARTIFACT_KEY = "browser_session"
+
+    def _get_existing_session(self, state: Dict[str, Any]) -> Optional[str]:
+        """Get existing session_id from state artifacts if available."""
+        artifacts = state.get("artifacts", {})
+        session_info = artifacts.get(self.BROWSER_SESSION_ARTIFACT_KEY, {})
+        return session_info.get("session_id")
+
+    def _validate_session(self, session_id: str) -> bool:
+        """Check if an existing session is still valid."""
+        try:
+            # Try to read current page to validate session
+            result = sync_call_external_mcp(
+                self.external_mcp_client,
+                "navigator",
+                "current",
+                {
+                    "session_id": session_id,
+                    "driver": "web"
+                }
+            )
+            # If we get here without error, session is valid
+            parsed = self._parse_result(result)
+            return "error" not in parsed
+        except Exception as e:
+            logger.warning(f"Session {session_id} validation failed: {e}")
+            return False
+
+    def _get_or_create_session(self, state: Dict[str, Any], persist: bool = True) -> Optional[str]:
+        """Get existing valid session or create a new one.
+
+        Args:
+            state: Graph state containing artifacts
+            persist: If True, enables session persistence (default True)
+
+        Returns:
+            Valid session_id or None if creation failed
+        """
+        if persist:
+            # Try to reuse existing session
+            existing_session = self._get_existing_session(state)
+            if existing_session:
+                if self._validate_session(existing_session):
+                    logger.info(f"Reusing existing browser session: {existing_session}")
+                    return existing_session
+                else:
+                    logger.info(f"Existing session {existing_session} invalid, creating new one")
+
+        # Create new session
+        return self._create_browser_session()
+
+    def _create_session_artifact(self, session_id: str) -> Dict[str, Any]:
+        """Create artifact dict for session persistence."""
+        return {
+            self.BROWSER_SESSION_ARTIFACT_KEY: {
+                "session_id": session_id,
+                "persist": True
+            }
+        }
+
+    def _merge_result_with_session(
+        self,
+        result: Dict[str, Any],
+        session_id: str,
+        persist: bool = True
+    ) -> Dict[str, Any]:
+        """Merge operation result with session persistence artifact."""
+        if not persist:
+            return result
+
+        # Get existing artifacts from result
+        artifacts = result.get("artifacts", {})
+
+        # Add session info
+        artifacts[self.BROWSER_SESSION_ARTIFACT_KEY] = {
+            "session_id": session_id,
+            "persist": True
+        }
+
+        result["artifacts"] = artifacts
+        return result
+
+    # =========================================================================
     # Main Execution
     # =========================================================================
 
-    def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute browser operation based on user request."""
+    def _execute_logic(self, state: Dict[str, Any], persist_session: bool = True) -> Dict[str, Any]:
+        """Execute browser operation based on user request.
+
+        Args:
+            state: Graph state with messages and artifacts
+            persist_session: If True, session is persisted for multi-turn conversations
+                           If False, session is destroyed after operation (default True)
+
+        Session Persistence (ADR-CORE-027 Phase 4):
+        When persist_session=True:
+        - Checks artifacts for existing session_id
+        - Validates existing session is still alive
+        - Creates new session if needed
+        - Stores session_id in returned artifacts
+        - Session remains alive for subsequent invocations
+
+        To end a persistent session, either:
+        - Call cleanup_session() explicitly
+        - Let session timeout naturally (default 1 hour)
+        - Start with persist_session=False
+        """
         # Check pre-flight
         if not self._perform_pre_flight_checks():
             return self._handle_browser_unavailable(state)
@@ -454,8 +560,8 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
                 "messages": [AIMessage(content="No browser request provided.")]
             }
 
-        # Create browser session
-        session_id = self._create_browser_session()
+        # Get or create session
+        session_id = self._get_or_create_session(state, persist=persist_session)
         if not session_id:
             return {
                 "messages": [AIMessage(content=(
@@ -470,21 +576,57 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
 
             # Route to handler
             if operation == "navigate":
-                return self._handle_navigate_request(session_id, request)
+                result = self._handle_navigate_request(session_id, request)
             elif operation == "click":
-                return self._handle_click_request(session_id, request)
+                result = self._handle_click_request(session_id, request)
             elif operation == "type":
-                return self._handle_type_request(session_id, request)
+                result = self._handle_type_request(session_id, request)
             elif operation == "read":
-                return self._handle_read_request(session_id, request)
+                result = self._handle_read_request(session_id, request)
             elif operation == "snapshot":
-                return self._handle_snapshot_request(session_id, request)
+                result = self._handle_snapshot_request(session_id, request)
             else:
-                return self._handle_unknown_request(session_id, request)
+                result = self._handle_unknown_request(session_id, request)
+
+            # Merge session persistence into result
+            return self._merge_result_with_session(result, session_id, persist=persist_session)
+
+        except Exception as e:
+            logger.error(f"Browser operation failed: {e}")
+            if not persist_session:
+                self._destroy_session(session_id)
+            return {
+                "messages": [AIMessage(content=f"Browser operation failed: {e}")]
+            }
 
         finally:
-            # Always cleanup session
+            # Only cleanup if not persisting
+            if not persist_session:
+                self._destroy_session(session_id)
+
+    def cleanup_session(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """Explicitly cleanup a persistent browser session.
+
+        Call this when a conversation ends or when you want to
+        start fresh in subsequent invocations.
+
+        Args:
+            state: Graph state containing session artifact
+
+        Returns:
+            State update clearing the session artifact
+        """
+        session_id = self._get_existing_session(state)
+        if session_id:
             self._destroy_session(session_id)
+            logger.info(f"Cleaned up persistent browser session: {session_id}")
+
+        return {
+            "artifacts": {
+                self.BROWSER_SESSION_ARTIFACT_KEY: None
+            },
+            "messages": [AIMessage(content="Browser session ended.")]
+        }
 
     # =========================================================================
     # MCP Service Interface

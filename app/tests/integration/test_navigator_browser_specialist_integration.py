@@ -206,6 +206,58 @@ class TestUrlExtractionIntegration:
 
 
 # =============================================================================
+# TEST: Session Persistence (ADR-CORE-027 Phase 4)
+# =============================================================================
+
+class TestSessionPersistenceIntegration:
+    """Test session persistence behavior (integration sanity checks)."""
+
+    def test_get_existing_session_from_artifacts(self, specialist_config):
+        """Test extracting session ID from artifacts."""
+        specialist = NavigatorBrowserSpecialist("navigator_browser_specialist", specialist_config)
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "test-session-123",
+                    "persist": True
+                }
+            }
+        }
+        session_id = specialist._get_existing_session(state)
+        assert session_id == "test-session-123"
+
+    def test_get_existing_session_returns_none_for_empty(self, specialist_config):
+        """Test that None is returned for empty state."""
+        specialist = NavigatorBrowserSpecialist("navigator_browser_specialist", specialist_config)
+        state = {"artifacts": {}}
+        session_id = specialist._get_existing_session(state)
+        assert session_id is None
+
+    def test_cleanup_session_clears_artifact(self, specialist_config):
+        """Test that cleanup clears the session artifact."""
+        specialist = NavigatorBrowserSpecialist("navigator_browser_specialist", specialist_config)
+        state = {
+            "artifacts": {
+                "browser_session": {
+                    "session_id": "session-to-clear",
+                    "persist": True
+                }
+            }
+        }
+        # No client attached, so _destroy_session will fail silently
+        result = specialist.cleanup_session(state)
+
+        # Artifact should be cleared
+        assert result["artifacts"]["browser_session"] is None
+        assert "session ended" in result["messages"][0].content.lower()
+
+    def test_session_artifact_key_constant(self, specialist_config):
+        """Test that session artifact key is consistent."""
+        specialist = NavigatorBrowserSpecialist("navigator_browser_specialist", specialist_config)
+        assert specialist.BROWSER_SESSION_ARTIFACT_KEY == "browser_session"
+
+
+# =============================================================================
 # NOTE: Direct Browser Operations
 #
 # Direct browser operations (goto, click, type, read, snapshot) are tested in
@@ -213,7 +265,7 @@ class TestUrlExtractionIntegration:
 # focuses on NavigatorBrowserSpecialist behavior with and without navigator.
 #
 # Test coverage summary:
-# - NavigatorBrowserSpecialist logic: app/tests/unit/test_navigator_browser_specialist.py (47 tests)
+# - NavigatorBrowserSpecialist logic: app/tests/unit/test_navigator_browser_specialist.py (62 tests)
 # - Navigator MCP browser transport: app/tests/integration/test_navigator_mcp.py (browser tests)
-# - NavigatorBrowserSpecialist integration: This file (11 tests)
+# - NavigatorBrowserSpecialist integration: This file (16 tests)
 # =============================================================================
