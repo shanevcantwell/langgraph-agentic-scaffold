@@ -119,7 +119,7 @@ If parallel specialists produce suspiciously similar outputs:
 ### Test Commit Atomicity
 **When committing test changes, always update documentation atomically.**
 
-1. Run `python scripts/summarize_tests.py` to regenerate `docs/TEST_SUITE_SUMMARY.md`
+1. Run `python scripts/summarize_tests.py` to regenerate `docs/generated/TEST_SUITE_SUMMARY.md`
 2. Include the updated summary in the same commit as test file changes
 3. This ensures documentation stays in sync with actual test coverage
 
@@ -193,39 +193,41 @@ Areas: RESEARCH, ROUTER, MCP, STATE, TRIAGE, SPECIALIST
 
 ## Testing
 
-### Docker Required for Integration Tests - CRITICAL
-**Integration tests MUST run inside Docker.** The `.env` file is configured for the proxy container setup, so running integration tests from the host will always fail for LMStudio/3090 connectivity.
+### Philosophy: Integration Tests for LLM-Dependent Code
 
-- **Unit tests**: Can run from host (`pytest app/tests/unit/`)
-- **Integration tests**: Must run inside Docker container
-- **Never dismiss integration test failures** as "pre-existing" or "environmental" without confirming Docker context
+Anything that flows through Triage or Router requires **live models** to be meaningful. Mocked LLM responses don't validate real behavior—they just confirm the mock returns what you told it to return.
+
+**Unit tests (mocks are valid):**
+- Config parsing, schema validation, state merge logic
+- Graph structure (nodes exist, edges connect)
+- Procedural specialists (e.g., TieredSynthesizerSpecialist has no LLM)
+- Post-LLM response handling (given a tool_call, test downstream parsing)
+- Error paths (timeout handling, malformed response, missing artifacts)
+
+**Integration tests (live models required):**
+- Triage producing correct ContextPlan for queries
+- Router selecting the right specialist
+- Progenitors producing coherent responses
+- End-to-end workflows
+
+**The distinction:** Mock LLM responses to test *handling*, not to test *LLM behavior*.
+
+### Docker Required - CRITICAL
+
+**Integration tests MUST run inside Docker.** The `.env` is configured for the proxy container—running from host fails for LMStudio/3090 connectivity.
 
 ```bash
-# Unit tests only (from host)
+# Unit tests (from host)
 pytest app/tests/unit/ -v
+
+# Integration tests (inside Docker)
+pytest -m integration
 
 # All tests (inside Docker)
 pytest
-
-# Run with coverage
-pytest --cov=app/src
-
-# Run specific test module
-pytest tests/test_specialists.py -v
 ```
 
-### Test Patterns
-- Mock external LLM calls in unit tests
-- Integration tests use actual model calls (mark with `@pytest.mark.integration`)
-- Test specialist contracts with Pydantic validation
-
-### Test Suite Documentation
-`docs/TEST_SUITE_SUMMARY.md` is **dynamically generated** - do not edit manually.
-
-```bash
-# Regenerate after adding/removing tests
-python ./scripts/summarize_tests.py
-```
+Never dismiss integration failures as "environmental" without confirming Docker context.
 
 ---
 
