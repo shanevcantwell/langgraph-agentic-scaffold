@@ -116,6 +116,13 @@ If parallel specialists produce suspiciously similar outputs:
 - Flag as significant
 - Investigate potential state leakage or model contamination
 
+### Test Commit Atomicity
+**When committing test changes, always update documentation atomically.**
+
+1. Run `python scripts/summarize_tests.py` to regenerate `docs/TEST_SUITE_SUMMARY.md`
+2. Include the updated summary in the same commit as test file changes
+3. This ensures documentation stays in sync with actual test coverage
+
 ---
 
 ## Git Operations Safety
@@ -211,6 +218,14 @@ pytest tests/test_specialists.py -v
 - Mock external LLM calls in unit tests
 - Integration tests use actual model calls (mark with `@pytest.mark.integration`)
 - Test specialist contracts with Pydantic validation
+
+### Test Suite Documentation
+`docs/TEST_SUITE_SUMMARY.md` is **dynamically generated** - do not edit manually.
+
+```bash
+# Regenerate after adding/removing tests
+python ./scripts/summarize_tests.py
+```
 
 ---
 

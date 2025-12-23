@@ -171,30 +171,6 @@ def test_graph_builder_raises_error_on_load_prompt_failure(mock_config_loader, m
         with pytest.raises(SpecialistLoadError, match="Could not load specialist 'router_specialist'"):
             GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
 
-@pytest.mark.skip(reason="_add_safe_conditional_edges removed - route validation now in GraphOrchestrator (Task 1.2)")
-@patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
-def test_safe_edges_raises_workflow_error_on_invalid_dest(mock_load_prompt, mock_config_loader, mock_adapter_factory):
-    """Test that _add_safe_conditional_edges raises WorkflowError for an invalid destination.
-
-    NOTE: This test is obsolete. Route validation moved to GraphOrchestrator.route_to_next_specialist()
-    as part of Task 1.2 (Fail-Fast Route Validation). See test_graph_orchestrator.py for current tests.
-    """
-    # Arrange
-    mock_workflow = MagicMock()
-    mock_decider = MagicMock(return_value="invalid_destination")
-    destination_map = {"valid_dest": "valid_dest", "another_valid": "another_valid"}
-
-    # Act & Assert
-    builder = GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
-    with pytest.raises(WorkflowError) as exc_info:
-        builder._add_safe_conditional_edges(mock_workflow, "source_node", mock_decider, destination_map)
-
-    # Verify the error message contains the expected information
-    assert "Routing error from 'source_node'" in str(exc_info.value)
-    assert "invalid_destination" in str(exc_info.value)
-    assert "valid_dest" in str(exc_info.value)
-    assert "another_valid" in str(exc_info.value)
-
 @patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
 def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router(mock_load_prompt, mock_config_loader, mock_adapter_factory):
     """Test that the router edge uses the safe wrapper method."""

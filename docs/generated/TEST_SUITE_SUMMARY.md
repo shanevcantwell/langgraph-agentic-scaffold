@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 637 |
-| Integration | 28 | 178 |
+| Unit | 68 | 636 |
+| Integration | 28 | 202 |
 | Other | 8 | 101 |
-| **Total** | **104** | **916** |
+| **Total** | **104** | **939** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -171,13 +171,6 @@
 - **`test_batch_sort_summary_matches_file_count`**
   - *Test that batch_sort_summary reports correct file counts.*
 
-## `app/tests/integration/test_chat_specialist_routing.py`
-
-- **`test_router_invokes_chat_specialist_for_conversational_query`**
-  - *End-to-end test: User asks a question → Router → ChatSpecialist → Response*
-- **`test_chat_specialist_appears_in_router_specialist_map`**
-  - *Simpler test: Verify ChatSpecialist is registered and discoverable by router.*
-
 ## `app/tests/integration/test_circuit_breaker.py`
 
 - **`test_circuit_breaker_route_to_error_handler`**
@@ -222,9 +215,6 @@
 - **`test_backtrack_is_targeted_not_full_restart`**
   - *Granular test: Verify backtracking goes to specific decision point.*
 
-## `app/tests/integration/test_external_mcp.py`
-
-
 ## `app/tests/integration/test_fara_smoke.py`
 
 - **`test_fara_responds_to_synthetic_image`**
@@ -252,6 +242,51 @@
   - *Live test: Full integration ping through V.E.G.A.S. Terminal.*
 - **`test_coordinate_in_expected_region`**
   - *Test that located coordinates fall within expected regions.*
+
+## `app/tests/integration/test_flows.py`
+
+- **`test_flow_1_1_simple_question`**
+  - *Flow 1.1: Simple Question (Tiered Chat)*
+- **`test_flow_1_2_comparative_question`**
+  - *Flow 1.2: Comparative Question*
+- **`test_flow_1_3_greeting_fast_path`**
+  - *Flow 1.3: Greeting (Fast Path)*
+- **`test_flow_2_1_read_file`**
+  - *Flow 2.1: Read File*
+- **`test_flow_2_2_write_file`**
+  - *Flow 2.2: Write File*
+- **`test_flow_2_3_list_directory`**
+  - *Flow 2.3: List Directory*
+- **`test_flow_3_1_navigate_to_url`**
+  - *Flow 3.1: Navigate to URL*
+- **`test_flow_3_2_click_element`**
+  - *Flow 3.2: Click Element*
+- **`test_flow_3_3_fill_form`**
+  - *Flow 3.3: Fill Form*
+- **`test_flow_4_1_simple_research`**
+  - *Flow 4.1: Simple Research*
+- **`test_flow_4_2_comparative_research`**
+  - *Flow 4.2: Comparative Research*
+- **`test_flow_5_1_html_generation`**
+  - *Flow 5.1: HTML Generation*
+- **`test_flow_5_2_technical_plan`**
+  - *Flow 5.2: Technical Plan*
+- **`test_flow_6_1_text_summary`**
+  - *Flow 6.1: Text Summary*
+- **`test_flow_6_2_sentiment_analysis`**
+  - *Flow 6.2: Sentiment Analysis*
+- **`test_flow_6_3_data_extraction`**
+  - *Flow 6.3: Data Extraction*
+- **`test_invariant_triage_entry`**
+  - *Invariant 1: Every flow starts at TriageArchitect*
+- **`test_invariant_end_exit`**
+  - *Invariant 2: Every flow ends at EndSpecialist*
+- **`test_invariant_no_silent_failure`**
+  - *Invariant 5: Errors route to error handling, not silent failure*
+- **`test_router_follows_triage`**
+  - *Router should always follow triage (after optional facilitator)*
+- **`test_end_is_terminal`**
+  - *End specialist should be at or near the end of execution*
 
 ## `app/tests/integration/test_gradio_integration.py`
 
@@ -284,14 +319,14 @@
   - *Verifies installer errors when neither Docker nor Python available.*
 - **`test_provider_choice_sets_correct_defaults`**
   - *Verifies each provider choice sets correct default and router bindings.*
-- **`test_detects_existing_navigation_mcp`**
-  - *Verifies installer detects existing navigation-mcp sibling repo.*
-- **`test_detects_missing_navigation_mcp`**
-  - *Verifies installer detects when navigation-mcp is not present.*
+- **`test_detects_existing_surf_mcp`**
+  - *Verifies installer detects existing surf-mcp sibling repo.*
+- **`test_detects_missing_surf_mcp`**
+  - *Verifies installer detects when surf-mcp is not present.*
 - **`test_sibling_path_resolution`**
-  - *Verifies navigation-mcp path is correctly resolved as sibling.*
-- **`test_navigation_mcp_optional_not_blocking`**
-  - *Verifies missing navigation-mcp doesn't block installation.*
+  - *Verifies surf-mcp path is correctly resolved as sibling.*
+- **`test_surf_mcp_optional_not_blocking`**
+  - *Verifies missing surf-mcp doesn't block installation.*
 
 ## `app/tests/integration/test_invariant_monitor.py`
 
@@ -307,6 +342,19 @@
 
 - **`test_live_lmstudio_adapter_interaction`**
   - *Tests a basic interaction with a live LM Studio model via the AdapterFactory.*
+
+## `app/tests/integration/test_llm_ping.py`
+
+- **`test_config_loads_successfully`**
+  - *Verify 3-tier config loads without error.*
+- **`test_at_least_one_provider_available`**
+  - *Verify at least one provider is available for testing.*
+- **`test_ping_all_providers`**
+  - *Ping all enabled providers and report results.*
+- **`test_ping_gemini_providers`**
+  - *Ping all Gemini-type providers.*
+- **`test_ping_lmstudio_providers`**
+  - *Ping all LMStudio-type providers.*
 
 ## `app/tests/integration/test_mcp_tools_integration.py`
 
@@ -1137,8 +1185,6 @@
   - *Tests that a SpecialistLoadError is raised if a specialist class cannot be imported.*
 - **`test_graph_builder_raises_error_on_load_prompt_failure`**
   - *Tests that a SpecialistLoadError is raised if a prompt file cannot be loaded.*
-- **`test_safe_edges_raises_workflow_error_on_invalid_dest`**
-  - *Test that _add_safe_conditional_edges raises WorkflowError for an invalid destination.*
 - **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router`**
   - *Test that the router edge uses the safe wrapper method.*
 - **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_critic`**

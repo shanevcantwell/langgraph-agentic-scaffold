@@ -100,6 +100,6 @@ def summarize_tests(start_dir: str, output_file: str):
 if __name__ == "__main__":
     # Configuration
     TEST_DIRECTORY = "app/tests"
-    OUTPUT_MARKDOWN_FILE = "docs/TEST_SUITE_SUMMARY.md"
+    OUTPUT_MARKDOWN_FILE = "docs/generated/TEST_SUITE_SUMMARY.md"
 
     summarize_tests(TEST_DIRECTORY, OUTPUT_MARKDOWN_FILE)

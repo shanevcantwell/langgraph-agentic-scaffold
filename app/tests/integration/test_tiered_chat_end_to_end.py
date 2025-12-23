@@ -131,7 +131,6 @@ def test_tiered_chat_full_mode_end_to_end():
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Test needs update: entry_point changed to triage_architect, progenitors never invoked without router routing to chat_specialist")
 def test_tiered_chat_graceful_degradation_alpha_only():
     """
     Tests graceful degradation when Bravo progenitor fails.
@@ -141,9 +140,6 @@ def test_tiered_chat_graceful_degradation_alpha_only():
 
     NOTE: We simulate failure by patching _execute_logic to not write bravo_response.
     The LLM adapter has fallback logic that prevents truly empty responses.
-
-    TODO: Update test to mock triage_architect to route through to chat_specialist
-    so progenitors are actually invoked.
     """
     # --- Arrange ---
     config_loader = ConfigLoader()
@@ -159,14 +155,15 @@ def test_tiered_chat_graceful_degradation_alpha_only():
     with patch.object(builder.specialists['progenitor_alpha_specialist'], 'llm_adapter') as mock_alpha_adapter, \
          patch.object(builder.specialists['progenitor_bravo_specialist'], '_execute_logic', side_effect=bravo_failure_execute), \
          patch.object(builder.specialists['router_specialist'], 'llm_adapter') as mock_router_adapter, \
-         patch.object(builder.specialists['prompt_triage_specialist'], 'llm_adapter') as mock_triage_adapter:
+         patch.object(builder.specialists['triage_architect'], 'llm_adapter') as mock_triage_adapter:
 
-        # Triage routes to router
+        # Triage returns ContextPlan recommending chat_specialist (no actions = route to Router)
         mock_triage_adapter.invoke.return_value = {
             "tool_calls": [{
                 "id": "call_triage",
                 "type": "tool_call",
-                "args": {"recommended_specialists": ["router_specialist"]}
+                "name": "ContextPlan",
+                "args": {"reasoning": "Simple chat question", "actions": [], "recommended_specialists": ["chat_specialist"]}
             }]
         }
 
@@ -225,16 +222,12 @@ def test_tiered_chat_graceful_degradation_alpha_only():
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Test needs update: entry_point changed to triage_architect, progenitors never invoked without router routing to chat_specialist")
 def test_tiered_chat_graceful_degradation_bravo_only():
     """
     Tests graceful degradation when Alpha progenitor fails.
 
     This validates that the system continues with only Bravo's perspective
     instead of completely failing.
-
-    TODO: Update test to mock triage_architect to route through to chat_specialist
-    so progenitors are actually invoked.
     """
     # --- Arrange ---
     config_loader = ConfigLoader()
@@ -247,14 +240,15 @@ def test_tiered_chat_graceful_degradation_bravo_only():
     with patch.object(builder.specialists['progenitor_alpha_specialist'], '_execute_logic', side_effect=alpha_failure_execute), \
          patch.object(builder.specialists['progenitor_bravo_specialist'], 'llm_adapter') as mock_bravo_adapter, \
          patch.object(builder.specialists['router_specialist'], 'llm_adapter') as mock_router_adapter, \
-         patch.object(builder.specialists['prompt_triage_specialist'], 'llm_adapter') as mock_triage_adapter:
+         patch.object(builder.specialists['triage_architect'], 'llm_adapter') as mock_triage_adapter:
 
-        # Triage routes to router
+        # Triage returns ContextPlan recommending chat_specialist
         mock_triage_adapter.invoke.return_value = {
             "tool_calls": [{
                 "id": "call_triage",
                 "type": "tool_call",
-                "args": {"recommended_specialists": ["router_specialist"]}
+                "name": "ContextPlan",
+                "args": {"reasoning": "Simple chat question", "actions": [], "recommended_specialists": ["chat_specialist"]}
             }]
         }
 
@@ -352,7 +346,6 @@ def test_tiered_chat_virtual_coordinator_pattern():
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Test needs update: entry_point changed from prompt_triage_specialist to triage_architect with different response format")
 def test_tiered_chat_state_management_pattern():
     """
     Tests that the state management pattern is followed correctly.
@@ -361,9 +354,6 @@ def test_tiered_chat_state_management_pattern():
     - Progenitors (parallel nodes) write ONLY to artifacts
     - Synthesizer (join node) writes to BOTH artifacts and messages
     - This prevents message pollution in multi-turn conversations
-
-    TODO: Update mocks to handle triage_architect's context_plan response format
-    instead of prompt_triage_specialist's tool_call format.
     """
     # --- Arrange ---
     config_loader = ConfigLoader()
@@ -378,15 +368,16 @@ def test_tiered_chat_state_management_pattern():
          patch.object(builder.specialists['progenitor_bravo_specialist'], 'llm_adapter') as mock_bravo_adapter, \
          patch.object(builder.specialists['tiered_synthesizer_specialist'], 'llm_adapter') as mock_synthesizer_adapter, \
          patch.object(builder.specialists['router_specialist'], 'llm_adapter') as mock_router_adapter, \
-         patch.object(builder.specialists['prompt_triage_specialist'], 'llm_adapter') as mock_triage_adapter, \
+         patch.object(builder.specialists['triage_architect'], 'llm_adapter') as mock_triage_adapter, \
          patch.object(builder.specialists['end_specialist'], 'llm_adapter', end_specialist_mock):
 
-        # Triage routes to router
+        # Triage returns ContextPlan recommending chat_specialist
         mock_triage_adapter.invoke.return_value = {
             "tool_calls": [{
                 "id": "call_triage",
                 "type": "tool_call",
-                "args": {"recommended_specialists": ["router_specialist"]}
+                "name": "ContextPlan",
+                "args": {"reasoning": "Simple chat question", "actions": [], "recommended_specialists": ["chat_specialist"]}
             }]
         }
 
@@ -452,7 +443,6 @@ def test_tiered_chat_state_management_pattern():
 
 
 @pytest.mark.integration
-@pytest.mark.skip(reason="Test needs update: entry_point changed from prompt_triage_specialist to triage_architect with different response format")
 def test_tiered_chat_simple_mode_bypass():
     """
     Tests that use_simple_chat flag bypasses tiered subgraph.
@@ -463,9 +453,6 @@ def test_tiered_chat_simple_mode_bypass():
     NOTE: This test will fail if chat_specialist is not in the config.
     The system currently uses tiered chat by default, so this is testing
     a fallback path that may not be commonly used.
-
-    TODO: Update mocks to handle triage_architect's context_plan response format
-    instead of prompt_triage_specialist's tool_call format.
     """
     # --- Arrange ---
     config_loader = ConfigLoader()
@@ -479,14 +466,15 @@ def test_tiered_chat_simple_mode_bypass():
 
     with patch.object(builder.specialists['chat_specialist'], 'llm_adapter') as mock_chat_adapter, \
          patch.object(builder.specialists['router_specialist'], 'llm_adapter') as mock_router_adapter, \
-         patch.object(builder.specialists['prompt_triage_specialist'], 'llm_adapter') as mock_triage_adapter:
+         patch.object(builder.specialists['triage_architect'], 'llm_adapter') as mock_triage_adapter:
 
-        # Triage routes to router
+        # Triage returns ContextPlan recommending chat_specialist
         mock_triage_adapter.invoke.return_value = {
             "tool_calls": [{
                 "id": "call_triage",
                 "type": "tool_call",
-                "args": {"recommended_specialists": ["router_specialist"]}
+                "name": "ContextPlan",
+                "args": {"reasoning": "Simple chat question", "actions": [], "recommended_specialists": ["chat_specialist"]}
             }]
         }
 

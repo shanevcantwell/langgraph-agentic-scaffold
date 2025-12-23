@@ -203,6 +203,7 @@ class TestProviderPing:
 # =============================================================================
 
 @pytest.mark.integration
+@pytest.mark.skip(reason="Google locked their Gemini API behind AI Studio projects only")
 class TestGeminiPing:
     """Ping tests specifically for Gemini providers."""
 
