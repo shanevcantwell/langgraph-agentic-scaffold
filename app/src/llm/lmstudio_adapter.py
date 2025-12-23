@@ -47,9 +47,17 @@ class LMStudioAdapter(BaseAdapter):
         self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
         self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
         self.max_tokens = self.config.get('parameters', {}).get('max_tokens') or 4096
-        # Pass through any additional sampling params (top_p, top_k, etc.) to the API
-        self.extra_params = {k: v for k, v in self.config.get('parameters', {}).items()
-                            if k not in ('temperature', 'max_tokens')}
+        # Separate OpenAI-compatible params from non-standard ones
+        # OpenAI SDK supports: top_p, frequency_penalty, presence_penalty, etc.
+        # Non-standard params (like top_k) go via extra_body for LM Studio
+        HANDLED_PARAMS = {'temperature', 'max_tokens'}
+        NON_STANDARD_PARAMS = {'top_k'}  # LM Studio supports these, but OpenAI SDK doesn't
+
+        all_params = self.config.get('parameters', {})
+        self.extra_params = {k: v for k, v in all_params.items()
+                            if k not in HANDLED_PARAMS and k not in NON_STANDARD_PARAMS}
+        self.extra_body = {k: v for k, v in all_params.items()
+                          if k in NON_STANDARD_PARAMS}
         extra_params_str = f", extra_params={self.extra_params}" if self.extra_params else ""
         logger.info(f"INITIALIZED LMStudioAdapter. Requests will be sent to '{base_url}' for model "
                     f"'{self.model_name}' with a timeout of {self.timeout}s, max_tokens={self.max_tokens}, "
@@ -237,6 +245,9 @@ class LMStudioAdapter(BaseAdapter):
         start_time = time.perf_counter()
 
         try:
+            # Pass non-standard params (like top_k) via extra_body for LM Studio
+            if self.extra_body:
+                api_kwargs["extra_body"] = self.extra_body
             completion = self.client.chat.completions.create(**api_kwargs, timeout=self.timeout)
             message = completion.choices[0].message
 
