@@ -4,11 +4,90 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 64 | 528 |
-| Integration | 26 | 158 |
+| Unit | 68 | 637 |
+| Integration | 28 | 178 |
 | Other | 8 | 101 |
-| **Total** | **98** | **787** |
+| **Total** | **104** | **916** |
 
+
+## `app/tests/interface/test_context_schema.py`
+
+- **`test_context_plan_with_recommended_specialists`**
+  - *Test ContextPlan with recommended_specialists field populated.*
+- **`test_context_plan_default_empty_recommendations`**
+  - *Test ContextPlan defaults to empty list for recommended_specialists.*
+- **`test_context_plan_validates_required_fields`**
+  - *Test ContextPlan requires reasoning field.*
+- **`test_context_plan_single_recommendation`**
+  - *Test ContextPlan with single specialist recommendation.*
+- **`test_context_plan_serialization`**
+  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
+- **`test_context_plan_empty_actions_with_recommendations`**
+  - *Test ContextPlan with no actions but with recommendations.*
+- **`test_context_plan_multiple_actions_with_recommendations`**
+  - *Test ContextPlan with multiple actions and recommendations.*
+
+## `app/tests/resilience/test_menu_filter_pattern.py`
+
+- **`test_immediate_repetition_loop_activates_menu_filter`**
+  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
+- **`test_two_step_cycle_loop_forbids_both_specialists`**
+  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
+- **`test_below_threshold_does_not_trigger_menu_filter`**
+  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
+- **`test_no_loop_returns_none`**
+  - *REQUIREMENT: No loop detected should return None.*
+- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
+  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
+- **`test_menu_filter_already_active_escalates_to_tier3`**
+  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
+- **`test_extract_from_immediate_loop_error`**
+  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
+- **`test_extract_from_two_step_cycle_error`**
+  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
+- **`test_invalid_error_format_returns_empty_list`**
+  - *REQUIREMENT: If error message format is invalid, return empty list.*
+- **`test_extraction_failure_triggers_circuit_breaker`**
+  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
+- **`test_no_forbidden_list_returns_full_menu`**
+  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
+- **`test_forbidden_list_filters_specialists`**
+  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
+- **`test_multiple_forbidden_specialists_all_removed`**
+  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
+- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
+  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
+- **`test_forbidden_list_cleared_after_non_router_execution`**
+  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
+- **`test_router_execution_does_not_clear_forbidden_list`**
+  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
+- **`test_full_loop_recovery_flow`**
+  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
+- **`test_oscillation_recovery_web_builder_critic`**
+  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
+- **`test_exactly_threshold_repetitions`**
+  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
+- **`test_threshold_plus_one_triggers`**
+  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
+- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
+  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
+- **`test_structural_integrity_violation_triggers_immediate_halt`**
+  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
+- **`test_forbidden_specialists_in_scratchpad_not_root`**
+  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
+- **`test_scratchpad_merge_semantics`**
+  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
+- **`test_menu_filter_activation_logged_at_warning_level`**
+  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
+- **`test_tier3_escalation_logged_at_error_level`**
+  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
+
+## `app/tests/resilience/test_strategy_pattern.py`
+
+- **`test_context_action_supports_strategy`**
+  - *Verify that ContextAction accepts a strategy field.*
+- **`test_context_action_strategy_defaults_to_none`**
+  - *Verify that strategy is optional.*
 
 ## `app/tests/integration/test_api_streaming_integration.py`
 
@@ -120,9 +199,6 @@
 - **`test_graph_builder_wires_convening_architecture`**
 - **`test_default_architecture_fallback`**
 
-## `app/tests/integration/test_emergent_project_subgraph.py`
-
-
 ## `app/tests/integration/test_esm_scenarios.py`
 
 - **`test_research_exhaustion_tracking`**
@@ -208,6 +284,14 @@
   - *Verifies installer errors when neither Docker nor Python available.*
 - **`test_provider_choice_sets_correct_defaults`**
   - *Verifies each provider choice sets correct default and router bindings.*
+- **`test_detects_existing_navigation_mcp`**
+  - *Verifies installer detects existing navigation-mcp sibling repo.*
+- **`test_detects_missing_navigation_mcp`**
+  - *Verifies installer detects when navigation-mcp is not present.*
+- **`test_sibling_path_resolution`**
+  - *Verifies navigation-mcp path is correctly resolved as sibling.*
+- **`test_navigation_mcp_optional_not_blocking`**
+  - *Verifies missing navigation-mcp doesn't block installation.*
 
 ## `app/tests/integration/test_invariant_monitor.py`
 
@@ -272,6 +356,47 @@
   - *Verify all expected MCP services are registered in full graph.*
 - **`test_file_specialist_accessible_from_graph`**
   - *Verify file_specialist MCP functions work from graph context.*
+
+## `app/tests/integration/test_navigator_browser_specialist_integration.py`
+
+- **`test_graceful_message_when_unavailable`**
+  - *Test that specialist provides helpful message when navigator unavailable.*
+- **`test_detect_navigate_operation`**
+  - *Test detecting navigate operation.*
+- **`test_detect_click_operation`**
+  - *Test detecting click operation.*
+- **`test_detect_type_operation`**
+  - *Test detecting type operation.*
+- **`test_detect_read_operation`**
+  - *Test detecting read operation.*
+- **`test_detect_snapshot_operation`**
+  - *Test detecting snapshot operation.*
+- **`test_extract_url_from_request`**
+  - *Test extracting URL from request.*
+- **`test_extract_url_strips_punctuation`**
+  - *Test that URL extraction strips trailing punctuation.*
+- **`test_get_existing_session_from_artifacts`**
+  - *Test extracting session ID from artifacts.*
+- **`test_get_existing_session_returns_none_for_empty`**
+  - *Test that None is returned for empty state.*
+- **`test_cleanup_session_clears_artifact`**
+  - *Test that cleanup clears the session artifact.*
+- **`test_session_artifact_key_constant`**
+  - *Test that session artifact key is consistent.*
+
+## `app/tests/integration/test_navigator_mcp.py`
+
+
+## `app/tests/integration/test_navigator_specialist_integration.py`
+
+- **`test_graceful_message_when_unavailable`**
+  - *Test that specialist provides helpful message when navigator unavailable.*
+- **`test_extract_quoted_path`**
+  - *Test extracting path from quoted string.*
+- **`test_extract_pattern_glob`**
+  - *Test extracting glob pattern.*
+- **`test_extract_pattern_extension`**
+  - *Test extracting pattern from '.X files' phrase.*
 
 ## `app/tests/integration/test_parallel_execution.py`
 
@@ -449,68 +574,6 @@
 - **`test_restart_application_failure`**
   - *Test application restart handles failures gracefully.*
 
-## `app/tests/resilience/test_menu_filter_pattern.py`
-
-- **`test_immediate_repetition_loop_activates_menu_filter`**
-  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
-- **`test_two_step_cycle_loop_forbids_both_specialists`**
-  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
-- **`test_below_threshold_does_not_trigger_menu_filter`**
-  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
-- **`test_no_loop_returns_none`**
-  - *REQUIREMENT: No loop detected should return None.*
-- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
-  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
-- **`test_menu_filter_already_active_escalates_to_tier3`**
-  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
-- **`test_extract_from_immediate_loop_error`**
-  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
-- **`test_extract_from_two_step_cycle_error`**
-  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
-- **`test_invalid_error_format_returns_empty_list`**
-  - *REQUIREMENT: If error message format is invalid, return empty list.*
-- **`test_extraction_failure_triggers_circuit_breaker`**
-  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
-- **`test_no_forbidden_list_returns_full_menu`**
-  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
-- **`test_forbidden_list_filters_specialists`**
-  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
-- **`test_multiple_forbidden_specialists_all_removed`**
-  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
-- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
-  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
-- **`test_forbidden_list_cleared_after_non_router_execution`**
-  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
-- **`test_router_execution_does_not_clear_forbidden_list`**
-  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
-- **`test_full_loop_recovery_flow`**
-  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
-- **`test_oscillation_recovery_web_builder_critic`**
-  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
-- **`test_exactly_threshold_repetitions`**
-  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
-- **`test_threshold_plus_one_triggers`**
-  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
-- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
-  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
-- **`test_structural_integrity_violation_triggers_immediate_halt`**
-  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
-- **`test_forbidden_specialists_in_scratchpad_not_root`**
-  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
-- **`test_scratchpad_merge_semantics`**
-  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
-- **`test_menu_filter_activation_logged_at_warning_level`**
-  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
-- **`test_tier3_escalation_logged_at_error_level`**
-  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
-
-## `app/tests/resilience/test_strategy_pattern.py`
-
-- **`test_context_action_supports_strategy`**
-  - *Verify that ContextAction accepts a strategy field.*
-- **`test_context_action_strategy_defaults_to_none`**
-  - *Verify that strategy is optional.*
-
 ## `app/tests/specialists/test_batch_processor_specialist.py`
 
 - **`test_successful_batch_sort`**
@@ -611,23 +674,6 @@
 - **`test_researcher_specialist_recommended_for_web_search`**
   - *Test the specific case from user's trace: web search should route to researcher.*
 
-## `app/tests/interface/test_context_schema.py`
-
-- **`test_context_plan_with_recommended_specialists`**
-  - *Test ContextPlan with recommended_specialists field populated.*
-- **`test_context_plan_default_empty_recommendations`**
-  - *Test ContextPlan defaults to empty list for recommended_specialists.*
-- **`test_context_plan_validates_required_fields`**
-  - *Test ContextPlan requires reasoning field.*
-- **`test_context_plan_single_recommendation`**
-  - *Test ContextPlan with single specialist recommendation.*
-- **`test_context_plan_serialization`**
-  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
-- **`test_context_plan_empty_actions_with_recommendations`**
-  - *Test ContextPlan with no actions but with recommendations.*
-- **`test_context_plan_multiple_actions_with_recommendations`**
-  - *Test ContextPlan with multiple actions and recommendations.*
-
 ## `app/tests/unit/test_adapter_contracts.py`
 
 - **`test_adapter_robust_parsing_contract`**
@@ -658,6 +704,8 @@
   - *Tests the main logic flow: package creation and state update.*
 - **`test_prune_archive_removes_oldest_files`**
   - *Tests that _prune_archive correctly removes the oldest files.*
+- **`test_cleanup_orphaned_directories`**
+  - *Tests that _cleanup_orphaned_directories removes orphaned dirs at startup.*
 - **`test_execute_logic_handles_missing_final_response`**
   - *Tests edge case where final_user_response.md is missing.*
 - **`test_archiver_summarize_conversation_with_objects`**
@@ -845,6 +893,9 @@
   - *Tests that EndSpecialist generates a fallback response when no snippets are available.*
 - **`test_end_specialist_handles_termination_reason`**
   - *Tests that EndSpecialist uses explicit termination_reason when present*
+
+## `app/tests/unit/test_external_mcp_config.py`
+
 
 ## `app/tests/unit/test_facilitator.py`
 
@@ -1394,6 +1445,206 @@
 - **`test_empty_parameters_dict_is_valid`**
   - *Test that empty parameters dict works (for parameterless functions).*
 
+## `app/tests/unit/test_navigator_browser_specialist.py`
+
+- **`test_init_sets_name_and_config`**
+  - *Test that init properly sets name and config.*
+- **`test_preflight_passes_without_client_for_loading`**
+  - *Test pre-flight passes when client not injected (allows loading).*
+- **`test_preflight_fails_when_not_connected`**
+  - *Test pre-flight check fails when navigator not connected.*
+- **`test_preflight_succeeds_when_connected`**
+  - *Test pre-flight check passes when navigator connected.*
+- **`test_create_browser_session_extracts_session_id`**
+  - *Test browser session creation extracts session_id.*
+- **`test_create_browser_session_passes_headless_option`**
+  - *Test browser session creation passes headless option.*
+- **`test_create_browser_session_returns_none_on_failure`**
+  - *Test browser session creation returns None on failure.*
+- **`test_destroy_session_calls_navigator`**
+  - *Test session destruction calls navigator.*
+- **`test_detect_navigate_with_url`**
+  - *Test detecting navigation request with URL.*
+- **`test_detect_navigate_with_url_only`**
+  - *Test detecting navigation when URL is present.*
+- **`test_detect_click_request`**
+  - *Test detecting click requests.*
+- **`test_detect_type_request`**
+  - *Test detecting type requests.*
+- **`test_detect_read_request`**
+  - *Test detecting read requests.*
+- **`test_detect_snapshot_request`**
+  - *Test detecting screenshot requests.*
+- **`test_detect_unknown_request`**
+  - *Test detecting unknown requests.*
+- **`test_extract_https_url`**
+  - *Test extracting HTTPS URL.*
+- **`test_extract_http_url`**
+  - *Test extracting HTTP URL.*
+- **`test_extract_url_with_path`**
+  - *Test extracting URL with path.*
+- **`test_extract_url_strips_punctuation`**
+  - *Test that trailing punctuation is stripped.*
+- **`test_extract_url_returns_none_when_missing`**
+  - *Test that None is returned when no URL present.*
+- **`test_extract_quoted_element`**
+  - *Test extracting quoted element description.*
+- **`test_extract_element_from_click_pattern`**
+  - *Test extracting element from click pattern.*
+- **`test_extract_element_returns_none_for_unclear`**
+  - *Test element extraction returns None for unclear requests.*
+- **`test_extract_quoted_text`**
+  - *Test extracting quoted text.*
+- **`test_extract_double_quoted_text`**
+  - *Test extracting double-quoted text.*
+- **`test_extract_text_returns_none_for_unclear`**
+  - *Test text extraction returns None for unclear requests.*
+- **`test_navigate_to_calls_navigator`**
+  - *Test navigate_to calls navigator goto.*
+- **`test_click_element_calls_navigator`**
+  - *Test click_element calls navigator click.*
+- **`test_type_text_calls_navigator`**
+  - *Test type_text calls navigator type.*
+- **`test_read_content_calls_navigator`**
+  - *Test read_content calls navigator read.*
+- **`test_take_snapshot_calls_navigator`**
+  - *Test take_snapshot calls navigator snapshot.*
+- **`test_handle_browser_unavailable`**
+  - *Test graceful message when browser unavailable.*
+- **`test_handle_navigate_success`**
+  - *Test successful navigation.*
+- **`test_handle_navigate_no_url`**
+  - *Test navigation without URL.*
+- **`test_handle_click_success`**
+  - *Test successful click.*
+- **`test_handle_click_error`**
+  - *Test click with error.*
+- **`test_handle_type_success`**
+  - *Test successful type.*
+- **`test_handle_read_success`**
+  - *Test successful read.*
+- **`test_handle_snapshot_success`**
+  - *Test successful snapshot.*
+- **`test_execute_without_client`**
+  - *Test execution without client returns unavailable message.*
+- **`test_execute_creates_session_and_persists_by_default`**
+  - *Test execution creates session and persists it by default (Phase 4).*
+- **`test_register_mcp_services`**
+  - *Test that MCP services are registered correctly.*
+- **`test_mcp_is_available`**
+  - *Test is_available MCP service.*
+- **`test_mcp_is_available_when_not_connected`**
+  - *Test is_available returns False when client injected but not connected.*
+- **`test_mcp_is_available_when_client_not_injected`**
+  - *Test is_available returns True when client not yet injected (allows loading).*
+- **`test_parse_json_result`**
+  - *Test parsing JSON result.*
+- **`test_parse_non_json_result`**
+  - *Test parsing non-JSON result falls back to string conversion.*
+- **`test_parse_none_result`**
+  - *Test parsing None result.*
+- **`test_get_existing_session_from_artifacts`**
+  - *Test extracting existing session from state artifacts.*
+- **`test_get_existing_session_returns_none_when_missing`**
+  - *Test that None is returned when no session artifact exists.*
+- **`test_get_existing_session_returns_none_for_empty_state`**
+  - *Test that None is returned for empty state.*
+- **`test_validate_session_returns_true_for_valid_session`**
+  - *Test session validation succeeds for valid session.*
+- **`test_validate_session_returns_false_for_error`**
+  - *Test session validation fails when navigator returns error.*
+- **`test_validate_session_returns_false_on_exception`**
+  - *Test session validation fails on exception.*
+- **`test_get_or_create_session_reuses_valid_session`**
+  - *Test that valid existing session is reused.*
+- **`test_get_or_create_session_creates_new_when_invalid`**
+  - *Test that new session is created when existing is invalid.*
+- **`test_get_or_create_session_creates_new_when_not_persisting`**
+  - *Test that new session is always created when persist=False.*
+- **`test_merge_result_with_session_adds_artifact`**
+  - *Test that session info is merged into result artifacts.*
+- **`test_merge_result_with_session_skips_when_not_persisting`**
+  - *Test that merge is skipped when persist=False.*
+- **`test_cleanup_session_destroys_existing_session`**
+  - *Test that cleanup destroys the existing session.*
+- **`test_cleanup_session_handles_no_existing_session`**
+  - *Test that cleanup handles missing session gracefully.*
+- **`test_execute_logic_persists_session_by_default`**
+  - *Test that execute_logic persists session by default.*
+- **`test_execute_logic_destroys_session_when_not_persisting`**
+  - *Test that execute_logic destroys session when persist_session=False.*
+
+## `app/tests/unit/test_navigator_specialist.py`
+
+- **`test_init_sets_name_and_config`**
+  - *Test that init properly sets name and config.*
+- **`test_preflight_passes_without_client_for_loading`**
+  - *Test pre-flight passes when client not injected (allows loading).*
+- **`test_preflight_fails_when_not_connected`**
+  - *Test pre-flight check fails when navigator not connected.*
+- **`test_preflight_succeeds_when_connected`**
+  - *Test pre-flight check passes when navigator connected.*
+- **`test_create_session_extracts_session_id`**
+  - *Test session creation extracts session_id from result.*
+- **`test_create_session_returns_none_on_failure`**
+  - *Test session creation returns None on failure.*
+- **`test_destroy_session_calls_navigator`**
+  - *Test session destruction calls navigator.*
+- **`test_extract_quoted_path`**
+  - *Test extracting path from quoted string.*
+- **`test_extract_path_from_folder_phrase`**
+  - *Test extracting path from 'X folder' phrase.*
+- **`test_extract_path_from_directory_phrase`**
+  - *Test extracting path from 'X directory' phrase.*
+- **`test_extract_pattern_glob`**
+  - *Test extracting glob pattern.*
+- **`test_extract_pattern_extension`**
+  - *Test extracting pattern from '.X files' phrase.*
+- **`test_extract_pattern_type_name`**
+  - *Test extracting pattern from file type name.*
+- **`test_extract_pattern_returns_none_for_unclear`**
+  - *Test pattern extraction returns None for unclear requests.*
+- **`test_handle_navigator_unavailable`**
+  - *Test graceful degradation message when navigator unavailable.*
+- **`test_execute_without_request`**
+  - *Test execution with no user message.*
+- **`test_execute_calls_session_lifecycle`**
+  - *Test that execute creates and destroys session.*
+- **`test_handle_delete_without_path`**
+  - *Test delete handler when path cannot be determined.*
+- **`test_handle_delete_success`**
+  - *Test successful delete operation.*
+- **`test_handle_delete_error`**
+  - *Test delete operation with error.*
+- **`test_handle_find_without_pattern`**
+  - *Test find handler when pattern cannot be determined.*
+- **`test_handle_find_success`**
+  - *Test successful find operation.*
+- **`test_handle_find_no_matches`**
+  - *Test find operation with no matches.*
+- **`test_handle_list_default_path`**
+  - *Test list with default path.*
+- **`test_handle_list_specific_path`**
+  - *Test list with specific path.*
+- **`test_handle_list_empty_directory`**
+  - *Test list on empty directory.*
+- **`test_register_mcp_services`**
+  - *Test that MCP services are registered correctly.*
+- **`test_mcp_is_available`**
+  - *Test is_available MCP service.*
+- **`test_mcp_is_available_when_not_connected`**
+  - *Test is_available returns False when client injected but not connected.*
+- **`test_mcp_is_available_when_client_not_injected`**
+  - *Test is_available returns True when client not yet injected (allows loading).*
+- **`test_parse_json_result`**
+  - *Test parsing JSON result.*
+- **`test_parse_non_json_result`**
+  - *Test parsing non-JSON result.*
+- **`test_parse_none_result`**
+  - *Test parsing None result.*
+- **`test_extract_session_id`**
+  - *Test session ID extraction.*
+
 ## `app/tests/unit/test_node_executor.py`
 
 - **`test_safe_executor_handles_specialist_exception`**
@@ -1474,6 +1725,31 @@
   - *Tests that ProgenitorBravo stores response content in artifacts (state management).*
 - **`test_progenitor_bravo_handles_empty_message_history`**
   - *Tests that ProgenitorBravo handles edge case of empty message history.*
+
+## `app/tests/unit/test_project_director.py`
+
+- **`test_project_director_inherits_react_mixin`**
+  - *Verify ProjectDirector has ReActMixin capabilities.*
+- **`test_project_director_defines_tools`**
+  - *Test that ProjectDirector defines search and browse tools.*
+- **`test_project_context_initialization`**
+  - *Test that ProjectContext is initialized from user message.*
+- **`test_project_context_restoration`**
+  - *Test that existing ProjectContext is restored from artifacts.*
+- **`test_research_prompt_building`**
+  - *Test that research prompt includes context information.*
+- **`test_max_iterations_from_config`**
+  - *Test that max_iterations is read from config.*
+- **`test_max_iterations_default`**
+  - *Test default max_iterations when not in config.*
+- **`test_tool_result_serialization`**
+  - *Test that tool results are serialized correctly for artifacts.*
+- **`test_partial_synthesis_on_max_iterations`**
+  - *Test graceful degradation when max iterations exceeded.*
+- **`test_subgraph_returns_empty_exclusions`**
+  - *Test that Phase 2 subgraph doesn't exclude specialists from hub-and-spoke.*
+- **`test_subgraph_build_no_custom_edges`**
+  - *Test that Phase 2 subgraph doesn't add custom edges.*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 

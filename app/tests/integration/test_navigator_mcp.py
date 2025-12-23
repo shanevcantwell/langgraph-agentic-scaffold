@@ -1,15 +1,17 @@
 """
-Integration tests for Navigation MCP Integration (ADR-CORE-027).
+Integration tests for surf-mcp Integration (ADR-CORE-027).
 
-Tests navigator-mcp connectivity for:
-- Filesystem tree traversal (goto, list, delete, find)
-- Browser navigation with visual grounding (goto, click, type, act)
+Tests surf-mcp connectivity for browser navigation with visual grounding:
+- goto, click, type, act (autonomous multi-step)
+
+Note: surf-mcp is browser-only. The filesystem driver has been removed.
+For filesystem operations, see FileSpecialist tests.
 
 Prerequisites:
-1. Start navigator container: docker-compose --profile navigator up -d
+1. Start surf container: docker-compose --profile surf up -d
 2. Run tests inside Docker: docker compose exec app pytest app/tests/integration/test_navigator_mcp.py -v
 
-These tests require the navigator-mcp container to be running.
+These tests require the surf-mcp container to be running.
 """
 import pytest
 import asyncio
@@ -697,7 +699,7 @@ class TestNavigatorErrorHandling:
                 "location": "."
             }
         )
-        # navigator-mcp returns errors in content JSON, not via isError flag
+        # surf-mcp returns errors in content JSON, not via isError flag
         result_text = _extract_text(result)
         try:
             parsed = json.loads(result_text)

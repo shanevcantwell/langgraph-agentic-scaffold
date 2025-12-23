@@ -114,10 +114,10 @@ class ExternalMcpServiceConfig(BaseModel):
     2. command/args mode: Launch subprocess directly
 
     Example (container_name mode):
-        navigator:
+        surf:
           enabled: true
-          container_name: "navigator-mcp"  # Uses: docker exec -i {name} {entrypoint}
-          entrypoint: "navigator-mcp"      # Optional, defaults to container_name
+          container_name: "surf-mcp"  # Uses: docker exec -i {name} {entrypoint}
+          entrypoint: "surf-mcp"      # Optional, defaults to container_name
 
     Example (command/args mode):
         filesystem:

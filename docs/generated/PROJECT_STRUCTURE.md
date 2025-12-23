@@ -61,8 +61,8 @@ This is the main Python package for the application.
     -   `image_specialist.py`: Image analysis and processing specialist.
 
     **Navigation & External MCP** (2 specialists - ADR-CORE-027):
-    -   `navigator_specialist.py`: Complex filesystem operations via external navigation-mcp container (recursive delete, glob search, tree traversal). Uses ExternalMcpClient.
-    -   `navigator_browser_specialist.py`: Web navigation with visual grounding via Fara AI model. Supports URL navigation, natural language element clicking, form filling, screenshots. Session persistence for multi-turn conversations.
+    -   `navigator_specialist.py`: Complex filesystem operations via external MCP container. Uses ExternalMcpClient. **Note:** ADR-CORE-035 proposes migrating to official MCP filesystem server.
+    -   `navigator_browser_specialist.py`: Web navigation with visual grounding via Fara AI model (surf-mcp). Supports URL navigation, natural language element clicking, form filling, screenshots. Session persistence for multi-turn conversations.
 
     **Analysis & Data Processing** (5 specialists):
     -   `text_analysis_specialist.py`: Text analysis and natural language processing.

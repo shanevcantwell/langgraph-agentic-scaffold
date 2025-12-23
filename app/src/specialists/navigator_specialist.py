@@ -1,14 +1,15 @@
 # app/src/specialists/navigator_specialist.py
 """
-Navigator Specialist - Tree traversal and complex file operations.
+Navigator Specialist - DEPRECATED filesystem driver.
 
-ADR-CORE-027 Phase 2: Provides capabilities beyond FileSpecialist:
-- Recursive directory deletion
-- Glob pattern search
-- Tree navigation with history
-- Browser automation (Phase 3)
+WARNING: The filesystem driver in the original navigation-mcp has been removed.
+surf-mcp (the successor) is browser-only. For filesystem operations, use FileSpecialist.
 
-Uses external navigation-mcp service via ExternalMcpClient.
+This specialist is retained for backwards compatibility but its fs_driver
+functionality is deprecated. See ADR-CORE-035 for migration to official
+@modelcontextprotocol/server-filesystem container.
+
+Browser operations have moved to NavigatorBrowserSpecialist.
 """
 
 import json

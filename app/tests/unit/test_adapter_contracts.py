@@ -66,8 +66,8 @@ def test_adapter_robust_parsing_contract(adapter_class, malformed_response, expe
             result = adapter.invoke(request)
     elif adapter_class == GeminiAdapter:
         adapter = GeminiAdapter(model_config={"api_identifier": "test-model"}, api_key="fake-key", system_prompt="")
-        # Mock the underlying model call for Gemini
-        with patch.object(adapter.model, 'generate_content', new_callable=MagicMock) as mock_create:
+        # Mock the underlying client.models.generate_content call for new Gemini SDK
+        with patch.object(adapter.client.models, 'generate_content', new_callable=MagicMock) as mock_create:
             # Configure the mock to ensure it doesn't look like a tool call.
             # MagicMock can create attributes on access, so we explicitly prevent it.
             mock_create.return_value.candidates[0].content.parts[0].function_call = None

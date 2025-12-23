@@ -339,11 +339,11 @@ class ExternalMcpClient:
 
         Config format (in config.yaml → mcp.external_mcp.services.{service_name}):
             # Mode 1: Use existing running container (docker-compose managed)
-            navigator:
+            surf:
               enabled: true
               required: false
-              container_name: "navigator-mcp"  # Uses: docker exec -i {name} {name}
-              entrypoint: "navigator-mcp"      # Optional, defaults to container_name
+              container_name: "surf-mcp"  # Uses: docker exec -i {name} {name}
+              entrypoint: "surf-mcp"      # Optional, defaults to container_name
               timeout_ms: 30000
 
             # Mode 2: Launch subprocess directly
@@ -353,7 +353,7 @@ class ExternalMcpClient:
               args: ["-y", "@some/mcp-server"]
 
         Args:
-            service_name: Key in config.yaml services dict (e.g., "navigator")
+            service_name: Key in config.yaml services dict (e.g., "surf")
 
         Returns:
             List of available tools if connected, None if service disabled/unavailable
@@ -378,7 +378,7 @@ class ExternalMcpClient:
 
         if container_name:
             # Mode 1: docker exec to running container
-            # Default entrypoint is container_name (e.g., "navigator-mcp")
+            # Default entrypoint is container_name (e.g., "surf-mcp")
             # Use `or` because Pydantic may set entrypoint to explicit None in dict
             entrypoint = service_cfg.get("entrypoint") or container_name
             command = "docker"

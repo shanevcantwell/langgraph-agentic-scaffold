@@ -16,17 +16,17 @@ from app.src.mcp.external_client import ExternalMcpClient
 
 @pytest.fixture
 def base_config() -> Dict[str, Any]:
-    """Base config with navigator enabled."""
+    """Base config with surf (browser) enabled."""
     return {
         "mcp": {
             "external_mcp": {
                 "enabled": True,
                 "tracing_enabled": True,
                 "services": {
-                    "navigator": {
+                    "surf": {
                         "enabled": True,
                         "required": False,
-                        "container_name": "navigator-mcp",
+                        "container_name": "surf-mcp",
                         "timeout_ms": 30000
                     }
                 }
@@ -74,10 +74,10 @@ class TestConnectFromConfigLogic:
     @pytest.mark.asyncio
     async def test_disabled_service_returns_none(self, base_config):
         """Test that disabled service returns None without attempting connection."""
-        base_config["mcp"]["external_mcp"]["services"]["navigator"]["enabled"] = False
+        base_config["mcp"]["external_mcp"]["services"]["surf"]["enabled"] = False
 
         client = ExternalMcpClient(base_config)
-        result = await client.connect_from_config("navigator")
+        result = await client.connect_from_config("surf")
 
         assert result is None
         await client.cleanup()
@@ -137,18 +137,18 @@ class TestConnectFromConfigLogic:
 
         client.connect_service = capture_connect
 
-        await client.connect_from_config("navigator")
+        await client.connect_from_config("surf")
 
         # Should use docker exec with container name
         assert captured_args["command"] == "docker"
-        assert captured_args["args"] == ["exec", "-i", "navigator-mcp", "navigator-mcp"]
+        assert captured_args["args"] == ["exec", "-i", "surf-mcp", "surf-mcp"]
 
         await client.cleanup()
 
     @pytest.mark.asyncio
     async def test_container_name_with_custom_entrypoint(self, base_config):
         """Test that custom entrypoint overrides default."""
-        base_config["mcp"]["external_mcp"]["services"]["navigator"]["entrypoint"] = "custom-cmd"
+        base_config["mcp"]["external_mcp"]["services"]["surf"]["entrypoint"] = "custom-cmd"
 
         client = ExternalMcpClient(base_config)
 
@@ -160,10 +160,10 @@ class TestConnectFromConfigLogic:
 
         client.connect_service = capture_connect
 
-        await client.connect_from_config("navigator")
+        await client.connect_from_config("surf")
 
         # Should use custom entrypoint
-        assert captured_args["args"] == ["exec", "-i", "navigator-mcp", "custom-cmd"]
+        assert captured_args["args"] == ["exec", "-i", "surf-mcp", "custom-cmd"]
 
         await client.cleanup()
 
@@ -207,7 +207,7 @@ class TestConnectFromConfigLogic:
         client.connect_service = fail_connect
 
         # Should not raise, just return None
-        result = await client.connect_from_config("navigator")
+        result = await client.connect_from_config("surf")
 
         assert result is None
         await client.cleanup()
@@ -215,7 +215,7 @@ class TestConnectFromConfigLogic:
     @pytest.mark.asyncio
     async def test_connection_failure_raises_for_required(self, base_config):
         """Test that connection failure raises for required service."""
-        base_config["mcp"]["external_mcp"]["services"]["navigator"]["required"] = True
+        base_config["mcp"]["external_mcp"]["services"]["surf"]["required"] = True
 
         client = ExternalMcpClient(base_config)
 
@@ -225,7 +225,7 @@ class TestConnectFromConfigLogic:
         client.connect_service = fail_connect
 
         with pytest.raises(RuntimeError, match="failed to connect"):
-            await client.connect_from_config("navigator")
+            await client.connect_from_config("surf")
 
         await client.cleanup()
 
@@ -270,9 +270,9 @@ class TestConnectAllFromConfig:
 
         result = await client.connect_all_from_config()
 
-        assert "navigator" in connected_services
+        assert "surf" in connected_services
         assert "service2" in connected_services
-        assert result["navigator"] == ["navigator_tool"]
+        assert result["surf"] == ["surf_tool"]
         assert result["service2"] == ["service2_tool"]
 
         await client.cleanup()
@@ -317,7 +317,7 @@ class TestConnectAllFromConfig:
 
         async def selective_fail(service_name, command, args, env=None):
             call_count[0] += 1
-            if service_name == "navigator":
+            if service_name == "surf":
                 raise RuntimeError("Navigator failed")
             return ["tool"]
 
@@ -327,7 +327,7 @@ class TestConnectAllFromConfig:
 
         # Should still have service2
         assert "service2" in result
-        assert "navigator" not in result
+        assert "surf" not in result
         assert call_count[0] == 2  # Both were attempted
 
         await client.cleanup()
@@ -335,7 +335,7 @@ class TestConnectAllFromConfig:
     @pytest.mark.asyncio
     async def test_required_failure_raises_immediately(self, base_config):
         """Test that required service failure raises RuntimeError."""
-        base_config["mcp"]["external_mcp"]["services"]["navigator"]["required"] = True
+        base_config["mcp"]["external_mcp"]["services"]["surf"]["required"] = True
         base_config["mcp"]["external_mcp"]["services"]["service2"] = {
             "enabled": True,
             "required": False,
@@ -345,12 +345,12 @@ class TestConnectAllFromConfig:
 
         client = ExternalMcpClient(base_config)
 
-        async def fail_navigator(service_name, command, args, env=None):
-            if service_name == "navigator":
+        async def fail_surf(service_name, command, args, env=None):
+            if service_name == "surf":
                 raise RuntimeError("Navigator failed")
             return ["tool"]
 
-        client.connect_service = fail_navigator
+        client.connect_service = fail_surf
 
         with pytest.raises(RuntimeError, match="failed to connect"):
             await client.connect_all_from_config()
@@ -368,12 +368,12 @@ class TestServiceConfigPatterns:
     @pytest.mark.asyncio
     async def test_container_name_mode_pattern(self, base_config):
         """Test the container_name mode pattern (ADR-CORE-027)."""
-        # This is the pattern for navigator
-        service_config = base_config["mcp"]["external_mcp"]["services"]["navigator"]
+        # This is the pattern for surf
+        service_config = base_config["mcp"]["external_mcp"]["services"]["surf"]
 
         assert service_config["enabled"] is True
         assert service_config["required"] is False
-        assert service_config["container_name"] == "navigator-mcp"
+        assert service_config["container_name"] == "surf-mcp"
         assert "command" not in service_config  # Uses container_name, not command
 
     @pytest.mark.asyncio

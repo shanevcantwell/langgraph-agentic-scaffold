@@ -950,7 +950,7 @@ mcp:
         enabled: true
 ```
 
-**See:** [MCP_GUIDE.md](MCP_GUIDE.md#910-navigation-mcp-filesystem--browser-operations) for full Navigation-MCP details.
+**See:** [MCP_GUIDE.md](../MCP_GUIDE.md) for MCP integration details. surf-mcp provides browser automation only; for filesystem operations use FileSpecialist.
 
 ## Conclusion
 

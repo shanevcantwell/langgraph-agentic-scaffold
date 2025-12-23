@@ -1,9 +1,10 @@
 """
 Navigator Browser Specialist for web navigation with visual grounding.
 
-Uses navigation-mcp browser driver for web browsing operations including
-URL navigation, element clicking via natural language, form filling,
-and page content extraction.
+Uses surf-mcp for web browsing operations including URL navigation,
+element clicking via natural language, form filling, and page content extraction.
+
+Note: surf-mcp is browser-only. For filesystem operations, see FileSpecialist.
 
 See ADR-CORE-027 for architectural details.
 """
@@ -25,11 +26,11 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
     """
     Specialist for web navigation with visual grounding.
 
-    Uses the navigation-mcp browser driver to browse websites using
-    natural language descriptions for element interaction (Fara visual grounding).
+    Uses surf-mcp to browse websites using natural language descriptions
+    for element interaction (Fara visual grounding).
 
-    Architecture (ADR-CORE-027 Phase 3):
-        User Request → NavigatorBrowserSpecialist → ExternalMcpClient → navigator-mcp
+    Architecture (ADR-CORE-027):
+        User Request → NavigatorBrowserSpecialist → ExternalMcpClient → surf-mcp
                                                                               ↓
                                                                         Browser Driver
                                                                               ↓

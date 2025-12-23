@@ -220,21 +220,25 @@ Debugging complex multi-agent interactions with `print` statements is insufficie
 ### Current Status
 
 **Maturity**: Alpha / Active Development
-**Roadmap Progress**: 20% complete (6.5/32 tasks)
-**Test Coverage**: 395 tests (371 passing, comprehensive coverage for core features)
+**Roadmap Progress**: Project Bedrock 100% complete (37/37 tasks)
+**Test Coverage**: 1,000+ tests across unit, integration, and contract testing
 
 **Production-Ready Features:**
-- Tiered Chat Subgraph (39 tests)
-- MCP Infrastructure (69 tests)
-- Fail-Fast Validation (startup + routing)
-- FileSpecialist with sandbox security
+- Tiered Chat Subgraph (CORE-CHAT-002) with parallel progenitors
+- MCP Infrastructure (internal + external containerized services)
+- Fail-Fast Validation (startup + route validation)
+- Invariant Monitor & Circuit Breaker system
+- Context Engineering pipeline (Triage → Facilitate → Execute)
+- Hybrid Routing Engine (declarative + procedural + probabilistic)
+- V.E.G.A.S. Terminal UI for real-time streaming
+- surf-mcp integration for browser automation
 
-**In Development:**
-- Circuit breaker system
-- Dossier communication pattern
-- Hybrid routing engine (reflexive + declarative + probabilistic)
+**Post-Bedrock Development:**
+- ReActMixin for iterative tool-use patterns
+- Deep Research pipeline
+- Tiered synthesis with graceful degradation
 
-See [roadmap documentation](../design-docs/agentic-scaffold/01_BLUEPRINTS/) for detailed implementation status and architectural vision.
+See [docs/ADRs/](./docs/ADRs/) for architectural decisions and design documentation.
 
 ## License
 
