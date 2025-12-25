@@ -108,6 +108,13 @@ def test_safe_executor_blocks_execution_on_missing_artifact(node_executor_instan
     """
     Tests that the safe_executor prevents a specialist from running if a required
     artifact is missing from the state.
+
+    The response uses ONLY scratchpad for routing signals - no messages pollution.
+    Router reads scratchpad.recommended_specialists and injects dependency context
+    into its prompt. This keeps internal orchestration out of user-visible stream.
+
+    CRITICAL: The blocked specialist is added to forbidden_specialists so Router
+    won't route back to it until the dependency is satisfied (ADR-CORE-016).
     """
     # Arrange
     mock_specialist = MagicMock(spec=BaseSpecialist)
@@ -126,21 +133,38 @@ def test_safe_executor_blocks_execution_on_missing_artifact(node_executor_instan
     # Assert
     mock_specialist.execute.assert_not_called()
 
-    # Check that the response contains the expected fields
+    # Recommendation flows through scratchpad (not messages - no pollution)
     assert "scratchpad" in result
     assert result["scratchpad"]["recommended_specialists"] == ["systems_architect"]
-    assert "messages" in result
-    assert len(result["messages"]) == 1
-    assert "system_plan" in result["messages"][0].content
-    assert "systems_architect" in result["messages"][0].content
+    # ADR-CORE-016: Blocked specialist added to forbidden_specialists to prevent routing loops
+    assert result["scratchpad"]["forbidden_specialists"] == ["artifact_requiring_specialist"]
+    # No messages - internal orchestration stays out of user-visible stream
+    assert "messages" not in result
+    # Routing history still tracked for observability
+    assert "routing_history" in result
+    assert result["routing_history"] == ["artifact_requiring_specialist"]
 
 def test_create_missing_artifact_response_format(node_executor_instance):
-    """Tests the specific format of the missing artifact response."""
+    """
+    Tests the specific format of the missing artifact response.
+
+    The response uses ONLY scratchpad - no messages pollution.
+    This is intentional: Router reads scratchpad.recommended_specialists and builds
+    its own dependency context. The internal "cannot execute" message should never
+    appear in user-visible conversation.
+
+    ADR-CORE-016: Blocked specialist is added to forbidden_specialists so Router
+    won't route back to it until the dependency is satisfied.
+    """
     # Act
     response = node_executor_instance.create_missing_artifact_response(
         specialist_name="test_specialist",
         missing_artifacts=["artifact1"],
         recommended_specialists=["provider_specialist"]
     )
-    # Assert
+    # Assert: recommendation in scratchpad
     assert response["scratchpad"]["recommended_specialists"] == ["provider_specialist"]
+    # Assert: blocked specialist in forbidden_specialists (prevents routing loops)
+    assert response["scratchpad"]["forbidden_specialists"] == ["test_specialist"]
+    # Assert: NO messages pollution
+    assert "messages" not in response

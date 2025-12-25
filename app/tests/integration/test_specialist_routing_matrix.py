@@ -167,14 +167,19 @@ def test_router_routes_to_expected_specialist(
                     f"[{desc}] Expected '{spec}' in routing history but got: {routing_history}"
                 )
 
-        # Verify no critical errors
+        # Verify no critical errors or workflow failures
         error_report = final_state.get("error_report")
-        # Allow soft errors but fail on hard errors
         if error_report:
-            # Check it's not a critical failure
             assert "CircuitBreakerTriggered" not in str(error_report), (
                 f"[{desc}] Circuit breaker triggered: {error_report}"
             )
+
+        # Check for loop detection (stored in scratchpad.termination_reason)
+        scratchpad = final_state.get("scratchpad", {})
+        termination_reason = scratchpad.get("termination_reason", "")
+        assert "unproductive loop" not in termination_reason.lower(), (
+            f"[{desc}] Workflow failed with loop detection: {termination_reason}"
+        )
 
 
 # =============================================================================

@@ -4,7 +4,7 @@ import traceback
 import hashlib
 from typing import Dict, Any, Callable
 
-from langchain_core.messages import AIMessage
+# AIMessage import removed - create_missing_artifact_response no longer pollutes messages
 from langgraph.errors import GraphInterrupt
 
 from ...specialists.base import BaseSpecialist
@@ -39,19 +39,31 @@ class NodeExecutor:
     ) -> dict:
         """
         Generates a standardized response when required artifacts are missing.
+
+        This returns ONLY scratchpad signals (no messages). The recommendation flows
+        through scratchpad.recommended_specialists, which Router reads and injects
+        into its prompt context. We intentionally avoid adding to messages because:
+        1. This is internal orchestration, not user communication
+        2. Adding to messages pollutes the user-visible stream with plumbing details
+        3. The dependency context is built by Router from scratchpad, not message content
+
+        CRITICAL: Also adds the blocked specialist to forbidden_specialists so Router
+        won't offer it again until the dependency is satisfied. This prevents loops
+        where Router keeps routing back to the blocked specialist.
         """
         missing_list = ", ".join(f"'{a}'" for a in missing_artifacts)
-        content = (
-            f"I, {specialist_name}, cannot execute because the following required artifacts "
-            f"are missing from the current state: {missing_list}. "
-            f"I recommend running the following specialist(s) first: {', '.join(recommended_specialists)}."
+        logger.warning(
+            f"Specialist '{specialist_name}' blocked: missing artifacts {missing_list}. "
+            f"Recommending: {recommended_specialists}. Adding '{specialist_name}' to forbidden_specialists."
         )
-        ai_message = AIMessage(content=content, name=specialist_name)
+        # Only use scratchpad for routing signals - no messages pollution
+        # ADR-CORE-016: Add blocked specialist to forbidden_specialists to prevent routing loops
         result = {
-            "messages": [ai_message],
-            "scratchpad": {"recommended_specialists": recommended_specialists}
+            "scratchpad": {
+                "recommended_specialists": recommended_specialists,
+                "forbidden_specialists": [specialist_name]  # Remove from Router menu
+            }
         }
-        logger.warning(f"create_missing_artifact_response returning: recommended_specialists={recommended_specialists}")
         return result
 
     def create_safe_executor(self, specialist_instance: BaseSpecialist, streaming_callback: Callable[[str], None] = None) -> Callable[[GraphState], Dict[str, Any]]:

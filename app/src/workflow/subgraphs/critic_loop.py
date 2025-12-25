@@ -36,9 +36,11 @@ class CriticLoopSubgraph(BaseSubgraph):
                 logger.info("Graph Edge: Added conditional edge web_builder → [critic_specialist|router] (ADR-CORE-012 subgraph)")
 
     def get_excluded_specialists(self) -> list[str]:
+        # 2025-12-25: web_builder exclusion removed per Issue #7
+        # Original intent was tight subgraph routing, but this blocked direct
+        # routing from Triage recommendations. MCP migration will handle critique
+        # internally. See ADR-CORE-012 for history.
         excluded = []
         if CoreSpecialist.CRITIC.value in self.specialists:
             excluded.append(CoreSpecialist.CRITIC.value)
-        if "web_builder" in self.specialists:
-            excluded.append("web_builder")
         return excluded
