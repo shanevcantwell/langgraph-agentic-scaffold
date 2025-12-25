@@ -1,10 +1,8 @@
 import logging
 from typing import Dict, Any, List
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from .base import BaseSpecialist
-from .helpers import create_llm_message
 from ..interface.context_schema import ContextPlan
-from ..utils.prompt_loader import load_prompt
 from ..llm.adapter import StandardizedLLMRequest
 from ..utils.errors import SpecialistError
 
@@ -47,20 +45,11 @@ class TriageArchitect(BaseSpecialist):
                     HM(content=last_content + "\n\n[SYSTEM NOTE: The user has uploaded an image. You cannot see it, but it is available in the artifacts. Do not ask for the image.]")
                 ]
 
-        # 2. Build Prompt
-        prompt_file = self.specialist_config.get("prompt_file")
-        if prompt_file:
-            try:
-                system_prompt = load_prompt(prompt_file)
-            except Exception as e:
-                logger.warning(f"Failed to load prompt file '{prompt_file}': {e}. Using fallback.")
-                system_prompt = self._get_fallback_prompt()
-        else:
-            system_prompt = self._get_fallback_prompt()
-
-        # 3. Create Request with system prompt + enriched conversation history
+        # 2. Create Request - use adapter's system prompt (configured by GraphBuilder with dynamic specialist roster)
+        # NOTE: Do NOT reload prompt file here - GraphBuilder._configure_triage() already assembled
+        # the dynamic prompt with specialist descriptions and set it on the adapter.
         request = StandardizedLLMRequest(
-            messages=[SystemMessage(content=system_prompt)] + messages,
+            messages=messages,  # No SystemMessage - adapter handles system prompt
             tools=[ContextPlan],
             force_tool_call=True
         )
@@ -96,25 +85,3 @@ class TriageArchitect(BaseSpecialist):
         except Exception as e:
             logger.error(f"Error in TriageArchitect: {e}", exc_info=True)
             return {"error": str(e)}
-
-    def _get_fallback_prompt(self) -> str:
-        return """You are the Triage Architect. Your goal is to create a structured plan to gather context for the user's request.
-        
-        Analyze the user's request and determine what information is needed to answer it fully.
-        You have access to the following context gathering actions:
-        
-        1. RESEARCH: Search the web for real-time information.
-           - Use this for current events, documentation, or facts not in your training data.
-           - Target: The search query.
-           
-        2. READ_FILE: Read a specific file from the workspace.
-           - Use this when the user refers to a file or you need to inspect code/docs.
-           - Target: The absolute file path.
-           
-        3. SUMMARIZE: Summarize a large text or document.
-           - Use this to condense information.
-           - Target: The text or file path to summarize.
-           
-        Output a ContextPlan containing a list of these actions.
-        If no context gathering is needed (e.g., a simple greeting), return an empty list of actions.
-        """

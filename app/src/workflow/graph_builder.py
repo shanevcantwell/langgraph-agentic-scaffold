@@ -304,10 +304,9 @@ class GraphBuilder:
             self._configure_triage(loaded_specialists, all_configs)
 
         # --- Context Engineering Ecosystem ---
-        # TriageArchitect is now a distinct specialist from prompt_triage_specialist
+        # TriageArchitect needs dynamic specialist roster in system prompt (same as prompt_triage_specialist)
         if "triage_architect" in loaded_specialists:
-            # No special configuration needed for now, uses standard prompt loading
-            pass
+            self._configure_triage(loaded_specialists, all_configs, specialist_name="triage_architect")
 
         # Now that all specialists, including triage, have their final
         # configurations, iterate through and attach adapters. This loop will
@@ -375,27 +374,42 @@ class GraphBuilder:
         router_instance.llm_adapter = self.adapter_factory.create_adapter(CoreSpecialist.ROUTER.value, dynamic_system_prompt)
         logger.info("RouterSpecialist adapter attached with dynamic, context-aware prompt.")
 
-    def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
-        triage_instance = specialists[CoreSpecialist.TRIAGE.value]
-        triage_config = configs.get(CoreSpecialist.TRIAGE.value, {})
+    def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict, specialist_name: str = None):
+        """Configure a triage specialist with dynamic specialist roster in system prompt.
+
+        Args:
+            specialists: Dict of loaded specialist instances
+            configs: Dict of specialist configurations
+            specialist_name: The name of the triage specialist to configure.
+                           Defaults to CoreSpecialist.TRIAGE.value for backwards compatibility.
+        """
+        if specialist_name is None:
+            specialist_name = CoreSpecialist.TRIAGE.value
+
+        triage_instance = specialists[specialist_name]
+        triage_config = configs.get(specialist_name, {})
         base_prompt = load_prompt(triage_config.get("prompt_file", ""))
-        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value]
-        available_specialists = {name: conf for name, conf in configs.items() if name not in excluded}
+        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value, "triage_architect"]
+        # Only include LLM-type specialists in triage menu (excludes procedural, MCP-only, internal subgraph nodes)
+        available_specialists = {
+            name: conf for name, conf in configs.items()
+            if name not in excluded and conf.get("type") == "llm"
+        }
         triage_instance.set_specialist_map(available_specialists)
         specialist_descs = "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])
         dynamic_system_prompt = f"{base_prompt}\n\n--- AVAILABLE SPECIALISTS ---\nYou MUST choose one or more of the following specialists:\n{specialist_descs}"
-        
+
         logger.debug(f"Attempting to configure adapter for '{triage_instance.specialist_name}'.")
         binding_key = triage_config.get("llm_config")
         if not binding_key:
-            raise WorkflowError(f"Could not resolve LLM binding for '{CoreSpecialist.TRIAGE.value}'. Ensure it is bound in 'user_settings.yaml' or a 'default_llm_config' is set.")
-        
+            raise WorkflowError(f"Could not resolve LLM binding for '{specialist_name}'. Ensure it is bound in 'user_settings.yaml' or a 'default_llm_config' is set.")
+
         try:
-            adapter = self.adapter_factory.create_adapter(CoreSpecialist.TRIAGE.value, dynamic_system_prompt)
+            adapter = self.adapter_factory.create_adapter(specialist_name, dynamic_system_prompt)
             if adapter is None:
                 logger.error(f"CRITICAL: AdapterFactory returned None for '{triage_instance.specialist_name}' with binding key '{binding_key}'.")
             triage_instance.llm_adapter = adapter
-            logger.info(f"Triage specialist adapter attached with dynamic, context-aware prompt. Adapter is {'present' if adapter else 'MISSING'}.")
+            logger.info(f"Triage specialist '{specialist_name}' adapter attached with dynamic, context-aware prompt. Adapter is {'present' if adapter else 'MISSING'}.")
         except Exception as e:
             logger.error(f"CRITICAL: An unexpected error occurred while creating the adapter for '{triage_instance.specialist_name}': {e}", exc_info=True)
             triage_instance.llm_adapter = None

@@ -94,7 +94,7 @@ specialists:
   systems_architect:
     type: "llm"
     prompt_file: "systems_architect_prompt.md"
-    description: "Analyzes a user's request and creates a high-level technical plan. Produces a 'system_plan' artifact. This is a good first step for complex tasks."
+    description: "Creates plans and designs implementation strategies. Use when user asks to 'plan', 'design', or 'architect' something. Produces a 'system_plan' artifact."
     tags: ["planning"]
 
   critic_specialist:
