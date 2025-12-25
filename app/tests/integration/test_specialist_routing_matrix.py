@@ -181,6 +181,38 @@ def test_router_routes_to_expected_specialist(
             f"[{desc}] Workflow failed with loop detection: {termination_reason}"
         )
 
+        # =============================================================================
+        # ARTIFACT VALIDATION: "What good looks like" for specific flows
+        # These assertions verify the actual deliverables, not just routing paths
+        # =============================================================================
+        artifacts = final_state.get("artifacts", {})
+
+        if desc == "web_ui_task":
+            # Web UI flow MUST produce HTML and go through critic
+            assert "html_document.html" in artifacts, (
+                f"[{desc}] web_builder must produce html_document.html artifact. "
+                f"Got artifacts: {list(artifacts.keys())}"
+            )
+            assert len(artifacts["html_document.html"]) > 100, (
+                f"[{desc}] html_document.html is suspiciously small ({len(artifacts['html_document.html'])} chars)"
+            )
+            assert "critic_specialist" in routing_history, (
+                f"[{desc}] critic_specialist must review HTML. History: {routing_history}"
+            )
+            assert final_state.get("task_is_complete") is True, (
+                f"[{desc}] task_is_complete must be True for successful web build"
+            )
+
+        if desc == "planning_task":
+            # Planning flow MUST produce system_plan
+            assert "system_plan" in artifacts, (
+                f"[{desc}] systems_architect must produce system_plan artifact. "
+                f"Got artifacts: {list(artifacts.keys())}"
+            )
+            assert final_state.get("task_is_complete") is True, (
+                f"[{desc}] task_is_complete must be True for successful planning"
+            )
+
 
 # =============================================================================
 # SPECIFIC SPECIALIST ROUTING TESTS

@@ -216,10 +216,26 @@ class RouterSpecialist(BaseSpecialist):
 
             if is_specialist_dependency:
                 # This is a specialist stating a hard dependency requirement
-                # Format: If only one dependency, be explicit about routing to it
+                # DETERMINISTIC ROUTING: When there's a single dependency target, bypass LLM entirely
+                # This prevents LLM from ignoring the dependency and picking a forbidden specialist
                 if len(recommended_specialists) == 1:
                     target = recommended_specialists[0]
-                    recommendation_context = f"\n\n**Dependency Requirement:**\n\nThe '{recommending_specialist}' specialist cannot proceed without artifacts from '{target}'. Please route to '{target}' next to satisfy this dependency.\n\n(Note: Routing back to '{recommending_specialist}' before running '{target}' will result in the same failure.)"
+                    if target in current_specialists:
+                        logger.info(f"Deterministic dependency routing: '{recommending_specialist}' requires '{target}' - bypassing LLM")
+                        return {
+                            "next_specialist": target,
+                            "tool_calls": [],
+                            "content": f"Routing to '{target}' to satisfy dependency from '{recommending_specialist}'",
+                            "router_diagnostics": {
+                                "llm_choice": None,
+                                "validated_choice": target,
+                                "routing_type": "deterministic_dependency",
+                                "available_count": len(current_specialists),
+                            }
+                        }
+                    else:
+                        logger.warning(f"Dependency target '{target}' not available, falling back to LLM")
+                        recommendation_context = f"\n\n**Dependency Requirement:**\n\nThe '{recommending_specialist}' specialist cannot proceed without artifacts from '{target}'. Please route to '{target}' next to satisfy this dependency.\n\n(Note: Routing back to '{recommending_specialist}' before running '{target}' will result in the same failure.)"
                 else:
                     recommendation_context = f"\n\n**Dependency Requirement:**\n\nThe '{recommending_specialist}' specialist cannot proceed without artifacts from one of the following: {', '.join(recommended_specialists)}. Please route to one of these specialists to satisfy this dependency.\n\n(Note: Routing back to '{recommending_specialist}' before satisfying this dependency will result in the same failure.)"
                 logger.warning(f"Specialist '{recommending_specialist}' has dependency on: {recommended_specialists}")

@@ -21,6 +21,20 @@ class SystemsArchitect(BaseSpecialist):
         logger.info("---INITIALIZED SystemsArchitect---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
+        # "Not me" pattern: if system_plan already exists, don't create another
+        # Add self to forbidden_specialists so Router won't route back here
+        existing_plan = state.get("artifacts", {}).get("system_plan")
+        if existing_plan:
+            logger.info("SystemsArchitect: system_plan already exists, adding self to forbidden_specialists")
+            return {
+                "messages": [create_llm_message(
+                    specialist_name=self.specialist_name,
+                    llm_adapter=self.llm_adapter,
+                    content=f"A system plan already exists: {existing_plan.get('plan_summary', 'see artifacts')}",
+                )],
+                "scratchpad": {"forbidden_specialists": [self.specialist_name]},
+            }
+
         # Get enriched messages (includes gathered_context if available)
         messages: List[BaseMessage] = self._get_enriched_messages(state)
 
@@ -42,11 +56,10 @@ class SystemsArchitect(BaseSpecialist):
             content=f"I have created a system plan: {plan.plan_summary}",
         )
         
-        # MODIFICATION: The System Plan is a durable output and MUST be placed
-        # in the 'artifacts' dictionary, not the 'scratchpad'.
-        updated_state = {
+        # System Plan is a durable output - placed in artifacts
+        # Add self to forbidden_specialists: job done, don't route back here
+        return {
             "messages": [new_message],
             "artifacts": {"system_plan": plan.dict()},
-            "scratchpad": {"recommended_specialists": ["web_builder"]}  # Task 2.7: moved to scratchpad
+            "scratchpad": {"forbidden_specialists": [self.specialist_name]},
         }
-        return updated_state

@@ -23,6 +23,45 @@ class DefaultResponderSpecialist(BaseSpecialist):
         """
         Generates a text response and signals that the task is complete.
         """
+        # =============================================================================
+        # TEMPORARY FIX: Exit Interview Pattern (Issue #7, ADR-CORE-036)
+        #
+        # This is a stopgap until a proper ExitInterviewSpecialist is implemented.
+        # DefaultResponder now checks if artifacts were produced that satisfy the
+        # user's request, and presents them instead of generating a generic response.
+        #
+        # TODO: Replace with dedicated ExitInterviewSpecialist per ADR-CORE-036
+        # =============================================================================
+        artifacts = state.get("artifacts", {})
+
+        # Check for key deliverable artifacts and present them directly
+        if "system_plan" in artifacts:
+            plan = artifacts["system_plan"]
+            plan_summary = plan.get("plan_summary", "See details below")
+            plan_steps = plan.get("execution_steps", [])
+
+            if plan_steps:
+                steps_text = "\n".join(f"  {i+1}. {step}" for i, step in enumerate(plan_steps))
+                text_response = f"Here's the plan I created:\n\n**{plan_summary}**\n\nSteps:\n{steps_text}"
+            else:
+                text_response = f"Here's the plan I created:\n\n**{plan_summary}**"
+
+            logger.info("DefaultResponder: Presenting system_plan artifact (Exit Interview pattern)")
+
+            ai_message = create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content=text_response,
+            )
+            return {
+                "messages": [ai_message],
+                "task_is_complete": True,
+                "scratchpad": {"user_response_snippets": [text_response]}
+            }
+        # =============================================================================
+        # END TEMPORARY FIX
+        # =============================================================================
+
         # The DefaultResponder's role is purely conversational. It should only
         # consider the user's messages and its own previous responses to create a
         # clean conversational context, ignoring orchestration messages from other
@@ -31,7 +70,7 @@ class DefaultResponderSpecialist(BaseSpecialist):
             msg for msg in state.get("messages", [])
             if isinstance(msg, HumanMessage) or (isinstance(msg, AIMessage) and msg.name == self.specialist_name)
         ]
-        
+
         # The specialist should act on the full, current state of the conversation.
         # Its system prompt guides it to focus on the most recent message.
         request = StandardizedLLMRequest(messages=messages)

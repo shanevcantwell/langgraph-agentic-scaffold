@@ -208,13 +208,16 @@ class NodeExecutor:
                     del update["turn_count"]
 
                 # ADR-CORE-016: Menu Filter Lifecycle Management
-                # Clear forbidden_specialists after ANY successful specialist execution (non-router)
-                # This ensures transient state and prevents permanent bans
+                # Clear forbidden_specialists after successful execution UNLESS specialist set it itself.
+                # Self-exclusion ("not me" pattern) should persist until Router consumes it.
+                # Only clear external bans (from InvariantMonitor loop detection).
                 if specialist_name != "router_specialist":
-                    scratchpad_in_update = update.get("scratchpad", {})
-                    scratchpad_in_update["forbidden_specialists"] = None
-                    update["scratchpad"] = scratchpad_in_update
-                    logger.debug(f"Cleared forbidden_specialists after successful execution of '{specialist_name}'")
+                    specialist_set_forbidden = specialist_name in update.get("scratchpad", {}).get("forbidden_specialists", [])
+                    if not specialist_set_forbidden:
+                        scratchpad_in_update = update.get("scratchpad", {})
+                        scratchpad_in_update["forbidden_specialists"] = None
+                        update["scratchpad"] = scratchpad_in_update
+                        logger.debug(f"Cleared forbidden_specialists after successful execution of '{specialist_name}'")
 
                 # ADR-CORE-016: Merge menu filter updates from InvariantMonitor (if any)
                 if menu_filter_update:

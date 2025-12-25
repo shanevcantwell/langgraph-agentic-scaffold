@@ -107,15 +107,17 @@ class GraphOrchestrator:
         if stabilization_target:
             return stabilization_target
 
-        # Check if web_builder was blocked (safe_executor set recommended_specialists)
-        if state.get("scratchpad", {}).get("recommended_specialists"):
-            logger.info("after_web_builder: web_builder blocked - returning to router for dependency resolution")
-            return CoreSpecialist.ROUTER.value
-
-        # Check if web_builder produced its artifact
+        # Check if web_builder produced html_document.html FIRST (success case)
+        # This must come before the recommended_specialists check because
+        # web_builder sets recommended_specialists: ["critic_specialist"] on SUCCESS
         if state.get("artifacts", {}).get("html_document.html"):
-            logger.info("after_web_builder: web_builder succeeded - routing to critic for review")
+            logger.info("after_web_builder: html_document.html produced - routing to critic for review")
             return CoreSpecialist.CRITIC.value
+
+        # Check if web_builder was blocked (safe_executor set recommended_specialists without producing HTML)
+        if state.get("scratchpad", {}).get("recommended_specialists"):
+            logger.info("after_web_builder: web_builder blocked (no HTML) - returning to router for dependency resolution")
+            return CoreSpecialist.ROUTER.value
 
         # Fallback to router if no artifact produced
         logger.warning("after_web_builder: web_builder did not produce artifact - returning to router")

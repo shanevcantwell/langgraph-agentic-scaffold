@@ -117,10 +117,11 @@ specialists:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
     description: "Builds or modifies web UIs (HTML/CSS/JS or Gradio Python). Can work from a 'system_plan' artifact OR from attached code files. Use this for creating new UIs, rewriting UI themes, or modifying existing web applications."
-    requires_artifacts: ["system_plan", "text_to_process"]
+    # Requires system_plan - creates emergent redirect to systems_architect first.
+    # Will use text_to_process if available, but doesn't require it.
+    requires_artifacts: ["system_plan"]
     artifact_providers:
       system_plan: "systems_architect"
-      text_to_process: "file_specialist"
     tags: ["vision_capable"]
 
   file_specialist:
