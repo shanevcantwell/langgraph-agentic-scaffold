@@ -229,6 +229,19 @@ Anything that flows through Triage or Router requires **live models** to be mean
 
 **The distinction:** Mock LLM responses to test *handling*, not to test *LLM behavior*.
 
+### xfail Requires Human Approval - CRITICAL
+
+**ALWAYS ask before marking tests as `xfail` or lowering test expectations.**
+
+LLMs optimize toward "green" - we instinctively want to make tests pass. This creates a bias toward marking failures as "expected" rather than fixing underlying issues. When a test fails:
+
+1. **First**: Understand why it's failing
+2. **Second**: Propose options (fix the issue, adjust test, mark xfail)
+3. **Third**: Ask the user which approach they prefer
+4. **Never**: Unilaterally mark something xfail or change expected values to make tests pass
+
+This applies to any change that lowers the bar: removing expected specialists, changing assertions to be more permissive, etc.
+
 ### Docker Required - CRITICAL
 
 **Integration tests MUST run inside Docker.** The `.env` is configured for the proxy container—running from host fails for LMStudio/3090 connectivity.
