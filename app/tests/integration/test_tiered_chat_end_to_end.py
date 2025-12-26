@@ -138,7 +138,7 @@ def test_tiered_chat_graceful_degradation_alpha_only():
     This validates that the system continues with only Alpha's perspective
     instead of completely failing.
 
-    NOTE: We simulate failure by patching _execute_logic to not write bravo_response.
+    NOTE: We simulate failure by patching _execute_logic to not write bravo_response.md.
     The LLM adapter has fallback logic that prevents truly empty responses.
     """
     # --- Arrange ---
@@ -150,7 +150,7 @@ def test_tiered_chat_graceful_degradation_alpha_only():
 
     def bravo_failure_execute(state):
         """Simulates Bravo progenitor failure by not writing artifact."""
-        return {"artifacts": {}}  # No bravo_response written
+        return {"artifacts": {}}  # No bravo_response.md written
 
     with patch.object(builder.specialists['progenitor_alpha_specialist'], 'llm_adapter') as mock_alpha_adapter, \
          patch.object(builder.specialists['progenitor_bravo_specialist'], '_execute_logic', side_effect=bravo_failure_execute), \
@@ -235,7 +235,7 @@ def test_tiered_chat_graceful_degradation_bravo_only():
 
     def alpha_failure_execute(state):
         """Simulates Alpha progenitor failure by not writing artifact."""
-        return {"artifacts": {}}  # No alpha_response written
+        return {"artifacts": {}}  # No alpha_response.md written
 
     with patch.object(builder.specialists['progenitor_alpha_specialist'], '_execute_logic', side_effect=alpha_failure_execute), \
          patch.object(builder.specialists['progenitor_bravo_specialist'], 'llm_adapter') as mock_bravo_adapter, \
@@ -416,10 +416,10 @@ def test_tiered_chat_state_management_pattern():
 
         # 1. Progenitor responses should be in artifacts
         artifacts = final_state.get("artifacts", {})
-        assert "alpha_response" in artifacts, \
-            "Alpha progenitor should write to artifacts['alpha_response']"
-        assert "bravo_response" in artifacts, \
-            "Bravo progenitor should write to artifacts['bravo_response']"
+        assert "alpha_response.md" in artifacts, \
+            "Alpha progenitor should write to artifacts['alpha_response.md']"
+        assert "bravo_response.md" in artifacts, \
+            "Bravo progenitor should write to artifacts['bravo_response.md']"
 
         # 2. Combined response should be in artifacts AND messages
         assert "final_user_response.md" in artifacts, \
@@ -436,8 +436,8 @@ def test_tiered_chat_state_management_pattern():
             "Should have user message + synthesizer message (minimum)"
 
         print("\n✓ State management pattern validated")
-        print(f"  ✓ Artifacts contain alpha_response: {len(artifacts.get('alpha_response', ''))} chars")
-        print(f"  ✓ Artifacts contain bravo_response: {len(artifacts.get('bravo_response', ''))} chars")
+        print(f"  ✓ Artifacts contain alpha_response.md: {len(artifacts.get('alpha_response.md', ''))} chars")
+        print(f"  ✓ Artifacts contain bravo_response.md: {len(artifacts.get('bravo_response.md', ''))} chars")
         print(f"  ✓ Artifacts contain final_user_response.md: {len(artifacts.get('final_user_response.md', ''))} chars")
         print(f"  ✓ Messages array has {len(messages)} messages")
 

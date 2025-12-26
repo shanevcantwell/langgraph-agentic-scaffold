@@ -340,7 +340,7 @@ class TestProgenitorSpecialistsExecution:
 
         # Progenitors should write to artifacts (parallel node pattern)
         assert "artifacts" in result
-        assert "alpha_response" in result["artifacts"]
+        assert "alpha_response.md" in result["artifacts"]
         # Should NOT write to messages (parallel node constraint)
         assert "messages" not in result or len(result.get("messages", [])) == 0
 
@@ -358,7 +358,7 @@ class TestProgenitorSpecialistsExecution:
 
         # Progenitors should write to artifacts (parallel node pattern)
         assert "artifacts" in result
-        assert "bravo_response" in result["artifacts"]
+        assert "bravo_response.md" in result["artifacts"]
         # Should NOT write to messages (parallel node constraint)
         assert "messages" not in result or len(result.get("messages", [])) == 0
 
@@ -379,8 +379,8 @@ class TestTieredSynthesizerExecution:
         state = create_test_state(
             messages=[HumanMessage(content="What is recursion?")],
             artifacts={
-                "alpha_response": "Analytically, recursion is a function calling itself...",
-                "bravo_response": "Intuitively, recursion is like looking into mirrors facing each other..."
+                "alpha_response.md": "Analytically, recursion is a function calling itself...",
+                "bravo_response.md": "Intuitively, recursion is like looking into mirrors facing each other..."
             }
         )
 
