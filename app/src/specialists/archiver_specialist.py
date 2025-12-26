@@ -88,11 +88,19 @@ class ArchiverSpecialist(BaseSpecialist):
         # CRITICAL FIX for UI Crash (Unterminated string in JSON):
         # We replace the heavy artifacts in the returned state with just the package path
         # and the final response. This prevents massive JSON payloads from crashing the UI.
+        # However, key artifacts like html_document.html must be included for downstream access.
         safe_artifacts = {
             "final_user_response.md": final_user_response,
             "archive_report.md": markdown_report,
             "archive_package_path": package_path
         }
+
+        # Include key string artifacts that downstream consumers (tests, UI) need access to
+        artifacts = state.get("artifacts", {})
+        key_artifacts = ["html_document.html", "critique.md", "alpha_response.md", "bravo_response.md"]
+        for key in key_artifacts:
+            if key in artifacts and isinstance(artifacts[key], str):
+                safe_artifacts[key] = artifacts[key]
 
         return {
             "messages": [ai_message],
