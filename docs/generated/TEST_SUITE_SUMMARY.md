@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 636 |
-| Integration | 28 | 202 |
+| Unit | 68 | 639 |
+| Integration | 28 | 201 |
 | Other | 8 | 101 |
-| **Total** | **104** | **939** |
+| **Total** | **104** | **941** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -273,10 +273,8 @@
   - *Flow 5.2: Technical Plan*
 - **`test_flow_6_1_text_summary`**
   - *Flow 6.1: Text Summary*
-- **`test_flow_6_2_sentiment_analysis`**
-  - *Flow 6.2: Sentiment Analysis*
-- **`test_flow_6_3_data_extraction`**
-  - *Flow 6.3: Data Extraction*
+- **`test_flow_6_2_data_extraction`**
+  - *Flow 6.2: Data Extraction*
 - **`test_invariant_triage_entry`**
   - *Invariant 1: Every flow starts at TriageArchitect*
 - **`test_invariant_end_exit`**
@@ -760,6 +758,8 @@
   - *Reproduces the 'AttributeError: 'HumanMessage' object has no attribute 'get''*
 - **`test_archiver_execute_logic_integration`**
   - *Integration-like test for _execute_logic with real message objects in state.*
+- **`test_archiver_includes_html_artifact_in_safe_artifacts`**
+  - *Verifies that HTML artifacts are included in the returned safe_artifacts.*
 
 ## `app/tests/unit/test_base_schemas.py`
 
@@ -1741,7 +1741,7 @@
 - **`test_progenitor_alpha_generates_analytical_response`**
   - *Tests that ProgenitorAlpha generates an analytical perspective response.*
 - **`test_progenitor_alpha_stores_response_in_artifacts`**
-  - *Tests that ProgenitorAlpha stores response in artifacts.alpha_response.*
+  - *Tests that ProgenitorAlpha stores response in artifacts.alpha_response.md.*
 - **`test_progenitor_alpha_does_not_set_task_complete`**
   - *Tests that ProgenitorAlpha does NOT set task_is_complete (TieredSynthesizer does).*
 - **`test_progenitor_alpha_maintains_conversation_context`**
@@ -1752,6 +1752,8 @@
   - *Tests that ProgenitorAlpha stores response content in artifacts (state management).*
 - **`test_progenitor_alpha_handles_empty_message_history`**
   - *Tests that ProgenitorAlpha handles edge case of empty message history.*
+- **`test_progenitor_alpha_artifact_key_has_md_extension`**
+  - *Verifies that ProgenitorAlpha saves with .md extension for proper archival.*
 
 ## `app/tests/unit/test_progenitor_bravo_specialist.py`
 
@@ -1760,7 +1762,7 @@
 - **`test_progenitor_bravo_generates_contextual_response`**
   - *Tests that ProgenitorBravo generates a contextual perspective response.*
 - **`test_progenitor_bravo_stores_response_in_artifacts`**
-  - *Tests that ProgenitorBravo stores response in artifacts.bravo_response.*
+  - *Tests that ProgenitorBravo stores response in artifacts.bravo_response.md.*
 - **`test_progenitor_bravo_does_not_set_task_complete`**
   - *Tests that ProgenitorBravo does NOT set task_is_complete (TieredSynthesizer does).*
 - **`test_progenitor_bravo_maintains_conversation_context`**
@@ -1771,6 +1773,8 @@
   - *Tests that ProgenitorBravo stores response content in artifacts (state management).*
 - **`test_progenitor_bravo_handles_empty_message_history`**
   - *Tests that ProgenitorBravo handles edge case of empty message history.*
+- **`test_progenitor_bravo_artifact_key_has_md_extension`**
+  - *Verifies that ProgenitorBravo saves with .md extension for proper archival.*
 
 ## `app/tests/unit/test_project_director.py`
 
