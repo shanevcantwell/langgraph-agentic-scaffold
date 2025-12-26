@@ -44,12 +44,12 @@ def test_progenitor_alpha_generates_analytical_response(progenitor_alpha):
 
     # Response should be stored in artifacts only
     assert "artifacts" in result_state
-    assert "alpha_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["alpha_response"] == mock_response
+    assert "alpha_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["alpha_response.md"] == mock_response
 
 
 def test_progenitor_alpha_stores_response_in_artifacts(progenitor_alpha):
-    """Tests that ProgenitorAlpha stores response in artifacts.alpha_response."""
+    """Tests that ProgenitorAlpha stores response in artifacts.alpha_response.md."""
     # Arrange
     mock_response = "Structured analytical response about Python."
     progenitor_alpha.llm_adapter.invoke.return_value = {"text_response": mock_response}
@@ -62,10 +62,10 @@ def test_progenitor_alpha_stores_response_in_artifacts(progenitor_alpha):
     result_state = progenitor_alpha._execute_logic(initial_state)
 
     # Assert
-    # CRITICAL: Response must be in artifacts.alpha_response for TieredSynthesizer
+    # CRITICAL: Response must be in artifacts.alpha_response.md for TieredSynthesizer
     assert "artifacts" in result_state
-    assert "alpha_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["alpha_response"] == mock_response
+    assert "alpha_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["alpha_response.md"] == mock_response
 
 
 def test_progenitor_alpha_does_not_set_task_complete(progenitor_alpha):
@@ -132,8 +132,8 @@ def test_progenitor_alpha_handles_llm_failure_gracefully(progenitor_alpha):
 
     # Fallback should still be stored in artifacts
     assert "artifacts" in result_state
-    assert "alpha_response" in result_state["artifacts"]
-    assert "unable to provide a response" in result_state["artifacts"]["alpha_response"].lower()
+    assert "alpha_response.md" in result_state["artifacts"]
+    assert "unable to provide a response" in result_state["artifacts"]["alpha_response.md"].lower()
 
 
 def test_progenitor_alpha_stores_content_in_artifacts(progenitor_alpha):
@@ -156,8 +156,8 @@ def test_progenitor_alpha_stores_content_in_artifacts(progenitor_alpha):
 
     # Response should be in artifacts
     assert "artifacts" in result_state
-    assert "alpha_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["alpha_response"] == mock_response
+    assert "alpha_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["alpha_response.md"] == mock_response
 
 
 def test_progenitor_alpha_handles_empty_message_history(progenitor_alpha):
@@ -179,5 +179,30 @@ def test_progenitor_alpha_handles_empty_message_history(progenitor_alpha):
 
     # Should still process successfully and store in artifacts
     assert "artifacts" in result_state
-    assert "alpha_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["alpha_response"] == mock_response
+    assert "alpha_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["alpha_response.md"] == mock_response
+
+
+def test_progenitor_alpha_artifact_key_has_md_extension(progenitor_alpha):
+    """
+    Verifies that ProgenitorAlpha saves with .md extension for proper archival.
+
+    REQUIREMENT: Progenitor responses must use .md extension (e.g., alpha_response.md)
+    so the archiver can properly save them as markdown files. Without the extension,
+    the archiver cannot determine the correct content type.
+    """
+    mock_response = "# Analysis\n\nPython is a programming language."
+    progenitor_alpha.llm_adapter.invoke.return_value = {"text_response": mock_response}
+
+    initial_state = {
+        "messages": [HumanMessage(content="What is Python?")]
+    }
+
+    result_state = progenitor_alpha._execute_logic(initial_state)
+
+    # CRITICAL: artifact key should have .md extension for proper archival
+    assert "artifacts" in result_state
+    assert "alpha_response.md" in result_state["artifacts"], (
+        "Progenitor Alpha should save with .md extension: 'alpha_response.md'"
+    )
+    assert result_state["artifacts"]["alpha_response.md"] == mock_response

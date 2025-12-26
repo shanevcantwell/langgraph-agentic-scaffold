@@ -40,8 +40,8 @@ class TestProgenitorStateManagement:
 
         # Verify response IS in artifacts
         assert "artifacts" in result_state
-        assert "alpha_response" in result_state["artifacts"]
-        assert isinstance(result_state["artifacts"]["alpha_response"], str)
+        assert "alpha_response.md" in result_state["artifacts"]
+        assert isinstance(result_state["artifacts"]["alpha_response.md"], str)
 
     def test_progenitor_bravo_does_not_modify_messages(self, initialized_specialist_factory):
         """Verifies ProgenitorBravo does NOT append to messages (critical for parallel pattern)."""
@@ -66,8 +66,8 @@ class TestProgenitorStateManagement:
 
         # Verify response IS in artifacts
         assert "artifacts" in result_state
-        assert "bravo_response" in result_state["artifacts"]
-        assert isinstance(result_state["artifacts"]["bravo_response"], str)
+        assert "bravo_response.md" in result_state["artifacts"]
+        assert isinstance(result_state["artifacts"]["bravo_response.md"], str)
 
     def test_progenitors_write_only_to_artifacts(self, initialized_specialist_factory):
         """Verifies both progenitors write responses to artifacts, not messages."""
@@ -87,8 +87,8 @@ class TestProgenitorStateManagement:
         # Assert - Both write to artifacts only
         assert "messages" not in alpha_result
         assert "messages" not in bravo_result
-        assert "alpha_response" in alpha_result["artifacts"]
-        assert "bravo_response" in bravo_result["artifacts"]
+        assert "alpha_response.md" in alpha_result["artifacts"]
+        assert "bravo_response.md" in bravo_result["artifacts"]
 
 
 class TestSynthesizerStateManagement:
@@ -102,8 +102,8 @@ class TestSynthesizerStateManagement:
         state = {
             "messages": [HumanMessage(content="Test question")],
             "artifacts": {
-                "alpha_response": "Alpha perspective",
-                "bravo_response": "Bravo perspective"
+                "alpha_response.md": "Alpha perspective",
+                "bravo_response.md": "Bravo perspective"
             }
         }
 
@@ -128,8 +128,8 @@ class TestSynthesizerStateManagement:
         state = {
             "messages": [HumanMessage(content="Test")],
             "artifacts": {
-                "alpha_response": "Alpha",
-                "bravo_response": "Bravo"
+                "alpha_response.md": "Alpha",
+                "bravo_response.md": "Bravo"
             }
         }
 
@@ -170,8 +170,8 @@ class TestMultiTurnStateManagement:
 
         # Merge artifacts (LangGraph would do this via reducer)
         turn1_artifacts = {
-            "alpha_response": alpha_result["artifacts"]["alpha_response"],
-            "bravo_response": bravo_result["artifacts"]["bravo_response"]
+            "alpha_response.md": alpha_result["artifacts"]["alpha_response.md"],
+            "bravo_response.md": bravo_result["artifacts"]["bravo_response.md"]
         }
 
         # Synthesizer combines
@@ -204,8 +204,8 @@ class TestMultiTurnStateManagement:
         bravo_result_t2 = bravo._execute_logic(turn2_state)
 
         turn2_artifacts = {
-            "alpha_response": alpha_result_t2["artifacts"]["alpha_response"],
-            "bravo_response": bravo_result_t2["artifacts"]["bravo_response"]
+            "alpha_response.md": alpha_result_t2["artifacts"]["alpha_response.md"],
+            "bravo_response.md": bravo_result_t2["artifacts"]["bravo_response.md"]
         }
 
         synthesizer_result_t2 = synthesizer._execute_logic({
@@ -260,4 +260,4 @@ class TestMultiTurnStateManagement:
         assert "messages" not in result, "Progenitor must not pollute message history"
 
         # 3. Response goes to artifacts only
-        assert "alpha_response" in result["artifacts"]
+        assert "alpha_response.md" in result["artifacts"]

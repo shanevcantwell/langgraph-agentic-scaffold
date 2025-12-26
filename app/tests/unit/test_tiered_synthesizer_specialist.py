@@ -31,8 +31,8 @@ def test_tiered_synthesizer_combines_both_responses(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "Analytical view: Python is a high-level language...",
-            "bravo_response": "Contextual view: Python is like a Swiss Army knife..."
+            "alpha_response.md": "Analytical view: Python is a high-level language...",
+            "bravo_response.md": "Contextual view: Python is like a Swiss Army knife..."
         },
         "messages": []
     }
@@ -68,8 +68,8 @@ def test_tiered_synthesizer_handles_alpha_only(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "Analytical view: Python is a high-level language..."
-            # bravo_response is missing
+            "alpha_response.md": "Analytical view: Python is a high-level language..."
+            # bravo_response.md is missing
         },
         "messages": []
     }
@@ -104,8 +104,8 @@ def test_tiered_synthesizer_handles_bravo_only(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            # alpha_response is missing
-            "bravo_response": "Contextual view: Python is like a Swiss Army knife..."
+            # alpha_response.md is missing
+            "bravo_response.md": "Contextual view: Python is like a Swiss Army knife..."
         },
         "messages": []
     }
@@ -140,7 +140,7 @@ def test_tiered_synthesizer_raises_error_when_both_missing(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            # Both alpha_response and bravo_response are missing
+            # Both alpha_response.md and bravo_response.md are missing
         },
         "messages": []
     }
@@ -158,8 +158,8 @@ def test_tiered_synthesizer_creates_proper_message(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "Alpha: " + ("x" * 100),
-            "bravo_response": "Bravo: " + ("y" * 150)
+            "alpha_response.md": "Alpha: " + ("x" * 100),
+            "bravo_response.md": "Bravo: " + ("y" * 150)
         },
         "messages": []
     }
@@ -187,8 +187,8 @@ def test_tiered_synthesizer_handles_empty_string_responses(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "",
-            "bravo_response": "Bravo has content"
+            "alpha_response.md": "",
+            "bravo_response.md": "Bravo has content"
         },
         "messages": []
     }
@@ -209,8 +209,8 @@ def test_tiered_synthesizer_preserves_markdown_formatting(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "# Analytical\n\n**Bold** and *italic*",
-            "bravo_response": "## Contextual\n\n- Bullet 1\n- Bullet 2"
+            "alpha_response.md": "# Analytical\n\n**Bold** and *italic*",
+            "bravo_response.md": "## Contextual\n\n- Bullet 1\n- Bullet 2"
         },
         "messages": []
     }
@@ -232,8 +232,8 @@ def test_tiered_synthesizer_response_format_structure(tiered_synthesizer):
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "Alpha content",
-            "bravo_response": "Bravo content"
+            "alpha_response.md": "Alpha content",
+            "bravo_response.md": "Bravo content"
         },
         "messages": []
     }
@@ -259,8 +259,8 @@ def test_tiered_synthesizer_does_not_add_to_user_response_snippets_if_already_pr
     # Arrange
     initial_state = {
         "artifacts": {
-            "alpha_response": "Alpha content",
-            "bravo_response": "Bravo content"
+            "alpha_response.md": "Alpha content",
+            "bravo_response.md": "Bravo content"
         },
         "messages": [],
         "scratchpad": {
@@ -284,8 +284,8 @@ def test_tiered_synthesizer_full_synthesis(tiered_synthesizer):
     """Tests synthesis when both Alpha and Bravo responses are present."""
     state = create_test_state(
         artifacts={
-            "alpha_response": "Alpha content",
-            "bravo_response": "Bravo content"
+            "alpha_response.md": "Alpha content",
+            "bravo_response.md": "Bravo content"
         }
     )
     
@@ -305,7 +305,7 @@ def test_tiered_synthesizer_graceful_degradation_alpha_only(tiered_synthesizer):
     """Tests synthesis when Bravo is missing."""
     state = create_test_state(
         artifacts={
-            "alpha_response": "Alpha content"
+            "alpha_response.md": "Alpha content"
             # Bravo missing
         }
     )
@@ -324,7 +324,7 @@ def test_tiered_synthesizer_graceful_degradation_bravo_only(tiered_synthesizer):
     """Tests synthesis when Alpha is missing."""
     state = create_test_state(
         artifacts={
-            "bravo_response": "Bravo content"
+            "bravo_response.md": "Bravo content"
             # Alpha missing
         }
     )

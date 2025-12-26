@@ -44,12 +44,12 @@ def test_progenitor_bravo_generates_contextual_response(progenitor_bravo):
 
     # Response should be stored in artifacts only
     assert "artifacts" in result_state
-    assert "bravo_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["bravo_response"] == mock_response
+    assert "bravo_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["bravo_response.md"] == mock_response
 
 
 def test_progenitor_bravo_stores_response_in_artifacts(progenitor_bravo):
-    """Tests that ProgenitorBravo stores response in artifacts.bravo_response."""
+    """Tests that ProgenitorBravo stores response in artifacts.bravo_response.md."""
     # Arrange
     mock_response = "Contextual, intuitive response about Python."
     progenitor_bravo.llm_adapter.invoke.return_value = {"text_response": mock_response}
@@ -62,10 +62,10 @@ def test_progenitor_bravo_stores_response_in_artifacts(progenitor_bravo):
     result_state = progenitor_bravo._execute_logic(initial_state)
 
     # Assert
-    # CRITICAL: Response must be in artifacts.bravo_response for TieredSynthesizer
+    # CRITICAL: Response must be in artifacts.bravo_response.md for TieredSynthesizer
     assert "artifacts" in result_state
-    assert "bravo_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["bravo_response"] == mock_response
+    assert "bravo_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["bravo_response.md"] == mock_response
 
 
 def test_progenitor_bravo_does_not_set_task_complete(progenitor_bravo):
@@ -132,8 +132,8 @@ def test_progenitor_bravo_handles_llm_failure_gracefully(progenitor_bravo):
 
     # Fallback should still be stored in artifacts
     assert "artifacts" in result_state
-    assert "bravo_response" in result_state["artifacts"]
-    assert "unable to provide a response" in result_state["artifacts"]["bravo_response"].lower()
+    assert "bravo_response.md" in result_state["artifacts"]
+    assert "unable to provide a response" in result_state["artifacts"]["bravo_response.md"].lower()
 
 
 def test_progenitor_bravo_stores_content_in_artifacts(progenitor_bravo):
@@ -156,8 +156,8 @@ def test_progenitor_bravo_stores_content_in_artifacts(progenitor_bravo):
 
     # Response should be in artifacts
     assert "artifacts" in result_state
-    assert "bravo_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["bravo_response"] == mock_response
+    assert "bravo_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["bravo_response.md"] == mock_response
 
 
 def test_progenitor_bravo_handles_empty_message_history(progenitor_bravo):
@@ -179,5 +179,30 @@ def test_progenitor_bravo_handles_empty_message_history(progenitor_bravo):
 
     # Should still process successfully and store in artifacts
     assert "artifacts" in result_state
-    assert "bravo_response" in result_state["artifacts"]
-    assert result_state["artifacts"]["bravo_response"] == mock_response
+    assert "bravo_response.md" in result_state["artifacts"]
+    assert result_state["artifacts"]["bravo_response.md"] == mock_response
+
+
+def test_progenitor_bravo_artifact_key_has_md_extension(progenitor_bravo):
+    """
+    Verifies that ProgenitorBravo saves with .md extension for proper archival.
+
+    REQUIREMENT: Progenitor responses must use .md extension (e.g., bravo_response.md)
+    so the archiver can properly save them as markdown files. Without the extension,
+    the archiver cannot determine the correct content type.
+    """
+    mock_response = "# Analysis\n\nPython is versatile and powerful."
+    progenitor_bravo.llm_adapter.invoke.return_value = {"text_response": mock_response}
+
+    initial_state = {
+        "messages": [HumanMessage(content="What is Python?")]
+    }
+
+    result_state = progenitor_bravo._execute_logic(initial_state)
+
+    # CRITICAL: artifact key should have .md extension for proper archival
+    assert "artifacts" in result_state
+    assert "bravo_response.md" in result_state["artifacts"], (
+        "Progenitor Bravo should save with .md extension: 'bravo_response.md'"
+    )
+    assert result_state["artifacts"]["bravo_response.md"] == mock_response

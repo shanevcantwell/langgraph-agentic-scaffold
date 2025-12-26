@@ -200,6 +200,43 @@ def test_archiver_execute_logic_integration(archiver_specialist):
     with patch.object(archiver_specialist, "_create_atomic_package", return_value="/tmp/pkg.zip"):
         with patch.object(archiver_specialist, "_prune_archive"):
             result = archiver_specialist._execute_logic(state)
-            
+
             assert result["artifacts"]["archive_package_path"] == "/tmp/pkg.zip"
             # Ensure no crash
+
+
+def test_archiver_includes_html_artifact_in_safe_artifacts(archiver_specialist):
+    """
+    Verifies that HTML artifacts are included in the returned safe_artifacts.
+
+    REQUIREMENT: When html_document.html exists in artifacts, it MUST be
+    included in the returned artifacts dict so downstream consumers
+    (tests, UI) can access the generated HTML content.
+    """
+    html_content = "<!DOCTYPE html><html><body><h1>Test</h1></body></html>"
+    state = create_test_state(
+        messages=[HumanMessage(content="Build me a page")],
+        artifacts={
+            "final_user_response.md": "Done.",
+            "html_document.html": html_content,
+            "system_plan": {"key": "value"},  # Dict artifact - should still be skipped
+        },
+        routing_history=["triage_architect", "web_builder"]
+    )
+
+    with patch.object(archiver_specialist, "_create_atomic_package", return_value="/tmp/pkg.zip"):
+        with patch.object(archiver_specialist, "_prune_archive"):
+            result = archiver_specialist._execute_logic(state)
+
+            # CRITICAL: html_document.html must be in returned artifacts
+            assert "html_document.html" in result["artifacts"], (
+                "html_document.html should be included in safe_artifacts for downstream access"
+            )
+            assert result["artifacts"]["html_document.html"] == html_content
+
+            # Standard artifacts still present
+            assert "final_user_response.md" in result["artifacts"]
+            assert "archive_package_path" in result["artifacts"]
+
+            # Dict artifacts should still be excluded (not serializable to string)
+            assert "system_plan" not in result["artifacts"]
