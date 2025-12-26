@@ -63,9 +63,9 @@ class TieredSynthesizerSpecialist(BaseSpecialist):
 
         artifacts = state.get("artifacts", {})
 
-        # Retrieve both progenitor responses
-        alpha_response = artifacts.get("alpha_response")
-        bravo_response = artifacts.get("bravo_response")
+        # Retrieve both progenitor responses (using .md extension for proper archival)
+        alpha_response = artifacts.get("alpha_response.md")
+        bravo_response = artifacts.get("bravo_response.md")
 
         # CORE-CHAT-002.1: Graceful degradation for partial failures
         if not alpha_response and not bravo_response:

@@ -97,9 +97,10 @@ class ProgenitorAlphaSpecialist(BaseSpecialist):
         # - Progenitors (parallel nodes) write ONLY to 'artifacts' (temporary storage)
         # - TieredSynthesizer (join node) reads artifacts and writes to 'messages' (permanent storage)
         # - This prevents message pollution and enables proper multi-turn cross-referencing
+        # NOTE: Using .md extension for proper archival (archiver needs extension to determine content type)
         return {
             "artifacts": {
-                "alpha_response": ai_response_content
+                "alpha_response.md": ai_response_content
             }
             # NOTE: task_is_complete is NOT set - TieredSynthesizerSpecialist will set it
         }
