@@ -10,6 +10,7 @@
 - Avoid premature confidence: "Tests passing" ≠ "Production ready"
 - Follow the user's pace; don't inject urgency
 - The project name is "LAS" or "lassi" (like the yogurt drink), not "Lassie" (the dog)
+- **Explain before editing:** State the file, function, and purpose before proposing code changes. The diff view hides context - the user can't tell what function they're looking at from a 5-line snippet.
 
 ---
 
