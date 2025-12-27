@@ -206,3 +206,9 @@ class UserSettings(BaseModel):
         default=None,
         description="Configuration for graph state persistence (interrupt/resume workflows)."
     )
+
+    # Global LLM settings (Issue #16)
+    max_image_size_mb: Optional[int] = Field(
+        default=10,
+        description="Maximum image size in MB (base64 encoded). Rejects uploads exceeding this limit."
+    )

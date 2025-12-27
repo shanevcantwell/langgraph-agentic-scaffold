@@ -109,10 +109,15 @@ class AdapterFactory:
         logger.debug(f"AdapterFactory: Found binding key '{binding_key}' for specialist '{specialist_name}'.")
 
         # Get the full provider configuration block from the top-level `llm_providers`
-        provider_config = self.full_config.get("llm_providers", {}).get(binding_key)
+        llm_providers = self.full_config.get("llm_providers", {})
+        provider_config = llm_providers.get(binding_key)
         if not provider_config:
             raise ValueError(f"Provider '{binding_key}' for specialist '{specialist_name}' not found in 'llm_providers'.")
-        
+
+        # Inject global settings from root config level into provider config
+        if "max_image_size_mb" in self.full_config:
+            provider_config["max_image_size_mb"] = self.full_config["max_image_size_mb"]
+
         logger.debug(f"AdapterFactory: Full provider config for '{binding_key}': {provider_config}")
         
         # Add the binding key to the config for better error messages within the adapter.

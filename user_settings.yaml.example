@@ -28,6 +28,10 @@
 #
 # If no `server` is specified, falls back to LMSTUDIO_BASE_URL env var.
 #
+# Maximum image size in MB (base64 encoded). Rejects uploads exceeding this.
+# ~10MB base64 ≈ 7.5MB original image. Adjust based on your context window.
+max_image_size_mb: 10
+
 llm_providers:
   # ===========================================================================
   # CLOUD PROVIDERS

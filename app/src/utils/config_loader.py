@@ -216,6 +216,10 @@ class ConfigLoader:
             merged["checkpointing"] = checkpointing_config
             logger.debug(f"Checkpointing config merged: enabled={checkpointing_config.get('enabled')}")
 
+        # Issue #16: Propagate max_image_size_mb to root level for factory.py
+        if max_image_size_mb := user_settings.get("max_image_size_mb"):
+            merged["max_image_size_mb"] = max_image_size_mb
+
         # Robustly get bindings, defaulting to an empty dict if the key is missing or its value is None.
         bindings = user_settings.get("specialist_model_bindings") or {}
         default_binding = user_settings.get("default_llm_config")
