@@ -48,50 +48,6 @@ def test_router_discovers_specialists_from_config(initialized_specialist_factory
     assert available["chat_specialist"]["description"] == "A general-purpose conversational specialist for answering user questions and chatting."
 
 
-@pytest.mark.xfail(reason="Requires MCP migration (Task 2.8). Recommendation-based routing pattern will be replaced by synchronous MCP service calls.")
-def test_router_respects_recommended_specialists_filter(initialized_specialist_factory):
-    """
-    Verifies that RouterSpecialist correctly filters available specialists
-    when recommendations are present (e.g., from TriageSpecialist).
-
-    This is important for the diplomatic process where we want to route to
-    specific specialists (e.g., ProgenitorAlpha and ProgenitorBravo).
-    """
-    # Arrange
-    router = initialized_specialist_factory("RouterSpecialist")
-
-    specialist_configs = {
-        "chat_specialist": {
-            "type": "llm",
-            "description": "Chat specialist"
-        },
-        "file_specialist": {
-            "type": "procedural",
-            "description": "File specialist"
-        },
-        "progenitor_alpha_specialist": {
-            "type": "llm",
-            "description": "First perspective"
-        }
-    }
-
-    router.set_specialist_map(specialist_configs)
-
-    # State with recommendations (simulates triage filtering)
-    state_with_recommendations = {
-        "recommended_specialists": ["chat_specialist", "progenitor_alpha_specialist"]
-    }
-
-    # Act
-    available = router._get_available_specialists(state_with_recommendations)
-
-    # Assert
-    assert len(available) == 2, "Should only include recommended specialists"
-    assert "chat_specialist" in available
-    assert "progenitor_alpha_specialist" in available
-    assert "file_specialist" not in available, "Non-recommended specialists should be filtered out"
-
-
 def test_router_handles_empty_specialist_map_gracefully(initialized_specialist_factory):
     """
     Verifies that RouterSpecialist handles edge case of no available specialists

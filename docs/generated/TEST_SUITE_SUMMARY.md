@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 639 |
-| Integration | 28 | 201 |
+| Unit | 68 | 638 |
+| Integration | 26 | 187 |
 | Other | 8 | 101 |
-| **Total** | **104** | **941** |
+| **Total** | **102** | **926** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -192,29 +192,6 @@
 - **`test_graph_builder_wires_convening_architecture`**
 - **`test_default_architecture_fallback`**
 
-## `app/tests/integration/test_esm_scenarios.py`
-
-- **`test_research_exhaustion_tracking`**
-  - *ESM Scenario: Research with source exhaustion tracking.*
-- **`test_research_no_retry_exhausted_sources`**
-  - *Negative test: Verify ESM prevents retry of exhausted sources.*
-- **`test_iterative_refinement_with_rollback`**
-  - *ESM Scenario: Database schema design with constraint validation and rollback.*
-- **`test_rollback_targets_specific_decision`**
-  - *Granular test: Verify rollback targets the specific failing decision.*
-- **`test_approval_workflow_state_machine`**
-  - *ESM Scenario: Press release with review cycles and escalation.*
-- **`test_approval_escalates_after_threshold`**
-  - *Test that approval workflow correctly escalates after N rejections.*
-- **`test_hypothesis_elimination_debugging`**
-  - *ESM Scenario: Debugging with hypothesis tracking.*
-- **`test_eliminated_hypothesis_not_retested`**
-  - *Negative test: Verify eliminated hypotheses are not re-tested.*
-- **`test_constraint_satisfaction_backtracking`**
-  - *ESM Scenario: Meeting scheduling with constraint backtracking.*
-- **`test_backtrack_is_targeted_not_full_restart`**
-  - *Granular test: Verify backtracking goes to specific decision point.*
-
 ## `app/tests/integration/test_fara_smoke.py`
 
 - **`test_fara_responds_to_synthetic_image`**
@@ -331,11 +308,6 @@
 - **`test_invariant_monitor_called_during_execution`**
   - *Verifies that the InvariantMonitor is invoked during the execution lifecycle.*
 
-## `app/tests/integration/test_live_llm.py`
-
-- **`test_live_gemini_adapter_interaction`**
-  - *Tests a basic interaction with a live Gemini model via the AdapterFactory.*
-
 ## `app/tests/integration/test_live_lmstudio.py`
 
 - **`test_live_lmstudio_adapter_interaction`**
@@ -449,18 +421,12 @@
 
 ## `app/tests/integration/test_routing_integration.py`
 
-- **`test_specialist_dependency_routing`**
-  - *Verifies specialist dependency requirements are treated as CRITICAL, not advisory.*
 - **`test_triage_advisory_not_restrictive`**
   - *Verifies triage recommendations are advisory (not restrictive).*
 - **`test_loop_detection_when_dependency_unsatisfied`**
   - *Verifies loop detection kicks in if specialist dependencies can't be satisfied.*
-- **`test_file_upload_routing_success`**
-  - *End-to-end test for the original bug scenario that motivated ADR-CORE-011.*
 - **`test_router_respects_specialist_cannot_proceed`**
   - *Verifies router treats "cannot proceed" messages as blocking, not advisory.*
-- **`test_context_aware_routing_prevents_loop`**
-  - *End-to-end test verifying context-aware routing prevents infinite loop.*
 - **`test_router_removes_declining_specialist_from_routing_decision`**
   - *Integration test verifying the Router's actual _get_llm_choice method*
 - **`test_specialist_decline_full_workflow`**
@@ -1925,8 +1891,6 @@
 
 - **`test_router_discovers_specialists_from_config`**
   - *Verifies that RouterSpecialist can discover and route to any specialist*
-- **`test_router_respects_recommended_specialists_filter`**
-  - *Verifies that RouterSpecialist correctly filters available specialists*
 - **`test_router_handles_empty_specialist_map_gracefully`**
   - *Verifies that RouterSpecialist handles edge case of no available specialists*
 - **`test_router_ignores_specialists_without_descriptions`**

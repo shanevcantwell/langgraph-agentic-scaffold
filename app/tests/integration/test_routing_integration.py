@@ -3,87 +3,18 @@
 Integration tests for routing behavior with real specialists.
 
 Tests critical routing scenarios that unit tests can't catch:
-- Specialist dependency requirements (web_builder → systems_architect)
 - Triage advisory suggestions (non-blocking)
 - Loop detection when dependencies aren't satisfied
-- Router ignoring invalid recommendations
+- Specialist decline handling ("not me" pattern)
 
 These tests use the real graph with real specialists to verify
 end-to-end routing behavior.
+
+NOTE: Tests for MCP dependency routing (web_builder → systems_architect)
+moved to GitHub Issue #10 pending MCP migration.
 """
 import pytest
 from fastapi.testclient import TestClient
-
-
-@pytest.mark.integration
-@pytest.mark.xfail(reason="Requires MCP migration (Task 2.8). Router uses LLM routing instead of deterministic dependency resolution. Will pass after web_builder uses McpClient for synchronous system_plan generation.")
-def test_specialist_dependency_routing(initialized_app):
-    """
-    Verifies specialist dependency requirements are treated as CRITICAL, not advisory.
-
-    Scenario:
-    - User requests web UI modification with attached file
-    - Router → web_builder
-    - web_builder: "Cannot proceed without 'system_plan' from systems_architect"
-    - Router sees CRITICAL DEPENDENCY REQUIREMENT (not advisory)
-    - Router → systems_architect (satisfies dependency)
-    - systems_architect creates system_plan
-    - Router → web_builder (now has required artifact)
-    - web_builder succeeds
-
-    This test catches the bug where dependency requirements were treated as
-    optional suggestions, causing router → specialist → router → specialist loops.
-    """
-    app = initialized_app
-
-    with TestClient(app) as client:
-        # Simulate user uploading code file and requesting modification
-        payload = {
-            "input_prompt": "Rewrite this Gradio app with a dark theme",
-            "text_to_process": "import gradio as gr\ndef greet(name):\n    return f'Hello {name}'\ngr.Interface(fn=greet, inputs='text', outputs='text').launch()",
-            "image_to_process": None
-        }
-
-        response = client.post("/v1/graph/invoke", json=payload)
-        assert response.status_code == 200
-
-        result = response.json()
-        final_state = result["final_output"]
-
-        # Verify no error occurred
-        assert final_state.get("error_report") is None, f"Workflow failed with error: {final_state.get('error_report')}"
-
-        # Verify routing history shows proper dependency resolution
-        routing_history = final_state.get("routing_history", [])
-
-        # Should see systems_architect run BEFORE second web_builder invocation
-        # Acceptable patterns:
-        # 1. [..., web_builder, systems_architect, web_builder, ...]
-        # 2. [..., systems_architect, web_builder, ...]
-        web_builder_indices = [i for i, spec in enumerate(routing_history) if spec == "web_builder"]
-        systems_architect_indices = [i for i, spec in enumerate(routing_history) if spec == "systems_architect"]
-
-        if len(web_builder_indices) > 1:
-            # If web_builder ran multiple times, systems_architect should be between the first two
-            first_web_builder = web_builder_indices[0]
-            second_web_builder = web_builder_indices[1]
-            assert any(first_web_builder < sa < second_web_builder for sa in systems_architect_indices), (
-                f"systems_architect should run between web_builder invocations. "
-                f"Routing history: {routing_history}"
-            )
-
-        # Verify no unproductive loop (web_builder should not repeat 3+ times consecutively)
-        for i in range(len(routing_history) - 2):
-            if (routing_history[i] == "web_builder" and
-                routing_history[i+1] == "web_builder" and
-                routing_history[i+2] == "web_builder"):
-                pytest.fail(
-                    f"Unproductive loop detected: web_builder repeated 3 times. "
-                    f"Routing history: {routing_history}"
-                )
-
-        # Verify workflow completed successfully
-        assert final_state.get("task_is_complete") is not False, "Workflow should complete successfully"
 
 
 @pytest.mark.integration
@@ -149,72 +80,6 @@ def test_loop_detection_when_dependency_unsatisfied(initialized_app):
 
 
 @pytest.mark.integration
-@pytest.mark.xfail(reason="Requires MCP migration (Task 2.8). Same dependency routing issue as test_specialist_dependency_routing.")
-def test_file_upload_routing_success(initialized_app):
-    """
-    End-to-end test for the original bug scenario that motivated ADR-CORE-011.
-
-    Scenario:
-    - User uploads file with code
-    - User requests modification (e.g., "Rewrite this with dark theme")
-    - Triage may or may not recommend correct specialist
-    - Router should choose web_builder (even if triage doesn't recommend it)
-    - If web_builder needs system_plan, it should get systems_architect
-    - Workflow completes successfully with modified code artifact
-
-    This is the regression test for the file attachment investigation issue.
-    """
-    app = initialized_app
-
-    with TestClient(app) as client:
-        payload = {
-            "input_prompt": "Check out this Gradio lassi app. Fix up the colors a little bit and gamify it a few more levels.",
-            "text_to_process": """import gradio as gr
-
-def calculate_bmi(weight, height):
-    bmi = weight / (height ** 2)
-    return f"Your BMI is: {bmi:.2f}"
-
-gr.Interface(
-    fn=calculate_bmi,
-    inputs=[
-        gr.Number(label="Weight (kg)"),
-        gr.Number(label="Height (m)")
-    ],
-    outputs="text",
-    title="BMI Calculator"
-).launch()""",
-            "image_to_process": None
-        }
-
-        response = client.post("/v1/graph/invoke", json=payload)
-        assert response.status_code == 200
-
-        result = response.json()
-        final_state = result["final_output"]
-
-        # Verify no error report
-        assert final_state.get("error_report") is None, (
-            f"File upload routing failed. Error: {final_state.get('error_report')}"
-        )
-
-        # Verify web_builder was involved (since this is web UI modification)
-        routing_history = final_state.get("routing_history", [])
-        assert "web_builder" in routing_history or "systems_architect" in routing_history, (
-            f"Expected web_builder or systems_architect in routing history. "
-            f"Got: {routing_history}"
-        )
-
-        # Verify no default_responder fallback (would indicate routing failure)
-        assert "default_responder_specialist" not in routing_history, (
-            "Should not fall back to default_responder for web UI modification task"
-        )
-
-        # Verify workflow completed
-        assert final_state.get("task_is_complete") is not False
-
-
-@pytest.mark.integration
 @pytest.mark.skip(reason="Blocking signal enforcement deferred per ADR-CORE-009 (requires Tasks 1.4-1.6: System Invariants & Circuit Breaker)")
 def test_router_respects_specialist_cannot_proceed(initialized_app):
     """
@@ -266,112 +131,6 @@ def test_router_respects_specialist_cannot_proceed(initialized_app):
                             f"Router routed back to web_builder without satisfying dependency. "
                             f"Routing history: {routing_history}"
                         )
-
-
-@pytest.mark.integration
-@pytest.mark.xfail(reason="LLM-dependent: routing decisions vary between models, local models may not follow expected triage→facilitator→chat flow")
-def test_context_aware_routing_prevents_loop(initialized_app):
-    """
-    End-to-end test verifying context-aware routing prevents infinite loop.
-
-    Scenario (regression test for router loop bug):
-    - User sends research query
-    - Router → triage_architect (analyzes request)
-    - Router → facilitator_specialist (executes context gathering)
-    - facilitator_specialist creates gathered_context artifact
-    - Router sees gathered_context → excludes triage/facilitator from menu
-    - Router → chat_specialist or researcher_specialist (NOT back to triage)
-    - Workflow completes successfully
-
-    BEFORE FIX:
-    - User → Triage → Facilitator → Router → Triage → [LOOP DETECTION ERROR]
-
-    AFTER FIX:
-    - User → Triage → Facilitator → Router → Chat/Researcher → End [SUCCESS]
-
-    This test verifies the fix in router_specialist.py:_get_available_specialists()
-    that excludes planning specialists when gathered_context artifact exists.
-
-    NOTE: This test depends on LLM routing decisions and may fail with local models
-    that don't follow the expected routing pattern.
-    """
-    app = initialized_app
-
-    with TestClient(app) as client:
-        # Research query that triggers triage → facilitator flow
-        payload = {
-            "input_prompt": "Research: winter weather patterns in Pueblo, CO",
-            "text_to_process": None,
-            "image_to_process": None
-        }
-
-        response = client.post("/v1/graph/invoke", json=payload)
-        assert response.status_code == 200
-
-        result = response.json()
-        final_state = result["final_output"]
-
-        # CRITICAL: Verify no loop detection error
-        scratchpad = final_state.get("scratchpad", {})
-        assert scratchpad.get("termination_reason") is None, (
-            f"Workflow should not be halted by loop detection. "
-            f"Termination reason: {scratchpad.get('termination_reason')}"
-        )
-
-        # Verify no error report
-        assert final_state.get("error_report") is None, (
-            f"Workflow should complete without errors. Error: {final_state.get('error_report')}"
-        )
-
-        # Verify routing history shows correct flow
-        routing_history = final_state.get("routing_history", [])
-
-        # Should have triage and facilitator in history
-        assert "triage_architect" in routing_history, (
-            f"Expected triage_architect in routing history. Got: {routing_history}"
-        )
-        assert "facilitator_specialist" in routing_history, (
-            f"Expected facilitator_specialist in routing history. Got: {routing_history}"
-        )
-
-        # CRITICAL: After facilitator runs, should NOT route back to triage_architect
-        facilitator_indices = [i for i, spec in enumerate(routing_history) if spec == "facilitator_specialist"]
-        if facilitator_indices:
-            last_facilitator_idx = facilitator_indices[-1]
-            # Check all specialists after last facilitator execution
-            specialists_after_facilitator = routing_history[last_facilitator_idx + 1:]
-
-            # Filter out router and check_task_completion (those are orchestration nodes)
-            actual_specialists_after = [
-                s for s in specialists_after_facilitator
-                if s not in ["router_specialist", "check_task_completion"]
-            ]
-
-            # CRITICAL: triage_architect should NOT appear after facilitator completed
-            assert "triage_architect" not in actual_specialists_after, (
-                f"Router should NOT route back to triage_architect after context gathering complete. "
-                f"Routing history: {routing_history}"
-            )
-
-            # CRITICAL: facilitator_specialist should NOT appear again after completing
-            assert "facilitator_specialist" not in actual_specialists_after, (
-                f"Router should NOT route back to facilitator_specialist after context gathering complete. "
-                f"Routing history: {routing_history}"
-            )
-
-        # Verify workflow completed successfully
-        assert final_state.get("task_is_complete") is not False, (
-            "Workflow should complete successfully"
-        )
-
-        # Verify no unproductive loop patterns (same specialist 3+ times consecutively)
-        for i in range(len(routing_history) - 2):
-            if (routing_history[i] == routing_history[i+1] == routing_history[i+2] and
-                routing_history[i] not in ["router_specialist", "check_task_completion"]):
-                pytest.fail(
-                    f"Unproductive loop detected: {routing_history[i]} repeated 3 times consecutively. "
-                    f"Routing history: {routing_history}"
-                )
 
 
 # ============================================================================
