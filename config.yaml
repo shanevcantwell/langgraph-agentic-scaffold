@@ -154,10 +154,9 @@ specialists:
   data_extractor_specialist:
     type: "llm"
     prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
-    description: "Extracts structured data from unstructured text based on a Pydantic schema. Requires 'text_to_process' in the state."
-    requires_artifacts: ["text_to_process"]
-    artifact_providers:
-      text_to_process: "file_specialist"
+    description: "Extracts structured data from unstructured text based on a Pydantic schema. Can use 'text_to_process' artifact or inline message content."
+    # NOTE: requires_artifacts removed - specialist now falls back to message content
+    # Proper solution pending ADR-CORE-040 (Context State Model). See Issue #8.
 
   sentiment_classifier_specialist:
     type: "llm"

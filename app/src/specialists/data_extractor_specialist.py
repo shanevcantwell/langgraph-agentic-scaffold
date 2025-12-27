@@ -20,12 +20,22 @@ class DataExtractorSpecialist(BaseSpecialist):
         messages = state.get("messages", [])
         text_to_process = state.get("artifacts", {}).get("text_to_process")
 
+        # Fallback: if no artifact, use the last human message content directly
         if not text_to_process or not text_to_process.strip():
-            logger.warning("DataExtractorSpecialist cannot execute: 'text_to_process' artifact is missing.")
+            last_human_msg = next(
+                (m for m in reversed(messages) if isinstance(m, HumanMessage)),
+                None
+            )
+            if last_human_msg and last_human_msg.content.strip():
+                text_to_process = last_human_msg.content
+                logger.info("DataExtractorSpecialist: No 'text_to_process' artifact, using message content directly.")
+
+        if not text_to_process or not text_to_process.strip():
+            logger.warning("DataExtractorSpecialist cannot execute: no text available (artifact or message).")
             ai_message = create_llm_message(
                 specialist_name=self.specialist_name,
                 llm_adapter=self.llm_adapter,
-                content="I cannot extract data because no text was provided. The 'file_specialist' should probably run first to load a file into the 'text_to_process' artifact."
+                content="I cannot extract data because no text was provided."
             )
             return {"messages": [ai_message]}
 

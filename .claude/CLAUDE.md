@@ -123,7 +123,8 @@ response = mcp_client.call_safe(
 - `./workspace/` is the Docker container's mounted root for LAS-scoped file operations
 - It contains user data and runtime artifacts - NOT application source code
 - Application code lives in `app/src/`, `app/tests/`, `docs/`, etc.
-- ADRs are stored in `./docs/ADRs/` (symlink to external design-docs repo)
+- ADRs are stored in `./docs/ADRs/` which is a symlink to `../design-docs/agentic-scaffold/03_ADRS/`
+- When creating new ADRs, check ALL subdirectories (completed/, implemented/, deferred/, PLANS/) for the highest sequence number
 
 ### Statistical Anomalies
 **NEVER dismiss statistical anomalies as coincidence.**
@@ -246,15 +247,20 @@ This applies to any change that lowers the bar: removing expected specialists, c
 
 **Integration tests MUST run inside Docker.** The `.env` is configured for the proxy container—running from host fails for LMStudio/3090 connectivity.
 
+**Container name:** `langgraph-app`
+
 ```bash
 # Unit tests (from host)
 pytest app/tests/unit/ -v
 
 # Integration tests (inside Docker)
-pytest -m integration
+docker exec langgraph-app pytest -m integration
 
 # All tests (inside Docker)
-pytest
+docker exec langgraph-app pytest
+
+# Full suite with verbose output
+docker exec langgraph-app pytest app/tests/ -v --tb=short
 ```
 
 Never dismiss integration failures as "environmental" without confirming Docker context.
