@@ -15,12 +15,12 @@ def triage_architect(mock_llm_adapter):
         "llm_config": "test_config",
         "prompt_file": "test_prompt.md"
     }
-    # We don't need to patch LLMFactory anymore
-    with patch("app.src.specialists.triage_architect.load_prompt", return_value="Test Prompt"):
-        specialist = TriageArchitect("triage_architect", config)
-        # Manually attach the adapter (simulating GraphBuilder)
-        specialist.llm_adapter = mock_llm_adapter
-        return specialist
+    # TriageArchitect doesn't load prompts itself - GraphBuilder._configure_triage()
+    # handles prompt assembly with dynamic specialist roster
+    specialist = TriageArchitect("triage_architect", config)
+    # Manually attach the adapter (simulating GraphBuilder)
+    specialist.llm_adapter = mock_llm_adapter
+    return specialist
 
 def test_triage_architect_generates_plan(triage_architect, mock_llm_adapter):
     # Arrange

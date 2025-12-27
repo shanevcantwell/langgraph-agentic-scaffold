@@ -14,10 +14,8 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     """Tests that the specialist successfully creates a system plan."""
     # Arrange
     mock_plan_summary = "Design a simple web page."
-    mock_plan_details = "Use HTML, CSS, and basic JS."
     mock_json_response = {
         "plan_summary": mock_plan_summary,
-        "plan_details": mock_plan_details,
         "required_components": ["web_builder"],
         "execution_steps": ["Generate HTML", "Generate CSS"]
     }
@@ -46,9 +44,9 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     assert result_state["artifacts"]["system_plan"]["plan_summary"] == mock_plan_summary # This is a dict now
     assert "Generate HTML" in result_state["artifacts"]["system_plan"]["execution_steps"]
 
-    # Task 2.7: recommended_specialists moved to scratchpad
-    assert "recommended_specialists" in result_state["scratchpad"]
-    assert result_state["scratchpad"]["recommended_specialists"] == ["web_builder"]
+    # "Not me" pattern: specialist adds itself to forbidden list after completing its job
+    assert "forbidden_specialists" in result_state["scratchpad"]
+    assert "systems_architect" in result_state["scratchpad"]["forbidden_specialists"]
 
 def test_systems_architect_handles_no_json_response(systems_architect_specialist):
     """Tests that the specialist raises an error if LLM returns no JSON response."""
@@ -64,7 +62,7 @@ def test_systems_architect_handles_no_json_response(systems_architect_specialist
 def test_systems_architect_handles_malformed_json_response(systems_architect_specialist):
     """Tests that the specialist raises an error if LLM returns malformed JSON."""
     # Arrange
-    # Missing required field 'plan_details' in SystemPlan
+    # Missing required fields 'required_components' and 'execution_steps' in SystemPlan
     systems_architect_specialist.llm_adapter.invoke.return_value = {
         "json_response": {"plan_summary": "Invalid plan."}
     }

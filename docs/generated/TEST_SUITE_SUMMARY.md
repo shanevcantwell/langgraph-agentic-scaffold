@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 638 |
+| Unit | 68 | 639 |
 | Integration | 26 | 187 |
 | Other | 8 | 101 |
-| **Total** | **102** | **926** |
+| **Total** | **102** | **927** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -866,8 +866,10 @@
 
 - **`test_data_extractor_success`**
   - *Tests successful data extraction and state update.*
-- **`test_data_extractor_no_text_to_process`**
-  - *Tests that the specialist handles missing input text gracefully by adding*
+- **`test_data_extractor_fallback_to_message_content`**
+  - *Tests that the specialist uses message content when artifact is missing.*
+- **`test_data_extractor_no_text_anywhere`**
+  - *Tests that the specialist handles truly empty input gracefully when both*
 - **`test_data_extractor_llm_fails`**
   - *Tests that the specialist raises an error if the LLM returns no valid JSON payload.*
 - **`test_data_extractor_handles_llm_invocation_error`**

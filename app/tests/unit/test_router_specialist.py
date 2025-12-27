@@ -286,16 +286,18 @@ def test_get_llm_choice_dependency_logic_with_tags(router_specialist):
     router_specialist.set_specialist_map({
         "planner": {"desc": "d1", "tags": ["planning"]},
         "worker": {"desc": "d2", "tags": ["coding"]},
-        "dependency_target": {"desc": "d3", "tags": ["coding"]}
+        "dependency_target": {"desc": "d3", "tags": ["coding"]},
+        "alt_target": {"desc": "d4", "tags": ["coding"]}
     })
-    
-    # Scenario: 'worker' ran last, and recommends 'dependency_target'. 
+
+    # Scenario: 'worker' ran last, and recommends multiple targets.
     # 'planner' is in history but should be ignored for dependency check.
+    # NOTE: Using 2+ recommendations forces LLM path (single recommendation uses deterministic routing)
     state = {
         "messages": [HumanMessage(content="Do work")],
         "artifacts": {},
-        "scratchpad": {"recommended_specialists": ["dependency_target"]},
-        "routing_history": ["planner", "worker"] 
+        "scratchpad": {"recommended_specialists": ["dependency_target", "alt_target"]},
+        "routing_history": ["planner", "worker"]
     }
     
     mock_adapter = router_specialist.llm_adapter
