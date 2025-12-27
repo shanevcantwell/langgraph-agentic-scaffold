@@ -5,9 +5,9 @@
 | Category | Files | Tests |
 |----------|-------|-------|
 | Unit | 68 | 639 |
-| Integration | 26 | 187 |
+| Integration | 26 | 188 |
 | Other | 8 | 101 |
-| **Total** | **102** | **927** |
+| **Total** | **102** | **928** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -252,6 +252,8 @@
   - *Flow 6.1: Text Summary*
 - **`test_flow_6_2_data_extraction`**
   - *Flow 6.2: Data Extraction*
+- **`test_flow_7_1_ui_mockup_to_html`**
+  - *Flow 7.1: UI Mockup to HTML Generation*
 - **`test_invariant_triage_entry`**
   - *Invariant 1: Every flow starts at TriageArchitect*
 - **`test_invariant_end_exit`**

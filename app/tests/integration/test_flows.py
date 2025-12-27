@@ -748,6 +748,93 @@ class TestAnalysisFlows:
 
 
 # ============================================================================
+# 7. VISION FLOWS
+# ============================================================================
+
+class TestVisionFlows:
+    """Flow 7.x: Vision/image analysis flows"""
+
+    @pytest.mark.integration
+    def test_flow_7_1_ui_mockup_to_html(self, api_client):
+        """
+        Flow 7.1: UI Mockup to HTML Generation
+
+        PROMPT: "Make this gradio look more like the image"
+        ATTACHMENT: gradio_vegas.png screenshot
+
+        Expected specialists:
+        - triage_architect → entry
+        - router_specialist → routing
+        - image_specialist → analyze uploaded mockup
+        - systems_architect → create implementation plan
+        - web_builder → generate HTML/CSS
+        - critic_specialist → review output
+        - end_specialist → termination
+
+        REGRESSION: image_specialist must add itself to forbidden_specialists
+        to prevent routing loop.
+        """
+        import base64
+        from pathlib import Path
+
+        # Load the test image
+        image_path = Path(__file__).parent / "assets" / "screenshots" / "gradio_vegas.png"
+        assert image_path.exists(), f"Test asset not found: {image_path}"
+
+        with open(image_path, "rb") as f:
+            image_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+        # Invoke with image attachment
+        result = invoke_flow(
+            api_client,
+            "Make this gradio look more like the image",
+            image_to_process=image_base64
+        )
+
+        # Must have core routing
+        assert_specialists_called(
+            result,
+            ["triage_architect", "router_specialist"],
+            "Flow 7.1: Missing core routing specialists"
+        )
+
+        # image_specialist should be called for image analysis
+        assert "image_specialist" in result['specialist_order'], (
+            f"Flow 7.1: image_specialist not called for image prompt. "
+            f"Called: {result['specialist_order']}"
+        )
+
+        # Full generation flow should include planning and building
+        called = set(result['specialist_order'])
+        generation_specialists = {"systems_architect", "web_builder", "critic_specialist"}
+        missing = generation_specialists - called
+        # At least some generation specialists should be called
+        assert len(missing) < 3, (
+            f"Flow 7.1: Expected generation specialists (systems_architect, web_builder, critic). "
+            f"Missing: {missing}. Called: {result['specialist_order']}"
+        )
+
+        # REGRESSION CHECK: image_specialist should NOT appear more than twice
+        # (once for analysis, maybe once more if router re-evaluates)
+        # More than 2 indicates the "not me" pattern is broken
+        image_specialist_count = result['specialist_order'].count("image_specialist")
+        assert image_specialist_count <= 2, (
+            f"Flow 7.1: image_specialist called {image_specialist_count} times - "
+            f"possible loop due to missing forbidden_specialists. "
+            f"Order: {result['specialist_order']}"
+        )
+
+        assert result['final_state'] is not None, "Flow 7.1: No final state"
+
+        # Should produce HTML artifact
+        html_content = get_artifact(result['final_state'], "html_document.html")
+        if html_content and not html_content.startswith("[Artifact"):
+            assert len(html_content) > 100, (
+                f"Flow 7.1: html_document.html too small ({len(html_content)} chars)"
+            )
+
+
+# ============================================================================
 # INVARIANT TESTS
 # ============================================================================
 

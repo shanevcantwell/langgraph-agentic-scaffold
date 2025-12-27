@@ -118,12 +118,15 @@ class ImageSpecialist(BaseSpecialist):
         try:
             description = self._describe_image(image_data, custom_prompt)
 
+            # "Not me" pattern: add self to forbidden_specialists after completing
+            # Prevents router from looping back to image_specialist
             return {
                 "artifacts": {
                     "image_description": description
                 },
                 "scratchpad": {
-                    "image_analysis_complete": True
+                    "image_analysis_complete": True,
+                    "forbidden_specialists": [self.specialist_name]
                 }
             }
         except Exception as e:
