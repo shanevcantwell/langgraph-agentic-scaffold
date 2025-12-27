@@ -14,6 +14,9 @@ class DefaultResponderSpecialist(BaseSpecialist):
     A specialist that generates a direct, conversational response to the user's prompt.
     It is intended for simple, single-turn interactions where no other specialist's
     tools are required. It signals task completion after it runs.
+
+    NOTE: This specialist is purely conversational - it does NOT inspect artifacts.
+    Exit Interview logic (ADR-CORE-036) requires a dedicated graph node that can route.
     """
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
@@ -23,79 +26,6 @@ class DefaultResponderSpecialist(BaseSpecialist):
         """
         Generates a text response and signals that the task is complete.
         """
-        # =============================================================================
-        # TEMPORARY FIX: Exit Interview Pattern (Issue #7, ADR-CORE-036)
-        #
-        # This is a stopgap until a proper ExitInterviewSpecialist is implemented.
-        # DefaultResponder now checks if artifacts were produced that satisfy the
-        # user's request, and presents them instead of generating a generic response.
-        #
-        # TODO: Replace with dedicated ExitInterviewSpecialist per ADR-CORE-036
-        # =============================================================================
-        artifacts = state.get("artifacts", {})
-
-        # Check for key deliverable artifacts and present them directly
-        if "system_plan" in artifacts:
-            plan = artifacts["system_plan"]
-            plan_summary = plan.get("plan_summary", "See details below")
-            plan_steps = plan.get("execution_steps", [])
-
-            if plan_steps:
-                steps_text = "\n".join(f"  {i+1}. {step}" for i, step in enumerate(plan_steps))
-                text_response = f"Here's the plan I created:\n\n**{plan_summary}**\n\nSteps:\n{steps_text}"
-            else:
-                text_response = f"Here's the plan I created:\n\n**{plan_summary}**"
-
-            logger.info("DefaultResponder: Presenting system_plan artifact (Exit Interview pattern)")
-
-            ai_message = create_llm_message(
-                specialist_name=self.specialist_name,
-                llm_adapter=self.llm_adapter,
-                content=text_response,
-            )
-            return {
-                "messages": [ai_message],
-                "task_is_complete": True,
-                "scratchpad": {"user_response_snippets": [text_response]}
-            }
-
-        # Check for image_description artifact from ImageSpecialist
-        if "image_description" in artifacts:
-            image_description = artifacts["image_description"]
-            logger.info("DefaultResponder: Presenting image_description artifact (Exit Interview pattern)")
-
-            # Include the image analysis in context for the LLM to use
-            # Filter to human messages only for clean context
-            messages: list[BaseMessage] = [
-                msg for msg in state.get("messages", [])
-                if isinstance(msg, HumanMessage)
-            ]
-
-            # Add context about the image analysis
-            context_message = HumanMessage(
-                content=f"[Context: Image analysis completed]\n\n{image_description}\n\n"
-                        f"Please use this image analysis to help with the user's original request."
-            )
-            messages.append(context_message)
-
-            request = StandardizedLLMRequest(messages=messages)
-            response_data = self.llm_adapter.invoke(request)
-            text_response = response_data.get("text_response", "I analyzed the image but couldn't generate a response.")
-
-            ai_message = create_llm_message(
-                specialist_name=self.specialist_name,
-                llm_adapter=self.llm_adapter,
-                content=text_response,
-            )
-            return {
-                "messages": [ai_message],
-                "task_is_complete": True,
-                "scratchpad": {"user_response_snippets": [text_response]}
-            }
-        # =============================================================================
-        # END TEMPORARY FIX
-        # =============================================================================
-
         # The DefaultResponder's role is purely conversational. It should only
         # consider the user's messages and its own previous responses to create a
         # clean conversational context, ignoring orchestration messages from other
