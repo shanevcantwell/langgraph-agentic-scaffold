@@ -123,8 +123,9 @@ response = mcp_client.call_safe(
 - `./workspace/` is the Docker container's mounted root for LAS-scoped file operations
 - It contains user data and runtime artifacts - NOT application source code
 - Application code lives in `app/src/`, `app/tests/`, `docs/`, etc.
-- ADRs are stored in `./docs/ADRs/` which is a symlink to `../design-docs/agentic-scaffold/03_ADRS/`
+- ADRs are stored in `./docs/ADRs/` which is a symlink to `../../design-docs/agentic-scaffold/03_ADRS/`
 - When creating new ADRs, check ALL subdirectories (completed/, implemented/, deferred/, PLANS/) for the highest sequence number
+- Also check GitHub Issues (`gh issue list`) for ADR numbers reserved in issue descriptions (e.g., "pending ADR-040")
 
 ### Statistical Anomalies
 **NEVER dismiss statistical anomalies as coincidence.**
