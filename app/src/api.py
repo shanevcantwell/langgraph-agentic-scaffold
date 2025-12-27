@@ -201,6 +201,13 @@ async def _stream_formatter(generator):
                     # Stream error immediately
                     yield f"data: {json.dumps({'error': error_msg, 'error_report': error_report})}\n\n"
 
+                # Stream scratchpad reasoning fields in real-time for THOUGHT STREAM visibility
+                if isinstance(scratchpad, dict):
+                    reasoning_fields = {k: v for k, v in scratchpad.items()
+                                       if k.endswith('_reasoning') or k.endswith('_decision')}
+                    if reasoning_fields:
+                        yield f"data: {json.dumps({'scratchpad': reasoning_fields, 'source': node_name})}\n\n"
+
                 # Accumulate state deltas according to GraphState reducer semantics
                 if accumulated_state is None:
                     accumulated_state = {}
