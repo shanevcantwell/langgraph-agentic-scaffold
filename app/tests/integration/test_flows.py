@@ -755,6 +755,90 @@ class TestVisionFlows:
     """Flow 7.x: Vision/image analysis flows"""
 
     @pytest.mark.integration
+    def test_flow_7_0_simple_image_analysis(self, api_client):
+        """
+        Flow 7.0: Simple Image Analysis (Exit Interview Pattern)
+
+        PROMPT: "What's in this image?"
+        ATTACHMENT: test screenshot
+
+        Expected specialists:
+        - triage_architect → entry
+        - router_specialist → routes to image_specialist
+        - image_specialist → analyzes image, produces image_description artifact
+        - default_responder_specialist → uses image_description via Exit Interview
+        - end_specialist → termination
+
+        Exit Interview Pattern (ADR-CORE-036):
+        When image_specialist produces image_description artifact, DefaultResponder
+        should use it as context for generating the response, NOT ask for clarification.
+        """
+        import base64
+        from pathlib import Path
+
+        # Load test image
+        image_path = Path(__file__).parent / "assets" / "screenshots" / "gradio_vegas.png"
+        assert image_path.exists(), f"Test asset not found: {image_path}"
+
+        with open(image_path, "rb") as f:
+            image_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+        # Simple analysis prompt - should NOT trigger full generation flow
+        result = invoke_flow(
+            api_client,
+            "What's in this image? Describe what you see.",
+            image_to_process=image_base64
+        )
+
+        # Core routing
+        assert_specialists_called(
+            result,
+            ["triage_architect", "router_specialist"],
+            "Flow 7.0: Missing core routing specialists"
+        )
+
+        # image_specialist MUST be called for image analysis
+        assert "image_specialist" in result['specialist_order'], (
+            f"Flow 7.0: image_specialist not called for image prompt. "
+            f"Called: {result['specialist_order']}"
+        )
+
+        # Should complete without errors
+        assert not result['errors'], f"Flow 7.0: Unexpected errors: {result['errors']}"
+        assert result['final_state'] is not None, "Flow 7.0: No final state"
+
+        # EXIT INTERVIEW VALIDATION: image_description artifact should exist
+        artifacts = result['final_state'].get('artifacts', {})
+        if isinstance(artifacts, dict):
+            has_image_description = 'image_description' in artifacts
+        else:
+            # List format from archiver
+            has_image_description = 'image_description' in artifacts
+
+        assert has_image_description, (
+            f"Flow 7.0: image_specialist should produce image_description artifact. "
+            f"Artifacts: {artifacts}"
+        )
+
+        # Final response should NOT ask for an image (Exit Interview should use artifact)
+        response_content = get_artifact(result['final_state'], "final_user_response.md")
+        if response_content and not response_content.startswith("[Artifact"):
+            # Check response doesn't contain clarification requests about images
+            response_lower = response_content.lower()
+            clarification_indicators = [
+                "please provide an image",
+                "i don't see an image",
+                "no image was provided",
+                "upload an image",
+                "share the image",
+            ]
+            for indicator in clarification_indicators:
+                assert indicator not in response_lower, (
+                    f"Flow 7.0: Exit Interview failed - response asks for image: '{indicator}'\n"
+                    f"Response snippet: {response_content[:300]}"
+                )
+
+    @pytest.mark.integration
     def test_flow_7_1_ui_mockup_to_html(self, api_client):
         """
         Flow 7.1: UI Mockup to HTML Generation
