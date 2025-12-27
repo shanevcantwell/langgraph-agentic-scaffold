@@ -131,8 +131,13 @@ fileInput.addEventListener('change', (e) => {
 
     const reader = new FileReader();
     
-    // Check if image
+    // Check if image - currently only PNG is supported (see Issue #16 for mimetype handling)
     if (file.type.startsWith('image/')) {
+        if (file.type !== 'image/png') {
+            logStatus(`⚠ Only PNG images are currently supported. Got: ${file.type}`);
+            fileInput.value = '';
+            return;
+        }
         reader.onload = (e) => {
             loadedFile = {
                 content: e.target.result, // base64 data url
@@ -236,7 +241,10 @@ async function executeWorkflow() {
 
     if (loadedFile) {
         if (loadedFile.type === 'image') {
-            payload.image_to_process = loadedFile.content;
+            // Extract raw base64 from data URL (adapter expects base64 only, not full data URL)
+            // Handle both data URLs and raw base64
+            const content = loadedFile.content;
+            payload.image_to_process = content.startsWith('data:') ? content.split(',')[1] : content;
             logStatus(`► INJECTING IMAGE DATA...`);
         } else {
             payload.text_to_process = loadedFile.content;

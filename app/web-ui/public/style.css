@@ -42,6 +42,11 @@
     box-sizing: border-box;
 }
 
+/* Prevent long strings from breaking layout */
+.main-grid, .main-grid * {
+    max-width: 100%;
+}
+
 body {
     margin: 0;
     padding: 20px;
@@ -124,6 +129,8 @@ h1 { margin: 0; font-size: 2.5rem; letter-spacing: 4px; }
     flex-direction: column;
     gap: 20px;
     min-height: 0;
+    min-width: 0;
+    overflow: hidden;
 }
 
 /* Panels */
@@ -136,6 +143,8 @@ h1 { margin: 0; font-size: 2.5rem; letter-spacing: 4px; }
     display: flex;
     flex-direction: column;
     transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+    overflow: hidden;
+    min-width: 0;
 }
 
 h3 {
@@ -213,8 +222,11 @@ button:hover { background: var(--primary-color); color: var(--bg-color); box-sha
 .ticker-box {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     font-size: 1.1rem;
     line-height: 1.4;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
 }
 .ticker-item { margin-bottom: 5px; border-left: 2px solid var(--secondary-color); padding-left: 5px; }
 .ticker-item.active { border-left-color: var(--primary-color); font-weight: bold; }
@@ -239,10 +251,14 @@ button:hover { background: var(--primary-color); color: var(--bg-color); box-sha
 .trace-box {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--bg-color);
     padding: 10px;
     border: 1px solid var(--secondary-color);
     font-size: 0.9rem;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 /* Trace Tree Styling */
@@ -263,14 +279,18 @@ button:hover { background: var(--primary-color); color: var(--bg-color); box-sha
     flex: 1;
     display: none;
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--bg-color);
     color: var(--primary-color);
     padding: 10px;
     border-radius: 4px;
     border: 1px solid var(--secondary-color);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 .tab-content.active { display: block; }
-#tab-report, #tab-json { background: var(--bg-color); color: var(--primary-color); }
+#tab-report, #tab-json { background: var(--bg-color); color: var(--primary-color); word-break: break-all; }
 
 iframe { width: 100%; height: 100%; border: none; }
 
@@ -439,11 +459,15 @@ pre, .markdown-body pre {
 .thought-stream-box {
     height: 350px;
     overflow-y: auto;
+    overflow-x: hidden;
     font-size: 0.9em;
     line-height: 1.6;
     padding: 8px;
     background: var(--panel-bg);
     border: 1px solid var(--secondary-color);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .thought-entry {
@@ -572,6 +596,10 @@ pre, .markdown-body pre {
     border: 1px solid var(--secondary-color);
     min-height: 300px;
     overflow-y: auto;
+    overflow-x: hidden;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .trace-panel .tab-content.active {

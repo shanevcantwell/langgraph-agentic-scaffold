@@ -204,6 +204,52 @@ VEGAS_CSS = """
     font-family: 'VT323', monospace !important;
 }
 
+/* === Long String Overflow Handling === */
+/* Prevent base64 strings and long content from stretching layout */
+.gradio-container,
+.gradio-container * {
+    max-width: 100% !important;
+}
+
+.gradio-container textarea,
+.gradio-container input[type="text"],
+.gradio-container .prose,
+.gradio-container .json-holder,
+.gradio-container .markdown,
+.gradio-container pre,
+.gradio-container code {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    word-break: break-all !important;
+    white-space: pre-wrap !important;
+}
+
+.nixie-panel,
+.specialist-ticker {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    overflow-x: hidden !important;
+}
+
+/* JSON display - ensure it wraps */
+.gradio-container .json {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    word-break: break-all !important;
+    white-space: pre-wrap !important;
+    overflow-x: auto !important;
+}
+
+/* Markdown blocks (Mission Report area) */
+.gradio-container .markdown-text,
+.gradio-container .prose {
+    word-wrap: break-word !important;
+    overflow-wrap: break-word !important;
+    word-break: break-word !important;
+    white-space: pre-wrap !important;
+    overflow-x: hidden !important;
+}
+
 /* === Headers === */
 .gradio-container h1,
 .gradio-container h2,
@@ -410,7 +456,7 @@ def create_ui(api_client: ApiClient):
     setTimeout(setupEnterKeyBehavior, 100);
     """
 
-    with gr.Blocks(title="LAS VEGAS Terminal") as demo:
+    with gr.Blocks(title="LAS VEGAS Terminal", css=VEGAS_CSS) as demo:
 
         # Header
         gr.Markdown("# 🖥️ V.E.G.A.S. TERMINAL")
