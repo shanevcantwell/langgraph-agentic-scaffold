@@ -11,6 +11,12 @@ from ._orchestration import (
 from ._web import WebContent
 from ._analysis import TextAnalysis
 from ._state import SpecialistResult
+from ._exit_interview import (
+    ExitInterviewArtifactConfig,
+    EXIT_INTERVIEW_ARTIFACTS,
+    ARTIFACT_FORMATTERS,
+    get_presentable_artifact,
+)
 
 __all__ = [
     "SpecialistOutput", "StatusEnum", "SuccessReport",
@@ -20,4 +26,9 @@ __all__ = [
     "WebContent",
     "TextAnalysis",
     "SpecialistResult",
+    # Exit Interview (ADR-CORE-036 stopgap)
+    "ExitInterviewArtifactConfig",
+    "EXIT_INTERVIEW_ARTIFACTS",
+    "ARTIFACT_FORMATTERS",
+    "get_presentable_artifact",
 ]

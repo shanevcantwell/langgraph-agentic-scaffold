@@ -58,6 +58,40 @@ class DefaultResponderSpecialist(BaseSpecialist):
                 "task_is_complete": True,
                 "scratchpad": {"user_response_snippets": [text_response]}
             }
+
+        # Check for image_description artifact from ImageSpecialist
+        if "image_description" in artifacts:
+            image_description = artifacts["image_description"]
+            logger.info("DefaultResponder: Presenting image_description artifact (Exit Interview pattern)")
+
+            # Include the image analysis in context for the LLM to use
+            # Filter to human messages only for clean context
+            messages: list[BaseMessage] = [
+                msg for msg in state.get("messages", [])
+                if isinstance(msg, HumanMessage)
+            ]
+
+            # Add context about the image analysis
+            context_message = HumanMessage(
+                content=f"[Context: Image analysis completed]\n\n{image_description}\n\n"
+                        f"Please use this image analysis to help with the user's original request."
+            )
+            messages.append(context_message)
+
+            request = StandardizedLLMRequest(messages=messages)
+            response_data = self.llm_adapter.invoke(request)
+            text_response = response_data.get("text_response", "I analyzed the image but couldn't generate a response.")
+
+            ai_message = create_llm_message(
+                specialist_name=self.specialist_name,
+                llm_adapter=self.llm_adapter,
+                content=text_response,
+            )
+            return {
+                "messages": [ai_message],
+                "task_is_complete": True,
+                "scratchpad": {"user_response_snippets": [text_response]}
+            }
         # =============================================================================
         # END TEMPORARY FIX
         # =============================================================================
