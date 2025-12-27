@@ -122,3 +122,105 @@ def test_invoke_raises_proxy_error_on_connection_issues(mock_openai_client, mock
     # Act & Assert
     with pytest.raises(ProxyError, match=expected_message):
         adapter.invoke(request)
+
+
+# =============================================================================
+# Image Handling Tests (Issue #16)
+# =============================================================================
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_image_injection_skips_empty_data(mock_openai_client, mock_model_config):
+    """Tests that empty string image_data is treated as 'no image' (skips injection)."""
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
+    mock_create = mock_openai_client.return_value.chat.completions.create
+    mock_create.return_value.choices[0].message.tool_calls = None
+    mock_create.return_value.choices[0].message.content = "Response"
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Describe this image")],
+        image_data=""  # Empty string = no image
+    )
+
+    result = adapter.invoke(request)
+
+    # Should succeed without image injection
+    assert result.get("text_response") == "Response"
+    call_kwargs = mock_create.call_args[1]
+    user_message = call_kwargs['messages'][1]
+    # Content should be plain string, not multimodal list
+    assert isinstance(user_message['content'], str)
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_image_injection_rejects_whitespace_only_data(mock_openai_client, mock_model_config):
+    """Tests that whitespace-only image data raises ValueError."""
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Describe this image")],
+        image_data="   \n\t  "  # Whitespace only
+    )
+
+    with pytest.raises(ValueError, match="Image data is empty or whitespace-only"):
+        adapter.invoke(request)
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_image_injection_rejects_oversized_image(mock_openai_client, mock_model_config):
+    """Tests that oversized image data raises ValueError with helpful message."""
+    # Configure a small limit for testing (1MB)
+    mock_model_config["max_image_size_mb"] = 1
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+
+    # Create a 2MB base64 string (exceeds 1MB limit)
+    oversized_image = "A" * (2 * 1024 * 1024)
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Describe this image")],
+        image_data=oversized_image
+    )
+
+    with pytest.raises(ValueError, match="Image data exceeds maximum size"):
+        adapter.invoke(request)
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_image_injection_accepts_valid_sized_image(mock_openai_client, mock_model_config):
+    """Tests that valid-sized image data passes size check and proceeds to injection."""
+    mock_model_config["max_image_size_mb"] = 10
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
+    mock_create = mock_openai_client.return_value.chat.completions.create
+    mock_create.return_value.choices[0].message.tool_calls = None
+    mock_create.return_value.choices[0].message.content = "Image description"
+
+    # Valid base64 image data (small, under limit)
+    valid_image = "iVBORw0KGgoAAAANSUhEUg=="
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Describe this image")],
+        image_data=valid_image
+    )
+
+    result = adapter.invoke(request)
+
+    # Should succeed and return response
+    assert result.get("text_response") == "Image description"
+    # Verify image was injected into the request
+    call_kwargs = mock_create.call_args[1]
+    user_message = call_kwargs['messages'][1]
+    assert isinstance(user_message['content'], list)
+    assert user_message['content'][1]['type'] == 'image_url'
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_image_injection_rejects_empty_message_content(mock_openai_client, mock_model_config):
+    """Tests that empty message content raises ValueError when injecting image."""
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="")],  # Empty message content
+        image_data="iVBORw0KGgoAAAANSUhEUg=="
+    )
+
+    with pytest.raises(ValueError, match="Cannot inject image into message with empty content"):
+        adapter.invoke(request)

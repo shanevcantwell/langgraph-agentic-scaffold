@@ -47,6 +47,7 @@ class LMStudioAdapter(BaseAdapter):
         self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
         self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
         self.max_tokens = self.config.get('parameters', {}).get('max_tokens') or 4096
+        self.max_image_size_bytes = self.config.get('max_image_size_mb', 10) * 1024 * 1024
         # Separate OpenAI-compatible params from non-standard ones
         # OpenAI SDK supports: top_p, frequency_penalty, presence_penalty, etc.
         # Non-standard params (like top_k) go via extra_body for LM Studio
@@ -159,12 +160,25 @@ class LMStudioAdapter(BaseAdapter):
 
         # Handle Image Injection
         if request.image_data:
+            # Invariant: reject empty/whitespace-only image data (e.g., 0-byte file upload)
+            if not request.image_data.strip():
+                raise ValueError("Image data is empty or whitespace-only")
+            # Invariant: reject oversized images (would exceed context window)
+            image_size = len(request.image_data)
+            if image_size > self.max_image_size_bytes:
+                raise ValueError(
+                    f"Image data exceeds maximum size: {image_size / (1024*1024):.1f}MB > "
+                    f"{self.max_image_size_bytes / (1024*1024):.0f}MB (configure max_image_size_mb in user_settings.yaml)"
+                )
             # Find the last user message to attach the image to
             for i in range(len(pruned_messages) - 1, -1, -1):
                 msg = pruned_messages[i]
                 if msg.type == 'human':
                     logger.info("LMStudioAdapter: Injecting image into last user message.")
                     original_text = msg.content
+                    # Invariant: multimodal text field must be non-empty (LM Studio rejects empty)
+                    if not original_text or (isinstance(original_text, str) and not original_text.strip()):
+                        raise ValueError("Cannot inject image into message with empty content.")
                     # Construct multimodal content
                     new_content = [
                         {"type": "text", "text": original_text},
