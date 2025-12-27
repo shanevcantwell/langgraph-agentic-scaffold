@@ -263,6 +263,11 @@ docker exec langgraph-app pytest
 docker exec langgraph-app pytest app/tests/ -v --tb=short
 ```
 
+**NEVER use `docker compose run` for tests.** Always use `docker exec langgraph-app ...`
+- `docker compose run` creates NEW containers that persist after completion
+- Zombie containers accumulate and consume resources indefinitely
+- If you see containers named `langgraph-agentic-scaffold-app-run-<hash>`, prune them: `docker container prune`
+
 Never dismiss integration failures as "environmental" without confirming Docker context.
 
 ---
