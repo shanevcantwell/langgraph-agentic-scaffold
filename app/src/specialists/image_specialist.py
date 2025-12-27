@@ -130,5 +130,12 @@ class ImageSpecialist(BaseSpecialist):
                 }
             }
         except Exception as e:
+            # BUG-SPECIALIST-001: Set forbidden_specialists on failure
+            # Prevents router from looping back to failing image_specialist
             logger.error(f"Error in ImageSpecialist graph execution: {e}")
-            return {"error": str(e)}
+            return {
+                "error": str(e),
+                "scratchpad": {
+                    "forbidden_specialists": [self.specialist_name]
+                }
+            }

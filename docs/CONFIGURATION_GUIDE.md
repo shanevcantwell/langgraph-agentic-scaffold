@@ -149,3 +149,24 @@ The system supports multiple architectural patterns, controlled by the `architec
 # user_settings.yaml
 architecture: "convening" # Defaults to "default" if omitted
 ```
+
+## 4.0 Startup Pre-Flight Checks
+
+At startup, the system performs several layers of validation before accepting requests:
+
+1. **Configuration Validation**: Verifies environment variables are set (e.g., `GOOGLE_API_KEY`, `LMSTUDIO_BASE_URL`)
+2. **Critical Specialist Loading**: Ensures specialists listed in `workflow.critical_specialists` loaded successfully
+3. **LLM Provider Connectivity**: Pings each bound LLM provider to verify network reachability
+
+**Provider Connectivity Check:**
+
+The system sends a simple "pong" request to each LLM provider that's bound to a specialist. This catches:
+- Network/proxy issues blocking connections
+- Misconfigured `base_url` or API endpoints
+- Models that aren't loaded in LM Studio
+
+Ping failures generate warnings but don't block startup (some providers may be optional). Check logs for messages like:
+```
+Provider 'lmstudio_router' ping OK (245.3ms)
+Provider 'lmstudio_vision' failed ping: Connection refused
+```

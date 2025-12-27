@@ -1,7 +1,9 @@
 # app/src/llm/factory.py
 import logging
+import time
 from typing import Dict, Any, List, Tuple
-from .adapter import BaseAdapter
+from langchain_core.messages import HumanMessage
+from .adapter import BaseAdapter, StandardizedLLMRequest
 from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
 from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
 
@@ -135,3 +137,65 @@ class AdapterFactory:
         if not adapter:
             logger.error(f"AdapterFactory: AdapterClass.from_config for '{base_provider_type}' returned None.")
         return adapter
+
+
+# --- LLM Connectivity Validation ---
+# Simple ping to validate provider is reachable at startup
+
+PING_PROMPT = "Reply with exactly one word: pong"
+PING_SYSTEM_PROMPT = "You are a test assistant. Follow instructions exactly."
+
+
+def ping_provider(provider_key: str, provider_config: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Send a simple ping to a provider and return the result.
+
+    Used by runner._perform_pre_flight_checks() to validate connectivity at startup.
+
+    Args:
+        provider_key: The binding key (e.g., "lmstudio_router")
+        provider_config: The full provider configuration dict
+
+    Returns:
+        Dict with keys: provider, type, model, success, response, error, latency_ms
+    """
+    result = {
+        "provider": provider_key,
+        "type": provider_config.get("type"),
+        "model": provider_config.get("model_name", provider_config.get("api_identifier", "unknown")),
+        "success": False,
+        "response": None,
+        "error": None,
+        "latency_ms": None,
+    }
+
+    provider_type = provider_config.get("type")
+    AdapterClass = ADAPTER_REGISTRY.get(provider_type)
+
+    if not AdapterClass:
+        result["error"] = f"Unknown provider type: {provider_type}"
+        return result
+
+    try:
+        # Add binding_key for error messages
+        config_copy = dict(provider_config)
+        config_copy.setdefault("binding_key", provider_key)
+
+        adapter = AdapterClass.from_config(config_copy, PING_SYSTEM_PROMPT)
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content=PING_PROMPT)]
+        )
+
+        start = time.time()
+        response = adapter.invoke(request)
+        elapsed = (time.time() - start) * 1000
+
+        result["latency_ms"] = round(elapsed, 1)
+        result["response"] = response.get("text_response", "")[:100]  # Truncate
+        result["success"] = True
+
+    except Exception as e:
+        result["error"] = str(e)[:200]  # Truncate error message
+
+    return result

@@ -20,17 +20,10 @@ import pytest
 import logging
 from typing import Dict, Any, List, Tuple
 
-from langchain_core.messages import HumanMessage
-
 from app.src.utils.config_loader import ConfigLoader
-from app.src.llm.factory import ADAPTER_REGISTRY
-from app.src.llm.adapter import StandardizedLLMRequest, BaseAdapter
+from app.src.llm.factory import ADAPTER_REGISTRY, ping_provider
 
 logger = logging.getLogger(__name__)
-
-# Simple ping prompt - should work with any LLM
-PING_PROMPT = "Reply with exactly one word: pong"
-PING_SYSTEM_PROMPT = "You are a test assistant. Follow instructions exactly."
 
 
 # =============================================================================
@@ -68,63 +61,6 @@ def enabled_providers(config) -> List[Tuple[str, Dict[str, Any]]]:
         enabled.append((key, provider_config))
 
     return enabled
-
-
-def create_adapter_direct(provider_config: Dict[str, Any], system_prompt: str) -> BaseAdapter:
-    """
-    Create an adapter directly from provider config (bypassing AdapterFactory specialist lookup).
-    """
-    provider_type = provider_config.get("type")
-    AdapterClass = ADAPTER_REGISTRY.get(provider_type)
-
-    if not AdapterClass:
-        raise ValueError(f"Unknown provider type: {provider_type}")
-
-    # Add binding_key for error messages (AdapterFactory does this)
-    config_copy = dict(provider_config)
-    config_copy.setdefault("binding_key", provider_type)
-
-    return AdapterClass.from_config(config_copy, system_prompt)
-
-
-def ping_provider(provider_key: str, provider_config: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Send a ping to a provider and return the result.
-
-    Returns:
-        Dict with keys: success, response, error, latency_ms
-    """
-    import time
-
-    result = {
-        "provider": provider_key,
-        "type": provider_config.get("type"),
-        "model": provider_config.get("model_name", provider_config.get("api_identifier", "unknown")),
-        "success": False,
-        "response": None,
-        "error": None,
-        "latency_ms": None,
-    }
-
-    try:
-        adapter = create_adapter_direct(provider_config, PING_SYSTEM_PROMPT)
-
-        request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=PING_PROMPT)]
-        )
-
-        start = time.time()
-        response = adapter.invoke(request)
-        elapsed = (time.time() - start) * 1000
-
-        result["latency_ms"] = round(elapsed, 1)
-        result["response"] = response.get("text_response", "")[:100]  # Truncate
-        result["success"] = True
-
-    except Exception as e:
-        result["error"] = str(e)[:200]  # Truncate error message
-
-    return result
 
 
 # =============================================================================

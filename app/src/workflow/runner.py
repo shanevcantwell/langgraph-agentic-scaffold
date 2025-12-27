@@ -161,6 +161,23 @@ class WorkflowRunner:
                 )
             logger.info(f"Successfully validated that all critical specialists are loaded: {critical_specialists}")
 
+        # BUG-STARTUP-001: Validate LLM provider connectivity
+        # Actually ping providers to catch network/proxy issues at startup
+        from ..llm.factory import ping_provider
+        failed_providers = []
+        for binding_key, provider_config in llm_providers.items():
+            if binding_key not in used_provider_bindings:
+                continue
+            result = ping_provider(binding_key, provider_config)
+            if result["success"]:
+                logger.info(f"Provider '{binding_key}' ping OK ({result['latency_ms']}ms)")
+            else:
+                logger.warning(f"Provider '{binding_key}' failed ping: {result['error']}")
+                failed_providers.append(binding_key)
+
+        if failed_providers:
+            logger.warning(f"Pre-flight: {len(failed_providers)} provider(s) failed connectivity check: {failed_providers}")
+
         logger.info("All pre-flight checks passed successfully.")
 
     def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False) -> Dict[str, Any]:

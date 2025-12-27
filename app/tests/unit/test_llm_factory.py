@@ -154,3 +154,87 @@ def test_validate_dependencies_ignores_unbound_providers():
 
     # Should be empty since gemini_webui is not bound to any specialist
     assert len(missing_deps) == 0
+
+
+# ==============================================================================
+# ping_provider Tests (BUG-STARTUP-001)
+# ==============================================================================
+
+from app.src.llm.factory import ping_provider
+
+
+def test_ping_provider_unknown_type():
+    """Tests that ping_provider handles unknown provider types gracefully."""
+    provider_config = {
+        "type": "unknown_future_type",
+        "api_identifier": "some-model"
+    }
+
+    result = ping_provider("test_provider", provider_config)
+
+    assert result["success"] is False
+    assert result["provider"] == "test_provider"
+    assert result["type"] == "unknown_future_type"
+    assert "Unknown provider type" in result["error"]
+
+
+@patch('app.src.llm.factory.LMStudioAdapter.from_config')
+def test_ping_provider_success(mock_from_config):
+    """Tests successful ping returns correct result structure."""
+    # Mock a successful adapter invocation
+    mock_adapter = MagicMock()
+    mock_adapter.invoke.return_value = {"text_response": "pong"}
+    mock_from_config.return_value = mock_adapter
+
+    provider_config = {
+        "type": "lmstudio",
+        "api_identifier": "test-model",
+        "base_url": "http://localhost:1234"
+    }
+
+    result = ping_provider("test_lmstudio", provider_config)
+
+    assert result["success"] is True
+    assert result["provider"] == "test_lmstudio"
+    assert result["type"] == "lmstudio"
+    assert result["response"] == "pong"
+    assert result["latency_ms"] is not None
+    assert result["error"] is None
+
+
+@patch('app.src.llm.factory.LMStudioAdapter.from_config')
+def test_ping_provider_connection_error(mock_from_config):
+    """Tests that ping_provider handles connection errors gracefully."""
+    mock_from_config.side_effect = Exception("Connection refused")
+
+    provider_config = {
+        "type": "lmstudio",
+        "api_identifier": "test-model",
+        "base_url": "http://localhost:9999"
+    }
+
+    result = ping_provider("failing_provider", provider_config)
+
+    assert result["success"] is False
+    assert result["provider"] == "failing_provider"
+    assert "Connection refused" in result["error"]
+    assert result["latency_ms"] is None
+
+
+@patch('app.src.llm.factory.LMStudioAdapter.from_config')
+def test_ping_provider_invoke_error(mock_from_config):
+    """Tests that ping_provider handles invocation errors gracefully."""
+    mock_adapter = MagicMock()
+    mock_adapter.invoke.side_effect = Exception("Model timeout")
+    mock_from_config.return_value = mock_adapter
+
+    provider_config = {
+        "type": "lmstudio",
+        "api_identifier": "test-model",
+        "base_url": "http://localhost:1234"
+    }
+
+    result = ping_provider("timeout_provider", provider_config)
+
+    assert result["success"] is False
+    assert "Model timeout" in result["error"]

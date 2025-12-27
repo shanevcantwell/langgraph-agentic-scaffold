@@ -233,3 +233,28 @@ class TestImageSpecialist:
 
         assert "error" in result
         assert "Image analysis failed" in result["error"]
+        # BUG-SPECIALIST-001: Verify forbidden_specialists is set on failure
+        assert "scratchpad" in result
+        assert "forbidden_specialists" in result["scratchpad"]
+        assert "image_specialist" in result["scratchpad"]["forbidden_specialists"]
+
+    def test_execute_logic_success_sets_forbidden_specialists(self, initialized_specialist_factory):
+        """Test that successful execution also sets forbidden_specialists (not me pattern)."""
+        specialist = initialized_specialist_factory("ImageSpecialist")
+
+        mock_adapter = Mock()
+        mock_adapter.invoke.return_value = {"text_response": "Test description"}
+        specialist.llm_adapter = mock_adapter
+
+        state = {
+            "artifacts": {
+                "uploaded_image.png": "data:image/png;base64,..."
+            }
+        }
+
+        result = specialist._execute_logic(state)
+
+        assert "artifacts" in result
+        assert "scratchpad" in result
+        assert "forbidden_specialists" in result["scratchpad"]
+        assert "image_specialist" in result["scratchpad"]["forbidden_specialists"]
