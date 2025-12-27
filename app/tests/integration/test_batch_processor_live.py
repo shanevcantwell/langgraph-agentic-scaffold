@@ -12,6 +12,8 @@ import shutil
 from pathlib import Path
 from fastapi.testclient import TestClient
 
+from app.tests.conftest import assert_response_not_error
+
 
 @pytest.fixture(scope="module")
 def initialized_app():
@@ -101,6 +103,13 @@ test_batch/e.txt, test_batch/l.txt, test_batch/n.txt, test_batch/q.txt, test_bat
                 f"Full reasoning:\n{reasoning}"
             )
 
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[BatchSort]")
+
 
 @pytest.mark.live_llm
 @pytest.mark.integration
@@ -142,3 +151,10 @@ test_batch/e.txt, test_batch/l.txt, test_batch/n.txt, test_batch/q.txt, test_bat
             for line in reasoning.split("\n"):
                 if "Parsed" in line or "files" in line.lower():
                     print(line)
+
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[BatchSortSummary]")

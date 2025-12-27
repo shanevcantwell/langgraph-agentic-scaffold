@@ -16,6 +16,8 @@ moved to GitHub Issue #10 pending MCP migration.
 import pytest
 from fastapi.testclient import TestClient
 
+from app.tests.conftest import assert_response_not_error
+
 
 @pytest.mark.integration
 def test_triage_advisory_not_restrictive(initialized_app):
@@ -57,6 +59,13 @@ def test_triage_advisory_not_restrictive(initialized_app):
         assert not final_state.get("scratchpad", {}).get("termination_reason"), (
             "Workflow should not be halted by loop detection"
         )
+
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[TriageAdvisory]")
 
 
 @pytest.mark.integration

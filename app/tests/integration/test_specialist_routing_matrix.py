@@ -13,6 +13,8 @@ import pytest
 from unittest.mock import patch
 from fastapi.testclient import TestClient
 
+from app.tests.conftest import assert_response_not_error, assert_tiered_chat_merge
+
 
 # =============================================================================
 # ROUTING TEST CASES
@@ -213,6 +215,14 @@ def test_router_routes_to_expected_specialist(
                 f"[{desc}] task_is_complete must be True for successful planning"
             )
 
+        # =============================================================================
+        # RESPONSE CONTENT VALIDATION: No silent failures
+        # =============================================================================
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, f"[{desc}]")
+
 
 # =============================================================================
 # SPECIFIC SPECIALIST ROUTING TESTS
@@ -247,6 +257,13 @@ def test_triage_architect_is_entry_point(initialized_app):
                 f"triage_architect should be early in routing. "
                 f"Found at index {triage_idx} in {routing_history}"
             )
+
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[TriageEntryPoint]")
 
 
 @pytest.mark.integration
@@ -287,6 +304,16 @@ def test_tiered_chat_pattern_triggers_progenitors(initialized_app):
                 f"Tiered chat should include synthesizer. History: {routing_history}"
             )
 
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[TieredChatPattern]")
+
+        # Validate tiered chat merge (synthesizer ran after both progenitors)
+        assert_tiered_chat_merge(final_state, "[TieredChatPattern]")
+
 
 @pytest.mark.integration
 def test_workflow_completes_at_end_specialist(initialized_app):
@@ -313,6 +340,13 @@ def test_workflow_completes_at_end_specialist(initialized_app):
         assert "end_specialist" in routing_history, (
             f"Workflow should terminate at end_specialist. History: {routing_history}"
         )
+
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[EndSpecialistTermination]")
 
 
 @pytest.mark.integration
@@ -353,6 +387,13 @@ def test_no_routing_to_internal_specialists(initialized_app):
                 f"History: {routing_history}"
             )
 
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[InternalRouting]")
+
 
 @pytest.mark.integration
 def test_loop_detection_prevents_infinite_loops(initialized_app):
@@ -389,6 +430,13 @@ def test_loop_detection_prevents_infinite_loops(initialized_app):
 
         # Verify workflow completed (didn't hang)
         assert len(routing_history) > 0, "Workflow should have routing history"
+
+        # Validate response content doesn't contain error indicators
+        artifacts = final_state.get("artifacts", {})
+        if isinstance(artifacts, dict):
+            final_response = artifacts.get("final_user_response.md", "")
+            if final_response:
+                assert_response_not_error(final_response, "[LoopDetection]")
 
 
 # =============================================================================

@@ -10,6 +10,30 @@ from fastapi.testclient import TestClient
 import json
 import re
 
+from app.tests.conftest import assert_response_not_error, assert_tiered_chat_merge
+
+
+def _extract_final_response_content(final_state: dict) -> str | None:
+    """Extract the final response text from final_state for validation."""
+    if not final_state:
+        return None
+
+    # Check artifacts for final_user_response.md
+    artifacts = final_state.get("artifacts", {})
+    if isinstance(artifacts, dict) and "final_user_response.md" in artifacts:
+        return artifacts["final_user_response.md"]
+
+    # Check messages for last AI message content
+    messages = final_state.get("messages", [])
+    if messages:
+        for msg in reversed(messages):
+            if isinstance(msg, dict) and msg.get("type") == "ai":
+                return msg.get("content", "")
+            elif hasattr(msg, "type") and msg.type == "ai":
+                return msg.content
+
+    return None
+
 
 @pytest.mark.integration
 def test_api_streams_multiple_specialist_updates(initialized_app):
@@ -43,6 +67,7 @@ def test_api_streams_multiple_specialist_updates(initialized_app):
         # Parse SSE stream to extract status updates
         status_updates = []
         specialist_names = set()
+        final_state = None
 
         for line in response.text.split('\n'):
             if line.startswith('data:'):
@@ -59,11 +84,19 @@ def test_api_streams_multiple_specialist_updates(initialized_app):
                         if match:
                             specialist_names.add(match.group(1))
 
+                    if 'final_state' in data:
+                        final_state = data['final_state']
+
                 except json.JSONDecodeError:
                     pass  # Skip malformed lines
 
         # Assertions
         assert len(status_updates) > 0, "No status updates received from API"
+
+        # Validate response content doesn't contain error indicators
+        response_content = _extract_final_response_content(final_state)
+        if response_content:
+            assert_response_not_error(response_content, "[Streaming]")
 
         # Should have at least router and one other specialist
         assert len(specialist_names) >= 2, (
@@ -141,6 +174,7 @@ def test_api_streams_tiered_chat_specialists(initialized_app):
         assert response.status_code == 200
 
         specialist_names = set()
+        final_state = None
 
         for line in response.text.split('\n'):
             if line.startswith('data:'):
@@ -150,8 +184,15 @@ def test_api_streams_tiered_chat_specialists(initialized_app):
                         match = re.search(r'Executing specialist: (\w+)', data['status'])
                         if match:
                             specialist_names.add(match.group(1))
+                    if 'final_state' in data:
+                        final_state = data['final_state']
                 except json.JSONDecodeError:
                     pass
+
+        # Validate response content doesn't contain error indicators
+        response_content = _extract_final_response_content(final_state)
+        if response_content:
+            assert_response_not_error(response_content, "[TieredChat]")
 
         # If tiered chat is enabled, should see progenitor specialists
         # Note: This test may need to be skipped if tiered chat is disabled in config
@@ -168,6 +209,10 @@ def test_api_streams_tiered_chat_specialists(initialized_app):
             assert len(specialist_names) >= 3, (
                 f"Expected router + 2 progenitors + synthesizer. Got: {specialist_names}"
             )
+
+            # Validate tiered chat merge (synthesizer ran after both progenitors)
+            if final_state:
+                assert_tiered_chat_merge(final_state, "[TieredChat]")
 
 
 @pytest.mark.integration
@@ -225,6 +270,11 @@ def test_api_streams_file_operations_specialist(initialized_app):
             "Expected final state or completion status in stream"
         )
 
+        # Validate response content doesn't contain error indicators
+        response_content = _extract_final_response_content(final_state)
+        if response_content:
+            assert_response_not_error(response_content, "[FileOperations]")
+
 
 @pytest.mark.integration
 def test_api_streams_artifacts_in_response(initialized_app):
@@ -249,6 +299,7 @@ def test_api_streams_artifacts_in_response(initialized_app):
 
         artifacts_found = False
         final_response_found = False
+        final_state = None
 
         for line in response.text.split('\n'):
             if line.startswith('data:'):
@@ -279,6 +330,11 @@ def test_api_streams_artifacts_in_response(initialized_app):
             "Expected either final response content or artifacts in stream"
         )
 
+        # Validate response content doesn't contain error indicators
+        response_content = _extract_final_response_content(final_state)
+        if response_content:
+            assert_response_not_error(response_content, "[Artifacts]")
+
 
 @pytest.mark.integration
 def test_api_streams_status_for_all_routed_specialists(initialized_app):
@@ -303,6 +359,8 @@ def test_api_streams_status_for_all_routed_specialists(initialized_app):
 
         execution_order = []
 
+        final_state = None
+
         for line in response.text.split('\n'):
             if line.startswith('data:'):
                 try:
@@ -313,6 +371,8 @@ def test_api_streams_status_for_all_routed_specialists(initialized_app):
                             specialist = match.group(1)
                             if specialist not in execution_order:
                                 execution_order.append(specialist)
+                    if 'final_state' in data:
+                        final_state = data['final_state']
                 except json.JSONDecodeError:
                     pass
 
@@ -327,6 +387,11 @@ def test_api_streams_status_for_all_routed_specialists(initialized_app):
             assert execution_order[0] == "triage_architect", (
                 f"triage_architect should be first. Order: {execution_order}"
             )
+
+        # Validate response content doesn't contain error indicators
+        response_content = _extract_final_response_content(final_state)
+        if response_content:
+            assert_response_not_error(response_content, "[StatusUpdates]")
 
 
 # ============================================================================

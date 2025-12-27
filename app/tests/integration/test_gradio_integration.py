@@ -15,6 +15,8 @@ import httpx
 import asyncio
 from app.src.ui.api_client import ApiClient
 
+from app.tests.conftest import ERROR_INDICATORS
+
 
 @pytest.mark.integration
 @pytest.mark.asyncio
@@ -69,6 +71,16 @@ async def test_api_client_streaming_with_simple_prompt():
     # Verify the structure of updates (should be dictionaries)
     for update in updates_received:
         assert isinstance(update, dict), f"Update should be a dict, got {type(update)}"
+
+    # Check for error indicators in response content
+    all_content = " ".join(
+        str(v) for update in updates_received for v in update.values()
+        if isinstance(v, str)
+    ).lower()
+    for indicator in ERROR_INDICATORS:
+        assert indicator.lower() not in all_content, (
+            f"[GradioStreaming] Response contains error indicator '{indicator}'"
+        )
 
 
 @pytest.mark.integration
@@ -150,3 +162,13 @@ async def test_gradio_handle_submit_integration():
         # At least one key should be a mock component
         assert any(key in mock_components.values() for key in update.keys()), \
             "Update should contain at least one UI component key"
+
+    # Check for error indicators in response content
+    all_content = " ".join(
+        str(v) for update in updates for v in update.values()
+        if isinstance(v, str)
+    ).lower()
+    for indicator in ERROR_INDICATORS:
+        assert indicator.lower() not in all_content, (
+            f"[GradioHandleSubmit] Response contains error indicator '{indicator}'"
+        )
