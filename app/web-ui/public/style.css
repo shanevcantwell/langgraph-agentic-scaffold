@@ -694,6 +694,7 @@ pre, .markdown-body pre {
     min-height: 300px;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
     word-wrap: break-word;
     overflow-wrap: break-word;
     word-break: break-word;
@@ -704,16 +705,105 @@ pre, .markdown-body pre {
 }
 
 /* ============================================================================ */
-/* SECOND-LEVEL SUBTABS (Dynamic from Archive H2 headers) */
+/* VERTICAL SECTION NAV (Right-edge scroll-to navigation) */
 /* ============================================================================ */
 
-.subtabs {
-    display: flex;
-    gap: 3px;
-    margin-bottom: 10px;
-    flex-wrap: wrap;
+/* Container for the Final Response tab content - flex layout with nav on right */
+/* Note: Only apply flex when .active - otherwise tab switching breaks */
+#tab-report {
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
 }
 
+#tab-report.active {
+    display: flex;
+}
+
+/* Main scrollable content area */
+#archiveOutput {
+    flex: 1;
+    order: 1; /* Content on left */
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
+    padding: 15px;
+    scroll-behavior: smooth;
+    /* Word-wrap rules for long content */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* Vertical nav strip on right edge */
+.subtabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    order: 2; /* Nav on right */
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    padding: 8px 4px;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--secondary-color);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Individual nav button - vertical tab style */
+.section-nav-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-main);
+    font-size: 0.8em;
+    text-align: left;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.section-nav-btn:hover {
+    color: var(--primary-color);
+    background: rgba(255, 159, 28, 0.08);
+    border-left-color: var(--secondary-color);
+}
+
+.section-nav-btn.active {
+    color: var(--primary-color);
+    background: rgba(255, 159, 28, 0.12);
+    border-left-color: var(--primary-color);
+    font-weight: bold;
+}
+
+/* Report section dividers */
+.report-section {
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px dashed var(--secondary-color);
+}
+
+.report-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.report-section .section-header {
+    color: var(--primary-color);
+    border-bottom: 1px solid var(--secondary-color);
+    padding-bottom: 8px;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+/* Legacy subtab-btn (kept for backward compatibility) */
 .subtab-btn {
     padding: 5px 12px;
     background: transparent;
@@ -768,7 +858,7 @@ pre, .markdown-body pre {
 .graph-view-container {
     flex: 1;
     min-height: 200px;
-    max-height: 400px;
+    max-height: 450px;
     overflow: auto;
     background: var(--bg-color);
     border: 1px solid var(--secondary-color);
@@ -812,5 +902,22 @@ pre, .markdown-body pre {
 .mermaid-container .edgeLabel {
     background-color: var(--panel-bg) !important;
     color: var(--text-dim) !important;
+}
+
+/* Mermaid subgraph (category cluster) styling */
+.mermaid-container .cluster rect {
+    fill: var(--panel-bg) !important;
+    stroke: var(--secondary-color) !important;
+    stroke-width: 1px !important;
+    stroke-dasharray: 4 2 !important;
+    rx: 8px !important;
+    ry: 8px !important;
+}
+
+.mermaid-container .cluster-label .nodeLabel {
+    color: var(--secondary-color) !important;
+    fill: var(--secondary-color) !important;
+    font-size: 0.9em !important;
+    font-weight: bold !important;
 }
 

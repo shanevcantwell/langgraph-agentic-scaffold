@@ -326,6 +326,59 @@ def get_graph_topology():
     specialists = builder.specialists
     allowed_destinations = builder.allowed_destinations
 
+    # Category mapping for subgraph clustering in UI
+    # Based on functional groupings from config.yaml
+    CATEGORY_MAP = {
+        # Orchestration & Planning
+        "router_specialist": "orchestration",
+        "triage_architect": "orchestration",
+        "project_director": "orchestration",
+        "systems_architect": "planning",
+        # Context Engineering
+        "facilitator_specialist": "context",
+        "dialogue_specialist": "context",
+        # Research Pipeline
+        "research_orchestrator": "research",
+        "browse_specialist": "research",
+        "synthesizer_specialist": "research",
+        "web_specialist": "research",
+        # Chat Subgraph
+        "chat_specialist": "chat",
+        "progenitor_alpha_specialist": "chat",
+        "progenitor_bravo_specialist": "chat",
+        "tiered_synthesizer_specialist": "chat",
+        "default_responder_specialist": "chat",
+        # Data & Analysis
+        "data_extractor_specialist": "data",
+        "sentiment_classifier_specialist": "data",
+        "data_processor_specialist": "data",
+        "text_analysis_specialist": "data",
+        # File Operations
+        "file_operations_specialist": "files",
+        "navigator_specialist": "files",
+        "batch_processor_specialist": "files",
+        # Browser
+        "navigator_browser_specialist": "browser",
+        # Builders
+        "web_builder": "builders",
+        "critic_specialist": "builders",
+        # Distillation (internal subgraph)
+        "distillation_coordinator_specialist": "distillation",
+        "distillation_prompt_expander_specialist": "distillation",
+        "distillation_prompt_aggregator_specialist": "distillation",
+        "distillation_response_collector_specialist": "distillation",
+        # Utilities
+        "prompt_specialist": "utilities",
+        "image_specialist": "utilities",
+        "prompt_triage_specialist": "utilities",
+        # Core Infrastructure
+        "end_specialist": "core",
+        "archiver_specialist": "core",
+        # MCP-only (not graph nodes)
+        "summarizer_specialist": "mcp_only",
+        "file_specialist": "mcp_only",
+    }
+
     # Build node list with categorization
     nodes = []
     router_name = CoreSpecialist.ROUTER.value
@@ -345,12 +398,17 @@ def get_graph_topology():
         # Get basic config info for the node
         spec_config = builder.config.get("specialists", {}).get(name, {})
 
+        # Assign category for subgraph clustering (default to "other")
+        category = CATEGORY_MAP.get(name, "other")
+
         nodes.append({
             "id": name,
             "type": node_type,
+            "category": category,
             "description": spec_config.get("description", ""),
             "has_llm": spec_config.get("llm_config") is not None,
-            "is_graph_node": name not in node_exclusions
+            "is_graph_node": name not in node_exclusions,
+            "is_routable": name in allowed_destinations
         })
 
     # Build edge list representing the hub-and-spoke architecture

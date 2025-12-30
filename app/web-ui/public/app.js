@@ -512,6 +512,16 @@ function addThoughtStreamEntry(specialist, message, type = 'info', options = {})
     }
 }
 
+/**
+ * Decode HTML entities to their actual characters.
+ * Handles common entities like &#x27; -> ' and &amp; -> &
+ */
+function decodeHtmlEntities(text) {
+    const textarea = document.createElement('textarea');
+    textarea.innerHTML = text;
+    return textarea.value;
+}
+
 function updateArtifactsDisplay(artifacts) {
     if (!artifacts || Object.keys(artifacts).length === 0) return;
 
@@ -524,7 +534,9 @@ function updateArtifactsDisplay(artifacts) {
         if (typeof value === 'object') {
             artifactsMarkdown += `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\`\n\n`;
         } else {
-            artifactsMarkdown += `\`\`\`\n${value}\n\`\`\`\n\n`;
+            // Decode HTML entities before displaying (fixes &#x27; -> ' etc.)
+            const decodedValue = decodeHtmlEntities(String(value));
+            artifactsMarkdown += `\`\`\`\n${decodedValue}\n\`\`\`\n\n`;
         }
     }
 
@@ -537,10 +549,13 @@ function renderMissionReport(markdown) {
     // Split by H2 headers (## )
     const sections = markdown.split(/^## /gm);
 
+    // Clear existing content
     archiveSubtabsEl.innerHTML = '';
     archiveOutputEl.innerHTML = '';
 
-    let firstTabBtn = null;
+    // Build all sections content with anchor IDs
+    let allSectionsHtml = '';
+    const navItems = [];
 
     sections.forEach((section, index) => {
         if (!section.trim()) return; // Skip empty sections
@@ -552,34 +567,74 @@ function renderMissionReport(markdown) {
 
         if (!title) return;
 
-        // Create sub-tab button
-        const btn = document.createElement('button');
-        btn.className = 'subtab-btn';
-        btn.textContent = title;
+        // Create a slug for the section anchor
+        const sectionId = `section-${index}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+$/, '')}`;
 
-        btn.onclick = () => {
-            // Deactivate all subtabs
-            document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
-            // Activate this subtab
-            btn.classList.add('active');
-            // Render content
-            archiveOutputEl.innerHTML = marked.parse(content);
-        };
+        // Build section HTML with anchor
+        allSectionsHtml += `<div class="report-section" id="${sectionId}">`;
+        allSectionsHtml += `<h2 class="section-header">${title}</h2>`;
+        allSectionsHtml += marked.parse(content);
+        allSectionsHtml += `</div>`;
 
-        archiveSubtabsEl.appendChild(btn);
-
-        if (!firstTabBtn) {
-            firstTabBtn = btn;
-        }
+        // Track nav item
+        navItems.push({ title, sectionId });
     });
 
-    // Activate first tab by default
-    if (firstTabBtn) {
-        firstTabBtn.click();
+    // Render all sections in content area
+    if (allSectionsHtml) {
+        archiveOutputEl.innerHTML = allSectionsHtml;
     } else {
         // Fallback if no sections found - render the whole thing
         archiveOutputEl.innerHTML = marked.parse(markdown);
+        return;
     }
+
+    // Build vertical nav strip
+    navItems.forEach((item, idx) => {
+        const navBtn = document.createElement('button');
+        navBtn.className = 'section-nav-btn';
+        navBtn.textContent = item.title;
+        navBtn.title = item.title; // Tooltip for truncated titles
+
+        // First item starts active
+        if (idx === 0) {
+            navBtn.classList.add('active');
+        }
+
+        navBtn.onclick = () => {
+            // Scroll to section
+            const sectionEl = document.getElementById(item.sectionId);
+            if (sectionEl) {
+                sectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+
+            // Update active state
+            document.querySelectorAll('.section-nav-btn').forEach(b => b.classList.remove('active'));
+            navBtn.classList.add('active');
+        };
+
+        archiveSubtabsEl.appendChild(navBtn);
+    });
+
+    // Update active nav on scroll (intersection observer)
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const sectionId = entry.target.id;
+                const navItem = navItems.find(n => n.sectionId === sectionId);
+                if (navItem) {
+                    document.querySelectorAll('.section-nav-btn').forEach(b => b.classList.remove('active'));
+                    const activeBtn = [...archiveSubtabsEl.children].find(btn => btn.textContent === navItem.title);
+                    if (activeBtn) activeBtn.classList.add('active');
+                }
+            }
+        });
+    }, { root: archiveOutputEl, threshold: 0.3 });
+
+    // Observe all sections
+    document.querySelectorAll('.report-section').forEach(section => {
+        observer.observe(section);
+    });
 }
 
 function handleStreamEvent(event) {
@@ -838,48 +893,95 @@ async function renderMermaidGraph(data) {
         return;
     }
 
-    // Build Mermaid flowchart definition
-    let graphDef = 'flowchart TD\n';
+    // Build Mermaid flowchart definition with LEFT-to-RIGHT for hub-spoke clarity
+    let graphDef = 'flowchart LR\n';
 
-    // Style classes
-    graphDef += '    classDef router fill:#FF9F1C,stroke:#fff,stroke-width:2px,color:#1a1a2e\n';
-    graphDef += '    classDef core fill:#2EC4B6,stroke:#fff,stroke-width:1px,color:#1a1a2e\n';
+    // Style classes - using CSS variables where possible
+    graphDef += '    classDef router fill:#FF9F1C,stroke:#fff,stroke-width:3px,color:#1a1a2e,font-weight:bold\n';
+    graphDef += '    classDef core fill:#2EC4B6,stroke:#fff,stroke-width:2px,color:#1a1a2e\n';
     graphDef += '    classDef specialist fill:#242442,stroke:#2EC4B6,stroke-width:1px,color:#FFECC2\n';
     graphDef += '    classDef terminal fill:#E74C3C,stroke:#fff,stroke-width:2px,color:#fff\n';
 
-    // Collect subgraph members for grouping
-    const subgraphMembers = new Set();
-    data.subgraphs.forEach(sg => {
-        sg.managed_specialists.forEach(s => subgraphMembers.add(s));
-    });
-
-    // Add nodes with simplified IDs (remove _specialist suffix for readability)
-    // Prefix with 'n_' to avoid Mermaid reserved words like 'end', 'graph', 'subgraph'
+    // Group nodes by category for subgraph clustering
+    const categoryNodes = {};
     const nodeIdMap = {};
+
+    // Category display names and order (for cleaner subgraph labels)
+    const CATEGORY_LABELS = {
+        'orchestration': '🎯 ORCHESTRATION',
+        'context': '📋 CONTEXT',
+        'research': '🔍 RESEARCH',
+        'chat': '💬 CHAT',
+        'data': '📊 DATA',
+        'files': '📁 FILES',
+        'browser': '🌐 BROWSER',
+        'builders': '🏗️ BUILDERS',
+        'utilities': '🔧 UTILITIES',
+        'core': '⚙️ CORE',
+        'distillation': '🧪 DISTILLATION',
+        'planning': '📐 PLANNING',
+        'other': '📦 OTHER'
+    };
+
+    // Only include routable specialists + router + core infrastructure
     data.nodes.forEach(node => {
-        if (!node.is_graph_node) return; // Skip MCP-only nodes
+        // Skip MCP-only and non-routable specialists (except router and core)
+        if (!node.is_graph_node) return;
+        if (!node.is_routable && node.type !== 'router' && node.type !== 'core_infrastructure') return;
 
         const shortId = 'n_' + node.id.replace(/_specialist$/, '').replace(/_/g, '_');
         const displayName = node.id.replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase();
         nodeIdMap[node.id] = shortId;
 
-        // Determine class based on node type
-        let nodeClass = 'specialist';
-        if (node.type === 'router') nodeClass = 'router';
-        else if (node.type === 'core_infrastructure') nodeClass = 'core';
-
-        graphDef += `    ${shortId}["${displayName}"]:::${nodeClass}\n`;
+        // Group by category
+        const category = node.category || 'other';
+        if (!categoryNodes[category]) {
+            categoryNodes[category] = [];
+        }
+        categoryNodes[category].push({ shortId, displayName, node });
     });
 
-    // Add terminal node
-    graphDef += '    __end__((END)):::terminal\n';
-    nodeIdMap['__end__'] = '__end__';
+    // Build subgraphs by category
+    // Router goes in its own prominent position (not in a subgraph)
+    const routerNode = categoryNodes['orchestration']?.find(n => n.node.type === 'router');
+    if (routerNode) {
+        graphDef += `    ${routerNode.shortId}[["🎯 ${routerNode.displayName}"]]:::router\n`;
+        // Remove router from orchestration group
+        categoryNodes['orchestration'] = categoryNodes['orchestration'].filter(n => n.node.type !== 'router');
+    }
 
-    // Add edges (only router -> specialists to avoid visual clutter)
-    // Show hub-and-spoke: router fans out, specialists return to router or end
+    // Define preferred category order for visual layout
+    const categoryOrder = ['orchestration', 'context', 'research', 'chat', 'data', 'files', 'browser', 'builders', 'planning', 'utilities', 'distillation', 'core', 'other'];
+
+    // Add subgraphs for each non-empty category
+    categoryOrder.forEach(category => {
+        const nodes = categoryNodes[category];
+        if (!nodes || nodes.length === 0) return;
+
+        const label = CATEGORY_LABELS[category] || category.toUpperCase();
+        graphDef += `    subgraph ${category}["${label}"]\n`;
+
+        nodes.forEach(({ shortId, displayName, node }) => {
+            let nodeClass = 'specialist';
+            if (node.type === 'core_infrastructure') nodeClass = 'core';
+
+            // Use different shapes for visual distinction
+            if (node.type === 'core_infrastructure') {
+                graphDef += `        ${shortId}([${displayName}]):::${nodeClass}\n`;
+            } else {
+                graphDef += `        ${shortId}["${displayName}"]:::${nodeClass}\n`;
+            }
+        });
+
+        graphDef += '    end\n';
+    });
+
+    // Add terminal END node (the final graph termination point)
+    graphDef += '    n_end_terminal((END)):::terminal\n';
+    nodeIdMap['__end__'] = 'n_end_terminal';
+
+    // Add edges: Router -> specialists (conditional routing)
     const routerEdges = data.edges.filter(e => e.type === 'conditional');
-    const completionEdges = data.edges.filter(e => e.type === 'completion' && e.label === 'complete');
-
     routerEdges.forEach(edge => {
         const sourceId = nodeIdMap[edge.source];
         const targetId = nodeIdMap[edge.target];
@@ -888,14 +990,10 @@ async function renderMermaidGraph(data) {
         }
     });
 
-    // Add completion edges to END only (to show the spoke pattern)
-    completionEdges.forEach(edge => {
-        const sourceId = nodeIdMap[edge.source];
-        const targetId = nodeIdMap[edge.target];
-        if (sourceId && targetId) {
-            graphDef += `    ${sourceId} -.-> ${targetId}\n`;
-        }
-    });
+    // Simplified: Show end_specialist -> END terminal edge
+    // (Skip the cluttered completion edges back to router for cleaner visualization)
+    // Note: end_specialist maps to 'n_end' (from the ID sanitization)
+    graphDef += '    n_end -.-> n_end_terminal\n';
 
     // Render the graph
     try {
@@ -904,6 +1002,7 @@ async function renderMermaidGraph(data) {
         mermaidGraphEl.innerHTML = svg;
     } catch (error) {
         console.error('Mermaid render error:', error);
+        console.error('Graph definition:', graphDef);
         mermaidGraphEl.innerHTML = `<div class="placeholder">Graph render error: ${error.message}</div>`;
     }
 }
