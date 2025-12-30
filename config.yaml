@@ -73,7 +73,7 @@ mcp:
       navigator:
         enabled: true
         required: false  # Graceful degradation if navigator unavailable
-        container_name: "navigator-mcp"  # Use docker exec instead of docker run
+        container_name: "surf-mcp"  # Use docker exec instead of docker run
         timeout_ms: 30000
 
 # ==============================================================================

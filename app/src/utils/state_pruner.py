@@ -1,5 +1,4 @@
 # app/src/utils/state_pruner.py
-import html
 import json
 import os
 from typing import Dict, Any
@@ -89,8 +88,8 @@ def generate_success_report(report_data: SuccessReport) -> str:
                 continue
 
             # Send full content - UI handles scrolling
-            # HTML-escape to prevent breaking out of code blocks
-            content_str = html.escape(str(value))
+            # Note: No HTML escaping needed - markdown code fences handle content literally
+            content_str = str(value)
             artifacts_str += f"### 📄 {key}\n\n```\n{content_str}\n```\n\n"
     if not artifacts_str:
         artifacts_str = "No additional artifacts were generated."
