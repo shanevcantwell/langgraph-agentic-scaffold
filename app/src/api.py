@@ -299,6 +299,124 @@ async def cancel_run(run_id: str):
     return {"status": "Cancellation requested"}
 
 
+@app.get("/v1/graph/topology")
+def get_graph_topology():
+    """
+    Returns the static structure of the graph for UI visualization.
+    Exposes nodes (specialists) and edges (routing relationships).
+
+    Node types:
+    - router: The central routing hub
+    - core_infrastructure: End, archiver, critic (special graph roles)
+    - specialist: User-facing specialists that can be routed to
+    - mcp_only: Services accessible only via MCP (not graph nodes)
+
+    Edge types:
+    - conditional: Router's dynamic routing decisions
+    - completion: Specialist → Router/END based on task_is_complete
+    - terminal: END → graph termination
+    """
+    if not workflow_runner:
+        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
+
+    from .workflow.specialist_categories import SpecialistCategories
+    from .enums import CoreSpecialist
+
+    builder = workflow_runner.builder
+    specialists = builder.specialists
+    allowed_destinations = builder.allowed_destinations
+
+    # Build node list with categorization
+    nodes = []
+    router_name = CoreSpecialist.ROUTER.value
+    node_exclusions = SpecialistCategories.get_node_exclusions()
+
+    for name in specialists:
+        # Determine node type
+        if name == router_name:
+            node_type = "router"
+        elif name in SpecialistCategories.CORE_INFRASTRUCTURE:
+            node_type = "core_infrastructure"
+        elif name in node_exclusions:
+            node_type = "mcp_only"
+        else:
+            node_type = "specialist"
+
+        # Get basic config info for the node
+        spec_config = builder.config.get("specialists", {}).get(name, {})
+
+        nodes.append({
+            "id": name,
+            "type": node_type,
+            "description": spec_config.get("description", ""),
+            "has_llm": spec_config.get("llm_config") is not None,
+            "is_graph_node": name not in node_exclusions
+        })
+
+    # Build edge list representing the hub-and-spoke architecture
+    edges = []
+
+    # Router → all routable destinations (conditional edges)
+    for dest in allowed_destinations:
+        edges.append({
+            "source": router_name,
+            "target": dest,
+            "type": "conditional",
+            "label": "route"
+        })
+
+    # Collect subgraph exclusions for hub-spoke wiring
+    subgraph_exclusions = []
+    for subgraph in builder.subgraphs:
+        subgraph_exclusions.extend(subgraph.get_excluded_specialists())
+
+    hub_spoke_exclusions = SpecialistCategories.get_hub_spoke_exclusions(subgraph_exclusions)
+
+    # Specialists → Router/END (completion edges)
+    end_name = CoreSpecialist.END.value
+    for name in specialists:
+        if name in hub_spoke_exclusions or name in node_exclusions:
+            continue
+        # Each specialist can route back to router or to end
+        edges.append({
+            "source": name,
+            "target": router_name,
+            "type": "completion",
+            "label": "continue"
+        })
+        edges.append({
+            "source": name,
+            "target": end_name,
+            "type": "completion",
+            "label": "complete"
+        })
+
+    # END → terminal
+    edges.append({
+        "source": end_name,
+        "target": "__end__",
+        "type": "terminal",
+        "label": "terminate"
+    })
+
+    # Include subgraph info for richer visualization
+    subgraph_info = []
+    for subgraph in builder.subgraphs:
+        subgraph_info.append({
+            "name": type(subgraph).__name__,
+            "managed_specialists": subgraph.get_excluded_specialists(),
+            "router_excluded": subgraph.get_router_excluded_specialists() if hasattr(subgraph, 'get_router_excluded_specialists') else []
+        })
+
+    return {
+        "nodes": nodes,
+        "edges": edges,
+        "subgraphs": subgraph_info,
+        "entry_point": builder.entry_point,
+        "architecture": builder.config.get("architecture", "default")
+    }
+
+
 class ResumeRequest(BaseModel):
     """ADR-CORE-018: Request body for resuming interrupted workflows."""
     thread_id: str = Field(

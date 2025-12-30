@@ -376,17 +376,124 @@ function formatTimestamp() {
     return `[${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}]`;
 }
 
-function addThoughtStreamEntry(specialist, message, type = 'info') {
+/**
+ * Enhanced thought stream entry with semantic rendering
+ * @param {string} specialist - Source specialist name
+ * @param {string} message - Message content
+ * @param {string} type - Entry type: info, success, error, mcp, routing, reasoning, artifact, lifecycle
+ * @param {object} options - Additional options: { collapsible, service, method, params, target }
+ */
+function addThoughtStreamEntry(specialist, message, type = 'info', options = {}) {
     const timestamp = formatTimestamp();
-    const entry = { timestamp, specialist, message, type };
+    const entry = { timestamp, specialist, message, type, options };
     thoughtStreamEntries.push(entry);
 
-    // Create entry element
     const div = document.createElement('div');
-    div.className = `thought-entry thought-${type}`;
 
-    const typeIcon = type === 'error' ? '❌' : type === 'success' ? '✓' : type === 'mcp' ? '📡' : '💭';
-    div.innerHTML = `<span class="thought-time">${timestamp}</span> <span class="thought-specialist">${specialist.toUpperCase()}:</span> ${typeIcon} ${message}`;
+    // Build entry based on semantic type
+    switch (type) {
+        case 'routing':
+            div.className = 'thought-entry thought-routing';
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-badge badge-route">ROUTE</span>
+                <span class="thought-specialist">${specialist.toUpperCase()}</span>
+                <span class="thought-route-arrow">→</span>
+                <span class="thought-content">${options.target || message}</span>
+            `;
+            break;
+
+        case 'mcp':
+            div.className = 'thought-entry thought-mcp';
+            if (options.service && options.method) {
+                div.innerHTML = `
+                    <span class="thought-time">${timestamp}</span>
+                    <span class="thought-badge badge-mcp">MCP</span>
+                    <div class="thought-mcp-call">
+                        <span class="thought-mcp-service">${options.service}</span>
+                        <span class="thought-mcp-method">.${options.method}()</span>
+                        ${options.params ? `<span class="thought-mcp-params">${options.params}</span>` : ''}
+                    </div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <span class="thought-time">${timestamp}</span>
+                    <span class="thought-badge badge-mcp">MCP</span>
+                    <span class="thought-content">📡 ${message}</span>
+                `;
+            }
+            break;
+
+        case 'reasoning':
+            div.className = 'thought-entry thought-reasoning' + (options.collapsible ? ' collapsed' : '');
+            const toggleId = `reasoning-${Date.now()}`;
+            if (options.collapsible) {
+                div.innerHTML = `
+                    <span class="thought-time">${timestamp}</span>
+                    <span class="thought-badge badge-think">THINK</span>
+                    <span class="thought-specialist">${specialist.toUpperCase()}</span>
+                    <span class="thought-toggle" onclick="this.parentElement.classList.toggle('collapsed')">▶ ${message.split('\n')[0].substring(0, 50)}...</span>
+                    <div class="thought-content">${message.replace(/\n/g, '<br>')}</div>
+                `;
+            } else {
+                div.innerHTML = `
+                    <span class="thought-time">${timestamp}</span>
+                    <span class="thought-badge badge-think">THINK</span>
+                    <span class="thought-specialist">${specialist.toUpperCase()}:</span>
+                    <span class="thought-content">${message}</span>
+                `;
+            }
+            break;
+
+        case 'artifact':
+            div.className = 'thought-entry thought-artifact';
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-badge badge-artifact">ARTIFACT</span>
+                <span class="thought-specialist">${specialist.toUpperCase()}</span>
+                <span class="thought-content">📦 ${message}</span>
+            `;
+            break;
+
+        case 'lifecycle':
+            div.className = 'thought-entry thought-lifecycle';
+            const lifecycleIcon = message.includes('start') ? '▶' : message.includes('complete') || message.includes('end') ? '■' : '●';
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-badge badge-${message.includes('Error') ? 'error' : message.includes('complete') ? 'end' : 'start'}">${message.includes('complete') ? 'DONE' : 'SYS'}</span>
+                <span class="thought-content">${lifecycleIcon} ${message}</span>
+            `;
+            break;
+
+        case 'error':
+            div.className = 'thought-entry thought-error';
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-badge badge-error">ERROR</span>
+                <span class="thought-specialist">${specialist.toUpperCase()}:</span>
+                <span class="thought-content">❌ ${message}</span>
+            `;
+            break;
+
+        case 'success':
+            div.className = 'thought-entry thought-success';
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-badge badge-end">OK</span>
+                <span class="thought-specialist">${specialist.toUpperCase()}:</span>
+                <span class="thought-content">✓ ${message}</span>
+            `;
+            break;
+
+        default: // 'info' and others
+            div.className = `thought-entry thought-${type}`;
+            const typeIcon = type === 'error' ? '❌' : type === 'success' ? '✓' : '💭';
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-specialist">${specialist.toUpperCase()}:</span>
+                <span class="thought-content">${typeIcon} ${message}</span>
+            `;
+    }
 
     // Remove placeholder if exists
     if (thoughtStreamEl.querySelector('.placeholder')) {
@@ -396,7 +503,7 @@ function addThoughtStreamEntry(specialist, message, type = 'info') {
     thoughtStreamEl.appendChild(div);
     thoughtStreamEl.scrollTop = thoughtStreamEl.scrollHeight;
 
-    // Limit to last 100 entries (increased since we're merging MCP calls)
+    // Limit to last 100 entries
     if (thoughtStreamEntries.length > 100) {
         thoughtStreamEntries.shift();
         if (thoughtStreamEl.firstChild) {
@@ -496,12 +603,19 @@ function handleStreamEvent(event) {
     switch (event.type) {
         case 'workflow_start':
             logStatus(`► WORKFLOW STARTED`);
-            addThoughtStreamEntry('SYSTEM', 'Workflow initiated', 'info');
+            addThoughtStreamEntry('SYSTEM', 'Workflow initiated', 'lifecycle');
             break;
 
         case 'status_update':
             if (data.status) {
                 logStatus(`► ${data.status}`);
+                // Detect routing decisions in status updates
+                if (data.status.includes('→') || data.status.toLowerCase().includes('routing to')) {
+                    const targetMatch = data.status.match(/(?:→|routing to)\s*(\w+)/i);
+                    if (targetMatch) {
+                        addThoughtStreamEntry('ROUTER', data.status, 'routing', { target: targetMatch[1] });
+                    }
+                }
             }
             break;
 
@@ -510,7 +624,8 @@ function handleStreamEvent(event) {
             // Specialist/Node is starting execution
             if (source) {
                 addRoutingEntry(source);
-                addThoughtStreamEntry(source, 'Starting execution...', 'info');
+                const displayName = source.replace(/_specialist$/, '').replace(/_/g, ' ');
+                addThoughtStreamEntry(source, `${displayName} starting...`, 'lifecycle');
             }
             break;
 
@@ -518,24 +633,36 @@ function handleStreamEvent(event) {
         case 'specialist_end':
             // Specialist/Node completed execution
             if (source) {
-                addThoughtStreamEntry(source, 'Execution complete', 'success');
+                const displayName = source.replace(/_specialist$/, '').replace(/_/g, ' ');
+                addThoughtStreamEntry(source, `${displayName} complete`, 'success');
 
                 // Extract thought process from scratchpad (generic pattern)
                 if (data.scratchpad) {
+                    // Check for router_decision (routing event)
+                    if (data.scratchpad.router_decision) {
+                        const decision = data.scratchpad.router_decision;
+                        addThoughtStreamEntry('ROUTER', decision, 'routing', { target: decision });
+                    }
+
                     // Generic: display any key ending in _reasoning or _decision
                     Object.keys(data.scratchpad).forEach(key => {
-                        if (key.endsWith('_reasoning') || key.endsWith('_decision')) {
-                            const specialist = key.replace(/_reasoning$|_decision$/, '').toUpperCase().replace(/_/g, ' ');
-                            const value = data.scratchpad[key];
-                            // Handle multiline values
-                            const lines = String(value).split('\n');
-                            lines.forEach(line => {
-                                if (line.trim()) {
-                                    addThoughtStreamEntry(specialist, line.trim(), 'info');
-                                }
-                            });
+                        if (key.endsWith('_reasoning')) {
+                            const specialist = key.replace(/_reasoning$/, '').toUpperCase().replace(/_/g, ' ');
+                            const value = String(data.scratchpad[key]);
+                            // Use collapsible for long reasoning (> 100 chars or multiline)
+                            const isLong = value.length > 100 || value.includes('\n');
+                            if (isLong) {
+                                addThoughtStreamEntry(specialist, value, 'reasoning', { collapsible: true });
+                            } else {
+                                addThoughtStreamEntry(specialist, value, 'reasoning');
+                            }
+                        } else if (key.endsWith('_decision') && key !== 'router_decision') {
+                            // Non-router decisions as info
+                            const specialist = key.replace(/_decision$/, '').toUpperCase().replace(/_/g, ' ');
+                            addThoughtStreamEntry(specialist, data.scratchpad[key], 'info');
                         }
                     });
+
                     // Special case: facilitator_complete (boolean flag, not reasoning)
                     if (data.scratchpad.facilitator_complete) {
                         addThoughtStreamEntry('FACILITATOR', 'Context gathering complete', 'success');
@@ -550,7 +677,7 @@ function handleStreamEvent(event) {
                     Object.keys(data.artifacts).forEach(key => {
                         // Skip archive_report.md from artifacts display (goes to Final Response)
                         if (key !== 'archive_report.md') {
-                            addThoughtStreamEntry(source, `Generated artifact: ${key}`, 'success');
+                            addThoughtStreamEntry(source, key, 'artifact');
                         }
                     });
                 }
@@ -562,13 +689,17 @@ function handleStreamEvent(event) {
                 // NOTE: Routing entries are added via node_start events, not logs
                 // (to avoid duplicates since both events fire for each node)
 
-                // Detect MCP calls in logs - add to thought stream
+                // Detect MCP calls in logs - add to thought stream with structured display
                 if (data.message.includes('MCP') || data.message.includes('Facilitator: Executing action')) {
-                    // Try to extract MCP call info
+                    // Try to extract MCP call info - pattern: service.method(params)
                     const mcpMatch = data.message.match(/(\w+_specialist)\.(\w+)\((.*?)\)/);
                     if (mcpMatch) {
-                        const [_, service, func, params] = mcpMatch;
-                        addThoughtStreamEntry('MCP', `📡 ${service}.${func}(${params})`, 'mcp');
+                        const [_, service, method, params] = mcpMatch;
+                        addThoughtStreamEntry('MCP', `${service}.${method}`, 'mcp', {
+                            service: service.replace(/_specialist$/, ''),
+                            method: method,
+                            params: params || null
+                        });
                     } else if (data.message.includes('Executing action')) {
                         addThoughtStreamEntry('FACILITATOR', data.message.split('Facilitator: ')[1] || data.message, 'info');
                     }
@@ -578,7 +709,7 @@ function handleStreamEvent(event) {
 
         case 'error':
             logStatus(`❌ ERROR: ${data.error}`);
-            addThoughtStreamEntry('SYSTEM', `ERROR: ${data.error}`, 'error');
+            addThoughtStreamEntry('SYSTEM', data.error, 'error');
             if (data.error_report) {
                 archiveOutputEl.innerHTML = marked.parse(`## ❌ Error Report\n\n${data.error_report}`);
             }
@@ -586,7 +717,7 @@ function handleStreamEvent(event) {
 
         case 'workflow_end':
             logStatus(`► WORKFLOW COMPLETE`);
-            addThoughtStreamEntry('SYSTEM', 'Workflow completed successfully', 'success');
+            addThoughtStreamEntry('SYSTEM', 'Workflow completed successfully', 'lifecycle');
 
             console.log('[workflow_end] Received data:', data);
             console.log('[workflow_end] Archive exists:', !!data.archive);
@@ -639,11 +770,160 @@ function addRoutingEntry(node) {
 function updateSpecialistGrid(nodeName) {
     // Deactivate all
     document.querySelectorAll('.spec-node').forEach(el => el.classList.remove('active'));
-    
+
     // Activate current if exists
     const el = document.getElementById(`node-${nodeName}`);
     if (el) {
         el.classList.add('active');
+    }
+
+    // Also highlight in Mermaid graph if visible
+    highlightMermaidNode(nodeName);
+}
+
+// ============================================================================
+// MERMAID GRAPH VISUALIZATION
+// ============================================================================
+
+let topologyData = null;
+let graphViewActive = false;
+let mermaidRenderCount = 0;
+
+const toggleGraphViewBtn = document.getElementById('toggleGraphView');
+const graphViewContainer = document.getElementById('graphViewContainer');
+const gridViewContainer = document.getElementById('gridViewContainer');
+const mermaidGraphEl = document.getElementById('mermaidGraph');
+
+// Toggle between grid and graph view
+if (toggleGraphViewBtn) {
+    toggleGraphViewBtn.addEventListener('click', async () => {
+        graphViewActive = !graphViewActive;
+        toggleGraphViewBtn.classList.toggle('active', graphViewActive);
+
+        if (graphViewActive) {
+            graphViewContainer.style.display = 'block';
+            gridViewContainer.style.display = 'none';
+
+            // Fetch and render topology if not already loaded
+            if (!topologyData) {
+                await fetchAndRenderTopology();
+            }
+        } else {
+            graphViewContainer.style.display = 'none';
+            gridViewContainer.style.display = 'grid';
+        }
+    });
+}
+
+async function fetchAndRenderTopology() {
+    try {
+        mermaidGraphEl.innerHTML = '<div class="placeholder">Loading topology...</div>';
+
+        const response = await fetch(`${API_BASE}/graph/topology`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        topologyData = await response.json();
+        await renderMermaidGraph(topologyData);
+
+    } catch (error) {
+        console.error('Failed to fetch topology:', error);
+        mermaidGraphEl.innerHTML = `<div class="placeholder">Failed to load topology: ${error.message}</div>`;
+    }
+}
+
+async function renderMermaidGraph(data) {
+    if (!window.mermaid) {
+        console.warn('Mermaid not loaded yet');
+        mermaidGraphEl.innerHTML = '<div class="placeholder">Mermaid loading...</div>';
+        return;
+    }
+
+    // Build Mermaid flowchart definition
+    let graphDef = 'flowchart TD\n';
+
+    // Style classes
+    graphDef += '    classDef router fill:#FF9F1C,stroke:#fff,stroke-width:2px,color:#1a1a2e\n';
+    graphDef += '    classDef core fill:#2EC4B6,stroke:#fff,stroke-width:1px,color:#1a1a2e\n';
+    graphDef += '    classDef specialist fill:#242442,stroke:#2EC4B6,stroke-width:1px,color:#FFECC2\n';
+    graphDef += '    classDef terminal fill:#E74C3C,stroke:#fff,stroke-width:2px,color:#fff\n';
+
+    // Collect subgraph members for grouping
+    const subgraphMembers = new Set();
+    data.subgraphs.forEach(sg => {
+        sg.managed_specialists.forEach(s => subgraphMembers.add(s));
+    });
+
+    // Add nodes with simplified IDs (remove _specialist suffix for readability)
+    // Prefix with 'n_' to avoid Mermaid reserved words like 'end', 'graph', 'subgraph'
+    const nodeIdMap = {};
+    data.nodes.forEach(node => {
+        if (!node.is_graph_node) return; // Skip MCP-only nodes
+
+        const shortId = 'n_' + node.id.replace(/_specialist$/, '').replace(/_/g, '_');
+        const displayName = node.id.replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase();
+        nodeIdMap[node.id] = shortId;
+
+        // Determine class based on node type
+        let nodeClass = 'specialist';
+        if (node.type === 'router') nodeClass = 'router';
+        else if (node.type === 'core_infrastructure') nodeClass = 'core';
+
+        graphDef += `    ${shortId}["${displayName}"]:::${nodeClass}\n`;
+    });
+
+    // Add terminal node
+    graphDef += '    __end__((END)):::terminal\n';
+    nodeIdMap['__end__'] = '__end__';
+
+    // Add edges (only router -> specialists to avoid visual clutter)
+    // Show hub-and-spoke: router fans out, specialists return to router or end
+    const routerEdges = data.edges.filter(e => e.type === 'conditional');
+    const completionEdges = data.edges.filter(e => e.type === 'completion' && e.label === 'complete');
+
+    routerEdges.forEach(edge => {
+        const sourceId = nodeIdMap[edge.source];
+        const targetId = nodeIdMap[edge.target];
+        if (sourceId && targetId) {
+            graphDef += `    ${sourceId} --> ${targetId}\n`;
+        }
+    });
+
+    // Add completion edges to END only (to show the spoke pattern)
+    completionEdges.forEach(edge => {
+        const sourceId = nodeIdMap[edge.source];
+        const targetId = nodeIdMap[edge.target];
+        if (sourceId && targetId) {
+            graphDef += `    ${sourceId} -.-> ${targetId}\n`;
+        }
+    });
+
+    // Render the graph
+    try {
+        mermaidRenderCount++;
+        const { svg } = await window.mermaid.render(`mermaid-graph-${mermaidRenderCount}`, graphDef);
+        mermaidGraphEl.innerHTML = svg;
+    } catch (error) {
+        console.error('Mermaid render error:', error);
+        mermaidGraphEl.innerHTML = `<div class="placeholder">Graph render error: ${error.message}</div>`;
+    }
+}
+
+function highlightMermaidNode(nodeName) {
+    // Try to find and highlight the active node in the Mermaid SVG
+    // Must match the 'n_' prefix used in renderMermaidGraph
+    const shortId = 'n_' + nodeName.replace(/_specialist$/, '').replace(/_/g, '_');
+
+    // Remove previous highlights
+    mermaidGraphEl.querySelectorAll('.node').forEach(node => {
+        node.classList.remove('active');
+    });
+
+    // Find and highlight the matching node
+    // Mermaid generates nodes with id like "flowchart-shortId-0"
+    const nodeEl = mermaidGraphEl.querySelector(`[id*="${shortId}"]`);
+    if (nodeEl) {
+        const nodeGroup = nodeEl.closest('.node') || nodeEl;
+        nodeGroup.classList.add('active');
     }
 }
 

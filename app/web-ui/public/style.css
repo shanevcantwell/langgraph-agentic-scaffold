@@ -5,7 +5,9 @@
     --bg-color: #FEF9E7; /* Light Cream */
     --panel-bg: #FFFFFF; /* White */
     --alert-color: #C0392B; /* Pomegranate */
+    --text-dim: #888; /* Dimmed text */
     --font-main: 'VT323', monospace;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
     --scanline-opacity: 0.05;
     --overlay-opacity: 0.1;
     --text-shadow: none;
@@ -13,25 +15,27 @@
 }
 
 [data-theme="dark"] {
-    /* Mango-LASsi (Dark - Toned Down) */
-    --primary-color: #F5CBA7; /* Pale Peach */
-    --secondary-color: #BA4A00; /* Dark Orange */
-    --bg-color: #2E1F08; /* Deep Warm Brown */
-    --panel-bg: #3D290D; /* Darker Brown */
-    --alert-color: #E6B0AA; /* Soft Red */
-    --scanline-opacity: 0.1;
-    --overlay-opacity: 0.2;
-    --text-shadow: 0 0 5px rgba(245, 203, 167, 0.3);
-    --box-shadow-color: rgba(245, 203, 167, 0.1);
+    /* Mango LASsi (Dark - Gemini Glass Cockpit spec) */
+    --primary-color: #FF9F1C; /* Ripe Mango */
+    --secondary-color: #2EC4B6; /* Safety Teal */
+    --bg-color: #1a1a2e; /* Deep Navy Bedrock */
+    --panel-bg: #242442; /* Lighter Navy Panel */
+    --alert-color: #E74C3C; /* Alert Red */
+    --text-dim: #9aaabf; /* Soft Blue-Grey (for secondary text) */
+    --scanline-opacity: 0.05;
+    --overlay-opacity: 0.15;
+    --text-shadow: 0 0 8px rgba(255, 159, 28, 0.4);
+    --box-shadow-color: rgba(255, 159, 28, 0.15);
 }
 
 [data-theme="terminal"] {
-    /* Classic Terminal (Green) */
+    /* Classic Terminal (Green) - Retro CRT */
     --primary-color: #33ff33;
     --secondary-color: #1a4d1a;
     --bg-color: #0a0a0a;
     --panel-bg: #0d0d0d;
     --alert-color: #ff9933;
+    --text-dim: #1a4d1a; /* Darker green for dimmed text */
     --scanline-opacity: 1;
     --overlay-opacity: 1;
     --text-shadow: 0 0 10px rgba(51, 255, 51, 0.8);
@@ -322,7 +326,7 @@ pre, .markdown-body pre {
     word-wrap: break-word;       /* Internet Explorer 5.5+ */
     position: relative;          /* For button positioning */
     color: var(--primary-color);
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
 }
 
 /* Code Block Toolbar */
@@ -351,7 +355,7 @@ pre, .markdown-body pre {
 }
 
 .markdown-body code {
-    font-family: 'Courier New', Courier, monospace;
+    font-family: var(--font-mono);
     background: var(--panel-bg);
     padding: 2px 4px;
     border: 1px solid var(--secondary-color);
@@ -494,7 +498,7 @@ pre, .markdown-body pre {
 }
 
 .thought-time {
-    opacity: 0.6;
+    color: var(--text-dim);
     margin-right: 8px;
     font-size: 0.85em;
 }
@@ -515,6 +519,99 @@ pre, .markdown-body pre {
         transform: translateX(0);
     }
 }
+
+/* Enhanced Thought Entry Types */
+.thought-entry.thought-routing {
+    border-left-color: var(--primary-color);
+    background: rgba(255, 159, 28, 0.08);
+}
+
+.thought-entry.thought-routing .thought-route-arrow {
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.thought-entry.thought-reasoning {
+    border-left-color: var(--text-dim);
+    background: rgba(154, 170, 191, 0.05);
+    font-size: 0.85em;
+    color: var(--text-dim);
+}
+
+.thought-entry.thought-reasoning.collapsed .thought-content {
+    display: none;
+}
+
+.thought-entry.thought-reasoning .thought-toggle {
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.7;
+    font-size: 0.9em;
+}
+
+.thought-entry.thought-reasoning .thought-toggle:hover {
+    opacity: 1;
+}
+
+.thought-entry.thought-artifact {
+    border-left-color: #9b59b6;
+    background: rgba(155, 89, 182, 0.08);
+}
+
+.thought-entry.thought-mcp {
+    border-left-color: #3498db;
+    background: rgba(52, 152, 219, 0.08);
+}
+
+.thought-mcp-call {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.thought-mcp-service {
+    font-weight: bold;
+    color: #3498db;
+}
+
+.thought-mcp-method {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.9em;
+    color: var(--secondary-color);
+}
+
+.thought-mcp-params {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.85em;
+    color: var(--text-dim);
+    padding-left: 12px;
+    border-left: 1px dashed var(--text-dim);
+    margin-top: 2px;
+}
+
+.thought-entry.thought-lifecycle {
+    border-left-color: var(--secondary-color);
+    font-style: italic;
+    opacity: 0.85;
+}
+
+.thought-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-right: 6px;
+    text-transform: uppercase;
+}
+
+.thought-badge.badge-route { background: var(--primary-color); color: var(--bg-color); }
+.thought-badge.badge-mcp { background: #3498db; color: #fff; }
+.thought-badge.badge-think { background: var(--text-dim); color: var(--bg-color); }
+.thought-badge.badge-artifact { background: #9b59b6; color: #fff; }
+.thought-badge.badge-start { background: var(--secondary-color); color: var(--bg-color); }
+.thought-badge.badge-end { background: #27ae60; color: #fff; }
+.thought-badge.badge-error { background: var(--alert-color); color: #fff; }
 
 /* ============================================================================ */
 /* ENHANCED NEURAL GRID */
@@ -639,5 +736,81 @@ pre, .markdown-body pre {
     color: var(--bg-color);
     opacity: 1;
     font-weight: bold;
+}
+
+/* ============================================================================ */
+/* MERMAID GRAPH VISUALIZATION */
+/* ============================================================================ */
+
+.toggle-btn {
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    padding: 2px 8px;
+    font-size: 0.8em;
+    cursor: pointer;
+    margin-left: 10px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.toggle-btn.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.graph-view-container {
+    flex: 1;
+    min-height: 200px;
+    max-height: 400px;
+    overflow: auto;
+    background: var(--bg-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.mermaid-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+}
+
+.mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Mermaid node styling overrides */
+.mermaid-container .node rect,
+.mermaid-container .node circle,
+.mermaid-container .node ellipse,
+.mermaid-container .node polygon {
+    stroke: var(--secondary-color) !important;
+    stroke-width: 2px !important;
+}
+
+.mermaid-container .node.active rect,
+.mermaid-container .node.active circle {
+    stroke: var(--primary-color) !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 8px var(--primary-color));
+}
+
+.mermaid-container .edgePath path {
+    stroke: var(--secondary-color) !important;
+    stroke-width: 1.5px !important;
+}
+
+.mermaid-container .edgeLabel {
+    background-color: var(--panel-bg) !important;
+    color: var(--text-dim) !important;
 }
 

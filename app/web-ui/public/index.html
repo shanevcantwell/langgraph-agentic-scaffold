@@ -5,8 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>V.E.G.A.S. TERMINAL</title>
     <link rel="stylesheet" href="style.css">
-    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=VT323&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'base',
+            themeVariables: {
+                primaryColor: '#FF9F1C',
+                primaryTextColor: '#1a1a2e',
+                primaryBorderColor: '#2EC4B6',
+                lineColor: '#2EC4B6',
+                secondaryColor: '#242442',
+                tertiaryColor: '#1a1a2e',
+                background: '#1a1a2e',
+                mainBkg: '#242442',
+                nodeBorder: '#2EC4B6',
+                clusterBkg: '#16213e',
+                clusterBorder: '#FF9F1C',
+                titleColor: '#FFECC2',
+                edgeLabelBackground: '#242442'
+            }
+        });
+        window.mermaid = mermaid;
+    </script>
 </head>
 <body>
     <div class="scanline"></div>
@@ -71,8 +94,13 @@
                 </section>
 
                 <section class="panel specialist-panel">
-                    <h3>🧠 NEURAL GRID</h3>
-                    <div class="specialist-grid">
+                    <h3>🧠 NEURAL GRID <button id="toggleGraphView" class="toggle-btn" title="Toggle Graph/Grid View">◐</button></h3>
+                    <div id="graphViewContainer" class="graph-view-container" style="display: none;">
+                        <div id="mermaidGraph" class="mermaid-container">
+                            <div class="placeholder">Loading topology...</div>
+                        </div>
+                    </div>
+                    <div id="gridViewContainer" class="specialist-grid">
                         <div class="spec-node" id="node-triage_architect">TRIAGE</div>
                         <div class="spec-node" id="node-facilitator_specialist">FACILITATOR</div>
                         <div class="spec-node" id="node-router_specialist">ROUTER</div>
