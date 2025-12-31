@@ -7,6 +7,8 @@
 [](https://github.com/psf/black)
 
 A foundational scaffold for building robust, modular, and scalable multi-agent systems using LangGraph. This project provides a production-ready architecture that moves beyond simple scripts to a fully-fledged, API-driven application. It is designed to be the best possible starting point for any LangGraph-based agentic system.
+---
+<img width="1955" height="1096" alt="{FD3D8427-8962-4787-8AD0-13F00AF671AC}" src="https://github.com/user-attachments/assets/315e79c0-e7eb-40d3-b4b6-0252c649194c" />
 
 ### 🎥 Video Briefings
 
