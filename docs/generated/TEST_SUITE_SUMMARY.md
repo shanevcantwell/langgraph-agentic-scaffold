@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 639 |
-| Integration | 26 | 188 |
-| Other | 8 | 101 |
-| **Total** | **102** | **928** |
+| Unit | 69 | 648 |
+| Integration | 28 | 205 |
+| Other | 8 | 102 |
+| **Total** | **105** | **955** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -252,6 +252,8 @@
   - *Flow 6.1: Text Summary*
 - **`test_flow_6_2_data_extraction`**
   - *Flow 6.2: Data Extraction*
+- **`test_flow_7_0_simple_image_analysis`**
+  - *Flow 7.0: Simple Image Analysis (Exit Interview Pattern)*
 - **`test_flow_7_1_ui_mockup_to_html`**
   - *Flow 7.1: UI Mockup to HTML Generation*
 - **`test_invariant_triage_entry`**
@@ -267,6 +269,44 @@
 
 ## `app/tests/integration/test_gradio_integration.py`
 
+
+## `app/tests/integration/test_image_specialist_streaming.py`
+
+- **`test_image_base64`**
+  - *Creates a minimal valid PNG image encoded in base64.*
+- **`test_image_specialist_appears_in_status_updates`**
+  - *CORE TEST: Verify image_specialist appears in SSE status updates.*
+- **`test_image_specialist_status_before_default_responder`**
+  - *Verify image_specialist status appears BEFORE default_responder.*
+- **`test_image_description_artifact_in_final_state`**
+  - *Verify image_description artifact is in final state.*
+- **`test_no_phantom_router_for_image_workflow`**
+  - *Verify router_specialist does NOT appear in image workflow.*
+- **`test_image_specialist_node_start_event`**
+  - *Verify NODE_START event is emitted for image_specialist.*
+- **`test_image_specialist_node_end_event`**
+  - *Verify NODE_END event is emitted for image_specialist.*
+- **`test_full_event_trace_for_image`**
+  - *Captures and reports the full event trace for an image workflow.*
+- **`test_compare_stream_and_events_endpoints`**
+  - *Compare output from both streaming endpoints to identify discrepancies.*
+- **`test_all_executed_specialists_appear_in_stream`**
+  - *Verify ALL specialists that execute appear in the stream.*
+
+## `app/tests/integration/test_image_workflow_quality.py`
+
+- **`test_image_base64`**
+  - *Creates a minimal valid PNG image encoded in base64.*
+- **`test_image_description_artifact_is_produced`**
+  - *BASELINE: Verify image_specialist produces the image_description artifact.*
+- **`test_final_response_uses_image_description`**
+  - *CRITICAL: Final response should USE the image_description, not ask for the image.*
+- **`test_final_response_contains_description_content`**
+  - *QUALITY: Final response should contain substantive content from the description.*
+- **`test_routing_does_not_go_to_default_responder_after_image`**
+  - *After image_specialist produces description, should NOT route to default_responder.*
+- **`test_task_completes_after_image_analysis`**
+  - *Image analysis workflow should complete (not loop indefinitely).*
 
 ## `app/tests/integration/test_installer_scripts.py`
 
@@ -660,6 +700,8 @@
   - *Test graph execution raises error if no LLM adapter.*
 - **`test_execute_logic_describe_error`**
   - *Test graph execution handles describe errors gracefully.*
+- **`test_execute_logic_success_sets_forbidden_specialists`**
+  - *Test that successful execution also sets forbidden_specialists (not me pattern).*
 
 ## `app/tests/specialists/test_router_specialist.py`
 
@@ -1303,6 +1345,14 @@
   - *Tests that validation passes when Playwright is available.*
 - **`test_validate_dependencies_ignores_unbound_providers`**
   - *Tests that validation only checks providers that are actually bound to specialists.*
+- **`test_ping_provider_unknown_type`**
+  - *Tests that ping_provider handles unknown provider types gracefully.*
+- **`test_ping_provider_success`**
+  - *Tests successful ping returns correct result structure.*
+- **`test_ping_provider_connection_error`**
+  - *Tests that ping_provider handles connection errors gracefully.*
+- **`test_ping_provider_invoke_error`**
+  - *Tests that ping_provider handles invocation errors gracefully.*
 
 ## `app/tests/unit/test_lmstudio_adapter.py`
 
@@ -1316,6 +1366,16 @@
   - *Tests that LLMInvocationError is raised when the client call fails.*
 - **`test_invoke_raises_proxy_error_on_connection_issues`**
   - *Tests that the LMStudio adapter correctly catches various connection-related*
+- **`test_image_injection_skips_empty_data`**
+  - *Tests that empty string image_data is treated as 'no image' (skips injection).*
+- **`test_image_injection_rejects_whitespace_only_data`**
+  - *Tests that whitespace-only image data raises ValueError.*
+- **`test_image_injection_rejects_oversized_image`**
+  - *Tests that oversized image data raises ValueError with helpful message.*
+- **`test_image_injection_accepts_valid_sized_image`**
+  - *Tests that valid-sized image data passes size check and proceeds to injection.*
+- **`test_image_injection_rejects_empty_message_content`**
+  - *Tests that empty message content raises ValueError when injecting image.*
 
 ## `app/tests/unit/test_mcp_client.py`
 
@@ -2046,6 +2106,9 @@
   - *Test that the specialist treats uploaded content as context, not target.*
 - **`test_text_analysis_preserves_user_message`**
   - *Test that the user's original message is preserved in the context.*
+
+## `app/tests/unit/test_thought_stream_events.py`
+
 
 ## `app/tests/unit/test_tiered_chat_state_management.py`
 

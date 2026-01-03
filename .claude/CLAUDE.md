@@ -283,6 +283,53 @@ docker exec langgraph-app pytest app/tests/integration/ -v --tb=short \
 
 Never dismiss integration failures as "environmental" without confirming Docker context.
 
+### Test Timeouts - CRITICAL
+
+**Maximum test runtime: 15 minutes.** If tests run longer, something is wrong.
+
+Typical turnaround times:
+- Unit tests: ~15 seconds (21 tests)
+- Single integration test: 30-90 seconds per LLM call
+- Full integration suite: 10-15 minutes
+
+If a test hangs, kill it and investigate. Don't wait indefinitely.
+
+---
+
+## Observability
+
+### Archive System - PRIMARY DEBUG TOOL
+
+**`./logs/archive/` contains the ground truth for what actually executed.**
+
+Every workflow run produces a timestamped zip archive:
+```
+./logs/archive/run_YYYYMMDD_HHMMSS_<hash>.zip
+```
+
+Archive contents:
+- `manifest.json` - routing_history, timestamps, run metadata
+- `llm_traces.jsonl` - per-specialist execution with latency_ms
+- `final_state.json` - accumulated state at workflow end
+- `artifacts/` - all produced artifacts
+
+**When debugging UI issues:**
+1. Find the archive for the problematic run
+2. Compare `routing_history` (what actually ran) vs UI display
+3. Check `llm_traces.jsonl` for execution timing and errors
+
+Example investigation:
+```bash
+# List recent archives
+ls -la ./logs/archive/*.zip | tail -5
+
+# Extract and inspect
+unzip -l ./logs/archive/run_20260101_075556_4aa7cfa9.zip
+unzip -p ./logs/archive/run_20260101_075556_4aa7cfa9.zip manifest.json | jq .
+```
+
+**The archive is authoritative.** If the UI shows something different from the archive, the bug is in the UI layer, not the execution layer.
+
 ---
 
 ## Specialist Development
