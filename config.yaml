@@ -65,9 +65,16 @@ mcp:
     tracing_enabled: true
     # Configuration for individual external MCP services
     services:
-      # NOTE: mcp/filesystem removed - using internal FileSpecialist instead
+      # Filesystem MCP - Official @modelcontextprotocol/server-filesystem
+      # Provides: directory_tree, search_files, read_multiple_files, edit_file
+      # Infrastructure defined in docker-compose.yml (profile: filesystem)
+      filesystem:
+        enabled: true
+        required: false  # Graceful degradation if container not running
+        container_name: "filesystem-mcp"
+        timeout_ms: 30000
 
-      # Navigator MCP - Tree traversal for filesystem and browser (ADR-CORE-027)
+      # Navigator MCP - Browser automation with Fara visual grounding (ADR-CORE-027)
       # Infrastructure defined in docker-compose.yml, secrets in .env
       # This section only controls whether/how LAS connects to the service
       navigator:
@@ -133,7 +140,7 @@ specialists:
   file_operations_specialist:
     type: "llm"
     prompt_file: "file_operations_prompt.md"
-    description: "User interface for file system operations. Interprets user requests (list files, read, write, etc.) and executes via MCP. Use this for any file system task (e.g., 'list files', 'read config.yaml', 'create notes.txt')."
+    description: "Executes file system CRUD operations: list, read, write, create, delete, rename, move. Use for 'list files in X', 'read config.yaml', 'create notes.txt', 'delete temp.txt'."
 
   navigator_specialist:
     type: "hybrid"
@@ -242,7 +249,7 @@ specialists:
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"
-    description: "Handles conversational questions and informational queries. Use this when the user seeks explanations, knowledge, or dialogue. Examples: 'What is Python?', 'How does X work?', 'Tell me about Y', 'Explain Z'. For tasks that require action (building, analyzing, modifying), use task-specific specialists instead. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
+    description: "Handles conversational questions, informational queries, and reasoning about gathered context. Use for explanations, dialogue, counting, comparing, summarizing observations. Examples: 'What is Python?', 'How many files?', 'Compare these results'. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
     # SYSTEM PROMPT BEHAVIOR:
     # - TIERED CHAT ENABLED: This specialist is NEVER directly executed.
     #   Routing to 'chat_specialist' triggers progenitor fan-out instead.
