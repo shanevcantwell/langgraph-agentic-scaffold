@@ -142,11 +142,6 @@ specialists:
     prompt_file: "file_operations_prompt.md"
     description: "Executes file system CRUD operations: list, read, write, create, delete, rename, move. Use for 'list files in X', 'read config.yaml', 'create notes.txt', 'delete temp.txt'."
 
-  navigator_specialist:
-    type: "hybrid"
-    prompt_file: "navigator_specialist_prompt.md"
-    description: "Handles complex file operations requiring tree traversal: recursive directory deletion, glob pattern search, and bulk operations. Use this for 'delete folder X and all contents', 'find all .py files', or operations spanning multiple directories."
-
   navigator_browser_specialist:
     type: "hybrid"
     prompt_file: "navigator_browser_specialist_prompt.md"

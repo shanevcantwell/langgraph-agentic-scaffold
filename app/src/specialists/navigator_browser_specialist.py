@@ -530,26 +530,88 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
     # Main Execution
     # =========================================================================
 
+    def _execute_autonomous(self, session_id: str, goal: str) -> Dict[str, Any]:
+        """Execute multi-step autonomous browser goal via surf-mcp.
+
+        Phase 1: All browser tasks go through act_autonomous. Fara handles
+        the multi-step execution - deciding what to click, type, navigate, etc.
+
+        Args:
+            session_id: Active browser session
+            goal: Natural language goal (e.g., "go to google.com and search for 'test'")
+
+        Returns:
+            Result dict with messages and optional artifacts
+        """
+        try:
+            result = sync_call_external_mcp(
+                self.external_mcp_client,
+                "navigator",
+                "act_autonomous",
+                {
+                    "session_id": session_id,
+                    "driver": "web",
+                    "goal": goal
+                }
+            )
+            parsed = self._parse_result(result)
+
+            # Extract useful info from autonomous result
+            if "error" in parsed:
+                return {
+                    "messages": [AIMessage(content=f"Browser task failed: {parsed['error']}")]
+                }
+
+            # Build response from autonomous execution
+            steps_taken = parsed.get("steps", [])
+            final_status = parsed.get("status", "unknown")
+            step_count = len(steps_taken) if steps_taken else parsed.get("step_count", 0)
+
+            # Format response
+            response_parts = [f"Browser task completed ({step_count} steps)."]
+
+            if final_status == "terminated":
+                response_parts.append("Task completed successfully.")
+            elif final_status == "max_steps":
+                response_parts.append("Reached maximum steps - task may be incomplete.")
+
+            # Include final page info if available
+            if parsed.get("final_url"):
+                response_parts.append(f"Final URL: {parsed['final_url']}")
+
+            return {
+                "messages": [AIMessage(content="\n".join(response_parts))],
+                "artifacts": {
+                    "browser_operation": {
+                        "type": "autonomous",
+                        "goal": goal,
+                        "steps": step_count,
+                        "status": final_status,
+                        "result": parsed
+                    }
+                }
+            }
+
+        except Exception as e:
+            logger.error(f"Autonomous browser execution failed: {e}")
+            return {
+                "messages": [AIMessage(content=f"Browser task failed: {e}")]
+            }
+
     def _execute_logic(self, state: Dict[str, Any], persist_session: bool = True) -> Dict[str, Any]:
-        """Execute browser operation based on user request.
+        """Execute browser task via autonomous multi-step execution.
+
+        Phase 1 Implementation:
+        All browser requests go through act_autonomous. The user's natural language
+        goal is passed directly to surf-mcp, which uses Fara for visual grounding
+        and multi-step execution. No operation detection or parsing here.
 
         Args:
             state: Graph state with messages and artifacts
             persist_session: If True, session is persisted for multi-turn conversations
-                           If False, session is destroyed after operation (default True)
 
-        Session Persistence (ADR-CORE-027 Phase 4):
-        When persist_session=True:
-        - Checks artifacts for existing session_id
-        - Validates existing session is still alive
-        - Creates new session if needed
-        - Stores session_id in returned artifacts
-        - Session remains alive for subsequent invocations
-
-        To end a persistent session, either:
-        - Call cleanup_session() explicitly
-        - Let session timeout naturally (default 1 hour)
-        - Start with persist_session=False
+        Phase 2 (Future - see ADR):
+        Expose granular control for specialists that need fine-grained browser ops.
         """
         # Runtime check: external_mcp_client must be injected
         if not hasattr(self, 'external_mcp_client') or not self.external_mcp_client:
@@ -559,17 +621,17 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
         if not self._perform_pre_flight_checks():
             return self._handle_browser_unavailable(state)
 
-        # Extract user request
+        # Extract user request (the goal for autonomous execution)
         messages = state.get("messages", [])
-        request = ""
+        goal = ""
         for msg in reversed(messages):
             if isinstance(msg, HumanMessage):
-                request = msg.content
+                goal = msg.content
                 break
 
-        if not request:
+        if not goal:
             return {
-                "messages": [AIMessage(content="No browser request provided.")]
+                "messages": [AIMessage(content="No browser task provided.")]
             }
 
         # Get or create session
@@ -583,32 +645,18 @@ class NavigatorBrowserSpecialist(BaseSpecialist):
             }
 
         try:
-            # Detect operation type
-            operation = self._detect_operation(request)
-
-            # Route to handler
-            if operation == "navigate":
-                result = self._handle_navigate_request(session_id, request)
-            elif operation == "click":
-                result = self._handle_click_request(session_id, request)
-            elif operation == "type":
-                result = self._handle_type_request(session_id, request)
-            elif operation == "read":
-                result = self._handle_read_request(session_id, request)
-            elif operation == "snapshot":
-                result = self._handle_snapshot_request(session_id, request)
-            else:
-                result = self._handle_unknown_request(session_id, request)
+            # Phase 1: All requests go through autonomous execution
+            result = self._execute_autonomous(session_id, goal)
 
             # Merge session persistence into result
             return self._merge_result_with_session(result, session_id, persist=persist_session)
 
         except Exception as e:
-            logger.error(f"Browser operation failed: {e}")
+            logger.error(f"Browser task failed: {e}")
             if not persist_session:
                 self._destroy_session(session_id)
             return {
-                "messages": [AIMessage(content=f"Browser operation failed: {e}")]
+                "messages": [AIMessage(content=f"Browser task failed: {e}")]
             }
 
         finally:

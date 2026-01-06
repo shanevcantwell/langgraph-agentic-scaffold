@@ -14,11 +14,8 @@ Prerequisites:
 These tests require the surf-mcp container to be running.
 """
 import pytest
-import asyncio
 import json
-import os
-from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from app.src.mcp.external_client import ExternalMcpClient
 from app.src.utils.config_loader import ConfigLoader
@@ -33,12 +30,6 @@ def config() -> Dict[str, Any]:
     """Load configuration from config.yaml."""
     config_loader = ConfigLoader()
     return config_loader.get_config()
-
-
-@pytest.fixture
-def workspace_path() -> str:
-    """Get workspace path from environment or use default."""
-    return os.getenv("WORKSPACE_PATH", "/app/workspace")
 
 
 @pytest.fixture
@@ -176,24 +167,16 @@ class TestNavigatorConnection:
         tools = await connected_navigator_client.list_tools("navigator")
 
         assert isinstance(tools, list)
-        assert len(tools) > 10  # Navigator has many tools
+        assert len(tools) > 5  # surf-mcp is browser-focused
 
-        # Filesystem tools
-        assert "goto" in tools
-        assert "list" in tools
-        assert "read" in tools
-        assert "write" in tools
-        assert "delete" in tools
-        assert "find" in tools
-
-        # Session tools
+        # Session tools (always present)
         assert "session_create" in tools
         assert "session_destroy" in tools
 
-        # Browser tools (may or may not be present depending on config)
-        browser_tools = ["click", "type", "scroll", "act", "snapshot"]
-        browser_available = any(t in tools for t in browser_tools)
-        print(f"Browser tools available: {browser_available}")
+        # Browser tools (surf-mcp is browser-only since v0.5.0)
+        browser_tools = ["click", "type", "scroll", "act", "act_autonomous", "snapshot", "goto"]
+        for tool in browser_tools:
+            assert tool in tools, f"Expected browser tool '{tool}' not found in {tools}"
 
 
 # =============================================================================
@@ -201,21 +184,20 @@ class TestNavigatorConnection:
 # =============================================================================
 
 class TestNavigatorSessions:
-    """Test navigator session lifecycle."""
+    """Test navigator session lifecycle (browser-only since surf-mcp v0.5.0)."""
 
     @pytest.mark.asyncio
-    async def test_create_and_destroy_filesystem_session(self, connected_navigator_client):
-        """Test creating and destroying a filesystem session."""
-        # Create session
+    async def test_create_and_destroy_browser_session(self, connected_navigator_client):
+        """Test creating and destroying a browser session."""
+        # Create browser session
         result = await connected_navigator_client.call_tool(
             service_name="navigator",
             tool_name="session_create",
             arguments={
                 "drivers": {
-                    "fs": {
-                        "type": "filesystem",
-                        "root": "/workspace",
-                        "sandbox": True
+                    "web": {
+                        "type": "browser",
+                        "headless": True
                     }
                 }
             }
@@ -238,13 +220,13 @@ class TestNavigatorSessions:
     @pytest.mark.asyncio
     async def test_session_list(self, connected_navigator_client):
         """Test listing active sessions."""
-        # Create a session first
+        # Create a browser session first
         create_result = await connected_navigator_client.call_tool(
             service_name="navigator",
             tool_name="session_create",
             arguments={
                 "drivers": {
-                    "fs": {"type": "filesystem", "root": "/workspace"}
+                    "web": {"type": "browser", "headless": True}
                 }
             }
         )
@@ -269,251 +251,6 @@ class TestNavigatorSessions:
                 service_name="navigator",
                 tool_name="session_destroy",
                 arguments={"session_id": session_id}
-            )
-
-
-# =============================================================================
-# INTEGRATION TESTS: Filesystem Operations
-# =============================================================================
-
-class TestNavigatorFilesystem:
-    """Test navigator filesystem operations (ADR-CORE-027 success criteria)."""
-
-    @pytest.fixture
-    async def fs_session(self, connected_navigator_client, workspace_path):
-        """Create a filesystem session for testing."""
-        result = await connected_navigator_client.call_tool(
-            service_name="navigator",
-            tool_name="session_create",
-            arguments={
-                "drivers": {
-                    "fs": {
-                        "type": "filesystem",
-                        "root": "/workspace",
-                        "sandbox": True
-                    }
-                }
-            }
-        )
-        session_id = _extract_session_id(result)
-        yield session_id, connected_navigator_client
-
-        # Cleanup session
-        await connected_navigator_client.call_tool(
-            service_name="navigator",
-            tool_name="session_destroy",
-            arguments={"session_id": session_id}
-        )
-
-    @pytest.mark.asyncio
-    async def test_goto_and_list(self, fs_session):
-        """Test navigating to directory and listing contents."""
-        session_id, client = fs_session
-
-        # Navigate to workspace root
-        goto_result = await client.call_tool(
-            service_name="navigator",
-            tool_name="goto",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "location": "."
-            }
-        )
-        assert goto_result is not None
-
-        # List contents
-        list_result = await client.call_tool(
-            service_name="navigator",
-            tool_name="list",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs"
-            }
-        )
-        assert list_result is not None
-
-    @pytest.mark.asyncio
-    async def test_write_read_file(self, fs_session):
-        """Test writing and reading a file."""
-        session_id, client = fs_session
-        test_content = "Navigator MCP test content\nLine 2\nLine 3"
-        test_file = "test_navigator_write.txt"
-
-        # Write file
-        write_result = await client.call_tool(
-            service_name="navigator",
-            tool_name="write",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": test_file,
-                "content": test_content
-            }
-        )
-        assert write_result is not None
-
-        # Read file back
-        read_result = await client.call_tool(
-            service_name="navigator",
-            tool_name="read",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": test_file
-            }
-        )
-        assert read_result is not None
-        result_text = _extract_text(read_result)
-        # read returns JSON with "content" key - parse it
-        try:
-            parsed = json.loads(result_text)
-            actual_content = parsed.get("content", result_text)
-        except json.JSONDecodeError:
-            actual_content = result_text
-        assert test_content in actual_content
-
-        # Cleanup
-        await client.call_tool(
-            service_name="navigator",
-            tool_name="delete",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": test_file
-            }
-        )
-
-    @pytest.mark.asyncio
-    async def test_delete_directory_recursive(self, fs_session):
-        """
-        Test recursive directory deletion (ADR-CORE-027 success criteria #1).
-
-        This tests the key capability that FileSpecialist lacks.
-        """
-        session_id, client = fs_session
-
-        # Create a directory with nested files
-        test_dir = "test_delete_recursive"
-
-        # Create directory structure via write (creates parent dirs)
-        await client.call_tool(
-            service_name="navigator",
-            tool_name="write",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": f"{test_dir}/file1.txt",
-                "content": "file 1"
-            }
-        )
-        await client.call_tool(
-            service_name="navigator",
-            tool_name="write",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": f"{test_dir}/subdir/file2.txt",
-                "content": "file 2"
-            }
-        )
-
-        # Delete directory recursively
-        delete_result = await client.call_tool(
-            service_name="navigator",
-            tool_name="delete",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": test_dir,
-                "recursive": True
-            }
-        )
-        assert delete_result is not None
-
-        # Verify deletion - listing should fail or return empty
-        # Navigate to parent and verify directory is gone
-        list_result = await client.call_tool(
-            service_name="navigator",
-            tool_name="list",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs"
-            }
-        )
-        result_text = _extract_text(list_result)
-        assert test_dir not in result_text, f"Directory {test_dir} should be deleted"
-
-    @pytest.mark.asyncio
-    async def test_find_glob_pattern(self, fs_session):
-        """
-        Test glob pattern search (ADR-CORE-027 success criteria #2).
-
-        Tests: "Find all .txt files" returns glob results
-        """
-        session_id, client = fs_session
-
-        # Create some test files
-        await client.call_tool(
-            service_name="navigator",
-            tool_name="write",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": "find_test/a.txt",
-                "content": "a"
-            }
-        )
-        await client.call_tool(
-            service_name="navigator",
-            tool_name="write",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": "find_test/b.txt",
-                "content": "b"
-            }
-        )
-        await client.call_tool(
-            service_name="navigator",
-            tool_name="write",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": "find_test/c.py",
-                "content": "c"
-            }
-        )
-
-        try:
-            # Find .txt files
-            find_result = await client.call_tool(
-                service_name="navigator",
-                tool_name="find",
-                arguments={
-                    "session_id": session_id,
-                    "driver": "fs",
-                    "pattern": "*.txt"
-                }
-            )
-            assert find_result is not None
-            result_text = _extract_text(find_result)
-
-            # Should find a.txt and b.txt but not c.py
-            assert "a.txt" in result_text
-            assert "b.txt" in result_text
-
-        finally:
-            # Cleanup
-            await client.call_tool(
-                service_name="navigator",
-                tool_name="delete",
-                arguments={
-                    "session_id": session_id,
-                    "driver": "fs",
-                    "target": "find_test",
-                    "recursive": True
-                }
             )
 
 
@@ -711,81 +448,6 @@ class TestNavigatorErrorHandling:
 
 
 # =============================================================================
-# SECURITY TESTS
-# =============================================================================
-
-class TestNavigatorSecurity:
-    """Test security constraints (ADR-CORE-027 success criteria #5)."""
-
-    @pytest.fixture
-    async def sandboxed_session(self, connected_navigator_client):
-        """Create a sandboxed filesystem session."""
-        result = await connected_navigator_client.call_tool(
-            service_name="navigator",
-            tool_name="session_create",
-            arguments={
-                "drivers": {
-                    "fs": {
-                        "type": "filesystem",
-                        "root": "/workspace",
-                        "sandbox": True
-                    }
-                }
-            }
-        )
-        session_id = _extract_session_id(result)
-        yield session_id, connected_navigator_client
-
-        await connected_navigator_client.call_tool(
-            service_name="navigator",
-            tool_name="session_destroy",
-            arguments={"session_id": session_id}
-        )
-
-    @pytest.mark.asyncio
-    async def test_path_traversal_blocked(self, sandboxed_session):
-        """Test that path traversal outside sandbox is blocked."""
-        session_id, client = sandboxed_session
-
-        # Attempt to read /etc/passwd (outside sandbox)
-        result = await client.call_tool(
-            service_name="navigator",
-            tool_name="read",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "target": "../../../etc/passwd"
-            }
-        )
-
-        # Should fail with security error
-        result_text = _extract_text(result)
-        # Navigator should reject path traversal
-        assert "error" in result_text.lower() or "denied" in result_text.lower() or \
-               "outside" in result_text.lower() or "sandbox" in result_text.lower()
-
-    @pytest.mark.asyncio
-    async def test_absolute_path_outside_root_blocked(self, sandboxed_session):
-        """Test that absolute paths outside root are blocked."""
-        session_id, client = sandboxed_session
-
-        result = await client.call_tool(
-            service_name="navigator",
-            tool_name="goto",
-            arguments={
-                "session_id": session_id,
-                "driver": "fs",
-                "location": "/etc"
-            }
-        )
-
-        result_text = _extract_text(result)
-        # Should fail - /etc is outside /workspace
-        assert "error" in result_text.lower() or "outside" in result_text.lower() or \
-               "denied" in result_text.lower()
-
-
-# =============================================================================
 # GRACEFUL DEGRADATION TESTS
 # =============================================================================
 
@@ -864,27 +526,3 @@ def _extract_text(result) -> str:
     return str(result)
 
 
-# =============================================================================
-# CLEANUP
-# =============================================================================
-
-@pytest.fixture(autouse=True)
-async def cleanup_test_files(workspace_path):
-    """Cleanup test files after each test."""
-    yield
-
-    # Cleanup test files
-    test_patterns = [
-        "test_navigator_*.txt",
-        "test_delete_recursive",
-        "find_test",
-    ]
-
-    workspace = Path(workspace_path) if workspace_path.startswith("/") else Path(f"/app/{workspace_path}")
-    for pattern in test_patterns:
-        for path in workspace.glob(pattern):
-            if path.is_file():
-                path.unlink()
-            elif path.is_dir():
-                import shutil
-                shutil.rmtree(path, ignore_errors=True)
