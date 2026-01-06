@@ -65,8 +65,8 @@ class ProgenitorBravoSpecialist(BaseSpecialist):
         """
         logger.info(f"--- {self.specialist_name}: Generating Bravo perspective. ---")
 
-        # Get the full message history for context
-        messages = state.get("messages", [])
+        # Get messages with gathered_context injected (if Facilitator gathered any)
+        messages = self._get_enriched_messages(state)
 
         # Check for uploaded image
         image_data = state.get("artifacts", {}).get("uploaded_image.png")
