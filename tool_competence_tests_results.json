@@ -1,0 +1,2564 @@
+{
+  "tests": [
+    "basic_tool_call",
+    "tool_selection",
+    "constraint_following",
+    "enum_constraint",
+    "nested_object",
+    "multiple_required",
+    "no_tool_needed",
+    "tool_choice_none",
+    "ambiguous_routing",
+    "boolean_optional",
+    "loop_recovery",
+    "missing_required_info",
+    "type_coercion",
+    "parallel_tool_calls",
+    "chained_dependency"
+  ],
+  "models": [
+    "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+    "granite-4.0-h-small",
+    "granite-4.0-h-tiny",
+    "granite-4.0-micro",
+    "lfm2-1.2b-tool",
+    "lfm2-vl-1.6b@f16",
+    "lfm2-vl-1.6b@q8_0",
+    "lfm2-vl-3b",
+    "lfm2.5-1.2b-instruct",
+    "lfm2.5-1.2b-instruct",
+    "lfm2.5-vl-1.6b",
+    "lfm2.5-vl-1.6b",
+    "magistral-small-2509",
+    "mirothinker-v1.5-30b",
+    "nvidia/nemotron-3-nano",
+    "qwen/qwen3-30b-a3b-2507",
+    "qwen/qwen3-4b-2507",
+    "qwen/qwen3-4b-thinking-2507",
+    "qwen/qwen3-vl-4b",
+    "qwen/qwen3-vl-8b",
+    "zai-org/glm-4.6v-flash"
+  ],
+  "results": [
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\"\n```\n```json\nTokyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3676.9490242004395,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 41323.45724105835,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 10937.65377998352,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 7175.472021102905,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>",
+      "latency_ms": 2412.688970565796,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>Checking the weather in Tokyo.",
+      "latency_ms": 5634.094953536987,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>Checking the weather in Tokyo.",
+      "latency_ms": 2305.5341243743896,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>",
+      "latency_ms": 7590.7697677612305,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>Fetching the current weather information for Tokyo.",
+      "latency_ms": 121.65260314941406,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>Fetching the current weather information for Tokyo.",
+      "latency_ms": 121.65260314941406,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Tokyo\"}}]<|tool_call_end|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>",
+      "latency_ms": 174.77869987487793,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Tokyo\"}}]<|tool_call_end|>[get_weather(city=\"Tokyo\")]<|tool_call_end|>",
+      "latency_ms": 174.77869987487793,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTokyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 32170.738220214844,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 29821.492433547974,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 17772.32575416565,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 22715.696334838867,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3754.9476623535156,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 4129.138708114624,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 6580.417156219482,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 13834.970235824585,
+      "error": null
+    },
+    {
+      "test_id": "basic_tool_call",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now call the get_weather function to obtain the weather information for Tokyo.\n\n**Tool Call:** `get_weather`\n```json\n{\"city\":\"Tokyo\"}\n```\n",
+      "latency_ms": 16311.903476715088,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 455.98626136779785,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 848.5329151153564,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 371.9909191131592,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 321.5963840484619,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 99.2119312286377,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"report.pdf\")]<|tool_call_end|>Deleting the file report.pdf.",
+      "latency_ms": 121.54054641723633,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"report.pdf\")]<|tool_call_end|>Deleting the file report.pdf.",
+      "latency_ms": 105.60488700866699,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 142.98033714294434,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"report.pdf\")]<|tool_call_end|>I will delete the file located at 'report.pdf'.",
+      "latency_ms": 133.83197784423828,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"report.pdf\")]<|tool_call_end|>I will delete the file located at 'report.pdf'.",
+      "latency_ms": 133.83197784423828,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"delete_file\", \"arguments\": {\"path\": \"report.pdf\"}}]<|tool_call_end|>[delete_file(path=\"report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 175.8558750152588,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"delete_file\", \"arguments\": {\"path\": \"report.pdf\"}}]<|tool_call_end|>[delete_file(path=\"report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 175.8558750152588,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 712.6579284667969,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 4402.153730392456,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "completed",
+      "response": "\n\n**Tool Call:** `delete_file`\n```json\n{\"path\":\"report.pdf\"}\n```\n\n",
+      "latency_ms": 1618.072748184204,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 276.08728408813477,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 239.63451385498047,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1595.9968566894531,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 221.10462188720703,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreport\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 313.8442039489746,
+      "error": null
+    },
+    {
+      "test_id": "tool_selection",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now proceed to call the delete_file function to delete the file report.pdf.\n\n**Tool Call:** `delete_file`\n```json\n{\"path\":\"report.pdf\"}\n```\n",
+      "latency_ms": 1250.5676746368408,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "semantic_failure",
+      "response": "<|channel|>final <|constrain|>functions.respond_to_user<|message|>I\u2019m sorry, but I can\u2019t run code directly. However, if you\u2019d like, I can help you understand what the code does or guide you through running it on your own system!",
+      "latency_ms": 816.9739246368408,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `search_docs`\n```json\n{\"\n```\n```json\nquery\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nprint\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3101.886987686157,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `execute_code`\n```json\n{\"\n```\n```json\ncode\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nprint\n```\n```json\n(\\\"\n```\n```json\nhello\n```\n```json\n\\\")\n```\n```json\n\"}\n```\n",
+      "latency_ms": 407.14430809020996,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `execute_code`\n```json\n{\"\n```\n```json\ncode\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nprint\n```\n```json\n(\\\"\n```\n```json\nhello\n```\n```json\n\\\")\n```\n```json\n\"}\n```\n",
+      "latency_ms": 359.1036796569824,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[execute_code(code=\"print('hello')\")]<|tool_call_end|>",
+      "latency_ms": 111.58919334411621,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[execute_code(code=\"print(\"hello\")\")]<|tool_call_end|>Executing the provided Python code.",
+      "latency_ms": 128.66473197937012,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[execute_code(code=\"print(\"hello\")\")]<|tool_call_end|>Executing the provided Python code.",
+      "latency_ms": 126.05953216552734,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[execute_code(code=\"print(\"hello\")\")]<|tool_call_end|>",
+      "latency_ms": 375.66494941711426,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[execute_code(code=\"print('hello')\")]<|tool_call_end|>",
+      "latency_ms": 107.2549819946289,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[execute_code(code=\"print('hello')\")]<|tool_call_end|>",
+      "latency_ms": 107.2549819946289,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"execute_code\", \"arguments\": {\"code\": \"print('hello')\"}}]<|tool_call_end|>[execute_code(code=\"print('hello')\")]<|tool_call_end|>",
+      "latency_ms": 242.1243190765381,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"execute_code\", \"arguments\": {\"code\": \"print('hello')\"}}]<|tool_call_end|>[execute_code(code=\"print('hello')\")]<|tool_call_end|>",
+      "latency_ms": 242.1243190765381,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "magistral-small-2509",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't run code directly. However, if you'd like, I can help explain the code or provide information about it! For example, the code `print(\"hello\")` is a simple Python command that outputs the text \"hello\" to the console.",
+      "latency_ms": 4928.617238998413,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `respond_to_user`\n```json\n{\"\n```\n```json\nmessage\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nI\n```\n```json\n noticed\n```\n```json\n that\n```\n```json\n the\n```\n```json\n \\\"\n```\n```json\nexecute\n```\n```json\n_code\n```\n```json\n\\\"\n```\n```json\n function\n```\n```json\n is\n```\n```json\n disabled\n```\n```json\n due\n```\n```json\n to\n```\n```json\n security\n```\n```json\n policy\n```\n```json\n,\n```\n```json\n but\n```\n```json\n I\n```\n```json\n can\n```\n```json\n help\n```\n```json\n you\n```\n```json\n run\n```\n```json\n your\n```\n```json\n Python\n```\n```json\n code\n```\n```json\n in\n```\n```json\n another\n```\n```json\n way\n```\n```json\n.L\n```\n```json\net\n```\n```json\n me\n```\n```json\n show\n```\n```json\n you\n```\n```json\n how\n```\n```json\n to\n```\n```json\n print\n```\n```json\n \\\"\n```\n```json\nhello\n```\n```json\n\\\"\n```\n```json\n using\n```\n```json\n a\n```\n```json\n simple\n```\n```json\n example\n```\n```json\n:\n```\n```json\n ```\n```\n```json\npython\n```\n```json\n\\n\n```\n```json\nprint\n```\n```json\n(\\\"\n```\n```json\nHello\n```\n```json\n\\\")\n```\n```json\n\\n\n```\n```json\n```\n```\n```json\nYou\n```\n```json\n can\n```\n```json\n copy\n```\n```json\n this\n```\n```json\n code\n```\n```json\n and\n```\n```json\n run\n```\n```json\n it\n```\n```json\n locally\n```\n```json\n or\n```\n```json\n on\n```\n```json\n an\n```\n```json\n online\n```\n```json\n Python\n```\n```json\n interpreter\n```\n```json\n (\n```\n```json\nsuch\n```\n```json\n as\n```\n```json\n Re\n```\n```json\nplit\n```\n```json\n)\n```\n```json\n to\n```\n```json\n get\n```\n```json\n the\n```\n```json\n expected\n```\n```json\n output\n```\n```json\n!\n```\n```json\n Is\n```\n```json\n there\n```\n```json\n anything\n```\n```json\n else\n```\n```json\n I\n```\n```json\n can\n```\n```json\n help\n```\n```json\n with\n```\n```json\n?\"\n```\n```json\n}\n```\n",
+      "latency_ms": 5262.830495834351,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "completed",
+      "response": "\n\n**Tool Call:** `respond_to_user`\n```json\n{\"message\":\"hello\"}\n```\n\n",
+      "latency_ms": 4360.466957092285,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "semantic_failure",
+      "response": "I cannot execute code due to security policy. Let me know if you need help with something else!",
+      "latency_ms": 257.59053230285645,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "semantic_failure",
+      "response": "I cannot execute code as it is disabled due to security policy. However, I can assist you with other queries or tasks. Let me know how I can help!",
+      "latency_ms": 312.2293949127197,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `respond_to_user`\n```json\n{\"\n```\n```json\nmessage\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nI\n```\n```json\n'm\n```\n```json\n sorry\n```\n```json\n,\n```\n```json\n but\n```\n```json\n I\n```\n```json\n can\n```\n```json\n't\n```\n```json\n run\n```\n```json\n Python\n```\n```json\n code\n```\n```json\n due\n```\n```json\n to\n```\n```json\n security\n```\n```json\n policies\n```\n```json\n.\n```\n```json\n Would\n```\n```json\n you\n```\n```json\n like\n```\n```json\n me\n```\n```json\n to\n```\n```json\n help\n```\n```json\n with\n```\n```json\n something\n```\n```json\n else\n```\n```json\n?\"\n```\n```json\n}\n```\n",
+      "latency_ms": 2124.457836151123,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `execute_code`\n```json\n{\"\n```\n```json\ncode\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nprint\n```\n```json\n(\\\"\n```\n```json\nhello\n```\n```json\n\\\")\n```\n```json\n\"}\n```\n",
+      "latency_ms": 261.5339756011963,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "semantic_failure",
+      "response": "The `execute_code` tool is disabled due to security policy, so I cannot run Python code for you. However, I can tell you that the code `print(\"hello\")` will output the text `hello` to the console when executed. Let me know if you need help with anything else!",
+      "latency_ms": 794.3410873413086,
+      "error": null
+    },
+    {
+      "test_id": "constraint_following",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now execute the provided Python code using the execute_code tool.\n\n**Tool Call:** `execute_code`\n```json\n{\"code\":\"print(\\\"hello\\\")\"}\n```\n",
+      "latency_ms": 3311.619758605957,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\"\n```\n```json\nreturns\n```\n```json\n\",\"\n```\n```json\npriority\n```\n```json\n\":\"\n```\n```json\nmedium\n```\n```json\n\"}\n```\n",
+      "latency_ms": 595.4179763793945,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nhigh\n```\n```json\n\"}\n```\n",
+      "latency_ms": 932.8665733337402,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nhigh\n```\n```json\n\"}\n```\n",
+      "latency_ms": 412.61887550354004,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nhigh\n```\n```json\n\"}\n```\n",
+      "latency_ms": 368.8220977783203,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>",
+      "latency_ms": 119.10009384155273,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>Routing a high-priority returns ticket for a broken laptop.",
+      "latency_ms": 150.7854461669922,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>Routing a high-priority returns ticket for a broken laptop.",
+      "latency_ms": 119.43531036376953,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>",
+      "latency_ms": 187.41965293884277,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>Submitting a high-priority ticket for returns to handle the broken laptop.",
+      "latency_ms": 169.50106620788574,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>Submitting a high-priority ticket for returns to handle the broken laptop.",
+      "latency_ms": 169.50106620788574,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"route_ticket\", \"arguments\": {\"department\": \"returns\", \"priority\": \"high\"}}]<|tool_call_end|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>",
+      "latency_ms": 221.96197509765625,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"route_ticket\", \"arguments\": {\"department\": \"returns\", \"priority\": \"high\"}}]<|tool_call_end|>[route_ticket(department=\"returns\", priority=\"high\")]<|tool_call_end|>",
+      "latency_ms": 221.96197509765625,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nmedium\n```\n```json\n\"}\n```\n",
+      "latency_ms": 912.0211601257324,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nhigh\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3882.127046585083,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8058.4588050842285,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nhigh\n```\n```json\n\"}\n```\n",
+      "latency_ms": 267.38429069519043,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nmedium\n```\n```json\n\"}\n```\n",
+      "latency_ms": 235.64600944519043,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nhigh\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1288.8684272766113,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nmedium\n```\n```json\n\"}\n```\n",
+      "latency_ms": 255.46503067016602,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route_ticket`\n```json\n{\"\n```\n```json\ndepartment\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nreturns\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\npriority\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nmedium\n```\n```json\n\"}\n```\n",
+      "latency_ms": 362.3197078704834,
+      "error": null
+    },
+    {
+      "test_id": "enum_constraint",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will help you return a broken laptop by routing this request. I am now calling the route_ticket tool using the parameters: department='returns', priority='medium'.\n\n**Tool Call:** `route_ticket`\n```json\n{\"department\":\"returns\",\"priority\":\"medium\"}\n```\n",
+      "latency_ms": 1960.9742164611816,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n\",\"\n```\n```json\natt\n```\n```json\nendees\n```\n```json\n\":[\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n\"\n```\n```json\ntime\n```\n```json\n\":{\"\n```\n```json\nstart\n```\n```json\n\":\"\n```\n```json\n202\n```\n```json\n6\n```\n```json\n-\n```\n```json\n01\n```\n```json\n-\n```\n```json\n09\n```\n```json\nT\n```\n```json\n15\n```\n```json\n:\n```\n```json\n00\n```\n```json\n:\n```\n```json\n00\n```\n```json\n\",\"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n60\n```\n```json\n}}\n```\n",
+      "latency_ms": 1737.2312545776367,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n with\n```\n```json\n Bob\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n202\n```\n```json\n2\n```\n```json\n-\n```\n```json\n05\n```\n```json\n-\n```\n```json\n18\n```\n```json\nT\n```\n```json\n15\n```\n```json\n:\n```\n```json\n00\n```\n```json\n:\n```\n```json\n00\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n60\n```\n```json\n}}\n```\n",
+      "latency_ms": 1815.5772686004639,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n202\n```\n```json\n3\n```\n```json\n-\n```\n```json\n10\n```\n```json\n-\n```\n```json\n26\n```\n```json\nT\n```\n```json\n15\n```\n```json\n:\n```\n```json\n00\n```\n```json\n:\n```\n```json\n00\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n60\n```\n```json\n}}\n```\n",
+      "latency_ms": 737.0150089263916,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n202\n```\n```json\n2\n```\n```json\n-\n```\n```json\n04\n```\n```json\n-\n```\n```json\n15\n```\n```json\nT\n```\n```json\n15\n```\n```json\n:\n```\n```json\n00\n```\n```json\n:\n```\n```json\n00\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n60\n```\n```json\n}}\n```\n",
+      "latency_ms": 768.0318355560303,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[create_event(title=\"Q4 Planning Meeting\", attendees=['Bob'], time={'start': '2026-01-27T15:00:00', 'duration_minutes': 60})]<|tool_call_end|>",
+      "latency_ms": 224.4894504547119,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[create_event(title=\"Q4 Planning Meeting\", attendees=['Bob'], time={'start': '2023-10-26T15:00:00', 'duration_minutes': 60})]<|tool_call_end|>Scheduling a meeting with Bob tomorrow at 3pm for 1 hour about Q4 planning.",
+      "latency_ms": 296.0476875305176,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[create_event(title=\"Q4 Planning Meeting\", attendees=['Bob'], time={'start': '2023-10-27T15:00:00', 'duration_minutes': 60})]<|tool_call_end|>I am scheduling a meeting with Bob tomorrow at 3pm for 1 hour about Q4 planning.",
+      "latency_ms": 213.63401412963867,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[create_event(title=\"Q4 Planning Meeting\", attendees=['Bob'], time={'start': '2023-10-26T15:00:00', 'duration_minutes': 60})]<|tool_call_end|>",
+      "latency_ms": 395.40576934814453,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[create_event(title=\"Q4 Planning Meeting\", time={\"start\": \"2023-10-06T15:00:00\", \"duration_minutes\": 60})]<|tool_call_end|>I am creating a calendar event titled \"Q4 Planning Meeting\" scheduled for tomorrow, October 6th, at 3:00 PM lasting 1 hour.",
+      "latency_ms": 320.1138973236084,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[create_event(title=\"Q4 Planning Meeting\", time={\"start\": \"2023-10-06T15:00:00\", \"duration_minutes\": 60})]<|tool_call_end|>I am creating a calendar event titled \"Q4 Planning Meeting\" scheduled for tomorrow, October 6th, at 3:00 PM lasting 1 hour.",
+      "latency_ms": 320.1138973236084,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"create_event\", \"arguments\": {\"title\": \"Q4 Planning Meeting\", \"attendees\": [\"Bob\"], \"time\": {\"start\": \"2023-10-25T15:00:00\", \"duration_minutes\": 60}}}]<|tool_call_end|>[create_event(title=\"Q4 Planning Meeting\", attendees=[\"Bob\"], time={\"start\": \"2023-10-25T15:00:00\", \"duration_minutes\": 60})]<|tool_call_end|>",
+      "latency_ms": 437.8519058227539,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"create_event\", \"arguments\": {\"title\": \"Q4 Planning Meeting\", \"attendees\": [\"Bob\"], \"time\": {\"start\": \"2023-10-25T15:00:00\", \"duration_minutes\": 60}}}]<|tool_call_end|>[create_event(title=\"Q4 Planning Meeting\", attendees=[\"Bob\"], time={\"start\": \"2023-10-25T15:00:00\", \"duration_minutes\": 60})]<|tool_call_end|>",
+      "latency_ms": 437.8519058227539,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\natt\n```\n```json\nende\n```\n```json\nes\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n3\n```\n```json\n-\n```\n```json\n1\n```\n```json\n0\n```\n```json\n-\n```\n```json\n1\n```\n```json\n1\n```\n```json\nT\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_min\n```\n```json\nutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 2573.6749172210693,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n with\n```\n```json\n Bob\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n4\n```\n```json\n-\n```\n```json\n0\n```\n```json\n9\n```\n```json\n-\n```\n```json\n2\n```\n```json\n7\n```\n```json\nT\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\nZ\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 4337.771892547607,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8060.646772384644,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n3\n```\n```json\n-\n```\n```json\n0\n```\n```json\n9\n```\n```json\n-\n```\n```json\n2\n```\n```json\n8\n```\n```json\nT\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 513.3054256439209,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n3\n```\n```json\n-\n```\n```json\n1\n```\n```json\n0\n```\n```json\n-\n```\n```json\n1\n```\n```json\n0\n```\n```json\nT\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 526.7493724822998,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 8691.277503967285,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n Meeting\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 440.64998626708984,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `create_event`\n```json\n{\"\n```\n```json\ntitle\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nQ\n```\n```json\n4\n```\n```json\n Planning\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nattend\n```\n```json\nees\n```\n```json\n\":\n```\n```json\n [\"\n```\n```json\nBob\n```\n```json\n\"],\n```\n```json\n \"\n```\n```json\ntime\n```\n```json\n\":\n```\n```json\n {\"\n```\n```json\nstart\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n3\n```\n```json\n-\n```\n```json\n1\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\nT\n```\n```json\n1\n```\n```json\n5\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n:\n```\n```json\n0\n```\n```json\n0\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nduration\n```\n```json\n_minutes\n```\n```json\n\":\n```\n```json\n \n```\n```json\n6\n```\n```json\n0\n```\n```json\n}}\n```\n",
+      "latency_ms": 821.1731910705566,
+      "error": null
+    },
+    {
+      "test_id": "nested_object",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will call the create_event function to schedule a meeting with Bob tomorrow at 3pm for 1 hour about Q4 planning.\n\n**Tool Call:** `create_event`\n```json\n{\"title\":\"Meeting with Bob about Q4 planning\",\"attendees\":[\"Bob\"],\"time\":\"start</arg_key>\\n<arg_value>2024-11-01 15:00\",\"duration_minutes\":60}\n```\n",
+      "latency_ms": 3557.5382709503174,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\"\n```\n```json\nchecking\n```\n```json\n\",\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 780.9383869171143,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 1138.3087635040283,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 463.1311893463135,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 485.5632781982422,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(from_account=\"checking\", to_account=\"savings\", amount=500)]<|tool_call_end|>",
+      "latency_ms": 134.4904899597168,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(from_account=\"checking\", to_account=\"savings\", amount=500)]<|tool_call_end|>Transferring $500 from checking to savings.",
+      "latency_ms": 160.57562828063965,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(from_account=\"checking\", to_account=\"savings\", amount=500)]<|tool_call_end|>Transferring $500 from checking to savings.",
+      "latency_ms": 126.20091438293457,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(from_account=\"checking\", to_account=\"savings\", amount=500)]<|tool_call_end|>",
+      "latency_ms": 220.3516960144043,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't transfer funds between accounts. Based on the available API, I can only help with tools that allow transferring money, such as moving an amount from one account to another. If you'd like to proceed with a simple transfer, please provide the details.",
+      "latency_ms": 250.86259841918945,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't transfer funds between accounts. Based on the available API, I can only help with tools that allow transferring money, such as moving an amount from one account to another. If you'd like to proceed with a simple transfer, please provide the details.",
+      "latency_ms": 250.86259841918945,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"transfer\", \"arguments\": {\"from_account\": \"checking\", \"to_account\": \"savings\", \"amount\": 500, \"currency\": \"USD\"}}]<|tool_call_end|>[transfer(from_account=\"checking\", to_account=\"savings\", amount=500, currency=\"USD\")]<|tool_call_end|>",
+      "latency_ms": 323.78172874450684,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"transfer\", \"arguments\": {\"from_account\": \"checking\", \"to_account\": \"savings\", \"amount\": 500, \"currency\": \"USD\"}}]<|tool_call_end|>[transfer(from_account=\"checking\", to_account=\"savings\", amount=500, currency=\"USD\")]<|tool_call_end|>",
+      "latency_ms": 323.78172874450684,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\nav\n```\n```json\nings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n,\n```\n```json\n \"\n```\n```json\ncurrency\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nUSD\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1590.3189182281494,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n,\n```\n```json\n \"\n```\n```json\ncurrency\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nUSD\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3133.491039276123,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 10227.853536605835,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n,\n```\n```json\n \"\n```\n```json\ncurrency\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nUSD\n```\n```json\n\"}\n```\n",
+      "latency_ms": 356.3065528869629,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 308.4907531738281,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 2200.2217769622803,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 319.03672218322754,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nfrom\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchecking\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n,\n```\n```json\n \"\n```\n```json\ncurrency\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nUSD\n```\n```json\n\"}\n```\n",
+      "latency_ms": 536.785364151001,
+      "error": null
+    },
+    {
+      "test_id": "multiple_required",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now call the transfer function to move $500 from checking to savings.\n\n**Tool Call:** `transfer`\n```json\n{\"from_account\":\"checking\",\"to_account\":\"savings\",\"amount\":500,\"currency\":\"USD\"}\n```\n",
+      "latency_ms": 1702.6824951171875,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "2\u202f+\u202f2 equals **4**.",
+      "latency_ms": 410.4609489440918,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "The result of\u202f\\(2 + 2\\)\u202fis **4**.",
+      "latency_ms": 767.1139240264893,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "The answer to 2 + 2 is **4**.",
+      "latency_ms": 381.9394111633301,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "The sum of 2 + 2 is **4**.",
+      "latency_ms": 234.68327522277832,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I don't have the capability to perform mathematical calculations like adding numbers. However, I can help you with reading and writing files if that's something you need assistance with! Let me know how else I might be able to assist you.",
+      "latency_ms": 241.26505851745605,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "I don't have a direct tool to perform mathematical calculations, but I can help you write or read files if you need assistance with that. Let me know how I can assist!",
+      "latency_ms": 174.39556121826172,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "I don't have a tool to perform mathematical calculations like addition. However, I can help you write or read files if that's something you need! Let me know how I can assist.",
+      "latency_ms": 148.637056350708,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "I'm sorry, I don't have a tool to perform arithmetic calculations like addition. However, I can help you with tasks such as reading or writing files if needed. Let me know how else I can assist you!",
+      "latency_ms": 569.190263748169,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't calculate mathematical expressions. My capabilities are limited to reading and writing files based on the provided tools. Let me know if you need help with file operations instead.",
+      "latency_ms": 215.0740623474121,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't calculate mathematical expressions. My capabilities are limited to reading and writing files based on the provided tools. Let me know if you need help with file operations instead.",
+      "latency_ms": 215.0740623474121,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "completed",
+      "response": "[TOOL_RESULT]\n<result>4</result>\n[END_TOOL_RESULT]",
+      "latency_ms": 121.60420417785645,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "completed",
+      "response": "[TOOL_RESULT]\n<result>4</result>\n[END_TOOL_RESULT]",
+      "latency_ms": 121.60420417785645,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "The answer to 2 + 2 is 4.",
+      "latency_ms": 727.9610633850098,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `write_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nanswer\n```\n```json\n.txt\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncontent\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n answer\n```\n```json\n to\n```\n```json\n \n```\n```json\n2\n```\n```json\n +\n```\n```json\n \n```\n```json\n2\n```\n```json\n is\n```\n```json\n \n```\n```json\n4\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 3132.6115131378174,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "completed",
+      "response": "\nThe answer to 2 + 2 is 4. \n\n<final_answer>\n4\n</final_answer>",
+      "latency_ms": 4687.508821487427,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "2 + 2 equals 4.",
+      "latency_ms": 178.78317832946777,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "2 + 2 = 4.",
+      "latency_ms": 121.72603607177734,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\nThe result of 2 + 2 is 4. No file operations are needed for this query.",
+      "latency_ms": 3730.8349609375,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "2 + 2 equals 4.",
+      "latency_ms": 121.56391143798828,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "2 + 2 equals 4.",
+      "latency_ms": 169.72708702087402,
+      "error": null
+    },
+    {
+      "test_id": "no_tool_needed",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\n4",
+      "latency_ms": 766.9062614440918,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "15\u202f\u00d7\u202f7\u00a0=\u00a0**105**",
+      "latency_ms": 589.9012088775635,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "granite-4.0-h-small",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n15\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 814.8963451385498,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n15\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 348.58131408691406,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "granite-4.0-micro",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n15\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 316.30492210388184,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>",
+      "latency_ms": 89.92457389831543,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>Calculating the result of 15 * 7.",
+      "latency_ms": 126.80721282958984,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>Calculating the result of 15 * 7.",
+      "latency_ms": 99.77555274963379,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2-vl-3b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>",
+      "latency_ms": 146.1641788482666,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>Calculating the result of the expression: 15 multiplied by 7.",
+      "latency_ms": 151.20363235473633,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>Calculating the result of the expression: 15 multiplied by 7.",
+      "latency_ms": 151.20363235473633,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[{\"name\": \"calculate\", \"arguments\": {\"expression\": \"15 * 7\"}}]<|tool_call_end|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>",
+      "latency_ms": 179.9025535583496,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[{\"name\": \"calculate\", \"arguments\": {\"expression\": \"15 * 7\"}}]<|tool_call_end|>[calculate(expression=\"15 * 7\")]<|tool_call_end|>",
+      "latency_ms": 179.9025535583496,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "magistral-small-2509",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 701.9824981689453,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "semantic_failure",
+      "response": "\n\n\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 5102.716684341431,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8070.0953006744385,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1111.4518642425537,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "15 * 7 = 105.",
+      "latency_ms": 132.3401927947998,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "semantic_failure",
+      "response": "\n\n\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1515.1796340942383,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 220.8259105682373,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "semantic_failure",
+      "response": "\n**Tool Call:** `calculate`\n```json\n{\"\n```\n```json\nexpression\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n1\n```\n```json\n5\n```\n```json\n *\n```\n```json\n \n```\n```json\n7\n```\n```json\n\"}\n```\n",
+      "latency_ms": 321.88940048217773,
+      "error": null
+    },
+    {
+      "test_id": "tool_choice_none",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "semantic_failure",
+      "response": "\nI will now proceed to use the calculate function to find the result of 15 multiplied by 7.\n\n**Tool Call:** `calculate`\n```json\n{\"expression\":\"15 * 7\"}\n```\n",
+      "latency_ms": 1328.16743850708,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n and\n```\n```json\n summarize\n```\n```json\n them\n```\n```json\n in\n```\n```json\n a\n```\n```json\n report\n```\n```json\n\"}\n```\n",
+      "latency_ms": 472.61857986450195,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1142.7648067474365,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nanal\n```\n```json\nyst\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n",
+      "latency_ms": 489.40443992614746,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n and\n```\n```json\n summarize\n```\n```json\n them\n```\n```json\n\"}\n```\n",
+      "latency_ms": 505.5992603302002,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route(specialist=\"researcher\", task_summary=\"Find recent statistics about EV adoption and summarize them in a report\")]<|tool_call_end|>",
+      "latency_ms": 153.10001373291016,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route(specialist=\"analyst\", task_summary=\"find recent statistics about EV adoption and summarize them in a report\")]<|tool_call_end|>I am routing the analyst to find recent statistics about EV adoption and summarize them in a report.",
+      "latency_ms": 205.49893379211426,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route(specialist=\"analyst\", task_summary=\"Find recent statistics about EV adoption and summarize them in a report\")]<|tool_call_end|>I am routing the request to an analyst to find recent statistics about EV adoption and summarize them in a report.",
+      "latency_ms": 165.46964645385742,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route(specialist=\"researcher\", task_summary=\"Find recent statistics about EV adoption and summarize them in a report\")]<|tool_call_end|>",
+      "latency_ms": 265.38920402526855,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't generate or summarize reports on EV adoption. Based on the available API, I can assist with routing tasks such as web searches for specialists like researchers, analysts, or writers. Let me know if you'd like help with that instead.",
+      "latency_ms": 239.99381065368652,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't generate or summarize reports on EV adoption. Based on the available API, I can assist with routing tasks such as web searches for specialists like researchers, analysts, or writers. Let me know if you'd like help with that instead.",
+      "latency_ms": 239.99381065368652,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "[END_TOOL_RESULT]\n{\"name\": \"route\", \"arguments\": {\"specialist\": \"analyst\", \"task_summary\": \"EV adoption statistics\"}}\n[END_TOOL_RESULT]",
+      "latency_ms": 196.17772102355957,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "[END_TOOL_RESULT]\n{\"name\": \"route\", \"arguments\": {\"specialist\": \"analyst\", \"task_summary\": \"EV adoption statistics\"}}\n[END_TOOL_RESULT]",
+      "latency_ms": 196.17772102355957,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nres\n```\n```json\nearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1219.7108268737793,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n electric\n```\n```json\n vehicle\n```\n```json\n adoption\n```\n```json\n trends\n```\n```json\n,\n```\n```json\n market\n```\n```json\n share\n```\n```json\n,\n```\n```json\n sales\n```\n```json\n figures\n```\n```json\n,\n```\n```json\n and\n```\n```json\n global\n```\n```json\n/reg\n```\n```json\nional\n```\n```json\n data\n```\n```json\n\"}\n```\n",
+      "latency_ms": 2063.9283657073975,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8083.8494300842285,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n and\n```\n```json\n summarize\n```\n```json\n them\n```\n```json\n in\n```\n```json\n a\n```\n```json\n report\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1717.5462245941162,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n",
+      "latency_ms": 292.54651069641113,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n",
+      "latency_ms": 24357.91301727295,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nwriter\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nSum\n```\n```json\nmar\n```\n```json\nize\n```\n```json\n the\n```\n```json\n found\n```\n```json\n statistics\n```\n```json\n into\n```\n```json\n a\n```\n```json\n report\n```\n```json\n\"}\n```\n",
+      "latency_ms": 561.7327690124512,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nresearch\n```\n```json\ner\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nFind\n```\n```json\n recent\n```\n```json\n statistics\n```\n```json\n about\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nanal\n```\n```json\nyst\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nAn\n```\n```json\nalyze\n```\n```json\n the\n```\n```json\n collected\n```\n```json\n data\n```\n```json\n on\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n trends\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nwriter\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ntask\n```\n```json\n_summary\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nSum\n```\n```json\nmar\n```\n```json\nize\n```\n```json\n the\n```\n```json\n analyzed\n```\n```json\n data\n```\n```json\n into\n```\n```json\n a\n```\n```json\n concise\n```\n```json\n report\n```\n```json\n on\n```\n```json\n EV\n```\n```json\n adoption\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1296.6740131378174,
+      "error": null
+    },
+    {
+      "test_id": "ambiguous_routing",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now proceed to search for recent statistics about EV adoption.\n\n**Tool Call:** `route`\n```json\n{\"specialist\":\"researcher\",\"task_summary\":\"Find recent statistics about EV adoption and summarize them in a report. Search for key metrics like global sales, market share, growth rates, and regional trends from reliable sources such as IEA, BloombergNEF, or government reports.\"}\n```\n",
+      "latency_ms": 4288.806200027466,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\"\n```\n```json\nactive\n```\n```json\n\",\"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\"\n```\n```json\n202\n```\n```json\n5\n```\n```json\n-\n```\n```json\n01\n```\n```json\n-\n```\n```json\n01\n```\n```json\n\",\"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\ntrue\n```\n```json\n}\n```\n",
+      "latency_ms": 1234.4770431518555,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n202\n```\n```json\n5\n```\n```json\n-\n```\n```json\n01\n```\n```json\n-\n```\n```json\n01\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 1274.7633457183838,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n202\n```\n```json\n5\n```\n```json\n-\n```\n```json\n01\n```\n```json\n-\n```\n```json\n01\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 527.2774696350098,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n202\n```\n```json\n5\n```\n```json\n-\n```\n```json\n01\n```\n```json\n-\n```\n```json\n01\n```\n```json\n\"}\n```\n",
+      "latency_ms": 444.0958499908447,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[query_users(status=\"active\", created_after=\"2025-01-01\", include_email=True)]<|tool_call_end|>",
+      "latency_ms": 143.93091201782227,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[query_users(status=\"active\", created_after=\"2023-01-01\")]<|tool_call_end|>Querying active users created after 2023-01-01.",
+      "latency_ms": 927.6130199432373,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[query_users(status=\"active\", created_after=\"2023-01-01\")]<|tool_call_end|>Querying active users created after 2023-01-01.",
+      "latency_ms": 127.1970272064209,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[query_users(status=\"active\", created_after=\"2023-11-28\", include_email=True)]<|tool_call_end|>",
+      "latency_ms": 263.11373710632324,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[query_users(status=\"active\", created_after=\"2025-01-01\", include_email=True)]<|tool_call_end|>I am querying the user database for individuals who have an \"active\" status, were created after January 1, 2025 (this year), and I will include their email addresses in the results.",
+      "latency_ms": 310.03522872924805,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[query_users(status=\"active\", created_after=\"2025-01-01\", include_email=True)]<|tool_call_end|>I am querying the user database for individuals who have an \"active\" status, were created after January 1, 2025 (this year), and I will include their email addresses in the results.",
+      "latency_ms": 310.03522872924805,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"query_users\", \"arguments\": {\"status\": \"active\", \"created_after\": \"2025-01-01\", \"include_email\": true}}]<|tool_call_end|>[query_users(status=\"active\", created_after=\"2025-01-01\", include_email=True)]<|tool_call_end|>",
+      "latency_ms": 498.30174446105957,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"query_users\", \"arguments\": {\"status\": \"active\", \"created_after\": \"2025-01-01\", \"include_email\": true}}]<|tool_call_end|>[query_users(status=\"active\", created_after=\"2025-01-01\", include_email=True)]<|tool_call_end|>",
+      "latency_ms": 498.30174446105957,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n5\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 1549.9184131622314,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n5\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 2432.406425476074,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 10314.511060714722,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n5\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 400.17151832580566,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n5\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 359.27271842956543,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n5\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 8849.680185317993,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n4\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 365.3867244720459,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `query_users`\n```json\n{\"\n```\n```json\nstatus\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nactive\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ncreated\n```\n```json\n_after\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\n2\n```\n```json\n0\n```\n```json\n2\n```\n```json\n4\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n-\n```\n```json\n0\n```\n```json\n1\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\ninclude\n```\n```json\n_email\n```\n```json\n\":\n```\n```json\n true\n```\n```json\n}\n```\n",
+      "latency_ms": 543.8289642333984,
+      "error": null
+    },
+    {
+      "test_id": "boolean_optional",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will search for all active users created this year and include their email addresses by calling the query_users function.\n\n**Tool Call:** `query_users`\n```json\n{\"status\":\"active\",\"created_after\":\"2025-01-01\",\"include_email\":true}\n```\n",
+      "latency_ms": 5290.804386138916,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "semantic_failure",
+      "response": "I\u2019m not able to run arbitrary Python code in this environment.  \nHowever, I can give you a quick and efficient way to compute Fibonacci numbers in Python so you can try it on your own machine.\n\n```python\ndef fibonacci(n: int) -> int:\n    \"\"\"Return the n\u2011th Fibonacci number (0-indexed).\"\"\"\n    if n < 0:\n        raise ValueError(\"n must be non\u2011negative\")\n    a, b = 0, 1\n    for _ in range(n):\n        a, b = b, a + b\n    return a\n\n# Example usage:\nfor i in range(10):\n    print(f\"F({i}) = {fibonacci(i)}\")\n```\n\nThis script:\n\n1. Uses an iterative approach (no recursion) so it works for large `n` without hitting the recursion limit.\n2. Runs in O(n) time and O(1) extra space.\n\nIf you run this on your machine, you\u2019ll see the first ten Fibonacci numbers: 0,\u202f1,\u202f1,\u202f2,\u202f3,\u202f5,\u202f8,\u202f13,\u202f21,\u202f34.  \n\nLet me know if you\u2019d like a different implementation (e.g., matrix exponentiation for faster big\u2011n computation).",
+      "latency_ms": 3288.7303829193115,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ncode\n```\n```json\n_executor\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n user\n```\n```json\n wants\n```\n```json\n to\n```\n```json\n run\n```\n```json\n a\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n that\n```\n```json\n calculates\n```\n```json\n Fibonacci\n```\n```json\n numbers\n```\n```json\n.\n```\n```json\n The\n```\n```json\n appropriate\n```\n```json\n specialist\n```\n```json\n is\n```\n```json\n the\n```\n```json\n code\n```\n```json\n executor\n```\n```json\n,\n```\n```json\n which\n```\n```json\n can\n```\n```json\n execute\n```\n```json\n arbitrary\n```\n```json\n code\n```\n```json\n safely\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 1669.1055297851562,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ncode\n```\n```json\n_executor\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n user\n```\n```json\n requested\n```\n```json\n execution\n```\n```json\n of\n```\n```json\n a\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n for\n```\n```json\n Fibonacci\n```\n```json\n calculation\n```\n```json\n,\n```\n```json\n which\n```\n```json\n requires\n```\n```json\n code\n```\n```json\n execution\n```\n```json\n specialist\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 601.2144088745117,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ncode\n```\n```json\n_executor\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n user\n```\n```json\n wants\n```\n```json\n to\n```\n```json\n execute\n```\n```json\n a\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n to\n```\n```json\n calculate\n```\n```json\n Fibonacci\n```\n```json\n numbers\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 561.438798904419,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[route(specialist=\"code_executor\", reasoning=\"Calculate Fibonacci sequence up to the 100th term using a recursive approach.\")]<|tool_call_end|>",
+      "latency_ms": 169.45862770080566,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "semantic_failure",
+      "response": "I'm sorry, I don't have access to a tool to execute Python scripts or perform calculations. However, I can help you route questions to specialists using the available tools. For example, if you need assistance with code execution, data analysis, research, or chat support, I can assist with those tasks. Let me know how I can help!",
+      "latency_ms": 1658.332109451294,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "semantic_failure",
+      "response": "I'm sorry, I don't have access to a tool to execute Python scripts or calculate Fibonacci numbers directly. However, if you need assistance with other tasks like routing to specialists or tools, I can help with that. Let me know how I can assist you otherwise.",
+      "latency_ms": 176.65863037109375,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2-vl-3b",
+      "status": "semantic_failure",
+      "response": "I'm sorry, I don't have access to a tool to execute Python scripts or perform calculations like Fibonacci sequences. However, if you need help with routing tasks to specialists (e.g., code execution via `code_executor`, data analysis via `data_analyst`, etc.), I can assist with that using the available tools. Let me know how I can help!",
+      "latency_ms": 603.6660671234131,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't execute Python scripts or perform code execution. The available API only allows routing tasks to specialists such as a code executor, data analyst, researcher, or chat, without running custom programs. If you need assistance with something else using those tools, let me know!",
+      "latency_ms": 284.52038764953613,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't execute Python scripts or perform code execution. The available API only allows routing tasks to specialists such as a code executor, data analyst, researcher, or chat, without running custom programs. If you need assistance with something else using those tools, let me know!",
+      "latency_ms": 284.52038764953613,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't execute Python scripts or run code. My capabilities are limited to the tools provided, such as route requests for specialists like code executors, data analysts, researchers, or chat assistants. Let me know if you'd like help with a task using one of these available tools!",
+      "latency_ms": 281.1272144317627,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't execute Python scripts or run code. My capabilities are limited to the tools provided, such as route requests for specialists like code executors, data analysts, researchers, or chat assistants. Let me know if you'd like help with a task using one of these available tools!",
+      "latency_ms": 281.1272144317627,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "magistral-small-2509",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't execute code directly. However, I can help you understand how to calculate Fibonacci numbers in Python or provide you with a script that you can run on your local machine.\n\nHere's a simple Python script to calculate Fibonacci numbers:\n\n```python\ndef fibonacci(n):\n    a, b = 0, 1\n    for _ in range(n):\n        print(a, end=' ')\n        a, b = b, a + b\n\nn = int(input(\"Enter the number of terms: \"))\nfibonacci(n)\n```\n\nYou can copy this script and run it in your local Python environment. If you need help with any specific part of the code or have any other questions, feel free to ask!",
+      "latency_ms": 6836.680173873901,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ncode\n```\n```json\n_executor\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTo\n```\n```json\n execute\n```\n```json\n the\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n to\n```\n```json\n calculate\n```\n```json\n Fibonacci\n```\n```json\n numbers\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 20065.964937210083,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8061.992406845093,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ndata\n```\n```json\n_an\n```\n```json\nal\n```\n```json\nyst\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n task\n```\n```json\n involves\n```\n```json\n executing\n```\n```json\n a\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n to\n```\n```json\n calculate\n```\n```json\n Fibonacci\n```\n```json\n numbers\n```\n```json\n,\n```\n```json\n which\n```\n```json\n is\n```\n```json\n best\n```\n```json\n handled\n```\n```json\n by\n```\n```json\n a\n```\n```json\n data\n```\n```json\n analyst\n```\n```json\n who\n```\n```json\n can\n```\n```json\n manage\n```\n```json\n and\n```\n```json\n run\n```\n```json\n code\n```\n```json\n effectively\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 464.519739151001,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "semantic_failure",
+      "response": "BLOCKED: code_executor has failed 3 times consecutively. Do NOT route to it.",
+      "latency_ms": 205.9638500213623,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nchat\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n code\n```\n```json\n_executor\n```\n```json\n tool\n```\n```json\n is\n```\n```json\n blocked\n```\n```json\n after\n```\n```json\n \n```\n```json\n3\n```\n```json\n consecutive\n```\n```json\n failures\n```\n```json\n.\n```\n```json\n I\n```\n```json\n cannot\n```\n```json\n execute\n```\n```json\n scripts\n```\n```json\n directly\n```\n```json\n,\n```\n```json\n but\n```\n```json\n I\n```\n```json\n can\n```\n```json\n help\n```\n```json\n you\n```\n```json\n write\n```\n```json\n a\n```\n```json\n Fibonacci\n```\n```json\n calculation\n```\n```json\n script\n```\n```json\n or\n```\n```json\n explain\n```\n```json\n the\n```\n```json\n process\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 3049.65877532959,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ncode\n```\n```json\n_executor\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n task\n```\n```json\n requires\n```\n```json\n executing\n```\n```json\n a\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n to\n```\n```json\n calculate\n```\n```json\n Fibonacci\n```\n```json\n numbers\n```\n```json\n,\n```\n```json\n which\n```\n```json\n is\n```\n```json\n a\n```\n```json\n coding\n```\n```json\n task\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 394.24800872802734,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `route`\n```json\n{\"\n```\n```json\nspecial\n```\n```json\nist\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ncode\n```\n```json\n_executor\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\nreason\n```\n```json\ning\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nThe\n```\n```json\n task\n```\n```json\n requires\n```\n```json\n executing\n```\n```json\n a\n```\n```json\n Python\n```\n```json\n script\n```\n```json\n to\n```\n```json\n calculate\n```\n```json\n Fibonacci\n```\n```json\n numbers\n```\n```json\n,\n```\n```json\n which\n```\n```json\n is\n```\n```json\n a\n```\n```json\n code\n```\n```json\n execution\n```\n```json\n task\n```\n```json\n.\"\n```\n```json\n}\n```\n",
+      "latency_ms": 586.8880748748779,
+      "error": null
+    },
+    {
+      "test_id": "loop_recovery",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will help you calculate Fibonacci numbers using Python. I'll write and run the code for you.\n\n**Tool Call:** `route`\n```json\n{\"specialist\":\"code_executor\",\"reasoning\":\"The user wants me to execute a Python script to calculate fibonacci numbers. I will provide the Python code and then use the code_executor tool to run it. The task is straightforward: write and execute a Python script that calculates Fibonacci numbers. I have decided to call the code_executor function with the appropriate Python code.\"}\n```\n",
+      "latency_ms": 9194.80013847351,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `ask_clarification`\n```json\n{\"\n```\n```json\nquestion\n```\n```json\n\":\"\n```\n```json\nWhich\n```\n```json\n file\n```\n```json\n would\n```\n```json\n you\n```\n```json\n like\n```\n```json\n to\n```\n```json\n delete\n```\n```json\n?\"\n```\n```json\n}\n```\n",
+      "latency_ms": 543.5914993286133,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `ask_clarification`\n```json\n{\"\n```\n```json\nquestion\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nCould\n```\n```json\n you\n```\n```json\n please\n```\n```json\n provide\n```\n```json\n the\n```\n```json\n path\n```\n```json\n or\n```\n```json\n name\n```\n```json\n of\n```\n```json\n the\n```\n```json\n file\n```\n```json\n you\n```\n```json\n want\n```\n```json\n to\n```\n```json\n delete\n```\n```json\n?\"\n```\n```json\n}\n```\n",
+      "latency_ms": 1212.4433517456055,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `delete_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"/\n```\n```json\nhome\n```\n```json\n/user\n```\n```json\n/documents\n```\n```json\n/report\n```\n```json\n.pdf\n```\n```json\n\"}\n```\n",
+      "latency_ms": 368.3328628540039,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `ask_clarification`\n```json\n{\"\n```\n```json\nquestion\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nWhich\n```\n```json\n file\n```\n```json\n would\n```\n```json\n you\n```\n```json\n like\n```\n```json\n to\n```\n```json\n delete\n```\n```json\n?\"\n```\n```json\n}\n```\n",
+      "latency_ms": 404.9978256225586,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"/home/user/Documents/report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 111.11068725585938,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"/home/user/documents\")]<|tool_call_end|>Deleting the file at /home/user/documents.",
+      "latency_ms": 137.3739242553711,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"/home/user/documents\")]<|tool_call_end|>Deleting the file at /home/user/documents.",
+      "latency_ms": 109.4198226928711,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[delete_file(path=\"/home/user/documents/report.pdf\")]<|tool_call_end|>Deleting the file at /home/user/documents/report.pdf.",
+      "latency_ms": 291.06903076171875,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I need the path of the file you want to delete. Please provide the location so I can proceed.",
+      "latency_ms": 130.88369369506836,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I need the path of the file you want to delete. Please provide the location so I can proceed.",
+      "latency_ms": 130.88369369506836,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"delete_file\", \"arguments\": {\"path\": \"/home/user/documents/report.pdf\"}}]<|tool_call_end|>[delete_file(path=\"/home/user/documents/report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 212.67199516296387,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"delete_file\", \"arguments\": {\"path\": \"/home/user/documents/report.pdf\"}}]<|tool_call_end|>[delete_file(path=\"/home/user/documents/report.pdf\")]<|tool_call_end|>",
+      "latency_ms": 212.67199516296387,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "magistral-small-2509",
+      "status": "semantic_failure",
+      "response": "Sure, could you please specify which file you would like to delete?",
+      "latency_ms": 819.3585872650146,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `ask_clarification`\n```json\n{\"\n```\n```json\nquestion\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nPlease\n```\n```json\n provide\n```\n```json\n the\n```\n```json\n file\n```\n```json\n path\n```\n```json\n you\n```\n```json\n want\n```\n```json\n to\n```\n```json\n delete\n```\n```json\n\"}\n```\n",
+      "latency_ms": 2184.227228164673,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8081.151247024536,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "semantic_failure",
+      "response": "Please specify the path of the file you want to delete.",
+      "latency_ms": 196.4282989501953,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "semantic_failure",
+      "response": "Could you please specify which file you would like me to delete?",
+      "latency_ms": 148.7410068511963,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `ask_clarification`\n```json\n{\"\n```\n```json\nquestion\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nWhich\n```\n```json\n file\n```\n```json\n would\n```\n```json\n you\n```\n```json\n like\n```\n```json\n to\n```\n```json\n delete\n```\n```json\n?\"\n```\n```json\n}\n```\n",
+      "latency_ms": 1516.942024230957,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "semantic_failure",
+      "response": "Please specify which file you would like to delete.",
+      "latency_ms": 133.5136890411377,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "semantic_failure",
+      "response": "Please specify which file you want me to delete. Provide the file path or name.",
+      "latency_ms": 271.1348533630371,
+      "error": null
+    },
+    {
+      "test_id": "missing_required_info",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will call the ask_clarification tool to ask the user for clarification on which file they want to delete.\n\n**Tool Call:** `ask_clarification`\n```json\n{\"question\":\"Which file would you like to delete? Please specify the path of the file.\"}\n```\n",
+      "latency_ms": 2618.884801864624,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 704.822301864624,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 919.4638729095459,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I need more information to complete your transfer. Could you please provide the account number or name for the \"savings\" account you want to send money to? Once you let me know that, I can assist with transferring $500. \n\nApologies for any inconvenience!",
+      "latency_ms": 757.5085163116455,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n500\n```\n```json\n}\n```\n",
+      "latency_ms": 380.20825386047363,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(to_account=\"savings\", amount=500)]<|tool_call_end|>",
+      "latency_ms": 101.1817455291748,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(to_account=\"savings\", amount=500)]<|tool_call_end|>Sending 500 dollars to savings.",
+      "latency_ms": 121.48904800415039,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(to_account=\"savings\", amount=500)]<|tool_call_end|>Sending 500 dollars to savings account.",
+      "latency_ms": 104.87556457519531,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[transfer(to_account=\"savings\", amount=500)]<|tool_call_end|>",
+      "latency_ms": 168.28465461730957,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't send money directly. Based on the available API, I can only transfer funds between accounts using the provided tool. Let me know if you'd like assistance with that instead.",
+      "latency_ms": 202.7912139892578,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "semantic_failure",
+      "response": "I'm sorry, but I can't send money directly. Based on the available API, I can only transfer funds between accounts using the provided tool. Let me know if you'd like assistance with that instead.",
+      "latency_ms": 202.7912139892578,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"transfer\", \"arguments\": {\"to_account\": \"savings\", \"amount\": 500.0}}]<|tool_call_end|>[transfer(to_account=\"savings\", amount=500.0)]<|tool_call_end|>",
+      "latency_ms": 219.03109550476074,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"transfer\", \"arguments\": {\"to_account\": \"savings\", \"amount\": 500.0}}]<|tool_call_end|>[transfer(to_account=\"savings\", amount=500.0)]<|tool_call_end|>",
+      "latency_ms": 219.03109550476074,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\nav\n```\n```json\nings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 1123.427391052246,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 4309.795141220093,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8081.608295440674,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 273.4193801879883,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 250.7803440093994,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 2274.320125579834,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 259.8552703857422,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `transfer`\n```json\n{\"\n```\n```json\nto\n```\n```json\n_account\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\ns\n```\n```json\navings\n```\n```json\n\",\n```\n```json\n \"\n```\n```json\namount\n```\n```json\n\":\n```\n```json\n \n```\n```json\n5\n```\n```json\n0\n```\n```json\n0\n```\n```json\n}\n```\n",
+      "latency_ms": 380.97548484802246,
+      "error": null
+    },
+    {
+      "test_id": "type_coercion",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will help you send five hundred dollars to savings now.\n\n**Tool Call:** `transfer`\n```json\n{\"to_account\":\"savings\",\"amount\":500}\n```\n",
+      "latency_ms": 1888.298749923706,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\"\n```\n```json\nTokyo\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3284.771203994751,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1244.365930557251,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 535.2859497070312,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 565.1929378509521,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>",
+      "latency_ms": 112.82920837402344,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>Checking the weather in Tokyo and Paris.",
+      "latency_ms": 145.05815505981445,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>Checking the weather for Tokyo and Paris.",
+      "latency_ms": 114.5162582397461,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>",
+      "latency_ms": 197.26848602294922,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>I am retrieving the current weather information for Tokyo and Paris.",
+      "latency_ms": 170.49384117126465,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>I am retrieving the current weather information for Tokyo and Paris.",
+      "latency_ms": 170.49384117126465,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Tokyo\"}}, {\"name\": \"get_weather\", \"arguments\": {\"city\": \"Paris\"}}]<|tool_call_end|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>",
+      "latency_ms": 263.5471820831299,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"get_weather\", \"arguments\": {\"city\": \"Tokyo\"}}, {\"name\": \"get_weather\", \"arguments\": {\"city\": \"Paris\"}}]<|tool_call_end|>[get_weather(city=\"Tokyo\"), get_weather(city=\"Paris\")]<|tool_call_end|>",
+      "latency_ms": 263.5471820831299,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTokyo\n```\n```json\n\"}\n```\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1321.7196464538574,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1866.6694164276123,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 10299.919366836548,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 341.8760299682617,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 332.5068950653076,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3003.6051273345947,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 349.64585304260254,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nTok\n```\n```json\nyo\n```\n```json\n\"}\n```\n\n\n**Tool Call:** `get_weather`\n```json\n{\"\n```\n```json\ncity\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nParis\n```\n```json\n\"}\n```\n",
+      "latency_ms": 521.8384265899658,
+      "error": null
+    },
+    {
+      "test_id": "parallel_tool_calls",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now get the weather information for Tokyo and Paris.\n\n**Tool Call:** `get_weather`\n```json\n{\"city\":\"Tokyo\"}\n```\n",
+      "latency_ms": 1234.6746921539307,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "openai/gpt-oss-20b-gguf/gpt-oss-20b-router-mxfp4.gguf",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 508.3880424499512,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "granite-4.0-h-small",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 818.4463977813721,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "granite-4.0-h-tiny",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 362.7157211303711,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "granite-4.0-micro",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 316.5559768676758,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2-1.2b-tool",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"config.json\")]<|tool_call_end|>",
+      "latency_ms": 85.93630790710449,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2-vl-1.6b@f16",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"config.json\")]<|tool_call_end|>Reading the file config.json to determine the port it uses.",
+      "latency_ms": 121.44255638122559,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2-vl-1.6b@q8_0",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"config.json\")]<|tool_call_end|>Reading the file config.json to determine the port it uses.",
+      "latency_ms": 98.13404083251953,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2-vl-3b",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"config.json\")]<|tool_call_end|>",
+      "latency_ms": 135.04910469055176,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"config.json\")]<|tool_call_end|>I will read the contents of the file located at 'config.json' to determine its content. Based on the information available in that file, I can identify any details related to a port usage.",
+      "latency_ms": 236.98043823242188,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2.5-1.2b-instruct",
+      "status": "completed",
+      "response": "<|tool_call_start|>[read_file(path=\"config.json\")]<|tool_call_end|>I will read the contents of the file located at 'config.json' to determine its content. Based on the information available in that file, I can identify any details related to a port usage.",
+      "latency_ms": 236.98043823242188,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"read_file\", \"arguments\": {\"path\": \"config.json\"}}]<|tool_call_end|>[read_file(path=\"config.json\")]<|tool_call_end|>",
+      "latency_ms": 163.05160522460938,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "lfm2.5-vl-1.6b",
+      "status": "semantic_failure",
+      "response": "<|tool_call_start|>[{\"name\": \"read_file\", \"arguments\": {\"path\": \"config.json\"}}]<|tool_call_end|>[read_file(path=\"config.json\")]<|tool_call_end|>",
+      "latency_ms": 163.05160522460938,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "magistral-small-2509",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1015.6717300415039,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "mirothinker-v1.5-30b",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 1404.1647911071777,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "nvidia/nemotron-3-nano",
+      "status": "error",
+      "response": "",
+      "latency_ms": 8079.879283905029,
+      "error": "Empty response received (possible aborted model load)"
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "qwen/qwen3-30b-a3b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 248.07190895080566,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "qwen/qwen3-4b-2507",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 199.5842456817627,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "qwen/qwen3-4b-thinking-2507",
+      "status": "completed",
+      "response": "\n\n\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 3838.108777999878,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "qwen/qwen3-vl-4b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 209.44523811340332,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "qwen/qwen3-vl-8b",
+      "status": "completed",
+      "response": "\n**Tool Call:** `read_file`\n```json\n{\"\n```\n```json\npath\n```\n```json\n\":\n```\n```json\n \"\n```\n```json\nconfig\n```\n```json\n.json\n```\n```json\n\"}\n```\n",
+      "latency_ms": 302.645206451416,
+      "error": null
+    },
+    {
+      "test_id": "chained_dependency",
+      "model_id": "zai-org/glm-4.6v-flash",
+      "status": "completed",
+      "response": "\nI will now call the read_file tool to read the contents of config.json.\n\n**Tool Call:** `read_file`\n```json\n{\"path\":\"config.json\"}\n```\n",
+      "latency_ms": 1649.1162776947021,
+      "error": null
+    }
+  ]
+}
