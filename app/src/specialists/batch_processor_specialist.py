@@ -1,51 +1,108 @@
 """
-BatchProcessorSpecialist - Batch file operations with emergent LLM-driven sorting.
+BatchProcessorSpecialist - Batch file operations via Operation Executor pattern.
 
-Architecture Pattern:
-- Interface Layer: Interprets user batch operation requests
-- Service Layer: Calls FileSpecialist via MCP for atomic operations
-- Decision Logic: LLM decides file destinations based on names/content
+Architecture (ADR-CORE-049):
+    Specialist (LLM) → list[FileOperation] → Executor → Filesystem MCP
+
+The LLM handles inference (what operations to perform).
+The executor handles dispatch (how to execute via MCP).
+
+Supported operations:
+- CREATE: "Create files a.txt, b.txt, c.txt"
+- SORT: "Sort files in to_sort/ into alphabetic subfolders"
+- MOVE: "Move old.txt to archive/"
+- MIXED: "Create x.txt then move it to backup/"
 
 Example Flow:
-    User: "Sort these files into a-m/ and n-z/: e.txt, l.txt, n.txt, q.txt"
+    User: "Create empty files named e.txt, l.txt, p.txt"
       ↓
     Router → BatchProcessorSpecialist
       ↓
-    1. LLM parses user intent → BatchSortRequest
-    2. (Optional) Read file metadata/content via MCP
-    3. LLM generates BatchSortPlan with decisions
-    4. Execute moves via FileSpecialist MCP calls
-    5. Return detailed results in artifacts
+    1. LLM parses user intent → list[FileOperation]
+    2. FileOperationExecutor dispatches to filesystem MCP
+    3. Return results with detailed artifacts
+
+Note: external_mcp_client is injected by GraphBuilder after specialist loading.
 """
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pathlib import Path
 from datetime import datetime
 from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
-from .schemas._batch_ops import BatchSortRequest, BatchSortPlan, FileSortDecision
+from .schemas._file_operations import FileOperation, FileOperationList
+from ..executors import FileOperationExecutor, OperationResult
+from ..mcp import sync_call_external_mcp
 
 logger = logging.getLogger(__name__)
 
 
+def _extract_text_from_mcp_result(result) -> str:
+    """Extract text content from external MCP result object."""
+    if result is None:
+        return ""
+
+    if hasattr(result, 'content'):
+        content = result.content
+        if isinstance(content, list) and len(content) > 0:
+            first = content[0]
+            if hasattr(first, 'text'):
+                return first.text
+            return str(first)
+        return str(content)
+
+    return str(result)
+
+
 class BatchProcessorSpecialist(BaseSpecialist):
     """
-    Specialist for batch file operations with emergent LLM-driven decision making.
+    Specialist for batch file operations via Operation Executor pattern (ADR-CORE-049).
 
-    Processes collections of files atomically (single graph node execution) using
-    internal iteration rather than graph-level looping.
+    LLM produces list[FileOperation], executor dispatches to filesystem MCP.
+    Handles: create multiple files, sort files, batch moves, mixed operations.
+
+    Uses external filesystem MCP container for file operations (ADR-CORE-035).
     """
+
+    def _is_filesystem_available(self) -> bool:
+        """Check if external filesystem MCP is connected."""
+        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+            return False
+        return self.external_mcp_client.is_connected("filesystem")
+
+    def _call_filesystem_mcp(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        """Call external filesystem MCP and extract text result."""
+        result = sync_call_external_mcp(
+            self.external_mcp_client,
+            "filesystem",
+            tool_name,
+            arguments
+        )
+        return _extract_text_from_mcp_result(result)
+
+    def _file_exists(self, path: str) -> bool:
+        """Check if file exists using filesystem MCP get_file_info."""
+        try:
+            self._call_filesystem_mcp("get_file_info", {"path": path})
+            return True
+        except Exception:
+            return False
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute batch file sorting with emergent destination logic.
+        Execute batch file operations via Operation Executor pattern.
+
+        Flow:
+        1. LLM parses user intent → list[FileOperation]
+        2. FileOperationExecutor dispatches each operation to MCP
+        3. Format results and return artifacts
         """
-        if not self.mcp_client:
-            logger.error("BatchProcessorSpecialist: MCP client not available")
+        if not self._is_filesystem_available():
+            logger.error("BatchProcessorSpecialist: Filesystem MCP not available")
             return {
-                "messages": [AIMessage(content="Error: File operations service not available.")],
+                "messages": [AIMessage(content="Error: File operations service not available. The filesystem container may not be running.")],
                 "task_is_complete": True
             }
 
@@ -57,40 +114,41 @@ class BatchProcessorSpecialist(BaseSpecialist):
             }
 
         try:
-            # Phase 1: Parse user intent into structured batch request
-            batch_request = self._parse_batch_request(messages)
+            # Phase 1: LLM parses user intent → list[FileOperation]
+            operations = self._parse_operations(messages)
+            logger.info(f"Phase 1: parsed {len(operations)} operations")
 
-            # Phase 2: Gather file information (optional content reading)
-            file_context = self._gather_file_context(batch_request)
+            # Phase 2: Execute via FileOperationExecutor
+            executor = FileOperationExecutor(self.external_mcp_client)
+            results = executor.execute_sync(operations)
 
-            # Phase 3: LLM generates sorting plan
-            sort_plan = self._generate_sort_plan(batch_request, file_context)
-
-            # Phase 4: Execute file operations
-            results = self._execute_batch_operations(sort_plan.decisions)
-
-            # Phase 5: Generate report and artifacts
-            report = self._generate_report(batch_request, results)
+            # Phase 3: Format results
+            formatted = self._format_results(operations, results)
 
             # Build reasoning for Thought Stream observability
-            reasoning_lines = [
-                f"Parsed {len(batch_request.file_paths)} files → {batch_request.destination_directories}"
-            ]
-            for decision in sort_plan.decisions:
-                reasoning_lines.append(f"  • {decision.file_path} → {decision.destination}: {decision.rationale}")
-            if results["failed"]:
-                reasoning_lines.append(f"⚠️ {len(results['failed'])} failed: {[f['file'] for f in results['failed']]}")
+            reasoning_lines = [f"Parsed {len(operations)} operations:"]
+            for op in operations:
+                if op.destination:
+                    reasoning_lines.append(f"  • {op.type}: {op.path} → {op.destination}")
+                else:
+                    reasoning_lines.append(f"  • {op.type}: {op.path}")
+
+            success_count = sum(1 for r in results if r.success)
+            fail_count = len(results) - success_count
+            if fail_count > 0:
+                failed_paths = [r.operation.path for r in results if not r.success]
+                reasoning_lines.append(f"⚠️ {fail_count} failed: {failed_paths}")
 
             return {
-                "messages": [AIMessage(content=self._format_summary(results))],
+                "messages": [AIMessage(content=formatted["summary"])],
                 "artifacts": {
-                    "batch_sort_summary": {
-                        "total_files": results["total"],
-                        "successful": len(results["successful"]),
-                        "failed": len(results["failed"])
+                    "batch_operation_summary": {
+                        "total": len(results),
+                        "successful": success_count,
+                        "failed": fail_count
                     },
-                    "batch_sort_details": results["successful"] + results["failed"],
-                    "batch_sort_report.md": report
+                    "batch_operation_details": formatted["details"],
+                    "batch_operation_report.md": formatted["report"]
                 },
                 "scratchpad": {
                     "batch_processor_reasoning": "\n".join(reasoning_lines)
@@ -105,299 +163,165 @@ class BatchProcessorSpecialist(BaseSpecialist):
                 "task_is_complete": True
             }
 
-    def _parse_batch_request(self, messages: List) -> BatchSortRequest:
+    def _parse_operations(self, messages: List) -> List[FileOperation]:
         """
-        Use LLM to parse user's batch operation request.
+        Use LLM to parse user intent into list of file operations.
+
+        The LLM analyzes the user request and produces a structured list of
+        operations (create, move, sort, etc.). For SORT operations, the LLM
+        decides destination directories based on file names.
 
         Args:
             messages: Conversation history
 
         Returns:
-            Structured BatchSortRequest
+            List of FileOperation objects
 
         Raises:
             ValueError: If LLM cannot parse request
         """
+        # System prompt guides the LLM to produce FileOperationList
+        system_prompt = """You are a file operations assistant. Parse the user's request into a list of file operations.
+
+Operation types:
+- "write": Create or overwrite a file (use for "create file", "make file", etc.)
+- "move": Move a file to a new location
+- "mkdir": Create a directory
+- "read": Read file contents
+- "list": List directory contents
+- "delete": Delete a file (note: may not be supported)
+
+For SORT operations (e.g., "sort files into folders"):
+1. Identify the files to sort
+2. Decide appropriate destination directories based on file names
+3. Return "move" operations with correct destinations
+4. Create destination directories first with "mkdir" operations
+
+For CREATE operations (e.g., "create files a.txt, b.txt"):
+1. Extract each file path
+2. Return "write" operations (content="" for empty files)
+
+CRITICAL - Path format:
+- Use ONLY relative paths. Never produce absolute paths.
+- GOOD: ".", "to_sort", "to_sort/file.txt", "./archive/old.txt"
+- BAD: "/to_sort", "/to_sort/file.txt", "/usr/bin"
+- For alphabetic sorting: use "a-m/" and "n-z/" directories
+
+Return a FileOperationList with all operations needed."""
+
         request = StandardizedLLMRequest(
-            messages=messages,
-            tools=[BatchSortRequest],
-            force_tool_call=True
+            messages=[HumanMessage(content=system_prompt)] + messages,
+            output_model_class=FileOperationList
         )
 
         response = self.llm_adapter.invoke(request)
-        tool_calls = response.get("tool_calls", [])
 
-        if not tool_calls:
+        # Parse structured output
+        json_response = response.get("json_response")
+        if not json_response:
             raise ValueError(
-                "Could not parse batch operation request. "
-                "Please specify files and destinations clearly."
+                "LLM did not return valid JSON for FileOperationList. "
+                f"Response keys: {list(response.keys())}"
             )
 
-        batch_request = BatchSortRequest(**tool_calls[0]['args'])
-        logger.info(f"Phase 1 parsed: {len(batch_request.file_paths)} files={batch_request.file_paths}, "
-                    f"destinations={batch_request.destination_directories}")
-        return batch_request
+        try:
+            operation_list = FileOperationList(**json_response)
+        except Exception as e:
+            raise ValueError(f"Failed to parse FileOperationList from LLM response: {e}")
 
-    def _gather_file_context(self, batch_request: BatchSortRequest) -> str:
+        if not operation_list.operations:
+            raise ValueError("LLM returned empty operation list")
+
+        logger.info(
+            f"Parsed {len(operation_list.operations)} operations: "
+            f"{[op.type for op in operation_list.operations]}"
+        )
+        return operation_list.operations
+
+    def _format_results(
+        self,
+        operations: List[FileOperation],
+        results: List[OperationResult]
+    ) -> Dict[str, Any]:
         """
-        Gather file metadata (and optionally content) for LLM decision making.
+        Format execution results for user and artifacts.
 
         Args:
-            batch_request: Parsed batch operation request
+            operations: Original operation list
+            results: Execution results from executor
 
         Returns:
-            Formatted context string with file information
-        """
-        context_lines = ["Files to sort:"]
-
-        for i, file_path in enumerate(batch_request.file_paths, 1):
-            try:
-                # Check existence
-                exists = self.mcp_client.call(
-                    "file_specialist",
-                    "file_exists",
-                    path=file_path
-                )
-
-                if not exists:
-                    context_lines.append(f"{i}. {file_path} (exists: no)")
-                    continue
-
-                # Optionally read content
-                if batch_request.strategy.read_content:
-                    content = self.mcp_client.call(
-                        "file_specialist",
-                        "read_file",
-                        path=file_path
-                    )
-                    # Truncate long content
-                    preview = content[:200] + "..." if len(content) > 200 else content
-                    context_lines.append(f"{i}. {file_path} (exists: yes, preview: {preview})")
-                else:
-                    context_lines.append(f"{i}. {file_path} (exists: yes)")
-
-            except Exception as e:
-                logger.warning(f"Failed to gather context for {file_path}: {e}")
-                context_lines.append(f"{i}. {file_path} (error: {str(e)})")
-
-        return "\n".join(context_lines)
-
-    def _generate_sort_plan(self, batch_request: BatchSortRequest, file_context: str) -> BatchSortPlan:
-        """
-        Use LLM to decide where each file should go.
-
-        Uses retry mechanism: if LLM truncates output and omits files,
-        retry with just the missing files and merge results.
-
-        Args:
-            batch_request: Parsed batch request with destinations
-            file_context: Formatted file information
-
-        Returns:
-            BatchSortPlan with decisions for each file
-
-        Raises:
-            ValueError: If LLM does not return valid plan
-        """
-        all_decisions = []
-        remaining_files = list(batch_request.file_paths)
-        max_retries = 3
-
-        for attempt in range(max_retries):
-            if not remaining_files:
-                break
-
-            # Build prompt for remaining files
-            file_count = len(remaining_files)
-            numbered_files = "\n".join(f"{i+1}. {f}" for i, f in enumerate(remaining_files))
-
-            planning_prompt = f"""You are sorting files into directories.
-
-Available Destinations:
-{chr(10).join(f'- {dest}' for dest in batch_request.destination_directories)}
-
-IMPORTANT: You MUST return a decision for ALL {file_count} files listed below:
-{numbered_files}
-
-For each file, decide which destination directory it should go into and provide a brief rationale.
-Your BatchSortPlan MUST contain exactly {file_count} decisions - one for each file."""
-
-            request = StandardizedLLMRequest(
-                messages=[HumanMessage(content=planning_prompt)],
-                output_model_class=BatchSortPlan
-            )
-
-            response = self.llm_adapter.invoke(request)
-
-            # Parse structured output
-            json_response = response.get("json_response")
-            if not json_response:
-                if attempt == max_retries - 1:
-                    raise ValueError(
-                        "LLM did not return valid JSON for BatchSortPlan. "
-                        f"Response keys: {list(response.keys())}"
-                    )
-                continue
-
-            try:
-                partial_plan = BatchSortPlan(**json_response)
-            except Exception as e:
-                if attempt == max_retries - 1:
-                    raise ValueError(f"Failed to parse BatchSortPlan from LLM response: {e}")
-                continue
-
-            # Collect decisions and track what's still missing
-            all_decisions.extend(partial_plan.decisions)
-            decided_files = {d.file_path for d in partial_plan.decisions}
-            remaining_files = [f for f in remaining_files if f not in decided_files]
-
-            if remaining_files:
-                logger.warning(
-                    f"Attempt {attempt + 1}: LLM omitted {len(remaining_files)} files, "
-                    f"retrying with: {remaining_files}"
-                )
-
-        # Final check
-        if remaining_files:
-            logger.error(
-                f"After {max_retries} attempts, still missing decisions for: {remaining_files}"
-            )
-
-        return BatchSortPlan(decisions=all_decisions)
-
-    def _execute_batch_operations(self, decisions: List[FileSortDecision]) -> Dict[str, Any]:
-        """
-        Execute file moves with granular error tracking.
-
-        Args:
-            decisions: List of file sorting decisions from LLM
-
-        Returns:
-            Dict with successful/failed operations and stats
-        """
-        results = {
-            "successful": [],
-            "failed": [],
-            "total": len(decisions)
-        }
-
-        for decision in decisions:
-            try:
-                # Validate source exists
-                exists = self.mcp_client.call(
-                    "file_specialist",
-                    "file_exists",
-                    path=decision.file_path
-                )
-
-                if not exists:
-                    results["failed"].append({
-                        "file": decision.file_path,
-                        "destination": decision.destination,
-                        "rationale": decision.rationale,
-                        "status": "failed",
-                        "error": "File not found"
-                    })
-                    continue
-
-                # Ensure destination directory exists
-                self.mcp_client.call(
-                    "file_specialist",
-                    "create_directory",
-                    path=decision.destination
-                )
-
-                # Compute new path
-                filename = Path(decision.file_path).name
-                new_path = f"{decision.destination.rstrip('/')}/{filename}"
-
-                # Move file
-                self.mcp_client.call(
-                    "file_specialist",
-                    "rename_file",
-                    old_path=decision.file_path,
-                    new_path=new_path
-                )
-
-                results["successful"].append({
-                    "file": decision.file_path,
-                    "destination": new_path,
-                    "rationale": decision.rationale,
-                    "status": "success"
-                })
-
-            except Exception as e:
-                logger.error(f"Failed to move {decision.file_path}: {e}")
-                results["failed"].append({
-                    "file": decision.file_path,
-                    "destination": decision.destination,
-                    "rationale": decision.rationale,
-                    "status": "failed",
-                    "error": str(e)
-                })
-
-        return results
-
-    def _generate_report(self, batch_request: BatchSortRequest, results: Dict[str, Any]) -> str:
-        """
-        Generate markdown report for archival.
-
-        Args:
-            batch_request: Original batch request
-            results: Execution results with successes/failures
-
-        Returns:
-            Markdown-formatted report
+            Dict with summary, details, and report
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        success_rate = (len(results["successful"]) / results["total"] * 100) if results["total"] > 0 else 0
+        total = len(results)
+        success_count = sum(1 for r in results if r.success)
+        fail_count = total - success_count
+        success_rate = (success_count / total * 100) if total > 0 else 0
 
-        lines = [
-            "# Batch File Sort Report",
+        # Build details list
+        details = []
+        for result in results:
+            op = result.operation
+            detail = {
+                "type": op.type,
+                "path": op.path,
+                "destination": op.destination,
+                "status": "success" if result.success else "failed",
+            }
+            if result.success:
+                detail["result"] = result.result
+            else:
+                detail["error"] = result.error
+            details.append(detail)
+
+        # Build markdown report
+        report_lines = [
+            "# Batch Operation Report",
             "",
             f"**Timestamp**: {timestamp}",
-            f"**Strategy**: {batch_request.strategy.strategy.capitalize()}",
-            f"**Read Content**: {batch_request.strategy.read_content}",
-            f"**Total Files**: {results['total']}",
-            f"**Success Rate**: {success_rate:.0f}% ({len(results['successful'])}/{results['total']})",
+            f"**Total Operations**: {total}",
+            f"**Success Rate**: {success_rate:.0f}% ({success_count}/{total})",
             ""
         ]
 
-        if results["successful"]:
-            lines.append("## Successful Operations")
-            for i, item in enumerate(results["successful"], 1):
-                lines.append(f"{i}. ✓ `{item['file']}` → `{item['destination']}`")
-                lines.append(f"   - Rationale: {item['rationale']}")
-                lines.append("")
+        successful = [r for r in results if r.success]
+        failed = [r for r in results if not r.success]
 
-        if results["failed"]:
-            lines.append("## Failed Operations")
-            for i, item in enumerate(results["failed"], 1):
-                lines.append(f"{i}. ✗ `{item['file']}` → `{item['destination']}`")
-                lines.append(f"   - Error: {item['error']}")
-                lines.append(f"   - Rationale: {item['rationale']}")
-                lines.append("")
+        if successful:
+            report_lines.append("## Successful Operations")
+            for i, r in enumerate(successful, 1):
+                op = r.operation
+                if op.destination:
+                    report_lines.append(f"{i}. ✓ {op.type}: `{op.path}` → `{op.destination}`")
+                else:
+                    report_lines.append(f"{i}. ✓ {op.type}: `{op.path}`")
+                if r.result:
+                    report_lines.append(f"   - Result: {r.result}")
+            report_lines.append("")
 
-        return "\n".join(lines)
+        if failed:
+            report_lines.append("## Failed Operations")
+            for i, r in enumerate(failed, 1):
+                op = r.operation
+                if op.destination:
+                    report_lines.append(f"{i}. ✗ {op.type}: `{op.path}` → `{op.destination}`")
+                else:
+                    report_lines.append(f"{i}. ✗ {op.type}: `{op.path}`")
+                report_lines.append(f"   - Error: {r.error}")
+            report_lines.append("")
 
-    def _format_summary(self, results: Dict[str, Any]) -> str:
-        """
-        Format user-facing summary message.
-
-        Args:
-            results: Execution results
-
-        Returns:
-            Concise summary string
-        """
-        total = results["total"]
-        success_count = len(results["successful"])
-        fail_count = len(results["failed"])
-
+        # Build summary
         if fail_count == 0:
-            return f"Successfully sorted all {total} files."
+            summary = f"Successfully completed all {total} operations."
         elif success_count == 0:
-            return f"Failed to sort all {total} files. Check batch_sort_report.md for details."
+            summary = f"All {total} operations failed. Check batch_operation_report.md for details."
         else:
-            failed_files = ", ".join(item["file"] for item in results["failed"])
-            return f"Sorted {success_count}/{total} files successfully. Failed: {failed_files}"
+            failed_paths = [r.operation.path for r in failed]
+            summary = f"Completed {success_count}/{total} operations. Failed: {', '.join(failed_paths)}"
+
+        return {
+            "summary": summary,
+            "details": details,
+            "report": "\n".join(report_lines)
+        }
