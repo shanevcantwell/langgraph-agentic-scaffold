@@ -86,9 +86,9 @@ services:
     tty: true
     working_dir: /app
     volumes:
-      # Mount workspace to /projects (filesystem-mcp convention)
-      - ./workspace:/projects/workspace
-    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/projects"]
+      # Mount workspace to /app (matches langgraph-app's view)
+      - ./workspace:/app
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/app"]
     restart: unless-stopped
 
   # surf-mcp - Browser automation with Fara visual grounding (ADR-CORE-027)

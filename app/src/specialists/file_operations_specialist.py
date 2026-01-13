@@ -5,8 +5,26 @@ from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
+from ..mcp import sync_call_external_mcp
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_text_from_mcp_result(result) -> str:
+    """Extract text content from external MCP result object."""
+    if result is None:
+        return ""
+
+    if hasattr(result, 'content'):
+        content = result.content
+        if isinstance(content, list) and len(content) > 0:
+            first = content[0]
+            if hasattr(first, 'text'):
+                return first.text
+            return str(first)
+        return str(content)
+
+    return str(result)
 
 
 class FileOperation(BaseModel):
@@ -39,35 +57,41 @@ class FileOperationsSpecialist(BaseSpecialist):
     User interface layer for file system operations.
 
     This specialist interprets user requests for file operations and routes them
-    to FileSpecialist via MCP. It serves as the routable interface layer while
-    FileSpecialist remains the MCP-only service layer.
+    to the external filesystem MCP container (ADR-CORE-035).
 
-    Architecture Pattern (aligns with ADR-MCP-002 Dockyard):
+    Architecture Pattern:
     - FileOperationsSpecialist: User interface layer (LLM-driven, routable)
-    - FileSpecialist: Service layer (MCP-only, procedural)
-    - Future: DockmasterSpecialist: Storage layer (uploaded files)
+    - Filesystem MCP: External container (@modelcontextprotocol/server-filesystem)
 
     Example Flow:
         User: "list files in workspace"
           ↓
         Router → FileOperationsSpecialist
           ↓
-        FileOperationsSpecialist.mcp_client.call("file_specialist", "list_files")
+        sync_call_external_mcp("filesystem", "list_directory", ...)
           ↓
         Returns formatted response to user
+
+    Note: external_mcp_client is injected by GraphBuilder after specialist loading.
     """
+
+    def _is_filesystem_available(self) -> bool:
+        """Check if external filesystem MCP is connected."""
+        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+            return False
+        return self.external_mcp_client.is_connected("filesystem")
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Interpret user's file operation request and execute via MCP.
+        Interpret user's file operation request and execute via external filesystem MCP.
 
         Uses LLM tool calling to parse user intent, then routes to appropriate
-        FileSpecialist MCP function.
+        filesystem MCP function.
         """
-        if not self.mcp_client:
-            logger.error("FileOperationsSpecialist: MCP client not available")
+        if not self._is_filesystem_available():
+            logger.error("FileOperationsSpecialist: Filesystem MCP not available")
             return {
-                "messages": [AIMessage(content="Error: File operations service not available. Please contact administrator.")],
+                "messages": [AIMessage(content="Error: File operations service not available. The filesystem container may not be running.")],
                 "task_is_complete": True
             }
 
@@ -117,9 +141,28 @@ class FileOperationsSpecialist(BaseSpecialist):
                 "task_is_complete": True
             }
 
+    def _call_filesystem_mcp(self, tool_name: str, arguments: Dict[str, Any]) -> str:
+        """
+        Call external filesystem MCP and extract text result.
+
+        Args:
+            tool_name: Filesystem MCP tool name
+            arguments: Tool arguments
+
+        Returns:
+            Text content from MCP result
+        """
+        result = sync_call_external_mcp(
+            self.external_mcp_client,
+            "filesystem",
+            tool_name,
+            arguments
+        )
+        return _extract_text_from_mcp_result(result)
+
     def _execute_file_operation(self, operation: str, args: Dict[str, Any]) -> str:
         """
-        Execute the specified file operation via MCP.
+        Execute the specified file operation via external filesystem MCP.
 
         Args:
             operation: Operation name (list_files, read_file, etc.)
@@ -127,18 +170,31 @@ class FileOperationsSpecialist(BaseSpecialist):
 
         Returns:
             Formatted result message for user
+
+        Tool mapping (internal → filesystem MCP):
+            list_files → list_directory
+            read_file → read_file
+            write_file → write_file
+            append_to_file → (read + append + write)
+            create_directory → create_directory
+            delete_file → (not supported in filesystem MCP)
+            rename_file → move_file
         """
         try:
             if operation == "list_files":
                 path = args.get('path', '.')
-                files = self.mcp_client.call(
-                    "file_specialist",
-                    "list_files",
-                    path=path
-                )
-                if not files:
+                result = self._call_filesystem_mcp("list_directory", {"path": path})
+
+                # Parse directory listing
+                if not result or result.strip() == "":
                     return f"No files found in '{path}'."
-                files_list = '\n'.join(f"  - {f}" for f in files)
+
+                # Try to parse as structured output, fall back to raw
+                lines = [line.strip() for line in result.split('\n') if line.strip()]
+                if not lines:
+                    return f"No files found in '{path}'."
+
+                files_list = '\n'.join(f"  - {f}" for f in lines)
                 return f"Files in '{path}':\n{files_list}"
 
             elif operation == "read_file":
@@ -146,11 +202,7 @@ class FileOperationsSpecialist(BaseSpecialist):
                 if not path:
                     return "Error: No file path specified."
 
-                content = self.mcp_client.call(
-                    "file_specialist",
-                    "read_file",
-                    path=path
-                )
+                content = self._call_filesystem_mcp("read_file", {"path": path})
                 return f"Contents of '{path}':\n```\n{content}\n```"
 
             elif operation == "write_file":
@@ -160,13 +212,11 @@ class FileOperationsSpecialist(BaseSpecialist):
                 if not path:
                     return "Error: No file path specified."
 
-                result = self.mcp_client.call(
-                    "file_specialist",
-                    "write_file",
-                    path=path,
-                    content=content
-                )
-                return f"✓ {result}"
+                result = self._call_filesystem_mcp("write_file", {
+                    "path": path,
+                    "content": content
+                })
+                return f"✓ Successfully wrote to '{path}'"
 
             elif operation == "append_to_file":
                 path = args.get('path')
@@ -175,13 +225,18 @@ class FileOperationsSpecialist(BaseSpecialist):
                 if not path:
                     return "Error: No file path specified."
 
-                result = self.mcp_client.call(
-                    "file_specialist",
-                    "append_to_file",
-                    path=path,
-                    content=content
-                )
-                return f"✓ {result}"
+                # Filesystem MCP doesn't have append - read existing, append, write
+                try:
+                    existing = self._call_filesystem_mcp("read_file", {"path": path})
+                except Exception:
+                    existing = ""  # File may not exist yet
+
+                new_content = existing + content
+                self._call_filesystem_mcp("write_file", {
+                    "path": path,
+                    "content": new_content
+                })
+                return f"✓ Successfully appended to '{path}'"
 
             elif operation == "create_directory":
                 path = args.get('path')
@@ -189,12 +244,8 @@ class FileOperationsSpecialist(BaseSpecialist):
                 if not path:
                     return "Error: No directory path specified."
 
-                result = self.mcp_client.call(
-                    "file_specialist",
-                    "create_directory",
-                    path=path
-                )
-                return f"✓ {result}"
+                result = self._call_filesystem_mcp("create_directory", {"path": path})
+                return f"✓ Successfully created directory '{path}'"
 
             elif operation == "delete_file":
                 path = args.get('path')
@@ -202,12 +253,9 @@ class FileOperationsSpecialist(BaseSpecialist):
                 if not path:
                     return "Error: No file path specified."
 
-                result = self.mcp_client.call(
-                    "file_specialist",
-                    "delete_file",
-                    path=path
-                )
-                return f"✓ {result}"
+                # Note: Filesystem MCP may not support delete
+                # Try move_file to a .deleted location as workaround, or report unsupported
+                return f"Error: Delete operation is not supported by the filesystem service. Consider using move_file to relocate the file instead."
 
             elif operation == "rename_file":
                 old_path = args.get('old_path')
@@ -216,17 +264,15 @@ class FileOperationsSpecialist(BaseSpecialist):
                 if not old_path or not new_path:
                     return "Error: Both old and new paths required for rename."
 
-                result = self.mcp_client.call(
-                    "file_specialist",
-                    "rename_file",
-                    old_path=old_path,
-                    new_path=new_path
-                )
-                return f"✓ {result}"
+                result = self._call_filesystem_mcp("move_file", {
+                    "source": old_path,
+                    "destination": new_path
+                })
+                return f"✓ Successfully renamed '{old_path}' to '{new_path}'"
 
             else:
                 return f"Error: Unknown operation '{operation}'"
 
         except Exception as e:
-            logger.error(f"MCP call failed for {operation}: {e}")
+            logger.error(f"Filesystem MCP call failed for {operation}: {e}")
             return f"Error executing {operation}: {str(e)}"

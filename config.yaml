@@ -71,7 +71,9 @@ mcp:
       filesystem:
         enabled: true
         required: false  # Graceful degradation if container not running
-        container_name: "filesystem-mcp"
+        # Use command mode to launch via docker exec with full args
+        command: "docker"
+        args: ["exec", "-i", "filesystem-mcp", "npx", "-y", "@modelcontextprotocol/server-filesystem", "/app"]
         timeout_ms: 30000
 
       # Navigator MCP - Browser automation with Fara visual grounding (ADR-CORE-027)
@@ -140,7 +142,7 @@ specialists:
   file_operations_specialist:
     type: "llm"
     prompt_file: "file_operations_prompt.md"
-    description: "Executes file system CRUD operations: list, read, write, create, delete, rename, move. Use for 'list files in X', 'read config.yaml', 'create notes.txt', 'delete temp.txt'."
+    description: "Executes SINGLE file operations: list, read, write, create, delete, rename, move. Use for ONE file at a time: 'read config.yaml', 'create notes.txt', 'delete temp.txt'. For multiple files, use batch_processor_specialist instead."
 
   navigator_browser_specialist:
     type: "hybrid"
@@ -150,7 +152,7 @@ specialists:
   batch_processor_specialist:
     type: "llm"
     prompt_file: "batch_processor_prompt.md"
-    description: "Handles batch file operations with emergent LLM-driven sorting logic. Processes collections of files atomically (single graph node) using internal iteration. Use this for sorting, organizing, or batch-processing multiple files (e.g., 'sort these files into folders', 'organize these documents')."
+    description: "Handles MULTIPLE file operations atomically in one execution. Use when user mentions multiple files: 'create a.txt, b.txt, c.txt', 'sort these files into folders', 'organize these documents', 'make 5 empty files'. Processes all files in a single graph node."
 
   # --- Data & Analysis ---
   data_extractor_specialist:

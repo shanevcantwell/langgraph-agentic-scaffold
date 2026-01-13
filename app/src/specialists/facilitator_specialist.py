@@ -1,15 +1,92 @@
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan, ContextActionType
+from ..mcp import sync_call_external_mcp
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_text_from_mcp_result(result) -> str:
+    """Extract text content from external MCP result object."""
+    if result is None:
+        return ""
+
+    if hasattr(result, 'content'):
+        content = result.content
+        if isinstance(content, list) and len(content) > 0:
+            first = content[0]
+            if hasattr(first, 'text'):
+                return first.text
+            return str(first)
+        return str(content)
+
+    return str(result)
 
 class FacilitatorSpecialist(BaseSpecialist):
     """
     Orchestrates the execution of a ContextPlan by calling other specialists
     via MCP (Synchronous Service Invocation).
+
+    Uses:
+    - Internal MCP for web_specialist, summarizer_specialist
+    - External MCP (filesystem container) for file operations (ADR-CORE-035)
+
+    Note: external_mcp_client is injected by GraphBuilder after specialist loading.
     """
+
+    def _is_filesystem_available(self) -> bool:
+        """Check if external filesystem MCP is connected."""
+        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+            return False
+        return self.external_mcp_client.is_connected("filesystem")
+
+    def _read_file_via_filesystem_mcp(self, path: str) -> Optional[str]:
+        """Read file content via external filesystem MCP."""
+        if not self._is_filesystem_available():
+            logger.warning("Facilitator: Filesystem MCP not available for file read")
+            return None
+
+        try:
+            result = sync_call_external_mcp(
+                self.external_mcp_client,
+                "filesystem",
+                "read_file",
+                {"path": path}
+            )
+            return _extract_text_from_mcp_result(result)
+        except Exception as e:
+            logger.error(f"Facilitator: Filesystem MCP read_file failed: {e}")
+            raise
+
+    def _list_directory_via_filesystem_mcp(self, path: str) -> Optional[list]:
+        """List directory contents via external filesystem MCP."""
+        if not self._is_filesystem_available():
+            logger.warning("Facilitator: Filesystem MCP not available for directory list")
+            return None
+
+        try:
+            result = sync_call_external_mcp(
+                self.external_mcp_client,
+                "filesystem",
+                "list_directory",
+                {"path": path}
+            )
+            # Parse the result - filesystem MCP returns structured directory listing
+            text = _extract_text_from_mcp_result(result)
+            # The result may be JSON or newline-separated entries
+            if text.startswith('['):
+                import json
+                try:
+                    return json.loads(text)
+                except json.JSONDecodeError:
+                    pass
+            # Fall back to line-by-line parsing
+            return [line.strip() for line in text.split('\n') if line.strip()]
+        except Exception as e:
+            logger.error(f"Facilitator: Filesystem MCP list_directory failed: {e}")
+            raise
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
         context_plan_data = artifacts.get("context_plan")
@@ -71,30 +148,27 @@ class FacilitatorSpecialist(BaseSpecialist):
                             # Regular text content
                             gathered_context.append(f"### Artifact: {artifact_key}\n```\n{content}\n```")
                     else:
-                        # Not in artifacts, treat as filesystem path - call FileSpecialist via MCP
-                        content = self.mcp_client.call(
-                            service_name="file_specialist",
-                            function_name="read_file",
-                            path=target_path
-                        )
-                        gathered_context.append(f"### File: {target_path}\n```\n{content}\n```")
+                        # Not in artifacts, treat as filesystem path - call filesystem MCP
+                        content = self._read_file_via_filesystem_mcp(target_path)
+                        if content is None:
+                            gathered_context.append(f"### File: {target_path}\n[Filesystem service unavailable]")
+                        else:
+                            gathered_context.append(f"### File: {target_path}\n```\n{content}\n```")
                     
                 elif action.type == ContextActionType.SUMMARIZE:
                     # Call Summarizer via MCP
                     text_to_summarize = action.target
-                    
+
                     # Heuristic: If target looks like a file path, try to read it first
                     if text_to_summarize.startswith("/") or text_to_summarize.startswith("./"):
                         try:
-                             text_to_summarize = self.mcp_client.call(
-                                service_name="file_specialist",
-                                function_name="read_file",
-                                path=text_to_summarize
-                            )
+                            file_content = self._read_file_via_filesystem_mcp(text_to_summarize)
+                            if file_content:
+                                text_to_summarize = file_content
                         except Exception:
                             # If read fails, assume it's raw text and proceed
                             pass
-                    
+
                     summary = self.mcp_client.call(
                         service_name="summarizer_specialist",
                         function_name="summarize",
@@ -103,18 +177,15 @@ class FacilitatorSpecialist(BaseSpecialist):
                     gathered_context.append(f"### Summary: {action.target}\n{summary}")
 
                 elif action.type == ContextActionType.LIST_DIRECTORY:
-                    # Call FileSpecialist to list directory contents
-                    items = self.mcp_client.call(
-                        service_name="file_specialist",
-                        function_name="list_files",
-                        path=action.target
-                    )
-                    # Format as bulleted list
-                    if isinstance(items, list):
+                    # Call filesystem MCP to list directory contents
+                    items = self._list_directory_via_filesystem_mcp(action.target)
+                    if items is None:
+                        gathered_context.append(f"### Directory: {action.target}\n[Filesystem service unavailable]")
+                    elif isinstance(items, list):
                         formatted_items = "\n".join([f"- {item}" for item in items])
+                        gathered_context.append(f"### Directory: {action.target}\n{formatted_items}")
                     else:
-                        formatted_items = str(items)
-                    gathered_context.append(f"### Directory: {action.target}\n{formatted_items}")
+                        gathered_context.append(f"### Directory: {action.target}\n{str(items)}")
 
             except Exception as e:
                 logger.error(f"Failed to execute action {action}: {e}")
