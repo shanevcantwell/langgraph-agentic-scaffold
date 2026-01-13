@@ -168,6 +168,9 @@ class WorkflowRunner:
         for binding_key, provider_config in llm_providers.items():
             if binding_key not in used_provider_bindings:
                 continue
+            if provider_config.get("skip_ping", False):
+                logger.info(f"Provider '{binding_key}' skipped ping (skip_ping=true)")
+                continue
             result = ping_provider(binding_key, provider_config)
             if result["success"]:
                 logger.info(f"Provider '{binding_key}' ping OK ({result['latency_ms']}ms)")
