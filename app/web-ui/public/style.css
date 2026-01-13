@@ -553,6 +553,15 @@ pre, .markdown-body pre {
     opacity: 1;
 }
 
+.toggle-arrow {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.thought-entry.thought-reasoning:not(.collapsed) .toggle-arrow {
+    transform: rotate(90deg);
+}
+
 .thought-entry.thought-artifact {
     border-left-color: #9b59b6;
     background: rgba(155, 89, 182, 0.08);

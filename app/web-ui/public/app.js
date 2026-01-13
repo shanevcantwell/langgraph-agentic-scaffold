@@ -432,7 +432,7 @@ function addThoughtStreamEntry(specialist, message, type = 'info', options = {})
                     <span class="thought-time">${timestamp}</span>
                     <span class="thought-badge badge-think">THINK</span>
                     <span class="thought-specialist">${specialist.toUpperCase()}</span>
-                    <span class="thought-toggle" onclick="this.parentElement.classList.toggle('collapsed')">▶ ${message.split('\n')[0].substring(0, 50)}...</span>
+                    <span class="thought-toggle" onclick="this.parentElement.classList.toggle('collapsed')"><span class="toggle-arrow">▶</span> ${message.split('\n')[0].substring(0, 50)}...</span>
                     <div class="thought-content">${message.replace(/\n/g, '<br>')}</div>
                 `;
             } else {
@@ -693,10 +693,23 @@ function handleStreamEvent(event) {
 
                 // Extract thought process from scratchpad (generic pattern)
                 if (data.scratchpad) {
+                    // Check for triage recommendations
+                    if (data.scratchpad.recommended_specialists && Array.isArray(data.scratchpad.recommended_specialists)) {
+                        const recs = data.scratchpad.recommended_specialists;
+                        const message = `Recommending: ${recs.join(', ')}`;
+                        addThoughtStreamEntry('TRIAGE', message, 'reasoning', { collapsible: recs.length > 2 });
+                    }
+
                     // Check for router_decision (routing event)
                     if (data.scratchpad.router_decision) {
                         const decision = data.scratchpad.router_decision;
-                        addThoughtStreamEntry('ROUTER', decision, 'routing', { target: decision });
+                        // Use reasoning type with collapsible for long decisions
+                        const isLong = decision.length > 80;
+                        if (isLong) {
+                            addThoughtStreamEntry('ROUTER', decision, 'reasoning', { collapsible: true });
+                        } else {
+                            addThoughtStreamEntry('ROUTER', decision, 'routing', { target: decision });
+                        }
                     }
 
                     // Generic: display any key ending in _reasoning or _decision
