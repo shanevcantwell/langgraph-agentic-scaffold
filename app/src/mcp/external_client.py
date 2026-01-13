@@ -87,6 +87,8 @@ class ExternalMcpClient:
         self.sessions: Dict[str, ClientSession] = {}
         self.exit_stack = AsyncExitStack()
         self.tracing_enabled = self.config.get("tracing_enabled", True)
+        # Store main event loop for sync bridge (see GitHub #28, ADR-MCP-003)
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         logger.info("Initialized ExternalMcpClient")
 
     async def connect_service(
@@ -362,6 +364,10 @@ class ExternalMcpClient:
             ValueError: If service config malformed
             RuntimeError: If required service fails to connect
         """
+        # Capture running loop for sync bridge (GitHub #28)
+        if self._main_loop is None:
+            self._main_loop = asyncio.get_running_loop()
+
         services_config = self.config.get("services", {})
         service_cfg = services_config.get(service_name, {})
 
@@ -432,6 +438,9 @@ class ExternalMcpClient:
         Raises:
             RuntimeError: If any required service fails to connect
         """
+        # Capture running loop for sync bridge (GitHub #28)
+        self._main_loop = asyncio.get_running_loop()
+
         if not self.config.get("enabled", True):
             logger.info("External MCP globally disabled in config")
             return {}
@@ -454,13 +463,15 @@ def sync_call_external_mcp(
     external_client: ExternalMcpClient,
     service_name: str,
     tool_name: str,
-    arguments: Optional[Dict[str, Any]] = None
+    arguments: Optional[Dict[str, Any]] = None,
+    timeout: float = 30.0
 ) -> Any:
     """
     Bridge sync specialist code to async external MCP.
 
-    Temporary workaround for calling async external MCP from sync specialists.
-    Creates new event loop for each call (overhead, but functional).
+    Uses run_coroutine_threadsafe to schedule async calls on the main event
+    loop where MCP sessions were created. This avoids cross-event-loop issues
+    that caused hangs (GitHub #28).
 
     See ADR-CORE-014 for long-term async migration plan.
 
@@ -469,12 +480,13 @@ def sync_call_external_mcp(
         service_name: Service identifier (e.g., "filesystem")
         tool_name: Tool name (e.g., "read_file")
         arguments: Tool arguments
+        timeout: Seconds to wait for result (default 30s)
 
     Returns:
         Tool result
 
     Raises:
-        RuntimeError: If tool call fails
+        RuntimeError: If client not initialized, tool call fails, or timeout
 
     Example:
         ```python
@@ -492,11 +504,34 @@ def sync_call_external_mcp(
         (ADR-CORE-014). It's a temporary bridge to enable external MCP usage
         without full async migration.
     """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(
-            external_client.call_tool(service_name, tool_name, arguments)
+    import concurrent.futures
+    import time
+
+    if external_client._main_loop is None:
+        raise RuntimeError(
+            "External MCP client not initialized. "
+            "Call connect_all_from_config() first (GitHub #28)."
         )
-    finally:
-        loop.close()
+
+    logger.debug(
+        f"Scheduling {service_name}.{tool_name}() on main loop (threadsafe)"
+    )
+    start_time = time.time()
+
+    future = asyncio.run_coroutine_threadsafe(
+        external_client.call_tool(service_name, tool_name, arguments),
+        external_client._main_loop
+    )
+
+    try:
+        result = future.result(timeout=timeout)
+        elapsed_ms = (time.time() - start_time) * 1000
+        logger.debug(
+            f"✓ Sync bridge completed: {service_name}.{tool_name}() in {elapsed_ms:.1f}ms"
+        )
+        return result
+    except concurrent.futures.TimeoutError:
+        raise RuntimeError(
+            f"External MCP call timed out after {timeout}s: "
+            f"{service_name}.{tool_name}()"
+        )
