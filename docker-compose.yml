@@ -88,7 +88,10 @@ services:
     volumes:
       # Mount workspace to /app (matches langgraph-app's view)
       - ./workspace:/app
-    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/app"]
+    tmpfs:
+      # Ephemeral temp directory - cleared on container restart
+      - /tmp:size=100M,mode=1777
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/app", "/tmp"]
     restart: unless-stopped
 
   # surf-mcp - Browser automation with Fara visual grounding (ADR-CORE-027)

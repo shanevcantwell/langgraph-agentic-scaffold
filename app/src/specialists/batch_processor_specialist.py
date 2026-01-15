@@ -1,11 +1,11 @@
 """
-BatchProcessorSpecialist - Batch file operations via Operation Executor pattern.
+BatchProcessorSpecialist - Batch file operations via Operation Dispatcher pattern.
 
 Architecture (ADR-CORE-049):
-    Specialist (LLM) → list[FileOperation] → Executor → Filesystem MCP
+    Specialist (LLM) → list[FileOperation] → Dispatcher → Filesystem MCP
 
 The LLM handles inference (what operations to perform).
-The executor handles dispatch (how to execute via MCP).
+The dispatcher handles dispatch (how to execute via MCP).
 
 Supported operations:
 - CREATE: "Create files a.txt, b.txt, c.txt"
@@ -19,7 +19,7 @@ Example Flow:
     Router → BatchProcessorSpecialist
       ↓
     1. LLM parses user intent → list[FileOperation]
-    2. FileOperationExecutor dispatches to filesystem MCP
+    2. FileOperationDispatcher dispatches to filesystem MCP
     3. Return results with detailed artifacts
 
 Note: external_mcp_client is injected by GraphBuilder after specialist loading.
@@ -33,34 +33,17 @@ from langchain_core.messages import AIMessage, HumanMessage
 from .base import BaseSpecialist
 from ..llm.adapter import StandardizedLLMRequest
 from .schemas._file_operations import FileOperation, FileOperationList
-from ..executors import FileOperationExecutor, OperationResult
-from ..mcp import sync_call_external_mcp
+from ..dispatchers import FileOperationDispatcher, OperationResult
+from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
 
 logger = logging.getLogger(__name__)
 
 
-def _extract_text_from_mcp_result(result) -> str:
-    """Extract text content from external MCP result object."""
-    if result is None:
-        return ""
-
-    if hasattr(result, 'content'):
-        content = result.content
-        if isinstance(content, list) and len(content) > 0:
-            first = content[0]
-            if hasattr(first, 'text'):
-                return first.text
-            return str(first)
-        return str(content)
-
-    return str(result)
-
-
 class BatchProcessorSpecialist(BaseSpecialist):
     """
-    Specialist for batch file operations via Operation Executor pattern (ADR-CORE-049).
+    Specialist for batch file operations via Operation Dispatcher pattern (ADR-CORE-049).
 
-    LLM produces list[FileOperation], executor dispatches to filesystem MCP.
+    LLM produces list[FileOperation], dispatcher dispatches to filesystem MCP.
     Handles: create multiple files, sort files, batch moves, mixed operations.
 
     Uses external filesystem MCP container for file operations (ADR-CORE-035).
@@ -80,7 +63,7 @@ class BatchProcessorSpecialist(BaseSpecialist):
             tool_name,
             arguments
         )
-        return _extract_text_from_mcp_result(result)
+        return extract_text_from_mcp_result(result)
 
     def _file_exists(self, path: str) -> bool:
         """Check if file exists using filesystem MCP get_file_info."""
@@ -92,11 +75,11 @@ class BatchProcessorSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Execute batch file operations via Operation Executor pattern.
+        Execute batch file operations via Operation Dispatcher pattern.
 
         Flow:
         1. LLM parses user intent → list[FileOperation]
-        2. FileOperationExecutor dispatches each operation to MCP
+        2. FileOperationDispatcher dispatches each operation to MCP
         3. Format results and return artifacts
         """
         if not self._is_filesystem_available():
@@ -118,9 +101,9 @@ class BatchProcessorSpecialist(BaseSpecialist):
             operations = self._parse_operations(messages)
             logger.info(f"Phase 1: parsed {len(operations)} operations")
 
-            # Phase 2: Execute via FileOperationExecutor
-            executor = FileOperationExecutor(self.external_mcp_client)
-            results = executor.execute_sync(operations)
+            # Phase 2: Execute via FileOperationDispatcher (ADR-CORE-049)
+            dispatcher = FileOperationDispatcher(self.external_mcp_client)
+            results = dispatcher.dispatch_sync(operations)
 
             # Phase 3: Format results
             formatted = self._format_results(operations, results)

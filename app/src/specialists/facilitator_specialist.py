@@ -2,26 +2,10 @@ import logging
 from typing import Dict, Any, Optional
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan, ContextActionType
-from ..mcp import sync_call_external_mcp
+from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
 
 logger = logging.getLogger(__name__)
 
-
-def _extract_text_from_mcp_result(result) -> str:
-    """Extract text content from external MCP result object."""
-    if result is None:
-        return ""
-
-    if hasattr(result, 'content'):
-        content = result.content
-        if isinstance(content, list) and len(content) > 0:
-            first = content[0]
-            if hasattr(first, 'text'):
-                return first.text
-            return str(first)
-        return str(content)
-
-    return str(result)
 
 class FacilitatorSpecialist(BaseSpecialist):
     """
@@ -54,7 +38,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                 "read_file",
                 {"path": path}
             )
-            return _extract_text_from_mcp_result(result)
+            return extract_text_from_mcp_result(result)
         except Exception as e:
             logger.error(f"Facilitator: Filesystem MCP read_file failed: {e}")
             raise
@@ -73,7 +57,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                 {"path": path}
             )
             # Parse the result - filesystem MCP returns structured directory listing
-            text = _extract_text_from_mcp_result(result)
+            text = extract_text_from_mcp_result(result)
             # The result may be JSON or newline-separated entries
             if text.startswith('['):
                 import json
