@@ -1,13 +1,27 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from app.src.specialists.facilitator_specialist import FacilitatorSpecialist
 from app.src.interface.context_schema import ContextPlan, ContextAction, ContextActionType
+
+
+def _make_mcp_result(text: str):
+    """Create mock MCP result with expected structure for extract_text_from_mcp_result."""
+    mock_content = MagicMock()
+    mock_content.text = text
+    mock_result = MagicMock()
+    mock_result.content = [mock_content]
+    return mock_result
 
 @pytest.fixture
 def facilitator():
     config = {}
     specialist = FacilitatorSpecialist("facilitator_specialist", config)
     specialist.mcp_client = MagicMock()
+
+    # Mock external MCP client for filesystem operations (ADR-CORE-035)
+    specialist.external_mcp_client = MagicMock()
+    specialist.external_mcp_client.is_connected.return_value = True
+
     return specialist
 
 def test_facilitator_executes_research_action(facilitator):
@@ -49,12 +63,12 @@ def test_facilitator_executes_read_file_action(facilitator):
     state = {
         "artifacts": {"context_plan": plan.model_dump()}
     }
-    
-    facilitator.mcp_client.call.return_value = "File content"
-    
-    # Act
-    result = facilitator.execute(state)
-    
+
+    # Act - Mock external MCP call (ADR-CORE-035: file ops via filesystem container)
+    with patch('app.src.specialists.facilitator_specialist.sync_call_external_mcp') as mock_sync:
+        mock_sync.return_value = _make_mcp_result("File content")
+        result = facilitator.execute(state)
+
     # Assert
     assert "### File: /path/to/file" in result["artifacts"]["gathered_context"]
     assert "File content" in result["artifacts"]["gathered_context"]
@@ -132,8 +146,8 @@ def test_facilitator_reads_artifact_for_uploaded_image_png_key(facilitator):
     assert "### Image: uploaded_image.png" in result["artifacts"]["gathered_context"]
     facilitator.mcp_client.call.assert_not_called()
 
-def test_facilitator_calls_file_specialist_when_artifact_not_in_state(facilitator):
-    """Test that Facilitator falls back to file_specialist when artifact is NOT in state."""
+def test_facilitator_reads_file_via_external_mcp_when_artifact_not_in_state(facilitator):
+    """Test that Facilitator reads files via external filesystem MCP when not in artifacts."""
     plan = ContextPlan(
         reasoning="Need actual file from workspace",
         actions=[
@@ -147,17 +161,13 @@ def test_facilitator_calls_file_specialist_when_artifact_not_in_state(facilitato
         }
     }
 
-    facilitator.mcp_client.call.return_value = "yaml content"
-
-    # Act
-    result = facilitator.execute(state)
+    # Act - Mock external MCP call (ADR-CORE-035: file ops via filesystem container)
+    with patch('app.src.specialists.facilitator_specialist.sync_call_external_mcp') as mock_sync:
+        mock_sync.return_value = _make_mcp_result("yaml content")
+        result = facilitator.execute(state)
 
     # Assert
     assert "### File: config.yaml" in result["artifacts"]["gathered_context"]
     assert "yaml content" in result["artifacts"]["gathered_context"]
-    # MCP SHOULD have been called
-    facilitator.mcp_client.call.assert_called_once_with(
-        service_name="file_specialist",
-        function_name="read_file",
-        path="config.yaml"
-    )
+    # External MCP should have been called
+    mock_sync.assert_called_once()

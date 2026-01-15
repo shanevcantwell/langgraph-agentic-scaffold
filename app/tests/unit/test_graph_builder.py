@@ -25,7 +25,6 @@ def test_load_and_configure_specialists(
     specialist_configs = {
         "router_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_router.md", "description": "d"},
         "prompt_triage_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_triage.md", "description": "d"},
-        "file_specialist": {"type": "procedural", "description": "File ops"},
         "end_specialist": {"type": "procedural", "llm_config": "gemini-test", "synthesis_prompt_file": "fake_end.md"},
         "chat_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_chat.md", "description": "d"},
         "archiver_specialist": {"type": "procedural"},
@@ -44,7 +43,7 @@ def test_load_and_configure_specialists(
     assert "router_specialist" in builder.specialists
     assert "prompt_triage_specialist" in builder.specialists
     assert "end_specialist" in builder.specialists
-    assert "file_specialist" in builder.specialists
+    assert "chat_specialist" in builder.specialists
     
     # 2. Check that adapters were attached correctly
     mock_adapter_factory.create_adapter.assert_any_call("router_specialist", ANY)
@@ -61,7 +60,7 @@ def test_build_graph(
     # --- Arrange ---
     spec_configs = {
         "router_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake.md"},
-        "file_specialist": {"type": "procedural", "description": "desc"},
+        "chat_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_chat.md", "description": "desc"},
         "end_specialist": {"type": "procedural"}
     }
     mock_config = mock_config_loader.get_config.return_value
@@ -77,7 +76,7 @@ def test_build_graph(
     assert graph is not None
     assert isinstance(graph, Pregel)
     assert "router_specialist" in graph.nodes
-    assert "file_specialist" in graph.nodes
+    assert "chat_specialist" in graph.nodes
 
 @patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
 def test_graph_builder_handles_disabled_specialist(mock_load_prompt, mock_config_loader, mock_adapter_factory):
@@ -86,7 +85,7 @@ def test_graph_builder_handles_disabled_specialist(mock_load_prompt, mock_config
     # We need a router for the graph to build correctly.
     spec_configs = {
         "router_specialist": {"type": "llm", "prompt_file": "fake.md", "llm_config": "gemini-test"},
-        "file_specialist": {"type": "procedural", "description": "File ops"},
+        "chat_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_chat.md", "description": "File ops"},
         "prompt_specialist": {"type": "llm", "llm_config": "gemini-test", "is_enabled": False, "description": "d"},
         "end_specialist": {"type": "procedural"}
     }
@@ -101,7 +100,7 @@ def test_graph_builder_handles_disabled_specialist(mock_load_prompt, mock_config
 
     # Assert
     assert "router_specialist" in graph.nodes
-    assert "file_specialist" in graph.nodes
+    assert "chat_specialist" in graph.nodes
     assert "prompt_specialist" not in graph.nodes
 
 @patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
@@ -112,7 +111,7 @@ def test_graph_builder_handles_pre_flight_check_failure(mock_load_prompt, mock_c
     # We use real specialists and make one of them "fail" the check.
     spec_configs = {
         "router_specialist": {"type": "llm", "prompt_file": "fake.md", "llm_config": "gemini-test"},
-        "file_specialist": {"type": "procedural"}, # This will pass
+        "chat_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "fake_chat.md"}, # This will pass
         "prompt_specialist": {"type": "llm", "llm_config": "gemini-test"}, # This will fail
         "end_specialist": {"type": "procedural"}
     }
@@ -131,7 +130,7 @@ def test_graph_builder_handles_pre_flight_check_failure(mock_load_prompt, mock_c
  
     # Assert
     assert "router_specialist" in graph.nodes
-    assert "file_specialist" in graph.nodes # This one should pass the check
+    assert "chat_specialist" in graph.nodes # This one should pass the check
     assert "prompt_specialist" not in graph.nodes
 
 @patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
@@ -180,7 +179,7 @@ def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router(mock_load_prompt,
     mock_config = mock_config_loader.get_config.return_value
     mock_config['specialists'] = {
         "router_specialist": {"type": "llm", "llm_config": "test"},
-        "file_specialist": {"type": "procedural"}
+        "chat_specialist": {"type": "llm", "llm_config": "test", "prompt_file": "fake_chat.md"}
     }
     mock_config['workflow'] = {"entry_point": "router_specialist"}
 
@@ -192,12 +191,12 @@ def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router(mock_load_prompt,
     # The call to add_conditional_edges should have been made with the safe_decider function
     # from _add_safe_conditional_edges, which is a wrapper around the actual decider.
     # We check that the `add_conditional_edges` method was called with the correct source and map.
-    # Note: Multiple calls expected (router + file_specialist), so we check for the specific router call
+    # Note: Multiple calls expected (router + chat_specialist), so we check for the specific router call
     from unittest.mock import call
     mock_workflow.add_conditional_edges.assert_any_call(
         "router_specialist",
         builder.orchestrator.route_to_next_specialist,
-        {"file_specialist": "file_specialist"}  # Router cannot route to itself
+        {"chat_specialist": "chat_specialist"}  # Router cannot route to itself
     )
 
 @patch("app.src.strategies.critique.llm_strategy.load_prompt", return_value="Critique prompt")
@@ -252,7 +251,7 @@ def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_task_completion(mock_loa
     mock_config = mock_config_loader.get_config.return_value
     mock_config['specialists'] = {
         "router_specialist": {"type": "llm", "llm_config": "test"},
-        "file_specialist": {"type": "procedural"}
+        "chat_specialist": {"type": "llm", "llm_config": "test", "prompt_file": "fake_chat.md"}
     }
     mock_config['workflow'] = {"entry_point": "router_specialist"}
 
@@ -264,10 +263,10 @@ def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_task_completion(mock_loa
     # The call to add_conditional_edges should have been made with the safe_decider function
     # from _add_safe_conditional_edges, which is a wrapper around the actual decider.
     # We check that the `add_conditional_edges` method was called with the correct source and map.
-    # Note: Multiple calls expected (router + file_specialist), so we check for the specific file_specialist call
+    # Note: Multiple calls expected (router + chat_specialist), so we check for the specific chat_specialist call
     from unittest.mock import call
     mock_workflow.add_conditional_edges.assert_any_call(
-        "file_specialist",
+        "chat_specialist",
         builder.orchestrator.check_task_completion,
         {"end_specialist": "end_specialist", "router_specialist": "router_specialist"}
     )

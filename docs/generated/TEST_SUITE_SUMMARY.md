@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 69 | 648 |
-| Integration | 28 | 205 |
-| Other | 8 | 102 |
-| **Total** | **105** | **955** |
+| Unit | 67 | 572 |
+| Integration | 29 | 209 |
+| Other | 7 | 90 |
+| **Total** | **103** | **871** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -219,6 +219,28 @@
   - *Live test: Full integration ping through V.E.G.A.S. Terminal.*
 - **`test_coordinate_in_expected_region`**
   - *Test that located coordinates fall within expected regions.*
+
+## `app/tests/integration/test_file_sort.py`
+
+- **`test_folder`**
+  - *Create a unique test folder, clean up after test.*
+- **`test_count_files_in_folder`**
+  - *Prompt: "Count the files in folder X"*
+- **`test_triage_recommends_chat_for_counting`**
+  - *Triage should recommend chat_specialist for counting tasks (reasoning verb).*
+- **`test_triage_recommends_file_ops_for_listing`**
+  - *Triage should recommend file_operations_specialist for listing tasks (CRUD verb).*
+
+## `app/tests/integration/test_filesystem_mcp.py`
+
+- **`test_folder`**
+  - *Create unique test folder, cleanup after.*
+- **`test_filesystem_mcp_connection`**
+  - *Verify connection to filesystem MCP container succeeds.*
+- **`test_sync_bridge_list_directory`**
+  - *Test sync_call_external_mcp works (validates fix for GitHub #28).*
+- **`test_sync_bridge_read_file`**
+  - *Test sync bridge read_file operation.*
 
 ## `app/tests/integration/test_flows.py`
 
@@ -447,17 +469,6 @@
 ## `app/tests/integration/test_navigator_mcp.py`
 
 
-## `app/tests/integration/test_navigator_specialist_integration.py`
-
-- **`test_graceful_message_when_unavailable`**
-  - *Test that specialist provides helpful message when navigator unavailable.*
-- **`test_extract_quoted_path`**
-  - *Test extracting path from quoted string.*
-- **`test_extract_pattern_glob`**
-  - *Test extracting glob pattern.*
-- **`test_extract_pattern_extension`**
-  - *Test extracting pattern from '.X files' phrase.*
-
 ## `app/tests/integration/test_parallel_execution.py`
 
 
@@ -644,33 +655,6 @@
   - *Test batch sorting with content reading enabled.*
 - **`test_mcp_error_during_execution`**
   - *Test graceful handling of MCP errors during file operations.*
-
-## `app/tests/specialists/test_file_operations_specialist.py`
-
-- **`test_init`**
-  - *Test FileOperationsSpecialist initializes correctly.*
-- **`test_list_files_operation`**
-  - *Test listing files via MCP.*
-- **`test_read_file_operation`**
-  - *Test reading file contents via MCP.*
-- **`test_write_file_operation`**
-  - *Test writing file via MCP.*
-- **`test_create_directory_operation`**
-  - *Test creating directory via MCP.*
-- **`test_delete_file_operation`**
-  - *Test deleting file via MCP.*
-- **`test_rename_file_operation`**
-  - *Test renaming file via MCP.*
-- **`test_no_mcp_client_error`**
-  - *Test error handling when MCP client not available.*
-- **`test_no_tool_calls_from_llm`**
-  - *Test handling when LLM doesn't return tool calls.*
-- **`test_mcp_call_failure`**
-  - *Test error handling when MCP call fails.*
-- **`test_empty_file_list_response`**
-  - *Test handling of empty directory.*
-- **`test_append_to_file_operation`**
-  - *Test appending content to file via MCP.*
 
 ## `app/tests/specialists/test_image_specialist.py`
 
@@ -967,8 +951,8 @@
   - *Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem.*
 - **`test_facilitator_reads_artifact_for_uploaded_image_png_key`**
   - *Test artifact retrieval with 'uploaded_image.png' key.*
-- **`test_facilitator_calls_file_specialist_when_artifact_not_in_state`**
-  - *Test that Facilitator falls back to file_specialist when artifact is NOT in state.*
+- **`test_facilitator_reads_file_via_external_mcp_when_artifact_not_in_state`**
+  - *Test that Facilitator reads files via external filesystem MCP when not in artifacts.*
 
 ## `app/tests/unit/test_fara_service.py`
 
@@ -1085,93 +1069,6 @@
   - *Tests that Pydantic models raise ValidationError for invalid input.*
 - **`test_write_file_params_allows_empty_content`**
   - *Tests that writing an empty string or empty bytes as content is valid.*
-
-## `app/tests/unit/test_file_specialist.py`
-
-- **`test_file_exists_returns_true_for_existing_file`**
-  - *Test that file_exists returns True for existing file.*
-- **`test_file_exists_returns_true_for_existing_directory`**
-  - *Test that file_exists returns True for existing directory.*
-- **`test_file_exists_returns_false_for_nonexistent_path`**
-  - *Test that file_exists returns False for nonexistent path.*
-- **`test_file_exists_rejects_path_escape_attempt`**
-  - *Test that file_exists rejects directory traversal attempts.*
-- **`test_read_file_returns_content`**
-  - *Test that read_file returns file contents.*
-- **`test_read_file_handles_multiline_content`**
-  - *Test that read_file preserves newlines.*
-- **`test_read_file_raises_on_nonexistent_file`**
-  - *Test that read_file raises SpecialistError for nonexistent file.*
-- **`test_read_file_raises_on_directory`**
-  - *Test that read_file raises SpecialistError when path is directory.*
-- **`test_read_file_rejects_path_escape_attempt`**
-  - *Test that read_file rejects directory traversal attempts.*
-- **`test_write_file_creates_new_file`**
-  - *Test that write_file creates new file with content.*
-- **`test_write_file_overwrites_existing_file`**
-  - *Test that write_file overwrites existing file.*
-- **`test_write_file_creates_parent_directories`**
-  - *Test that write_file creates missing parent directories.*
-- **`test_write_file_handles_empty_content`**
-  - *Test that write_file can write empty file.*
-- **`test_write_file_rejects_path_escape_attempt`**
-  - *Test that write_file rejects directory traversal attempts.*
-- **`test_list_files_returns_directory_contents`**
-  - *Test that list_files returns all files and directories.*
-- **`test_list_files_returns_empty_for_empty_directory`**
-  - *Test that list_files returns empty list for empty directory.*
-- **`test_list_files_lists_subdirectory`**
-  - *Test that list_files can list subdirectory contents.*
-- **`test_list_files_raises_on_nonexistent_directory`**
-  - *Test that list_files raises SpecialistError for nonexistent directory.*
-- **`test_list_files_raises_on_file_path`**
-  - *Test that list_files raises SpecialistError when path is file.*
-- **`test_list_files_rejects_path_escape_attempt`**
-  - *Test that list_files rejects directory traversal attempts.*
-- **`test_create_directory_creates_new_directory`**
-  - *Test that create_directory creates new directory.*
-- **`test_create_directory_creates_nested_directories`**
-  - *Test that create_directory creates missing parent directories.*
-- **`test_create_directory_succeeds_if_already_exists`**
-  - *Test that create_directory is idempotent (succeeds if dir exists).*
-- **`test_create_directory_rejects_path_escape_attempt`**
-  - *Test that create_directory rejects directory traversal attempts.*
-- **`test_create_zip_creates_archive`**
-  - *Test that create_zip creates zip archive from directory.*
-- **`test_create_zip_preserves_directory_structure`**
-  - *Test that create_zip preserves nested directory structure.*
-- **`test_create_zip_handles_zip_extension_in_dest`**
-  - *Test that create_zip handles .zip extension correctly.*
-- **`test_create_zip_raises_on_nonexistent_source`**
-  - *Test that create_zip raises SpecialistError for nonexistent source.*
-- **`test_create_zip_raises_on_file_source`**
-  - *Test that create_zip raises SpecialistError when source is file.*
-- **`test_create_zip_rejects_source_path_escape`**
-  - *Test that create_zip rejects directory traversal in source path.*
-- **`test_create_zip_rejects_dest_path_escape`**
-  - *Test that create_zip rejects directory traversal in dest path.*
-- **`test_create_manifest_creates_valid_json`**
-  - *Test that create_manifest creates a valid JSON file.*
-- **`test_create_manifest_validates_schema`**
-  - *Test that create_manifest raises error for invalid data.*
-- **`test_create_manifest_rejects_path_escape`**
-  - *Test that create_manifest rejects directory traversal.*
-- **`test_validate_path_accepts_relative_paths`**
-  - *Test that relative paths within root_dir are accepted.*
-- **`test_validate_path_accepts_current_directory`**
-  - *Test that '.' resolves to root_dir.*
-- **`test_validate_path_rejects_parent_directory_traversal`**
-  - *Test that .. traversal escaping root_dir is rejected.*
-- **`test_validate_path_rejects_absolute_path_outside_root`**
-  - *Test that absolute paths outside root_dir are rejected.*
-- **`test_validate_path_accepts_absolute_path_inside_root`**
-  - *Test that absolute paths within root_dir are accepted.*
-- **`test_register_mcp_services_exposes_all_functions`**
-  - *Test that register_mcp_services exposes all 6 functions.*
-- **`test_execute_logic_returns_empty_dict`**
-  - *Test that _execute_logic returns empty dict (no-op).*
-- **`test_execute_logic_logs_warning`**
-  - *Test that _execute_logic logs warning about MCP-only mode.*
 
 ## `app/tests/unit/test_gemini_adapter.py`
 
@@ -1649,77 +1546,6 @@
   - *Test that execute_logic persists session by default.*
 - **`test_execute_logic_destroys_session_when_not_persisting`**
   - *Test that execute_logic destroys session when persist_session=False.*
-
-## `app/tests/unit/test_navigator_specialist.py`
-
-- **`test_init_sets_name_and_config`**
-  - *Test that init properly sets name and config.*
-- **`test_preflight_passes_without_client_for_loading`**
-  - *Test pre-flight passes when client not injected (allows loading).*
-- **`test_preflight_fails_when_not_connected`**
-  - *Test pre-flight check fails when navigator not connected.*
-- **`test_preflight_succeeds_when_connected`**
-  - *Test pre-flight check passes when navigator connected.*
-- **`test_create_session_extracts_session_id`**
-  - *Test session creation extracts session_id from result.*
-- **`test_create_session_returns_none_on_failure`**
-  - *Test session creation returns None on failure.*
-- **`test_destroy_session_calls_navigator`**
-  - *Test session destruction calls navigator.*
-- **`test_extract_quoted_path`**
-  - *Test extracting path from quoted string.*
-- **`test_extract_path_from_folder_phrase`**
-  - *Test extracting path from 'X folder' phrase.*
-- **`test_extract_path_from_directory_phrase`**
-  - *Test extracting path from 'X directory' phrase.*
-- **`test_extract_pattern_glob`**
-  - *Test extracting glob pattern.*
-- **`test_extract_pattern_extension`**
-  - *Test extracting pattern from '.X files' phrase.*
-- **`test_extract_pattern_type_name`**
-  - *Test extracting pattern from file type name.*
-- **`test_extract_pattern_returns_none_for_unclear`**
-  - *Test pattern extraction returns None for unclear requests.*
-- **`test_handle_navigator_unavailable`**
-  - *Test graceful degradation message when navigator unavailable.*
-- **`test_execute_without_request`**
-  - *Test execution with no user message.*
-- **`test_execute_calls_session_lifecycle`**
-  - *Test that execute creates and destroys session.*
-- **`test_handle_delete_without_path`**
-  - *Test delete handler when path cannot be determined.*
-- **`test_handle_delete_success`**
-  - *Test successful delete operation.*
-- **`test_handle_delete_error`**
-  - *Test delete operation with error.*
-- **`test_handle_find_without_pattern`**
-  - *Test find handler when pattern cannot be determined.*
-- **`test_handle_find_success`**
-  - *Test successful find operation.*
-- **`test_handle_find_no_matches`**
-  - *Test find operation with no matches.*
-- **`test_handle_list_default_path`**
-  - *Test list with default path.*
-- **`test_handle_list_specific_path`**
-  - *Test list with specific path.*
-- **`test_handle_list_empty_directory`**
-  - *Test list on empty directory.*
-- **`test_register_mcp_services`**
-  - *Test that MCP services are registered correctly.*
-- **`test_mcp_is_available`**
-  - *Test is_available MCP service.*
-- **`test_mcp_is_available_when_not_connected`**
-  - *Test is_available returns False when client injected but not connected.*
-- **`test_mcp_is_available_when_client_not_injected`**
-  - *Test is_available returns True when client not yet injected (allows loading).*
-- **`test_parse_json_result`**
-  - *Test parsing JSON result.*
-- **`test_parse_non_json_result`**
-  - *Test parsing non-JSON result.*
-- **`test_parse_none_result`**
-  - *Test parsing None result.*
-- **`test_extract_session_id`**
-  - *Test session ID extraction.*
 
 ## `app/tests/unit/test_node_executor.py`
 
