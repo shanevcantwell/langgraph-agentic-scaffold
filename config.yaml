@@ -133,16 +133,17 @@ specialists:
       system_plan: "systems_architect"
     tags: ["vision_capable"]
 
-  file_specialist:
-    type: "llm"
-    prompt_file: "file_specialist_prompt.md"
-    description: "MCP-only service layer for file system operations. NOT routable - accessed exclusively via MCP by other specialists. User-initiated file operations now handled by external filesystem MCP container."
-    root_dir: "${WORKSPACE_PATH:-workspace}" # Workspace path from .env (defaults to 'workspace')
+  # REMOVED: file_specialist - superseded by external filesystem MCP container (ADR-CORE-035)
+  # File operations now handled via:
+  # - batch_processor_specialist (user-initiated file operations)
+  # - External filesystem MCP (containerized @modelcontextprotocol/server-filesystem)
 
-  file_operations_specialist:
-    type: "llm"
-    prompt_file: "file_operations_prompt.md"
-    description: "Executes SINGLE file operations: list, read, write, create, delete, rename, move. Use for ONE file at a time: 'read config.yaml', 'create notes.txt', 'delete temp.txt'. For multiple files, use batch_processor_specialist instead."
+  # DEPRECATED: file_operations_specialist - superseded by batch_processor_specialist (ADR-CORE-049)
+  # The dispatcher pattern handles single AND batch operations uniformly.
+  # file_operations_specialist:
+  #   type: "llm"
+  #   prompt_file: "file_operations_prompt.md"
+  #   description: "DEPRECATED - use batch_processor_specialist"
 
   navigator_browser_specialist:
     type: "hybrid"
@@ -152,7 +153,7 @@ specialists:
   batch_processor_specialist:
     type: "llm"
     prompt_file: "batch_processor_prompt.md"
-    description: "Handles MULTIPLE file operations atomically in one execution. Use when user mentions multiple files: 'create a.txt, b.txt, c.txt', 'sort these files into folders', 'organize these documents', 'make 5 empty files'. Processes all files in a single graph node."
+    description: "Handles ALL file operations via dispatcher pattern: create, read, write, move, delete, list, mkdir. Works for single files ('read config.yaml', 'create notes.txt') AND batch operations ('create a.txt, b.txt, c.txt', 'move files to archive/', 'sort files into folders'). Primary specialist for any filesystem task."
 
   # --- Data & Analysis ---
   data_extractor_specialist:
@@ -179,8 +180,8 @@ specialists:
     prompt_file: "text_analysis_prompt.md"
     description: "Analyzes, summarizes, or extracts specific information from documents or text blocks. Use this for analytical tasks on text content (e.g., 'summarize this document', 'extract key points', 'analyze this code structure'). For conversational questions about text, use chat_specialist instead."
     requires_artifacts: ["text_to_process"]
-    artifact_providers:
-      text_to_process: "file_specialist"
+    # NOTE: artifact_providers.text_to_process removed - file_specialist superseded by filesystem MCP (ADR-CORE-035)
+    # text_to_process now comes from facilitator_specialist gathering via external filesystem MCP
 
   # --- Conversational & Chat ---
 

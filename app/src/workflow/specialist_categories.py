@@ -37,9 +37,8 @@ class SpecialistCategories:
     ])
 
     # Service layer: MCP-only internal services
-    SERVICE_LAYER: frozenset = frozenset([
-        "file_specialist",  # MCP-only service, use file_operations_specialist for user requests
-    ])
+    # NOTE: file_specialist removed - superseded by external filesystem MCP container (ADR-CORE-035)
+    SERVICE_LAYER: frozenset = frozenset([])
 
     @classmethod
     def get_router_exclusions(cls, subgraph_exclusions: List[str] = None) -> Set[str]:
