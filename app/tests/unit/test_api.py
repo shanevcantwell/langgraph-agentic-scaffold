@@ -8,6 +8,7 @@ from app.src.utils.errors import WorkflowError
 # from being built during the FastAPI app's lifespan startup event.
 # This is the key to isolating the API tests from the complex workflow logic.
 mock_graph_builder_instance = MagicMock()
+mock_graph_builder_instance.return_value = mock_graph_builder_instance  # When called as class, return self
 mock_compiled_app = MagicMock()
 
 # The mock compiled app's methods need to be async where the original is.
@@ -15,14 +16,22 @@ mock_compiled_app.astream.return_value = AsyncMock()
 
 mock_graph_builder_instance.build.return_value = mock_compiled_app
 
-# We apply two critical patches:
+# Mock external MCP lifecycle to prevent Docker connection attempts (fixes hang issue)
+mock_graph_builder_instance.initialize_external_mcp = AsyncMock()
+mock_graph_builder_instance.cleanup_external_mcp = AsyncMock()
+
+# We apply two critical patches using patch.start() to keep them active for the module lifetime:
 # 1. GraphBuilder (in the runner module): Prevents the real graph from being built when WorkflowRunner is initialized.
 # 2. AdapterFactory (in the graph_builder module): Prevents the real LLM adapters from being created
 #    when the GraphBuilder logic is executed. This is the key to stopping live API calls.
-with patch('app.src.workflow.runner.GraphBuilder', return_value=mock_graph_builder_instance), \
-     patch('app.src.workflow.graph_builder.AdapterFactory', MagicMock()):
-    from app.src import api
-    from fastapi.testclient import TestClient
+# NOTE: Using patch.start() instead of `with patch()` keeps patches active for test execution, not just imports.
+_graph_builder_patch = patch('app.src.workflow.runner.GraphBuilder', mock_graph_builder_instance)
+_adapter_factory_patch = patch('app.src.workflow.graph_builder.AdapterFactory', MagicMock())
+_graph_builder_patch.start()
+_adapter_factory_patch.start()
+
+from app.src import api
+from fastapi.testclient import TestClient
  
 async def mock_streaming_gen(*args, **kwargs):
     """
