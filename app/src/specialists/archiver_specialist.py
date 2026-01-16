@@ -166,7 +166,19 @@ class ArchiverSpecialist(BaseSpecialist):
                     size_bytes=os.path.getsize(traces_path)
                 ))
 
-            # 4. Create Manifest
+            # 4. Write Final State (Issue #39)
+            final_state_path = os.path.join(package_dir, "final_state.json")
+            with open(final_state_path, "w", encoding="utf-8") as f:
+                json.dump(self._serialize_state(state), f, indent=2, default=str)
+            logger.info("Wrote final_state.json to archive")
+            artifact_manifests.append(ArtifactManifest(
+                filename="final_state.json",
+                original_key="final_state",
+                content_type="application/json",
+                size_bytes=os.path.getsize(final_state_path)
+            ))
+
+            # 5. Create Manifest
             manifest = AtomicManifest(
                 run_id=run_id,
                 routing_history=state.get("routing_history", []),
@@ -178,7 +190,7 @@ class ArchiverSpecialist(BaseSpecialist):
             with open(os.path.join(package_dir, "manifest.json"), "w", encoding="utf-8") as f:
                 f.write(manifest.model_dump_json(indent=2))
 
-            # 5. Zip Package
+            # 6. Zip Package
             zip_path = shutil.make_archive(package_dir, 'zip', package_dir)
             logger.info(f"Created Atomic Archival Package: {zip_path}")
             
@@ -232,6 +244,39 @@ class ArchiverSpecialist(BaseSpecialist):
                 summary_lines.append(f"{i+1}. **{name} ({role}):** *{content}*")
 
         return "\n".join(summary_lines)
+
+    def _serialize_state(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Converts GraphState to JSON-serializable dict.
+        Handles LangChain BaseMessage objects in the messages list.
+        """
+        serialized = {}
+
+        for key, value in state.items():
+            if key == "messages":
+                # Convert LangChain messages to dicts
+                serialized[key] = [self._serialize_message(msg) for msg in value]
+            elif key == "llm_traces":
+                # Already serializable (list of dicts from model_dump)
+                serialized[key] = value
+            else:
+                # Other state fields (artifacts, scratchpad, routing_history, etc.)
+                serialized[key] = value
+
+        return serialized
+
+    def _serialize_message(self, msg: Any) -> Dict[str, Any]:
+        """Converts a single message (BaseMessage or dict) to serializable dict."""
+        if isinstance(msg, dict):
+            return msg
+
+        # LangChain BaseMessage object
+        return {
+            "type": getattr(msg, "type", "unknown"),
+            "name": getattr(msg, "name", None),
+            "content": getattr(msg, "content", ""),
+            "additional_kwargs": getattr(msg, "additional_kwargs", {}),
+        }
 
     def _save_report(self, report_content: str):
         """Saves the report content to a timestamped file."""

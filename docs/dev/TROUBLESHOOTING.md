@@ -10,7 +10,8 @@ This guide helps you diagnose issues by analyzing the Atomic Archival Packages (
 2. **Extract manifest:** `unzip -p <archive.zip> manifest.json | jq .`
 3. **Check routing_history:** Did the expected specialists run?
 4. **Check llm_traces:** `unzip -p <archive.zip> llm_traces.jsonl | jq -s .`
-5. **Look for gaps:** Missing steps indicate procedural specialists or Router (see [Known Observability Gaps](#known-observability-gaps))
+5. **Check final_state:** `unzip -p <archive.zip> final_state.json | jq 'keys'`
+6. **Look for gaps:** Missing steps indicate procedural specialists (see [Known Observability Gaps](#known-observability-gaps))
 
 ---
 
@@ -20,6 +21,7 @@ This guide helps you diagnose issues by analyzing the Atomic Archival Packages (
 |------|---------|------------|
 | `manifest.json` | Run metadata | `routing_history`, `termination_reason` |
 | `llm_traces.jsonl` | Per-LLM-call records | `step`, `specialist`, `from_source`, `tool_calls`, `scratchpad_signals` |
+| `final_state.json` | Complete GraphState at termination | `messages`, `artifacts`, `scratchpad`, `routing_history` |
 | `report.md` | Human summary | Routing history, artifacts, conversation |
 | `final_user_response.md` | What user received | Plain text |
 
@@ -62,7 +64,7 @@ Each line is a JSON object for one LLM call:
 - `step` starts at 0, increments per LLM call (not per specialist!)
 - `tool_calls` shows structured output (Pydantic models)
 - `scratchpad_signals` shows what this specialist told routing
-- `from_source` is the previous specialist in routing_history (NOT Router - it's invisible)
+- `from_source` is the previous specialist in routing_history
 
 ---
 
@@ -112,7 +114,7 @@ unzip -p <archive.zip> llm_traces.jsonl | jq -r 'select(.specialist=="triage_arc
 
 **Diagnosis:**
 1. Check Triage's `recommended_specialists` in llm_traces
-2. Remember: Router is invisible - it made the final decision
+2. Check Router's llm_trace for its final decision
 3. Check Router's prompt (includes specialist descriptions and recommendations)
 
 ---
@@ -152,6 +154,15 @@ unzip -p ./logs/archive/<archive.zip> manifest.json | jq -r '.termination_reason
 
 # Show all specialists that ran with their step numbers
 unzip -p ./logs/archive/<archive.zip> llm_traces.jsonl | jq -r '[.step, .specialist] | @tsv'
+
+# Show final_state keys (what's in the state at termination)
+unzip -p ./logs/archive/<archive.zip> final_state.json | jq 'keys'
+
+# Show all artifact keys at workflow end
+unzip -p ./logs/archive/<archive.zip> final_state.json | jq '.artifacts | keys'
+
+# Show scratchpad signals (inter-specialist communication)
+unzip -p ./logs/archive/<archive.zip> final_state.json | jq '.scratchpad'
 ```
 
 ---
