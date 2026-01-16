@@ -35,19 +35,10 @@ Archives are created by the termination chain:
 
 **These are documented limitations - not bugs you're imagining:**
 
-| Gap | Issue | Workaround |
-|-----|-------|------------|
-| Router invisible in routing_history | [#41](https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues/41) | Router ran between specialists even if not shown |
-| Router LLM calls not in llm_traces | [#41](https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues/41) | Check logs or infer from routing decisions |
-| Procedural specialists have no llm_trace | [#35](https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues/35) | Check routing_history - they DID run |
-| Step numbers have gaps | [#35](https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues/35) | Gaps = specialists that didn't call LLM |
-| `from_source` doesn't always match routing_history | [#38](https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues/38) | Router is invisible, so from_source skips it |
-
-### Why Router Is Invisible
-
-Router is the ONLY specialist that increments `turn_count`. The `safe_executor` wrapper (which records `routing_history` and `llm_traces`) strips `turn_count` from all updates. To preserve turn counting, Router is NOT wrapped - making it invisible to observability.
-
-**Technical details:** See [graph_builder.py:428-431](../../app/src/workflow/graph_builder.py) and [node_executor.py:206-208](../../app/src/workflow/executors/node_executor.py).
+| Gap | Explanation |
+|-----|-------------|
+| Procedural specialists have no llm_trace | They don't call LLMs. Check routing_history - they DID run. |
+| Step numbers have gaps | Gaps = specialists that didn't call LLM (procedural or deterministic routing) |
 
 ---
 

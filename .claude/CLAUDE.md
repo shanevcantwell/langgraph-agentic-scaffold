@@ -47,6 +47,8 @@ result = safe_executor.execute(specialist, input_data)
 result = specialist.execute(input_data)  # Bypasses safety
 ```
 
+**Exception:** Router bypasses SafeExecutor to preserve `turn_count` handling (only Router can increment it). Router includes its own observability hooks directly in `_execute_logic()`.
+
 ### Dossier Pattern
 State-mediated communication between specialists. Each handoff includes:
 - Metadata (checkpoint_id, source specialist, routing info)

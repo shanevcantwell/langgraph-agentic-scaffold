@@ -9,6 +9,12 @@ from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
 from ..enums import CoreSpecialist
+from ..llm.tracing import (
+    set_current_specialist,
+    clear_current_specialist,
+    flush_adapter_traces,
+    build_specialist_turn_trace,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -304,6 +310,10 @@ class RouterSpecialist(BaseSpecialist):
         turn_count = state.get("turn_count", 0) + 1
         logger.debug(f"Executing turn {turn_count}")
 
+        # Issue #41: Set up tracing context for observability
+        # Router bypasses safe_executor (to preserve turn_count), so we add tracing directly
+        set_current_specialist(self.specialist_name)
+
         # Initialize diagnostics (populated only for LLM routing path)
         router_diagnostics = None
 
@@ -351,11 +361,33 @@ class RouterSpecialist(BaseSpecialist):
         if router_diagnostics:
             scratchpad_update["router_decision"] = f"LLM chose '{router_diagnostics.get('llm_choice')}', validated as '{router_diagnostics.get('validated_choice')}'. ({router_diagnostics.get('available_count')} specialists available)"
 
+        # Issue #41: Flush adapter traces and build turn trace if LLM was called
+        # This handles both deterministic paths (no traces) and LLM path (traces captured)
+        adapter_traces = flush_adapter_traces()
+        clear_current_specialist()
+
+        turn_trace = None
+        if adapter_traces:
+            routing_history = state.get("routing_history", [])
+            turn_trace = build_specialist_turn_trace(
+                adapter_traces=adapter_traces,
+                step=len(routing_history),
+                specialist_name=self.specialist_name,
+                specialist_type="llm",
+                from_source=routing_history[-1] if routing_history else "user",
+                system_prompt=getattr(self.llm_adapter, 'system_prompt', None),
+                context_artifacts_before=list(state.get("artifacts", {}).keys()),
+                artifacts_produced=[],  # Router doesn't produce artifacts
+                scratchpad_signals=scratchpad_update,
+                routing_decision=str(next_specialist_name) if not isinstance(next_specialist_name, str) else next_specialist_name,
+            )
+
         return {
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
             "scratchpad": scratchpad_update,
-            "parallel_tasks": parallel_tasks_update, # Task 3.3: Initialize barrier
-            # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
+            "parallel_tasks": parallel_tasks_update,  # Task 3.3: Initialize barrier
+            "routing_history": [self.specialist_name],  # Issue #41: Router now visible in history
+            "llm_traces": [turn_trace.model_dump()] if turn_trace else [],  # Issue #41: Capture LLM traces
         }
