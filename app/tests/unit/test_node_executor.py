@@ -1,6 +1,6 @@
 # app/tests/unit/test_node_executor.py
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 from app.src.workflow.executors.node_executor import NodeExecutor
@@ -168,3 +168,112 @@ def test_create_missing_artifact_response_format(node_executor_instance):
     assert response["scratchpad"]["forbidden_specialists"] == ["test_specialist"]
     # Assert: NO messages pollution
     assert "messages" not in response
+
+
+# ========================================
+# Tracing Context Tests (Issue #35)
+# ========================================
+
+def test_safe_executor_clears_tracing_context_on_success(node_executor_instance):
+    """
+    Tests that the tracing context is properly cleared after successful execution.
+
+    The pattern should be: set_current_specialist -> execute -> flush -> clear
+    This prevents context leakage between specialist executions.
+    """
+    # Arrange
+    mock_specialist = MagicMock(spec=BaseSpecialist)
+    mock_specialist.specialist_name = "test_specialist"
+    mock_specialist.specialist_config = {"type": "llm"}
+    mock_specialist.execute.return_value = {"artifacts": {"result.txt": "done"}}
+
+    safe_executor = node_executor_instance.create_safe_executor(mock_specialist)
+    initial_state = create_test_state()
+
+    # Act & Assert
+    with patch('app.src.workflow.executors.node_executor.set_current_specialist') as mock_set, \
+         patch('app.src.workflow.executors.node_executor.clear_current_specialist') as mock_clear, \
+         patch('app.src.workflow.executors.node_executor.flush_adapter_traces') as mock_flush:
+
+        mock_flush.return_value = []  # No LLM traces (simulating non-LLM path)
+
+        result = safe_executor(initial_state)
+
+        # Verify the sequence: set -> (execute) -> flush -> clear
+        mock_set.assert_called_once_with("test_specialist")
+        mock_flush.assert_called_once()
+        mock_clear.assert_called_once()
+
+
+def test_safe_executor_emits_trace_for_procedural_specialist(node_executor_instance):
+    """
+    Tests that procedural specialists emit trace entries even without LLM calls.
+
+    Issue #35: Procedural specialists should appear in llm_traces.jsonl with
+    specialist_type="procedural" and model_id="no_llm_call".
+    """
+    # Arrange
+    mock_specialist = MagicMock(spec=BaseSpecialist)
+    mock_specialist.specialist_name = "facilitator_specialist"
+    mock_specialist.specialist_config = {"type": "procedural"}
+    mock_specialist.execute.return_value = {
+        "artifacts": {"gathered_context": "research results"},
+        "scratchpad": {"facilitator_complete": True}
+    }
+
+    safe_executor = node_executor_instance.create_safe_executor(mock_specialist)
+    initial_state = create_test_state(routing_history=["triage_architect"])
+
+    # Act
+    with patch('app.src.workflow.executors.node_executor.flush_adapter_traces') as mock_flush, \
+         patch('app.src.workflow.executors.node_executor.build_specialist_turn_trace') as mock_build:
+
+        mock_flush.return_value = []  # No adapter traces (procedural specialist)
+        mock_build.return_value = MagicMock(model_dump=lambda: {
+            "step": 1,
+            "specialist": "facilitator_specialist",
+            "specialist_type": "procedural"
+        })
+
+        result = safe_executor(initial_state)
+
+        # Assert: build_specialist_turn_trace was called even with empty adapter_traces
+        mock_build.assert_called_once()
+        call_kwargs = mock_build.call_args[1]
+        assert call_kwargs["specialist_name"] == "facilitator_specialist"
+        assert call_kwargs["specialist_type"] == "procedural"
+        assert call_kwargs["adapter_traces"] == []  # Empty for procedural
+        assert "execution_latency_ms" in call_kwargs  # Latency still tracked
+
+        # Assert: trace is in result
+        assert "llm_traces" in result
+        assert len(result["llm_traces"]) == 1
+
+
+def test_safe_executor_does_not_emit_trace_for_unknown_type_without_adapter_traces(node_executor_instance):
+    """
+    Tests that specialists with unknown type and no adapter traces don't emit traces.
+
+    This preserves backwards compatibility - only explicitly "procedural" specialists
+    or specialists with actual LLM calls emit traces.
+    """
+    # Arrange
+    mock_specialist = MagicMock(spec=BaseSpecialist)
+    mock_specialist.specialist_name = "mystery_specialist"
+    mock_specialist.specialist_config = {}  # No type specified, defaults to "llm"
+    mock_specialist.execute.return_value = {"artifacts": {}}
+
+    safe_executor = node_executor_instance.create_safe_executor(mock_specialist)
+    initial_state = create_test_state()
+
+    # Act
+    with patch('app.src.workflow.executors.node_executor.flush_adapter_traces') as mock_flush, \
+         patch('app.src.workflow.executors.node_executor.build_specialist_turn_trace') as mock_build:
+
+        mock_flush.return_value = []  # No adapter traces
+
+        result = safe_executor(initial_state)
+
+        # Assert: build_specialist_turn_trace was NOT called (no traces, not procedural)
+        mock_build.assert_not_called()
+        assert "llm_traces" not in result or result.get("llm_traces") is None
