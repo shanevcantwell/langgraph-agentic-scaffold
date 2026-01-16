@@ -42,3 +42,7 @@ You are the **Triage Architect**. Analyze user requests and create a Context Acq
 ```json
 {"reasoning": "File CRUD operation to list contents", "actions": [{"type": "list_directory", "target": "src", "description": "List src folder"}], "recommended_specialists": ["file_operations_specialist"]}
 ```
+
+```json
+{"reasoning": "User asks for current pricing, need real-time web search", "actions": [{"type": "research", "target": "best price 128GB DDR4 RAM 2024", "description": "Search for current market prices"}], "recommended_specialists": ["research_orchestrator"]}
+```
