@@ -155,8 +155,14 @@ class NodeExecutor:
                 update = specialist_instance.execute(state)
 
                 # --- TRACE CAPTURE: Build complete specialist turn trace ---
+                # Issue #35: Emit traces for ALL specialists (LLM and procedural)
                 adapter_traces = flush_adapter_traces()
-                if adapter_traces:
+                clear_current_specialist()  # Clean up trace context after flush
+                specialist_type = specialist_config.get("type", "llm")
+                execution_latency_ms = int((time.perf_counter() - start_time) * 1000)
+
+                # Emit traces for LLM specialists (have adapter traces) AND procedural specialists
+                if adapter_traces or specialist_type == "procedural":
                     # Compute artifacts produced (new keys in update)
                     artifacts_after = list(update.get("artifacts", {}).keys())
                     artifacts_produced = [a for a in artifacts_after if a not in artifacts_before]
@@ -166,9 +172,6 @@ class NodeExecutor:
 
                     # Extract routing decision (for router specialist)
                     routing_decision = update.get("next_specialist")
-
-                    # Get specialist type from config
-                    specialist_type = specialist_config.get("type", "unknown")
 
                     # Build complete trace
                     turn_trace = build_specialist_turn_trace(
@@ -182,11 +185,12 @@ class NodeExecutor:
                         artifacts_produced=artifacts_produced,
                         scratchpad_signals=scratchpad_signals,
                         routing_decision=routing_decision,
+                        execution_latency_ms=execution_latency_ms,
                     )
 
                     # Add trace to state
                     update["llm_traces"] = [turn_trace.model_dump()]
-                    logger.debug(f"Captured specialist turn trace for '{specialist_name}' (step {step})")
+                    logger.debug(f"Captured specialist turn trace for '{specialist_name}' (step {step}, type={specialist_type})")
 
                 # CENTRALIZED ROUTING HISTORY TRACKING (post-execution)
                 # Remove any routing_history that specialist tried to add (enforces centralization)

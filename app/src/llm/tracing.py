@@ -233,14 +233,20 @@ def build_specialist_turn_trace(
     artifacts_produced: List[str],
     scratchpad_signals: Dict[str, Any],
     routing_decision: Optional[str],
+    execution_latency_ms: Optional[int] = None,
 ) -> SpecialistTurnTrace:
     """
     Build a complete SpecialistTurnTrace from adapter traces and orchestration context.
 
     Called by NodeExecutor after specialist execution.
+
+    Args:
+        execution_latency_ms: For procedural specialists (no LLM calls), pass the
+            total execution time. If None and adapter_traces is empty, latency will be 0.
     """
     # Aggregate adapter trace data
-    total_latency = sum(t.latency_ms for t in adapter_traces)
+    # For procedural specialists with no adapter traces, use execution_latency_ms if provided
+    total_latency = sum(t.latency_ms for t in adapter_traces) if adapter_traces else (execution_latency_ms or 0)
     model_id = adapter_traces[0].model_id if adapter_traces else "no_llm_call"
 
     # Extract response content from the last trace (most relevant)

@@ -11,7 +11,7 @@ This guide helps you diagnose issues by analyzing the Atomic Archival Packages (
 3. **Check routing_history:** Did the expected specialists run?
 4. **Check llm_traces:** `unzip -p <archive.zip> llm_traces.jsonl | jq -s .`
 5. **Check final_state:** `unzip -p <archive.zip> final_state.json | jq 'keys'`
-6. **Look for gaps:** Missing steps indicate procedural specialists (see [Known Observability Gaps](#known-observability-gaps))
+6. **Compare traces to routing_history:** All specialists should have corresponding trace entries (see [Trace Types](#trace-types))
 
 ---
 
@@ -33,14 +33,17 @@ Archives are created by the termination chain:
 
 ---
 
-## Known Observability Gaps
+## Trace Types
 
-**These are documented limitations - not bugs you're imagining:**
+All specialists now emit traces to `llm_traces.jsonl`. The `specialist_type` field distinguishes them:
 
-| Gap | Explanation |
-|-----|-------------|
-| Procedural specialists have no llm_trace | They don't call LLMs. Check routing_history - they DID run. |
-| Step numbers have gaps | Gaps = specialists that didn't call LLM (procedural or deterministic routing) |
+| Type | Description | `model_id` |
+|------|-------------|------------|
+| `llm` | Makes LLM calls | Model name (e.g., `gemini-2.0-flash`) |
+| `procedural` | Orchestration/data processing | `no_llm_call` |
+| `hybrid` | May or may not call LLM | Varies |
+
+**Note:** Step numbers are now contiguous. All specialists in `routing_history` have corresponding entries in `llm_traces.jsonl`.
 
 ---
 
