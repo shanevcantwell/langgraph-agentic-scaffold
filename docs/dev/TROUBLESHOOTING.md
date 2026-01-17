@@ -170,9 +170,55 @@ unzip -p ./logs/archive/<archive.zip> final_state.json | jq '.scratchpad'
 
 ---
 
+## Context Engineering Flow
+
+Understanding how context flows through the system is critical for debugging "specialist didn't have the right context" issues.
+
+### The Flow
+
+```
+User Request
+    ↓
+TriageArchitect → Creates ContextPlan (actions + recommended_specialists)
+    ↓
+Facilitator → Executes actions, produces gathered_context artifact
+    ↓
+Router → Sees gathered_context, routes to specialist
+    ↓
+Specialist → Receives context via _get_enriched_messages()
+```
+
+### Key Mechanism: `_get_enriched_messages()`
+
+All specialists that need context call `self._get_enriched_messages(state)` (defined in [base.py:45-79](../../app/src/specialists/base.py#L45-L79)). This method:
+
+1. Gets messages from state
+2. Checks for `gathered_context` artifact
+3. If present, appends it as a HumanMessage: `[Context gathered by the system]:\n\n{gathered_context}`
+
+**To verify context injection:** Check if specialist uses `_get_enriched_messages()` vs raw `state["messages"]`.
+
+### Debugging Context Issues
+
+```bash
+# Check what ContextPlan Triage created
+unzip -p <archive.zip> llm_traces.jsonl | jq -r 'select(.specialist=="triage_architect") | .tool_calls[0].args'
+
+# Check what Facilitator gathered
+unzip -p <archive.zip> final_state.json | jq '.artifacts.gathered_context'
+
+# Check if gathered_context is present (non-null)
+unzip -p <archive.zip> final_state.json | jq '.artifacts | has("gathered_context")'
+```
+
+**Deep dive:** See [FACILITATOR.md](../specialist_profiles/FACILITATOR.md) for complete details on context gathering.
+
+---
+
 ## Related Documentation
 
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture overview
 - [SPECIALISTS.md](SPECIALISTS.md) - How specialists work
 - [SUBGRAPHS.md](SUBGRAPHS.md) - Graph construction and edge wiring
 - [CONFIGURATION_GUIDE.md](../CONFIGURATION_GUIDE.md) - 3-tier configuration system
+- [FACILITATOR.md](../specialist_profiles/FACILITATOR.md) - Context gathering specialist profile
