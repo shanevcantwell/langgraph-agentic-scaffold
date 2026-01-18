@@ -27,23 +27,13 @@ from fastapi.testclient import TestClient
 
 @pytest.fixture(scope="module")
 def test_image_base64() -> str:
-    """
-    Creates a minimal valid PNG image encoded in base64.
-    This is a 1x1 pixel red PNG.
-    """
-    # Minimal 1x1 red PNG
-    png_bytes = bytes([
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,  # PNG signature
-        0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,  # IHDR chunk
-        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,  # 1x1 pixels
-        0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
-        0xDE, 0x00, 0x00, 0x00, 0x0C, 0x49, 0x44, 0x41,  # IDAT chunk
-        0x54, 0x08, 0xD7, 0x63, 0xF8, 0xFF, 0xFF, 0x3F,
-        0x00, 0x05, 0xFE, 0x02, 0xFE, 0xDC, 0xCC, 0x59,
-        0xE7, 0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E,  # IEND chunk
-        0x44, 0xAE, 0x42, 0x60, 0x82
-    ])
-    return f"data:image/png;base64,{base64.b64encode(png_bytes).decode()}"
+    """Loads the standard test image from assets."""
+    from pathlib import Path
+    image_path = Path(__file__).parent.parent / "assets" / "screenshots" / "gradio_vegas.png"
+    assert image_path.exists(), f"Test asset not found: {image_path}"
+    with open(image_path, "rb") as f:
+        # Raw base64 (no data URI prefix) to match test_flows.py pattern
+        return base64.b64encode(f.read()).decode()
 
 
 @pytest.fixture(scope="module")
