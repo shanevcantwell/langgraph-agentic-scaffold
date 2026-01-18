@@ -43,7 +43,7 @@ class LMStudioAdapter(BaseAdapter):
                 "identifier expected by the server (often the model's filename)."
             )
 
-        self.context_window = self.config.get('context_window') or 4096
+        self.context_window = self.config.get('context_window')  # None if not configured; let LMStudio handle limits
         self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
         self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
         self.max_tokens = self.config.get('parameters', {}).get('max_tokens') or 4096
@@ -60,9 +60,11 @@ class LMStudioAdapter(BaseAdapter):
         self.extra_body = {k: v for k, v in all_params.items()
                           if k in NON_STANDARD_PARAMS}
         extra_params_str = f", extra_params={self.extra_params}" if self.extra_params else ""
+        extra_body_str = f", extra_body={self.extra_body}" if self.extra_body else ""
+        context_window_display = self.context_window if self.context_window else "unlimited (LMStudio native)"
         logger.info(f"INITIALIZED LMStudioAdapter. Requests will be sent to '{base_url}' for model "
                     f"'{self.model_name}' with a timeout of {self.timeout}s, max_tokens={self.max_tokens}, "
-                    f"and context_window={self.context_window}{extra_params_str}. "
+                    f"and context_window={context_window_display}{extra_params_str}{extra_body_str}. "
                     "Ensure this matches your LM Studio server setup."
                    )
 
@@ -96,9 +98,16 @@ class LMStudioAdapter(BaseAdapter):
         Proactively prunes the message history to fit within the model's context window.
         This implementation keeps the first message (original user prompt) and the most
         recent messages that fit within the token limit.
+
+        If context_window is not configured (None), pruning is skipped entirely and
+        LMStudio's native per-model "Stop at Limit" handling is used instead.
         """
         if not messages:
             return []
+
+        # Skip pruning if no context_window configured - let LMStudio handle limits natively
+        if self.context_window is None:
+            return messages
 
         try:
             # Using cl100k_base as a general-purpose tokenizer for OpenAI-compatible models.

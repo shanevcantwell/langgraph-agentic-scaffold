@@ -102,4 +102,4 @@ class ResearchOrchestrator(BaseSpecialist):
         )
         
         response = self.llm_adapter.invoke(request)
-        return response.get("structured_output")
+        return response.get("json_response")

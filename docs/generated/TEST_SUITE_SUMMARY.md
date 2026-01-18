@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 67 | 572 |
-| Integration | 29 | 209 |
+| Unit | 69 | 611 |
+| Integration | 30 | 220 |
 | Other | 7 | 90 |
-| **Total** | **103** | **871** |
+| **Total** | **106** | **921** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -132,8 +132,8 @@
   - *Verify successful workflows have final_response_generated=True.*
 - **`test_tiered_chat_has_progenitors`**
   - *Verify tiered chat workflows include progenitor specialists.*
-- **`test_no_router_in_routing_history`**
-  - *Verify router_specialist does not appear in routing_history.*
+- **`test_router_in_routing_history`**
+  - *Verify router_specialist appears in routing_history (Issue #41 fix).*
 - **`test_triage_is_entry_point_when_present`**
   - *Verify triage_architect is first when it appears in routing.*
 - **`test_log_file_exists`**
@@ -329,6 +329,31 @@
   - *After image_specialist produces description, should NOT route to default_responder.*
 - **`test_task_completes_after_image_analysis`**
   - *Image analysis workflow should complete (not loop indefinitely).*
+
+## `app/tests/integration/test_inference_service_integration.py`
+
+- **`test_infer_returns_structured_judgment`**
+  - *Test that infer() returns judgment, reasoning, and confidence from live LLM.*
+- **`test_infer_with_boolean_format`**
+  - *Test that boolean format hint produces yes/no judgment.*
+- **`test_infer_with_category_format`**
+  - *Test that category format hint produces category-based judgment.*
+- **`test_infer_handles_ambiguous_context`**
+  - *Test that infer() handles ambiguous/unclear context gracefully.*
+- **`test_infer_callable_via_mcp_client`**
+  - *Test that infer() is callable through MCP client.*
+- **`test_mcp_service_exposes_all_functions`**
+  - *Test that all InferenceService methods are exposed via MCP.*
+- **`test_judge_relevance_via_mcp`**
+  - *Test judge_relevance through MCP client.*
+- **`test_infer_with_call_time_adapter`**
+  - *Test that infer() works when adapter is passed at call time.*
+- **`test_judge_relevance_with_call_time_adapter`**
+  - *Test judge_relevance with call-time adapter.*
+- **`test_infer_with_very_long_context`**
+  - *Test that long context is handled (truncated) correctly.*
+- **`test_infer_with_technical_content`**
+  - *Test inference on technical/code content.*
 
 ## `app/tests/integration/test_installer_scripts.py`
 
@@ -1188,6 +1213,65 @@
 - **`test_import_all_modules`**
   - *A smoke test to ensure all critical modules and specialist modules*
 
+## `app/tests/unit/test_inference_service.py`
+
+- **`test_service_initializes_with_adapter`**
+  - *Test that service stores adapter reference when provided.*
+- **`test_service_initializes_without_adapter`**
+  - *Test that service can be initialized without adapter (ADR-CORE-020).*
+- **`test_get_mcp_functions_returns_all_methods`**
+  - *Test that get_mcp_functions exposes all service methods.*
+- **`test_infer_returns_structured_output`**
+  - *Test that infer() returns judgment, reasoning, and confidence.*
+- **`test_infer_passes_context_to_llm`**
+  - *Test that context is included in the LLM request.*
+- **`test_infer_truncates_long_context`**
+  - *Test that context over 4000 chars is truncated.*
+- **`test_infer_uses_inference_response_schema`**
+  - *Test that infer() uses InferenceResponse as output model.*
+- **`test_infer_boolean_format_hint`**
+  - *Test that boolean format adds yes/no instruction.*
+- **`test_infer_category_format_hint`**
+  - *Test that category format adds category instruction.*
+- **`test_infer_json_format_hint`**
+  - *Test that json format adds JSON instruction.*
+- **`test_infer_no_format_hint_when_none`**
+  - *Test that no format hint is added when output_format is None.*
+- **`test_inference_response_validates_required_fields`**
+  - *Test that InferenceResponse requires all fields.*
+- **`test_inference_response_confidence_is_float`**
+  - *Test that confidence is stored as float.*
+- **`test_judge_relevance_calls_adapter`**
+  - *Test that judge_relevance invokes LLM adapter.*
+- **`test_detect_contradiction_calls_adapter`**
+  - *Test that detect_contradiction invokes LLM adapter.*
+- **`test_assess_source_quality_calls_adapter`**
+  - *Test that assess_source_quality invokes LLM adapter.*
+- **`test_infer_handles_empty_structured_output`**
+  - *Test that infer() handles missing structured_output gracefully.*
+- **`test_infer_handles_empty_context`**
+  - *Test that infer() handles empty context.*
+- **`test_infer_handles_unknown_format`**
+  - *Test that unknown output_format is ignored (no hint added).*
+- **`test_infer_uses_call_time_adapter`**
+  - *Test that infer() uses adapter passed at call time.*
+- **`test_infer_call_time_adapter_overrides_instance`**
+  - *Test that call-time adapter takes precedence over instance adapter.*
+- **`test_infer_raises_without_any_adapter`**
+  - *Test that infer() raises ValueError when no adapter available.*
+- **`test_judge_relevance_uses_call_time_adapter`**
+  - *Test that judge_relevance() accepts call-time adapter.*
+- **`test_judge_relevance_raises_without_adapter`**
+  - *Test that judge_relevance() raises ValueError when no adapter.*
+- **`test_detect_contradiction_uses_call_time_adapter`**
+  - *Test that detect_contradiction() accepts call-time adapter.*
+- **`test_detect_contradiction_raises_without_adapter`**
+  - *Test that detect_contradiction() raises ValueError when no adapter.*
+- **`test_assess_source_quality_uses_call_time_adapter`**
+  - *Test that assess_source_quality() accepts call-time adapter.*
+- **`test_assess_source_quality_raises_without_adapter`**
+  - *Test that assess_source_quality() raises ValueError when no adapter.*
+
 ## `app/tests/unit/test_install.py`
 
 - **`test_install_script_creates_venv_and_installs_pytest`**
@@ -1559,6 +1643,12 @@
   - *Tests that the safe_executor prevents a specialist from running if a required*
 - **`test_create_missing_artifact_response_format`**
   - *Tests the specific format of the missing artifact response.*
+- **`test_safe_executor_clears_tracing_context_on_success`**
+  - *Tests that the tracing context is properly cleared after successful execution.*
+- **`test_safe_executor_emits_trace_for_procedural_specialist`**
+  - *Tests that procedural specialists emit trace entries even without LLM calls.*
+- **`test_safe_executor_does_not_emit_trace_for_unknown_type_without_adapter_traces`**
+  - *Tests that specialists with unknown type and no adapter traces don't emit traces.*
 
 ## `app/tests/unit/test_parallel_reducer.py`
 
@@ -1734,6 +1824,25 @@
   - *BUG-RESEARCH-003: When Router routes to web_specialist, scratchpad.web_task*
 - **`test_web_specialist_mcp_path_vs_graph_path`**
   - *Document the two invocation paths for WebSpecialist.*
+
+## `app/tests/unit/test_router_observability.py`
+
+- **`test_router_appears_in_routing_history`**
+  - *Router should add itself to routing_history.*
+- **`test_router_returns_llm_traces_field`**
+  - *Router should return llm_traces field (empty in unit tests due to mock).*
+- **`test_router_deterministic_end_path_has_routing_history`**
+  - *Deterministic END path (archive exists) should still add Router to routing_history.*
+- **`test_router_deterministic_dependency_path_has_routing_history`**
+  - *Deterministic dependency routing should still add Router to routing_history.*
+- **`test_router_observability_fields_with_parallel_routing`**
+  - *Router observability works correctly with parallel specialist routing.*
+- **`test_router_routing_history_is_additive_list`**
+  - *Router returns routing_history as list for operator.add reducer.*
+- **`test_tracing_context_is_set_and_cleared`**
+  - *Verify set_current_specialist and clear_current_specialist are called.*
+- **`test_turn_trace_built_when_adapter_traces_exist`**
+  - *Verify build_specialist_turn_trace is called when adapter captures traces.*
 
 ## `app/tests/unit/test_router_parallel.py`
 
