@@ -253,23 +253,12 @@ class GraphBuilder:
                     # For now, default to DuckDuckGo
                     search_strategy_instance = DuckDuckGoSearchStrategy()
 
-                    # Inject FaraService if visual browsing is configured
-                    fara_service_instance = None
-                    fara_config = config.get("visual_browser", {})
-                    if fara_config.get("enabled", False):
-                        try:
-                            from ..mcp.services.fara_service import FaraService
-                            # Note: llm_adapter will be attached later in deferred config
-                            fara_service_instance = FaraService()
-                            logger.info("FaraService enabled for web_specialist visual browsing")
-                        except ImportError as e:
-                            logger.warning(f"Could not load FaraService: {e}")
-
+                    # NOTE: FaraService removed - visual browsing now handled by
+                    # navigator_browser_specialist via surf-mcp (see GH #32)
                     instance = SpecialistClass(
                         specialist_name=name,
                         specialist_config=config,
-                        search_strategy=search_strategy_instance,
-                        fara_service=fara_service_instance
+                        search_strategy=search_strategy_instance
                     )
 
                 else:

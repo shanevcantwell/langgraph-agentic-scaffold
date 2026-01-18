@@ -6,9 +6,9 @@ Services provide tool functionality that can be exposed via MCP to specialists.
 Unlike specialists, services are not graph nodes - they're pure capability providers.
 
 Available services:
-- FaraService: Visual UI verification using Fara-7B vision model
+- InferenceService: LLM inference for MCP tool execution
 """
 
-from .fara_service import FaraService
+from .inference_service import InferenceService, InferenceResponse
 
-__all__ = ["FaraService"]
+__all__ = ["InferenceService", "InferenceResponse"]
