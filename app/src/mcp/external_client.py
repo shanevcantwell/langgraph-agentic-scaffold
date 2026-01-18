@@ -18,6 +18,8 @@ import logging
 from typing import Any, Dict, List, Optional
 from contextlib import AsyncExitStack
 
+from anyio import ClosedResourceError
+
 try:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -235,6 +237,48 @@ class ExternalMcpClient:
             if self.tracing_enabled:
                 logger.debug(
                     f"✓ External MCP call succeeded: {service_name}.{tool_name}()"
+                )
+
+            return result
+
+        except ClosedResourceError:
+            # Session died (container restart) - attempt reconnection
+            logger.warning(
+                f"MCP session '{service_name}' closed (container restart?). "
+                f"Attempting reconnection..."
+            )
+            # Remove stale session
+            del self.sessions[service_name]
+
+            # Try to reconnect using config
+            tools = await self.connect_from_config(service_name)
+            if tools is None:
+                raise RuntimeError(
+                    f"Failed to reconnect to MCP service '{service_name}' after session died. "
+                    f"Service may be disabled or unavailable."
+                )
+
+            # Retry the call with new session
+            logger.info(f"Reconnected to '{service_name}', retrying {tool_name}()...")
+            session = self.sessions[service_name]
+            result = await session.call_tool(tool_name, arguments=arguments)
+
+            # Check for errors in retry result
+            if hasattr(result, 'isError') and result.isError:
+                error_msg = "Unknown error"
+                if hasattr(result, 'content') and result.content:
+                    if isinstance(result.content, list) and len(result.content) > 0:
+                        error_msg = result.content[0].text if hasattr(result.content[0], 'text') else str(result.content[0])
+                    else:
+                        error_msg = str(result.content)
+                raise RuntimeError(
+                    f"External MCP tool call failed after reconnect: {service_name}.{tool_name}()\n"
+                    f"Error: {error_msg}"
+                )
+
+            if self.tracing_enabled:
+                logger.debug(
+                    f"✓ External MCP call succeeded after reconnect: {service_name}.{tool_name}()"
                 )
 
             return result

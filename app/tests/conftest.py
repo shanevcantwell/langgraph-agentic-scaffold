@@ -399,3 +399,63 @@ def assert_specialist_sequence(
             f"Actual order: {specialist_order}\n"
             f"Missing from sequence: {remaining}"
         )
+
+
+# =============================================================================
+# EXTERNAL MCP FIXTURES (Shared across MCP container tests)
+# =============================================================================
+
+@pytest.fixture
+def mcp_config():
+    """
+    Load application configuration for MCP tests.
+
+    Provides access to mcp.external_mcp config section.
+    """
+    from app.src.utils.config_loader import ConfigLoader
+    return ConfigLoader().get_config()
+
+
+@pytest.fixture
+async def external_mcp_client(mcp_config):
+    """
+    Shared ExternalMcpClient fixture with automatic cleanup.
+
+    Use this as the base for service-specific connection fixtures.
+    Pytest-asyncio manages the event loop automatically.
+
+    Example:
+        async def test_something(external_mcp_client):
+            await external_mcp_client.connect_from_config("filesystem")
+            # ... test code ...
+    """
+    from app.src.mcp.external_client import ExternalMcpClient
+    client = ExternalMcpClient(mcp_config)
+    yield client
+    await client.cleanup()
+
+
+@pytest.fixture
+async def connected_filesystem_client(external_mcp_client):
+    """
+    ExternalMcpClient connected to filesystem MCP container.
+
+    Skips test if filesystem MCP not enabled/available.
+    """
+    tools = await external_mcp_client.connect_from_config("filesystem")
+    if tools is None:
+        pytest.skip("Filesystem MCP not enabled or available")
+    yield external_mcp_client
+
+
+@pytest.fixture
+async def connected_navigator_client(external_mcp_client):
+    """
+    ExternalMcpClient connected to navigator (surf) MCP container.
+
+    Skips test if navigator MCP not enabled/available.
+    """
+    tools = await external_mcp_client.connect_from_config("navigator")
+    if tools is None:
+        pytest.skip("Navigator MCP not enabled or available. Start with: docker-compose --profile navigator up -d")
+    yield external_mcp_client

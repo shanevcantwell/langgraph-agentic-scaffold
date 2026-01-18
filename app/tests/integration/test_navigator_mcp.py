@@ -7,54 +7,19 @@ Tests surf-mcp connectivity for browser navigation with visual grounding:
 Note: surf-mcp is browser-only. The filesystem driver has been removed.
 For filesystem operations, see FileSpecialist tests.
 
-Prerequisites:
-1. Start surf container: docker-compose --profile surf up -d
-2. Run tests inside Docker: docker compose exec app pytest app/tests/integration/test_navigator_mcp.py -v
+Run with: docker exec langgraph-app pytest app/tests/integration/test_navigator_mcp.py -v
 
-These tests require the surf-mcp container to be running.
+Prerequisites:
+- navigator-mcp container running (docker compose --profile navigator up)
+- Config: mcp.external_mcp.services.navigator.enabled = true
+
+Note: Uses shared MCP fixtures from conftest.py (connected_navigator_client).
 """
 import pytest
 import json
-from typing import Dict, Any, Optional
+from typing import Optional
 
 from app.src.mcp.external_client import ExternalMcpClient
-from app.src.utils.config_loader import ConfigLoader
-
-
-# =============================================================================
-# FIXTURES
-# =============================================================================
-
-@pytest.fixture
-def config() -> Dict[str, Any]:
-    """Load configuration from config.yaml."""
-    config_loader = ConfigLoader()
-    return config_loader.get_config()
-
-
-@pytest.fixture
-async def external_mcp_client(config):
-    """Create and initialize ExternalMcpClient, cleanup on teardown."""
-    client = ExternalMcpClient(config)
-    yield client
-    await client.cleanup()
-
-
-@pytest.fixture
-async def connected_navigator_client(external_mcp_client):
-    """
-    ExternalMcpClient with navigator service connected.
-
-    Uses connect_from_config to connect via docker exec.
-    """
-    tools = await external_mcp_client.connect_from_config("navigator")
-
-    if tools is None:
-        pytest.skip(
-            "Navigator not available. Start with: docker-compose --profile navigator up -d"
-        )
-
-    yield external_mcp_client
 
 
 # =============================================================================
@@ -65,11 +30,11 @@ class TestConnectFromConfig:
     """Test the new connect_from_config method."""
 
     @pytest.mark.asyncio
-    async def test_connect_from_config_disabled_service(self, config):
+    async def test_connect_from_config_disabled_service(self, mcp_config):
         """Test that disabled service returns None."""
         # Modify config to disable navigator
-        config["mcp"]["external_mcp"]["services"]["navigator"]["enabled"] = False
-        client = ExternalMcpClient(config)
+        mcp_config["mcp"]["external_mcp"]["services"]["navigator"]["enabled"] = False
+        client = ExternalMcpClient(mcp_config)
 
         result = await client.connect_from_config("navigator")
 
@@ -77,9 +42,9 @@ class TestConnectFromConfig:
         await client.cleanup()
 
     @pytest.mark.asyncio
-    async def test_connect_from_config_nonexistent_service(self, config):
+    async def test_connect_from_config_nonexistent_service(self, mcp_config):
         """Test that nonexistent service returns None."""
-        client = ExternalMcpClient(config)
+        client = ExternalMcpClient(mcp_config)
 
         result = await client.connect_from_config("nonexistent_service")
 
@@ -87,15 +52,15 @@ class TestConnectFromConfig:
         await client.cleanup()
 
     @pytest.mark.asyncio
-    async def test_connect_from_config_missing_connection_config(self, config):
+    async def test_connect_from_config_missing_connection_config(self, mcp_config):
         """Test that service without container_name or command returns None."""
         # Add service with no connection method
-        config["mcp"]["external_mcp"]["services"]["bad_service"] = {
+        mcp_config["mcp"]["external_mcp"]["services"]["bad_service"] = {
             "enabled": True,
             "required": False,
             # No container_name or command
         }
-        client = ExternalMcpClient(config)
+        client = ExternalMcpClient(mcp_config)
 
         result = await client.connect_from_config("bad_service")
 
@@ -103,14 +68,14 @@ class TestConnectFromConfig:
         await client.cleanup()
 
     @pytest.mark.asyncio
-    async def test_connect_from_config_required_missing_raises(self, config):
+    async def test_connect_from_config_required_missing_raises(self, mcp_config):
         """Test that required service with missing config raises ValueError."""
-        config["mcp"]["external_mcp"]["services"]["bad_required"] = {
+        mcp_config["mcp"]["external_mcp"]["services"]["bad_required"] = {
             "enabled": True,
             "required": True,  # Required!
             # No container_name or command
         }
-        client = ExternalMcpClient(config)
+        client = ExternalMcpClient(mcp_config)
 
         with pytest.raises(ValueError, match="no connection config"):
             await client.connect_from_config("bad_required")
@@ -118,10 +83,10 @@ class TestConnectFromConfig:
         await client.cleanup()
 
     @pytest.mark.asyncio
-    async def test_connect_all_from_config_disabled_globally(self, config):
+    async def test_connect_all_from_config_disabled_globally(self, mcp_config):
         """Test that globally disabled external MCP returns empty dict."""
-        config["mcp"]["external_mcp"]["enabled"] = False
-        client = ExternalMcpClient(config)
+        mcp_config["mcp"]["external_mcp"]["enabled"] = False
+        client = ExternalMcpClient(mcp_config)
 
         result = await client.connect_all_from_config()
 
@@ -455,13 +420,13 @@ class TestGracefulDegradation:
     """Test graceful degradation when navigator unavailable (ADR-CORE-027 criteria #4)."""
 
     @pytest.mark.asyncio
-    async def test_optional_service_unavailable_returns_none(self, config):
+    async def test_optional_service_unavailable_returns_none(self, mcp_config):
         """Test that optional unavailable service returns None, not raises."""
         # Use a container name that doesn't exist
-        config["mcp"]["external_mcp"]["services"]["navigator"]["container_name"] = "nonexistent-container"
-        config["mcp"]["external_mcp"]["services"]["navigator"]["required"] = False
+        mcp_config["mcp"]["external_mcp"]["services"]["navigator"]["container_name"] = "nonexistent-container"
+        mcp_config["mcp"]["external_mcp"]["services"]["navigator"]["required"] = False
 
-        client = ExternalMcpClient(config)
+        client = ExternalMcpClient(mcp_config)
 
         # Should return None, not raise
         result = await client.connect_from_config("navigator")
