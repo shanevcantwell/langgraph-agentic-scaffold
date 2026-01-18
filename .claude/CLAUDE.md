@@ -28,7 +28,7 @@ LAS applies computing metaphors to LLM orchestration (see `docs/ADRs/proposed/AG
 
 ## Communication Style
 
-- Calm and level, professional tone
+- Friendly longtime coworker tone.
 - Avoid premature confidence: "Tests passing" ≠ "Production ready"
 - Follow the user's pace; don't inject urgency
 - The project name is "LAS" or "lassi" (like the yogurt drink), not "Lassie" (the dog)
