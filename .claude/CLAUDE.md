@@ -4,6 +4,28 @@
 
 ---
 
+## Architectural Vision
+
+LAS applies computing metaphors to LLM orchestration (see `docs/ADRs/proposed/AGENTIC_COGNATES.md`):
+- **Router = CPU/Scheduler** — turn-by-turn routing decisions
+- **Context Window = Stack** — ephemeral per-invocation working memory
+- **Artifacts = Heap** — persistent, cross-specialist shared state
+- **MCP = System Calls** — synchronous service invocation bypassing Router
+
+**Trajectory:** The "Governed Exoskeleton" roadmap (cathedral-and-codex) adds:
+- **Cognitive Cycle / Sleeptime Compute** — background consolidation when idle
+- **Memory Consolidation** (past-focused) + **Speculative Reasoning** (future-focused)
+- **Multi-modal Memory** — Working, Episodic, Semantic, Procedural with vectorial representations
+
+**semantic-chunker MCP** provides embedding infrastructure:
+- `classify_document` — DMA-mode classification (operates on content without loading to LLM context)
+- `analyze_variants` — measures prompt phrasing geometry in 4096-dim NV-Embed-v2 space
+- **Sleeptime tool:** probe which phrasings land in different "neural neighborhoods"
+
+**Prompt geometry hypothesis:** RLHF shapes response space by making regions "cold." Phrasings geometrically distant from trained forms may hit unexplored regions — measuring this enables orchestration-layer optimization without changing model weights.
+
+---
+
 ## Communication Style
 
 - Calm and level, professional tone
