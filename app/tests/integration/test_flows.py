@@ -776,8 +776,8 @@ class TestVisionFlows:
         import base64
         from pathlib import Path
 
-        # Load test image
-        image_path = Path(__file__).parent / "assets" / "screenshots" / "gradio_vegas.png"
+        # Load test image (assets are in tests/, not tests/integration/)
+        image_path = Path(__file__).parent.parent / "assets" / "screenshots" / "gradio_vegas.png"
         assert image_path.exists(), f"Test asset not found: {image_path}"
 
         with open(image_path, "rb") as f:
@@ -861,8 +861,8 @@ class TestVisionFlows:
         import base64
         from pathlib import Path
 
-        # Load the test image
-        image_path = Path(__file__).parent / "assets" / "screenshots" / "gradio_vegas.png"
+        # Load the test image (assets are in tests/, not tests/integration/)
+        image_path = Path(__file__).parent.parent / "assets" / "screenshots" / "gradio_vegas.png"
         assert image_path.exists(), f"Test asset not found: {image_path}"
 
         with open(image_path, "rb") as f:

@@ -51,27 +51,6 @@ def mcp_client(mcp_registry):
 
 
 @pytest.fixture
-def file_specialist_with_registry(mcp_registry, tmp_path):
-    """
-    Create FileSpecialist with MCP registration using tmp_path as root.
-
-    This allows testing file operations in an isolated temporary directory.
-    """
-    from app.src.specialists.file_specialist import FileSpecialist
-
-    # Create specialist with tmp_path as root directory
-    specialist = FileSpecialist(
-        specialist_name="file_specialist",
-        specialist_config={"root_dir": str(tmp_path)}
-    )
-
-    # Register MCP services
-    specialist.register_mcp_services(mcp_registry)
-
-    return specialist, tmp_path
-
-
-@pytest.fixture
 def web_specialist_with_registry(mcp_registry):
     """Create WebSpecialist with MCP registration."""
     from app.src.specialists.web_specialist import WebSpecialist
@@ -136,233 +115,9 @@ def image_specialist_with_registry(mcp_registry):
 
 
 # =============================================================================
-# FILE SPECIALIST MCP TESTS
+# NOTE: TestFileSpecialistMcp removed - file_specialist superseded by external
+# filesystem MCP container (ADR-CORE-035). Coverage now in test_filesystem_mcp.py
 # =============================================================================
-
-class TestFileSpecialistMcp:
-    """Test all file_specialist MCP functions."""
-
-    def test_file_exists_returns_false_for_missing_file(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify file_exists returns False for non-existent file."""
-        _, tmp_path = file_specialist_with_registry
-
-        result = mcp_client.call(
-            "file_specialist",
-            "file_exists",
-            path="nonexistent.txt"
-        )
-
-        assert result is False
-
-    def test_file_exists_returns_true_for_existing_file(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify file_exists returns True for existing file."""
-        _, tmp_path = file_specialist_with_registry
-
-        # Create a test file
-        test_file = tmp_path / "exists.txt"
-        test_file.write_text("test content")
-
-        result = mcp_client.call(
-            "file_specialist",
-            "file_exists",
-            path="exists.txt"
-        )
-
-        assert result is True
-
-    def test_write_and_read_file(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify write_file and read_file work together."""
-        _, tmp_path = file_specialist_with_registry
-
-        test_content = "Hello, MCP testing!"
-
-        # Write file - returns success message string
-        write_result = mcp_client.call(
-            "file_specialist",
-            "write_file",
-            path="test_write.txt",
-            content=test_content
-        )
-
-        assert write_result  # Truthy (success message string)
-        assert "Successfully" in write_result or "wrote" in write_result.lower()
-
-        # Read file back
-        read_result = mcp_client.call(
-            "file_specialist",
-            "read_file",
-            path="test_write.txt"
-        )
-
-        assert read_result == test_content
-
-    def test_append_to_file(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify append_to_file adds content to existing file."""
-        _, tmp_path = file_specialist_with_registry
-
-        # Create initial file
-        mcp_client.call(
-            "file_specialist",
-            "write_file",
-            path="append_test.txt",
-            content="Line 1\n"
-        )
-
-        # Append to file
-        mcp_client.call(
-            "file_specialist",
-            "append_to_file",
-            path="append_test.txt",
-            content="Line 2\n"
-        )
-
-        # Read back
-        content = mcp_client.call(
-            "file_specialist",
-            "read_file",
-            path="append_test.txt"
-        )
-
-        assert "Line 1" in content
-        assert "Line 2" in content
-
-    def test_list_files(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify list_files returns directory contents."""
-        _, tmp_path = file_specialist_with_registry
-
-        # Create some test files
-        (tmp_path / "file1.txt").write_text("content1")
-        (tmp_path / "file2.txt").write_text("content2")
-        (tmp_path / "subdir").mkdir()
-
-        result = mcp_client.call(
-            "file_specialist",
-            "list_files",
-            path="."
-        )
-
-        assert isinstance(result, list)
-        assert "file1.txt" in result
-        assert "file2.txt" in result
-        assert "subdir" in result
-
-    def test_create_directory(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify create_directory creates new directory."""
-        _, tmp_path = file_specialist_with_registry
-
-        result = mcp_client.call(
-            "file_specialist",
-            "create_directory",
-            path="new_directory"
-        )
-
-        assert result  # Truthy (success message string)
-        assert (tmp_path / "new_directory").is_dir()
-
-    def test_rename_file(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify rename_file moves/renames files."""
-        _, tmp_path = file_specialist_with_registry
-
-        # Create original file
-        (tmp_path / "original.txt").write_text("content")
-
-        result = mcp_client.call(
-            "file_specialist",
-            "rename_file",
-            old_path="original.txt",
-            new_path="renamed.txt"
-        )
-
-        assert result  # Truthy (success message string)
-        assert not (tmp_path / "original.txt").exists()
-        assert (tmp_path / "renamed.txt").exists()
-
-    def test_delete_file(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify delete_file removes files."""
-        _, tmp_path = file_specialist_with_registry
-
-        # Create file to delete
-        test_file = tmp_path / "to_delete.txt"
-        test_file.write_text("delete me")
-
-        result = mcp_client.call(
-            "file_specialist",
-            "delete_file",
-            path="to_delete.txt"
-        )
-
-        assert result  # Truthy (success message string)
-        assert not test_file.exists()
-
-    def test_create_zip(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify create_zip creates archive from directory."""
-        _, tmp_path = file_specialist_with_registry
-
-        # Create source directory with files
-        source_dir = tmp_path / "to_zip"
-        source_dir.mkdir()
-        (source_dir / "file1.txt").write_text("content1")
-        (source_dir / "file2.txt").write_text("content2")
-
-        # Note: Parameter is destination_path, not output_path
-        result = mcp_client.call(
-            "file_specialist",
-            "create_zip",
-            source_path="to_zip",
-            destination_path="archive.zip"
-        )
-
-        assert result  # Truthy (success message string)
-        assert (tmp_path / "archive.zip").exists()
-
-    def test_create_manifest(
-        self, mcp_client, file_specialist_with_registry
-    ):
-        """Verify create_manifest creates valid JSON manifest."""
-        _, tmp_path = file_specialist_with_registry
-
-        # AtomicManifest schema requires run_id and final_response_generated
-        manifest_data = {
-            "run_id": "test-run-12345",
-            "final_response_generated": True,
-            "routing_history": ["router", "chat_specialist", "end_specialist"],
-            "artifacts": [],
-            "termination_reason": "success"
-        }
-
-        result = mcp_client.call(
-            "file_specialist",
-            "create_manifest",
-            path="manifest.json",
-            data=manifest_data
-        )
-
-        assert result  # Truthy (success message string)
-        assert (tmp_path / "manifest.json").exists()
-
-        # Verify JSON content
-        content = (tmp_path / "manifest.json").read_text()
-        parsed = json.loads(content)
-        assert parsed["run_id"] == "test-run-12345"
-        assert parsed["final_response_generated"] is True
 
 
 # =============================================================================
@@ -490,12 +245,12 @@ class TestMcpErrorHandling:
         assert "not found" in str(exc_info.value).lower()
 
     def test_call_nonexistent_function_raises_error(
-        self, mcp_client, file_specialist_with_registry
+        self, mcp_client, web_specialist_with_registry
     ):
         """Verify calling non-existent function raises appropriate error."""
         with pytest.raises(ValueError) as exc_info:
             mcp_client.call(
-                "file_specialist",
+                "web_specialist",
                 "nonexistent_function"
             )
 
@@ -521,14 +276,14 @@ class TestMcpRegistry:
     """Test MCP registry functionality."""
 
     def test_list_services_returns_all_registered(
-        self, mcp_client, file_specialist_with_registry
+        self, mcp_client, web_specialist_with_registry
     ):
         """Verify list_services returns all registered services."""
         services = mcp_client.list_services()
 
         assert isinstance(services, dict)
-        assert "file_specialist" in services
-        assert len(services["file_specialist"]) == 10  # 10 file functions
+        assert "web_specialist" in services
+        assert "search" in services["web_specialist"]
 
     def test_registry_isolation(self, mcp_config):
         """Verify each registry instance is isolated."""
@@ -573,8 +328,9 @@ class TestMcpGraphIntegration:
         services = full_graph_mcp_client.list_services()
 
         # These services should be registered
+        # NOTE: file_specialist removed per ADR-CORE-035 (external filesystem MCP)
         expected_services = [
-            "file_specialist",
+            # "file_specialist",  # Removed - superseded by external filesystem MCP (ADR-CORE-035)
             # "researcher_specialist", # Removed in Phase 1
             "summarizer_specialist",
             "image_specialist",
@@ -586,20 +342,16 @@ class TestMcpGraphIntegration:
                 f"Available: {list(services.keys())}"
             )
 
-    def test_file_specialist_accessible_from_graph(self, full_graph_mcp_client):
-        """Verify file_specialist MCP functions work from graph context."""
+    def test_image_specialist_accessible_from_graph(self, full_graph_mcp_client):
+        """Verify image_specialist MCP functions work from graph context."""
         services = full_graph_mcp_client.list_services()
 
-        # file_specialist should have all 10 functions
-        if "file_specialist" in services:
-            file_funcs = services["file_specialist"]
-            expected_funcs = [
-                "file_exists", "read_file", "write_file", "append_to_file",
-                "delete_file", "list_files", "create_directory", "rename_file",
-                "create_zip", "create_manifest"
-            ]
-            for func in expected_funcs:
-                assert func in file_funcs, (
-                    f"Expected function '{func}' in file_specialist. "
-                    f"Available: {file_funcs}"
-                )
+        # image_specialist should have describe function
+        assert "image_specialist" in services, (
+            f"image_specialist not found. Available: {list(services.keys())}"
+        )
+        image_funcs = services["image_specialist"]
+        assert "describe" in image_funcs, (
+            f"Expected function 'describe' in image_specialist. "
+            f"Available: {image_funcs}"
+        )
