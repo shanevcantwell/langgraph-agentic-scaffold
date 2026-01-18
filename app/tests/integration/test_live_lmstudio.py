@@ -1,9 +1,9 @@
 import pytest
 import os
-from src.llm.factory import AdapterFactory
-from src.llm.adapter import StandardizedLLMRequest
+from app.src.llm.factory import AdapterFactory
+from app.src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage
-from src.utils.config_loader import ConfigLoader
+from app.src.utils.config_loader import ConfigLoader
 
 @pytest.mark.live_llm
 def test_live_lmstudio_adapter_interaction():

@@ -69,26 +69,6 @@ def test_triage_advisory_not_restrictive(initialized_app):
 
 
 @pytest.mark.integration
-def test_loop_detection_when_dependency_unsatisfied(initialized_app):
-    """
-    Verifies loop detection kicks in if specialist dependencies can't be satisfied.
-
-    Scenario (hypothetical edge case):
-    - Specialist A requires artifact from Specialist B
-    - Specialist B is unavailable or broken
-    - Router keeps trying Specialist A
-    - Loop detection halts after 3 cycles
-    - EndSpecialist generates report with termination reason
-
-    This is a negative test - we want loop detection to catch pathological cases.
-
-    NOTE: This test is harder to create without artificially breaking a specialist.
-    Marking as xfail for now, but documents the expected behavior.
-    """
-    pytest.xfail("Requires artificially breaking a specialist to trigger unsatisfiable dependency")
-
-
-@pytest.mark.integration
 @pytest.mark.skip(reason="Blocking signal enforcement deferred per ADR-CORE-009 (requires Tasks 1.4-1.6: System Invariants & Circuit Breaker)")
 def test_router_respects_specialist_cannot_proceed(initialized_app):
     """
