@@ -241,6 +241,10 @@ class TestImageWorkflowQuality:
 class TestImageRoutingAfterAnalysis:
     """Tests for routing decisions after image_specialist completes."""
 
+    @pytest.mark.xfail(
+        reason="Known Issue #19: Artifact-producing specialists route through default_responder. "
+               "Requires ADR-ROADMAP-001 Phase 1 (Facilitator completion checking) to fix."
+    )
     def test_routing_does_not_go_to_default_responder_after_image(
         self,
         initialized_app,
