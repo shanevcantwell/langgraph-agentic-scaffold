@@ -586,41 +586,12 @@ flowchart LR
 
 ## System Overview
 
-High-level view of the hub-and-spoke architecture:
+For the hub-and-spoke architecture diagram and routing concepts, see [ARCHITECTURE.md § 3.1](ARCHITECTURE.md#31-hub-and-spoke).
 
-```mermaid
-flowchart TB
-    User([User Request]) --> Triage[TriageArchitect]
-
-    subgraph Context[Context Engineering]
-        Triage --> Fac[Facilitator]
-        Fac --> |gathered_context| Router
-    end
-
-    Triage --> |no context needed| Router[Router<br/>Central Hub]
-
-    Router --> Chat[Tiered Chat]
-    Router --> File[File Ops]
-    Router --> Browser[Browser]
-    Router --> Research[Research]
-    Router --> Gen[Generation]
-    Router --> Analysis[Analysis]
-
-    Chat --> Router
-    File --> Router
-    Browser --> Router
-    Research --> Router
-    Gen --> Router
-    Analysis --> Router
-
-    Router --> End[EndSpecialist]
-    End --> Archive[ArchiverSpecialist]
-    Archive --> Response([Response])
-
-    style Router fill:#FFD700
-    style Triage fill:#87CEEB
-    style End fill:#90EE90
-```
+**Key points:**
+- All flows enter via TriageArchitect
+- Router is the central hub - specialists return to router after execution
+- All flows exit via EndSpecialist → ArchiverSpecialist
 
 ---
 

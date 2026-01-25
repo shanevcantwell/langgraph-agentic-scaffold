@@ -6,9 +6,10 @@
 >
 > **Correct Command:**
 > ```bash
-> docker compose run --rm app pytest app/tests/integration/
+> docker exec langgraph-app pytest app/tests/integration/
 > ```
 > **NEVER** run `pytest` directly in your local shell for integration tests.
+> **NEVER** use `docker compose run` - it creates zombie containers that persist after completion.
 
 This guide provides a step-by-step walkthrough for writing integration tests for the langgraph-agentic-scaffold. It is intended for developers who want to add comprehensive test coverage beyond unit tests.
 
