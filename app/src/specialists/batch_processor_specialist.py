@@ -178,7 +178,6 @@ For SORT operations (e.g., "sort files into folders"):
 1. Identify the files to sort
 2. Decide appropriate destination directories based on file names
 3. Return "move" operations with FULL destination paths (including filename)
-4. Create destination directories first with "mkdir" operations
 
 CRITICAL - Move destinations must include filename:
 - CORRECT: destination="a-m/e.txt" (full path with filename)
