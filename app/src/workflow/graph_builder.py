@@ -502,7 +502,8 @@ class GraphBuilder:
 
         for name, instance in specialists.items():
             spec_config = configs.get(name, {})
-            react_config = spec_config.get("react", {})
+            # Use `or {}` to handle Pydantic adding react: null for all specialists
+            react_config = spec_config.get("react") or {}
 
             if react_config.get("enabled", False):
                 # Specialist has react enabled - wrap it
