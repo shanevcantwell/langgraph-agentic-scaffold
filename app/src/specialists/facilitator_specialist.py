@@ -176,6 +176,25 @@ class FacilitatorSpecialist(BaseSpecialist):
                     else:
                         gathered_context.append(f"### Directory: {action.target}\n{str(items)}")
 
+                elif action.type == ContextActionType.ASK_USER:
+                    # Human-in-the-loop: pause graph execution for user clarification
+                    from langgraph.types import interrupt
+
+                    question_text = action.description or action.target or "Please clarify your request."
+
+                    interrupt_payload = {
+                        "question": question_text,
+                        "reason": action.description,
+                        "action_type": "ask_user"
+                    }
+
+                    logger.info(f"Facilitator: Requesting user clarification: {question_text}")
+                    user_answer = interrupt(interrupt_payload)
+
+                    # Add clarification to gathered context (same pattern as other action types)
+                    gathered_context.append(f"### User Clarification\n{user_answer}")
+                    logger.info(f"Facilitator: Received clarification, added to gathered_context")
+
             except Exception as e:
                 logger.error(f"Failed to execute action {action}: {e}")
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")

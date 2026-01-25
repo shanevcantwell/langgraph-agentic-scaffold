@@ -249,33 +249,20 @@ async function submitClarification() {
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        // Handle streamed response (resume returns SSE stream)
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { value, done } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                if (line.startsWith('data: ')) {
-                    try {
-                        const data = JSON.parse(line.slice(6));
-                        handleStreamEvent(data);
-                    } catch (e) {
-                        console.error("Error parsing resume SSE:", e);
-                    }
-                }
-            }
-        }
+        // /graph/resume returns JSON (not SSE stream)
+        const result = await response.json();
 
         pendingThreadId = null;
         logStatus('► WORKFLOW RESUMED SUCCESSFULLY');
+        addThoughtStreamEntry('SYSTEM', 'Workflow completed after clarification', 'lifecycle');
+
+        // Update UI with final state if available
+        if (result.final_state) {
+            if (result.final_state.artifacts) {
+                updateArtifactsDisplay(result.final_state.artifacts);
+            }
+            jsonOutputEl.textContent = JSON.stringify(result.final_state, null, 2);
+        }
 
     } catch (error) {
         logStatus(`❌ RESUME ERROR: ${error.message}`);
@@ -748,7 +735,7 @@ function handleStreamEvent(event) {
         let questionsHtml = '<ul style="list-style: none; padding: 0;">';
         questions.forEach(q => {
             if (typeof q === 'object') {
-                questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q}`;
+                questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q.reason || String(q)}`;
                 if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
                 questionsHtml += '</li>';
             } else {
@@ -928,7 +915,7 @@ function handleStreamEvent(event) {
             let questionsHtml = '<ul style="list-style: none; padding: 0;">';
             questions.forEach(q => {
                 if (typeof q === 'object') {
-                    questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q}`;
+                    questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q.reason || String(q)}`;
                     if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
                     questionsHtml += '</li>';
                 } else {
