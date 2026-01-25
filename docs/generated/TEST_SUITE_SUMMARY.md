@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 572 |
+| Unit | 68 | 573 |
 | Integration | 28 | 195 |
 | Other | 7 | 90 |
-| **Total** | **103** | **857** |
+| **Total** | **103** | **858** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -1587,8 +1587,8 @@
 
 ## `app/tests/unit/test_project_director.py`
 
-- **`test_project_director_inherits_react_mixin`**
-  - *Verify ProjectDirector has ReActMixin capabilities.*
+- **`test_project_director_no_longer_inherits_react_mixin`**
+  - *ADR-CORE-051: Verify ProjectDirector uses config-driven ReAct, not mixin.*
 - **`test_project_director_defines_tools`**
   - *Test that ProjectDirector defines search and browse tools.*
 - **`test_project_context_initialization`**
@@ -1601,6 +1601,8 @@
   - *Test that max_iterations is read from config.*
 - **`test_max_iterations_default`**
   - *Test default max_iterations when not in config.*
+- **`test_max_iterations_from_react_config`**
+  - *ADR-CORE-051: Test that _react_config (injected by ReactEnabledSpecialist)*
 - **`test_tool_result_serialization`**
   - *Test that tool results are serialized correctly for artifacts.*
 - **`test_partial_synthesis_on_max_iterations`**
