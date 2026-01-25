@@ -166,7 +166,12 @@ class FacilitatorSpecialist(BaseSpecialist):
                     if items is None:
                         gathered_context.append(f"### Directory: {action.target}\n[Filesystem service unavailable]")
                     elif isinstance(items, list):
-                        formatted_items = "\n".join([f"- {item}" for item in items])
+                        # Include full path for each item so downstream specialists have unambiguous paths
+                        formatted_items = "\n".join([
+                            f"- {action.target}/{item}" if not item.startswith('[DIR]')
+                            else f"- [DIR] {action.target}/{item.replace('[DIR] ', '')}"
+                            for item in items
+                        ])
                         gathered_context.append(f"### Directory: {action.target}\n{formatted_items}")
                     else:
                         gathered_context.append(f"### Directory: {action.target}\n{str(items)}")
