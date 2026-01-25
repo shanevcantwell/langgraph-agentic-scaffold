@@ -84,7 +84,7 @@ mcp:
         required: false  # Graceful degradation if container not running
         # Use command mode to launch via docker exec with full args
         command: "docker"
-        args: ["exec", "-i", "filesystem-mcp", "npx", "-y", "@modelcontextprotocol/server-filesystem", "/app"]
+        args: ["exec", "-i", "filesystem-mcp", "npx", "-y", "@modelcontextprotocol/server-filesystem", "/workspace"]
         timeout_ms: 30000
 
       # Navigator MCP - Browser automation with Fara visual grounding (ADR-CORE-027)
@@ -194,10 +194,10 @@ specialists:
     # NOTE: requires_artifacts removed - specialist now falls back to message content
     # Proper solution pending ADR-CORE-040 (Context State Model). See Issue #8.
 
-  sentiment_classifier_specialist:
-    type: "llm"
-    prompt_file: "sentiment_classifier_prompt.md"
-    description: "Classifies the sentiment of a given text as positive, negative, or neutral."
+  # sentiment_classifier_specialist:
+  #   type: "llm"
+  #   prompt_file: "sentiment_classifier_prompt.md"
+  #   description: "Classifies the sentiment of a given text as positive, negative, or neutral."
 
   data_processor_specialist:
     type: "procedural"
@@ -242,31 +242,31 @@ specialists:
   # - See user_settings.yaml for model assignment strategies
   # ==============================================================================
 
-  progenitor_alpha_specialist:
-    type: "llm"
-    prompt_file: "progenitor_alpha_prompt.md"
-    description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
-    # SYSTEM PROMPT: This specialist's LLM receives progenitor_alpha_prompt.md as its
-    # system prompt. Edit this file to define Alpha's personality, expertise, tone,
-    # and approach. Default: analytical/structured/methodical.
-    #
-    # EXAMPLE CUSTOMIZATIONS:
-    # - Technical expert (code-focused, precise terminology)
-    # - Formal academic (citations, research-oriented)
-    # - Beginner-friendly (simple explanations, analogies)
+  # progenitor_alpha_specialist:
+  #   type: "llm"
+  #   prompt_file: "progenitor_alpha_prompt.md"
+  #   description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
+  #   # SYSTEM PROMPT: This specialist's LLM receives progenitor_alpha_prompt.md as its
+  #   # system prompt. Edit this file to define Alpha's personality, expertise, tone,
+  #   # and approach. Default: analytical/structured/methodical.
+  #   #
+  #   # EXAMPLE CUSTOMIZATIONS:
+  #   # - Technical expert (code-focused, precise terminology)
+  #   # - Formal academic (citations, research-oriented)
+  #   # - Beginner-friendly (simple explanations, analogies)
 
-  progenitor_bravo_specialist:
-    type: "llm"
-    prompt_file: "progenitor_bravo_prompt.md"
-    description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
-    # SYSTEM PROMPT: This specialist's LLM receives progenitor_bravo_prompt.md as its
-    # system prompt. Edit this file to define Bravo's personality, expertise, tone,
-    # and approach. Default: intuitive/contextual/human-centered.
-    #
-    # EXAMPLE CUSTOMIZATIONS:
-    # - Creative storyteller (metaphors, narratives)
-    # - Casual conversationalist (friendly, approachable)
-    # - Advanced expert (deep technical insights, edge cases)
+  # progenitor_bravo_specialist:
+  #   type: "llm"
+  #   prompt_file: "progenitor_bravo_prompt.md"
+  #   description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
+  #   # SYSTEM PROMPT: This specialist's LLM receives progenitor_bravo_prompt.md as its
+  #   # system prompt. Edit this file to define Bravo's personality, expertise, tone,
+  #   # and approach. Default: intuitive/contextual/human-centered.
+  #   #
+  #   # EXAMPLE CUSTOMIZATIONS:
+  #   # - Creative storyteller (metaphors, narratives)
+  #   # - Casual conversationalist (friendly, approachable)
+  #   # - Advanced expert (deep technical insights, edge cases)
 
   tiered_synthesizer_specialist:
     type: "procedural"
@@ -351,10 +351,10 @@ specialists:
     tags: ["vision_capable"]
 
   # --- General & Fallback ---
-  prompt_specialist:
-    type: "llm"
-    prompt_file: "prompt_specialist_prompt.md"
-    description: "A specialist for advanced prompt engineering tasks. Can be used to generate or refine prompts for other specialists or to analyze prompt structures. Does not terminate the turn."
+  # prompt_specialist:
+  #   type: "llm"
+  #   prompt_file: "prompt_specialist_prompt.md"
+  #   description: "A specialist for advanced prompt engineering tasks. Can be used to generate or refine prompts for other specialists or to analyze prompt structures. Does not terminate the turn."
 
   default_responder_specialist:
     type: "llm"
@@ -397,8 +397,8 @@ specialists:
     description: "Fetches and parses web content. A dumb tool for the research pipeline."
     tags: ["research", "tool"]
 
-  synthesizer_specialist:
-    type: "llm"
-    prompt_file: "synthesizer_prompt.md"
-    description: "Synthesizes research findings into comprehensive reports."
-    tags: ["research", "synthesis"]
+  # synthesizer_specialist:
+  #   type: "llm"
+  #   prompt_file: "synthesizer_prompt.md"
+  #   description: "Synthesizes research findings into comprehensive reports."
+  #   tags: ["research", "synthesis"]
