@@ -242,3 +242,271 @@ def test_facilitator_directory_listing_handles_subdirs(facilitator):
     assert "- workspace/file.txt" in gathered
     assert "- [DIR] workspace/subdir" in gathered
     assert "- [DIR] workspace/another" in gathered
+
+
+# =============================================================================
+# Tests derived from FACILITATOR.md briefing
+# =============================================================================
+
+def test_facilitator_executes_summarize_action(facilitator):
+    """
+    Per FACILITATOR.md: SUMMARIZE action calls summarizer_specialist.summarize.
+    """
+    plan = ContextPlan(
+        reasoning="Need summary",
+        actions=[
+            ContextAction(
+                type=ContextActionType.SUMMARIZE,
+                target="This is a very long document with many details...",
+                description="Summarize the content"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    facilitator.mcp_client.call.return_value = "A concise summary of the document."
+
+    result = facilitator.execute(state)
+
+    # Verify MCP call
+    facilitator.mcp_client.call.assert_called_with(
+        service_name="summarizer_specialist",
+        function_name="summarize",
+        text="This is a very long document with many details..."
+    )
+
+    # Verify output format
+    assert "### Summary:" in result["artifacts"]["gathered_context"]
+    assert "A concise summary of the document." in result["artifacts"]["gathered_context"]
+
+
+def test_facilitator_summarize_with_file_path_reads_file_first(facilitator):
+    """
+    Per FACILITATOR.md: If SUMMARIZE target looks like a file path (starts with / or ./),
+    Facilitator reads the file first, then summarizes the content.
+    """
+    plan = ContextPlan(
+        reasoning="Summarize a file",
+        actions=[
+            ContextAction(
+                type=ContextActionType.SUMMARIZE,
+                target="/workspace/long_document.md",
+                description="Summarize the document"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    # Mock file read to return document content
+    with patch.object(facilitator, '_read_file_via_filesystem_mcp') as mock_read:
+        mock_read.return_value = "Full document content here..."
+        facilitator.mcp_client.call.return_value = "Summary of document"
+
+        result = facilitator.execute(state)
+
+    # File should have been read
+    mock_read.assert_called_once_with("/workspace/long_document.md")
+
+    # Summarizer should have been called with file CONTENT, not path
+    facilitator.mcp_client.call.assert_called_with(
+        service_name="summarizer_specialist",
+        function_name="summarize",
+        text="Full document content here..."
+    )
+
+
+def test_facilitator_skips_ask_user_action(facilitator):
+    """
+    Per FACILITATOR.md: ASK_USER actions are implicitly skipped (no handler in loop).
+    DialogueSpecialist handles these downstream.
+    """
+    plan = ContextPlan(
+        reasoning="Need user clarification",
+        actions=[
+            ContextAction(
+                type=ContextActionType.ASK_USER,
+                target="What file format do you prefer?",
+                description="Clarify user preference"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    result = facilitator.execute(state)
+
+    # No MCP calls should have been made
+    facilitator.mcp_client.call.assert_not_called()
+
+    # gathered_context should be empty (ASK_USER produces no output)
+    assert result["artifacts"]["gathered_context"] == ""
+
+    # But completion flag should still be set
+    assert result["scratchpad"]["facilitator_complete"] is True
+
+
+def test_facilitator_executes_multiple_actions(facilitator):
+    """
+    Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,
+    joining results with double newlines.
+    """
+    plan = ContextPlan(
+        reasoning="Need multiple context sources",
+        actions=[
+            ContextAction(type=ContextActionType.RESEARCH, target="topic1", description="Search topic1"),
+            ContextAction(type=ContextActionType.RESEARCH, target="topic2", description="Search topic2"),
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    facilitator.mcp_client.call.side_effect = [
+        [{"title": "Result1", "url": "url1", "snippet": "snippet1"}],
+        [{"title": "Result2", "url": "url2", "snippet": "snippet2"}],
+    ]
+
+    result = facilitator.execute(state)
+
+    # Both actions should be executed
+    assert facilitator.mcp_client.call.call_count == 2
+
+    # Both results should appear in gathered_context, separated by double newline
+    gathered = result["artifacts"]["gathered_context"]
+    assert "### Research: topic1" in gathered
+    assert "### Research: topic2" in gathered
+    assert "\n\n" in gathered  # Sections joined with double newline
+
+
+def test_facilitator_sets_completion_flag(facilitator):
+    """
+    Per FACILITATOR.md: Facilitator sets scratchpad["facilitator_complete"] = True
+    after processing all actions.
+    """
+    plan = ContextPlan(
+        reasoning="Simple action",
+        actions=[
+            ContextAction(type=ContextActionType.RESEARCH, target="test", description="test")
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    facilitator.mcp_client.call.return_value = []
+
+    result = facilitator.execute(state)
+
+    assert "scratchpad" in result
+    assert result["scratchpad"]["facilitator_complete"] is True
+
+
+def test_facilitator_filesystem_unavailable_graceful_degradation(facilitator):
+    """
+    Per FACILITATOR.md: If filesystem MCP is unavailable, Facilitator includes
+    "[Filesystem service unavailable]" message and continues.
+    """
+    plan = ContextPlan(
+        reasoning="Need file",
+        actions=[
+            ContextAction(type=ContextActionType.READ_FILE, target="/path/to/file", description="Read file")
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    # Mock filesystem as unavailable
+    facilitator.external_mcp_client.is_connected.return_value = False
+
+    result = facilitator.execute(state)
+
+    # Should show unavailable message, not error
+    gathered = result["artifacts"]["gathered_context"]
+    assert "### File: /path/to/file" in gathered
+    assert "[Filesystem service unavailable]" in gathered
+
+    # Completion flag still set
+    assert result["scratchpad"]["facilitator_complete"] is True
+
+
+def test_facilitator_directory_listing_filesystem_unavailable(facilitator):
+    """
+    Per FACILITATOR.md: LIST_DIRECTORY also gracefully handles filesystem unavailability.
+    """
+    plan = ContextPlan(
+        reasoning="List directory",
+        actions=[
+            ContextAction(type=ContextActionType.LIST_DIRECTORY, target="/workspace", description="List")
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    facilitator.external_mcp_client.is_connected.return_value = False
+
+    result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+    assert "### Directory: /workspace" in gathered
+    assert "[Filesystem service unavailable]" in gathered
+
+
+def test_facilitator_handles_invalid_context_plan(facilitator):
+    """
+    Per FACILITATOR.md: Invalid ContextPlan data returns an error.
+    """
+    state = {
+        "artifacts": {
+            "context_plan": {"invalid": "structure"}  # Missing required fields
+        }
+    }
+
+    result = facilitator.execute(state)
+
+    assert "error" in result
+    assert "Invalid context plan" in result["error"]
+
+
+def test_facilitator_continues_after_action_error(facilitator):
+    """
+    Per FACILITATOR.md: Individual action failures don't halt the entire plan.
+    Error is logged and next action continues.
+    """
+    plan = ContextPlan(
+        reasoning="Multiple actions with one failing",
+        actions=[
+            ContextAction(type=ContextActionType.RESEARCH, target="failing_query", description="Will fail"),
+            ContextAction(type=ContextActionType.RESEARCH, target="success_query", description="Will succeed"),
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    # First call fails, second succeeds
+    facilitator.mcp_client.call.side_effect = [
+        Exception("Network error"),
+        [{"title": "Success", "url": "url", "snippet": "snippet"}],
+    ]
+
+    result = facilitator.execute(state)
+
+    # Both actions attempted
+    assert facilitator.mcp_client.call.call_count == 2
+
+    # Error for first, success for second
+    gathered = result["artifacts"]["gathered_context"]
+    assert "### Error: failing_query" in gathered
+    assert "Network error" in gathered
+    assert "### Research: success_query" in gathered
+    assert "Success" in gathered
+
+    # Completion flag still set
+    assert result["scratchpad"]["facilitator_complete"] is True

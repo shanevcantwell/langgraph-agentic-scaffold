@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 563 |
+| Unit | 68 | 572 |
 | Integration | 28 | 195 |
 | Other | 7 | 90 |
-| **Total** | **103** | **848** |
+| **Total** | **103** | **857** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -926,6 +926,24 @@
   - *Regression test for Bug #49: Directory listing must include full paths.*
 - **`test_facilitator_directory_listing_handles_subdirs`**
   - *Test that [DIR] markers are properly formatted with full paths.*
+- **`test_facilitator_executes_summarize_action`**
+  - *Per FACILITATOR.md: SUMMARIZE action calls summarizer_specialist.summarize.*
+- **`test_facilitator_summarize_with_file_path_reads_file_first`**
+  - *Per FACILITATOR.md: If SUMMARIZE target looks like a file path (starts with / or ./),*
+- **`test_facilitator_skips_ask_user_action`**
+  - *Per FACILITATOR.md: ASK_USER actions are implicitly skipped (no handler in loop).*
+- **`test_facilitator_executes_multiple_actions`**
+  - *Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,*
+- **`test_facilitator_sets_completion_flag`**
+  - *Per FACILITATOR.md: Facilitator sets scratchpad["facilitator_complete"] = True*
+- **`test_facilitator_filesystem_unavailable_graceful_degradation`**
+  - *Per FACILITATOR.md: If filesystem MCP is unavailable, Facilitator includes*
+- **`test_facilitator_directory_listing_filesystem_unavailable`**
+  - *Per FACILITATOR.md: LIST_DIRECTORY also gracefully handles filesystem unavailability.*
+- **`test_facilitator_handles_invalid_context_plan`**
+  - *Per FACILITATOR.md: Invalid ContextPlan data returns an error.*
+- **`test_facilitator_continues_after_action_error`**
+  - *Per FACILITATOR.md: Individual action failures don't halt the entire plan.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
