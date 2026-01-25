@@ -31,7 +31,12 @@ class AgUiTranslator:
                 )
                 continue
 
-            # 2. Handle Interrupt Events (ADR-CORE-018/042: HitL Clarification)
+            # 2. Handle thread_id (metadata, not a node)
+            if "thread_id" in chunk:
+                # Store for interrupt handling but don't emit an event
+                continue
+
+            # 3. Handle Interrupt Events (ADR-CORE-018/042: HitL Clarification)
             if "__interrupt__" in chunk:
                 interrupt_data = chunk["__interrupt__"]
                 if interrupt_data and len(interrupt_data) > 0:
@@ -51,7 +56,7 @@ class AgUiTranslator:
                 # Don't emit WORKFLOW_END - workflow is paused, not complete
                 return
 
-            # 3. Handle Node Execution
+            # 4. Handle Node Execution
             for node_name, node_output in chunk.items():
                 # Emit NODE_START event
                 yield AgUiEvent(

@@ -174,3 +174,36 @@ async def test_translator_handles_interrupt_with_object_payload():
     clarification_events = [e for e in events if e.type == EventType.CLARIFICATION_REQUIRED]
     assert len(clarification_events) == 1
     assert clarification_events[0].data["questions"][0]["question"] == "What format?"
+
+
+@pytest.mark.asyncio
+async def test_translator_skips_thread_id_metadata():
+    """
+    Regression test for Bug #52: thread_id chunk must not be processed as node.
+
+    When runner yields {"thread_id": "xxx"}, the translator should skip it
+    (like run_id), not emit NODE_START/NODE_END events for "thread_id".
+    """
+    async def stream_with_thread_id():
+        yield {"run_id": "test-run"}
+        yield {"thread_id": "test-run"}  # Metadata, not a node
+        yield {
+            "router_specialist": {
+                "messages": ["routed"],
+                "scratchpad": {}
+            }
+        }
+
+    translator = AgUiTranslator()
+    events = []
+    async for event in translator.translate(stream_with_thread_id()):
+        events.append(event)
+
+    # Find all node sources
+    node_sources = [e.source for e in events if e.type == EventType.NODE_START]
+
+    # thread_id should NOT appear as a node
+    assert "thread_id" not in node_sources, "thread_id metadata incorrectly processed as node"
+
+    # router_specialist should be the only node
+    assert "router_specialist" in node_sources
