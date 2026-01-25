@@ -91,7 +91,8 @@ services:
     tmpfs:
       # Ephemeral temp directory - cleared on container restart
       - /tmp:size=100M,mode=1777
-    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/workspace", "/tmp"]
+    # Keep container alive; LAS starts MCP server via docker exec (see config.yaml)
+    command: ["tail", "-f", "/dev/null"]
     restart: unless-stopped
 
   # surf-mcp - Browser automation with Fara visual grounding (ADR-CORE-027)
