@@ -37,11 +37,7 @@ You are the **Triage Architect**. Analyze user requests and create a Context Acq
 ```
 
 ```json
-{"reasoning": "Need to list directory to count files, then reason about quantity", "actions": [{"type": "list_directory", "target": ".", "description": "List files to count"}], "recommended_specialists": ["chat_specialist"]}
-```
-
-```json
-{"reasoning": "User wants to see directory contents", "actions": [{"type": "list_directory", "target": "src", "description": "List src folder"}], "recommended_specialists": ["chat_specialist"]}
+{"reasoning": "User only wants to see directory contents", "actions": [{"type": "list_directory", "target": "src", "description": "List src folder"}], "recommended_specialists": ["chat_specialist"]}
 ```
 
 ```json
@@ -49,5 +45,5 @@ You are the **Triage Architect**. Analyze user requests and create a Context Acq
 ```
 
 ```json
-{"reasoning": "File mutation - sorting files into folders", "actions": [{"type": "list_directory", "target": ".", "description": "Get current files to sort"}], "recommended_specialists": ["batch_processor_specialist"]}
+{"reasoning": "File mutation - sorting files into folders (or, say, reading multiple files)", "actions": [{"type": "list_directory", "target": ".", "description": "Get list of target files to sort (or read)"}], "recommended_specialists": ["batch_processor_specialist"]}
 ```
