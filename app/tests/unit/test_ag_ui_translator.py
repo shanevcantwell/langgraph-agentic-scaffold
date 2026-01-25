@@ -86,3 +86,91 @@ async def test_translator_error_handling():
     assert len(error_events) == 1
     assert error_events[0].data["error"] == "Something went wrong"
     assert error_events[0].data["error_report"] == "Detailed trace"
+
+
+@pytest.mark.asyncio
+async def test_translator_handles_interrupt_event():
+    """
+    Regression test for Bug #50: AgUiTranslator must handle __interrupt__ events.
+
+    When DialogueSpecialist calls interrupt(), LangGraph yields a chunk with
+    __interrupt__ key. The translator must emit CLARIFICATION_REQUIRED event
+    with thread_id for resume capability.
+    """
+    async def interrupt_generator():
+        yield {"run_id": "interrupt-run-456"}
+        yield {
+            "facilitator_specialist": {
+                "messages": ["starting facilitator"],
+                "scratchpad": {}
+            }
+        }
+        # Simulate LangGraph interrupt event (as returned by astream)
+        yield {
+            "__interrupt__": [
+                {
+                    "value": {
+                        "questions": [
+                            {"question": "Which file?", "reason": "Ambiguous reference"}
+                        ]
+                    },
+                    "resumable": True
+                }
+            ]
+        }
+        # Nothing after interrupt - workflow is paused
+
+    translator = AgUiTranslator()
+    events = []
+    async for event in translator.translate(interrupt_generator()):
+        events.append(event)
+
+    # Should have: WORKFLOW_START, NODE_START, STATUS_UPDATE, LOG, NODE_END, CLARIFICATION_REQUIRED
+    # NO WORKFLOW_END - workflow is paused, not complete
+
+    # Find clarification event
+    clarification_events = [e for e in events if e.type == EventType.CLARIFICATION_REQUIRED]
+    assert len(clarification_events) == 1, f"Expected 1 clarification event, got {len(clarification_events)}"
+
+    clarification = clarification_events[0]
+    assert clarification.source == "system"
+    assert clarification.data["resumable"] is True
+    assert clarification.data["thread_id"] == "interrupt-run-456"
+    assert len(clarification.data["questions"]) == 1
+    assert clarification.data["questions"][0]["question"] == "Which file?"
+
+    # Verify NO workflow_end event (workflow is paused)
+    end_events = [e for e in events if e.type == EventType.WORKFLOW_END]
+    assert len(end_events) == 0, "Should not emit WORKFLOW_END when interrupted"
+
+
+@pytest.mark.asyncio
+async def test_translator_handles_interrupt_with_object_payload():
+    """
+    Test interrupt handling when payload has .value attribute (namedtuple form).
+    """
+    class InterruptPayload:
+        """Simulates LangGraph's Interrupt namedtuple."""
+        def __init__(self, value, resumable=True):
+            self.value = value
+            self.resumable = resumable
+
+    async def interrupt_with_object():
+        yield {"run_id": "object-run"}
+        yield {
+            "__interrupt__": [
+                InterruptPayload(
+                    value={"questions": [{"question": "What format?", "reason": "Need clarification"}]},
+                    resumable=True
+                )
+            ]
+        }
+
+    translator = AgUiTranslator()
+    events = []
+    async for event in translator.translate(interrupt_with_object()):
+        events.append(event)
+
+    clarification_events = [e for e in events if e.type == EventType.CLARIFICATION_REQUIRED]
+    assert len(clarification_events) == 1
+    assert clarification_events[0].data["questions"][0]["question"] == "What format?"

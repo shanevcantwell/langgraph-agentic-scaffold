@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 69 | 611 |
-| Integration | 30 | 220 |
+| Unit | 68 | 563 |
+| Integration | 28 | 195 |
 | Other | 7 | 90 |
-| **Total** | **106** | **921** |
+| **Total** | **103** | **848** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -192,34 +192,6 @@
 - **`test_graph_builder_wires_convening_architecture`**
 - **`test_default_architecture_fallback`**
 
-## `app/tests/integration/test_fara_smoke.py`
-
-- **`test_fara_responds_to_synthetic_image`**
-  - *SMOKE TEST: Send a synthetic image to Fara and print the response.*
-- **`test_fara_verify_element_exists`**
-  - *SMOKE TEST: Ask Fara if an element exists in the image.*
-
-## `app/tests/integration/test_fara_vegas_terminal.py`
-
-- **`test_locate_execute_button`**
-  - *Fara can locate the EXECUTE button in V.E.G.A.S. Terminal.*
-- **`test_locate_status_indicator`**
-  - *Fara can locate the status indicator panel.*
-- **`test_verify_terminal_header`**
-  - *Fara can verify the V.E.G.A.S. Terminal header exists.*
-- **`test_verify_missing_element`**
-  - *Fara correctly reports missing elements.*
-- **`test_full_ping_workflow_mocked`**
-  - *Test the full integration ping workflow with mocked responses.*
-- **`test_locate_execute_button_live`**
-  - *Live test: Locate EXECUTE button.*
-- **`test_verify_all_major_elements_live`**
-  - *Live test: Verify major UI elements exist.*
-- **`test_full_integration_ping_live`**
-  - *Live test: Full integration ping through V.E.G.A.S. Terminal.*
-- **`test_coordinate_in_expected_region`**
-  - *Test that located coordinates fall within expected regions.*
-
 ## `app/tests/integration/test_file_sort.py`
 
 - **`test_folder`**
@@ -235,12 +207,6 @@
 
 - **`test_folder`**
   - *Create unique test folder, cleanup after.*
-- **`test_filesystem_mcp_connection`**
-  - *Verify connection to filesystem MCP container succeeds.*
-- **`test_sync_bridge_list_directory`**
-  - *Test sync_call_external_mcp works (validates fix for GitHub #28).*
-- **`test_sync_bridge_read_file`**
-  - *Test sync bridge read_file operation.*
 
 ## `app/tests/integration/test_flows.py`
 
@@ -295,7 +261,7 @@
 ## `app/tests/integration/test_image_specialist_streaming.py`
 
 - **`test_image_base64`**
-  - *Creates a minimal valid PNG image encoded in base64.*
+  - *Loads the standard test image from assets.*
 - **`test_image_specialist_appears_in_status_updates`**
   - *CORE TEST: Verify image_specialist appears in SSE status updates.*
 - **`test_image_specialist_status_before_default_responder`**
@@ -318,7 +284,7 @@
 ## `app/tests/integration/test_image_workflow_quality.py`
 
 - **`test_image_base64`**
-  - *Creates a minimal valid PNG image encoded in base64.*
+  - *Loads the standard test image from assets.*
 - **`test_image_description_artifact_is_produced`**
   - *BASELINE: Verify image_specialist produces the image_description artifact.*
 - **`test_final_response_uses_image_description`**
@@ -417,26 +383,6 @@
 
 ## `app/tests/integration/test_mcp_tools_integration.py`
 
-- **`test_file_exists_returns_false_for_missing_file`**
-  - *Verify file_exists returns False for non-existent file.*
-- **`test_file_exists_returns_true_for_existing_file`**
-  - *Verify file_exists returns True for existing file.*
-- **`test_write_and_read_file`**
-  - *Verify write_file and read_file work together.*
-- **`test_append_to_file`**
-  - *Verify append_to_file adds content to existing file.*
-- **`test_list_files`**
-  - *Verify list_files returns directory contents.*
-- **`test_create_directory`**
-  - *Verify create_directory creates new directory.*
-- **`test_rename_file`**
-  - *Verify rename_file moves/renames files.*
-- **`test_delete_file`**
-  - *Verify delete_file removes files.*
-- **`test_create_zip`**
-  - *Verify create_zip creates archive from directory.*
-- **`test_create_manifest`**
-  - *Verify create_manifest creates valid JSON manifest.*
 - **`test_search_function_registered`**
   - *Verify search function is registered in MCP.*
 - **`test_search_returns_results`**
@@ -461,8 +407,8 @@
   - *Verify each registry instance is isolated.*
 - **`test_all_mcp_services_registered_in_graph`**
   - *Verify all expected MCP services are registered in full graph.*
-- **`test_file_specialist_accessible_from_graph`**
-  - *Verify file_specialist MCP functions work from graph context.*
+- **`test_image_specialist_accessible_from_graph`**
+  - *Verify image_specialist MCP functions work from graph context.*
 
 ## `app/tests/integration/test_navigator_browser_specialist_integration.py`
 
@@ -501,8 +447,6 @@
 
 - **`test_triage_advisory_not_restrictive`**
   - *Verifies triage recommendations are advisory (not restrictive).*
-- **`test_loop_detection_when_dependency_unsatisfied`**
-  - *Verifies loop detection kicks in if specialist dependencies can't be satisfied.*
 - **`test_router_respects_specialist_cannot_proceed`**
   - *Verifies router treats "cannot proceed" messages as blocking, not advisory.*
 - **`test_router_removes_declining_specialist_from_routing_decision`**
@@ -978,109 +922,10 @@
   - *Test artifact retrieval with 'uploaded_image.png' key.*
 - **`test_facilitator_reads_file_via_external_mcp_when_artifact_not_in_state`**
   - *Test that Facilitator reads files via external filesystem MCP when not in artifacts.*
-
-## `app/tests/unit/test_fara_service.py`
-
-- **`test_locate_result_found`**
-  - *Test LocateResult when element is found.*
-- **`test_locate_result_not_found`**
-  - *Test LocateResult when element not found.*
-- **`test_verify_result`**
-  - *Test VerifyResult schema.*
-- **`test_action_result_success`**
-  - *Test ActionResult for successful action.*
-- **`test_action_result_failure`**
-  - *Test ActionResult for failed action.*
-- **`test_get_mcp_functions_returns_dict`**
-  - *Test that get_mcp_functions returns correct structure.*
-- **`test_mcp_functions_are_callable`**
-  - *Test that all MCP functions are callable.*
-- **`test_screenshot_uses_default_when_set`**
-  - *Test that default_screenshot is returned when set.*
-- **`test_screenshot_from_browser`**
-  - *Test screenshot capture from browser controller.*
-- **`test_screenshot_raises_without_browser_or_default`**
-  - *Test that screenshot raises when no source available.*
-- **`test_verify_element_found`**
-  - *Test verify when element exists.*
-- **`test_verify_element_not_found`**
-  - *Test verify when element doesn't exist.*
-- **`test_verify_captures_screenshot_if_not_provided`**
-  - *Test that verify captures screenshot when not provided.*
-- **`test_verify_raises_without_adapter`**
-  - *Test that verify raises when no LLM adapter.*
-- **`test_locate_element_found`**
-  - *Test locate returns coordinates when found (scaled to original).*
-- **`test_locate_element_not_found`**
-  - *Test locate when element doesn't exist.*
-- **`test_locate_handles_markdown_json`**
-  - *Test that locate handles JSON wrapped in markdown.*
-- **`test_locate_handles_extra_text`**
-  - *Test that locate extracts JSON from verbose response.*
-- **`test_click_success`**
-  - *Test successful click action.*
-- **`test_click_failure`**
-  - *Test click action failure.*
-- **`test_click_raises_without_browser`**
-  - *Test that click raises without browser controller.*
-- **`test_type_success`**
-  - *Test successful type action.*
-- **`test_type_failure`**
-  - *Test type action failure.*
-- **`test_type_raises_without_browser`**
-  - *Test that type raises without browser controller.*
-- **`test_locate_then_click_workflow`**
-  - *Test typical locate-then-click workflow.*
-- **`test_verify_before_action_workflow`**
-  - *Test verify-before-action safety pattern.*
-- **`test_get_image_dimensions`**
-  - *Test that image dimensions are correctly extracted.*
-- **`test_get_image_dimensions_with_data_url`**
-  - *Test dimensions extraction with data URL prefix.*
-- **`test_select_best_resolution_landscape`**
-  - *Test that landscape images select landscape resolution.*
-- **`test_select_best_resolution_portrait`**
-  - *Test that portrait images select portrait resolution.*
-- **`test_select_best_resolution_square`**
-  - *Test that square-ish images select square resolution.*
-- **`test_scale_to_native`**
-  - *Test that images are scaled to native resolution.*
-- **`test_scale_coordinates_2x`**
-  - *Test coordinate scaling with 2x factor.*
-- **`test_scale_coordinates_4k_to_native`**
-  - *Test coordinate scaling from native to 4K.*
-- **`test_locate_scales_coordinates_to_original`**
-  - *Test that locate returns coordinates in original resolution.*
-- **`test_locate_with_portrait_image`**
-  - *Test that portrait images use portrait native resolution.*
-- **`test_custom_native_resolutions`**
-  - *Test that custom native resolutions are respected.*
-- **`test_verify_does_not_return_coordinates`**
-  - *Test that verify doesn't include scaled coordinates.*
-- **`test_scaled_image_sent_to_model`**
-  - *Test that the scaled image (not original) is sent to the model.*
-- **`test_extract_json_from_tool_call_tags`**
-  - *Test extraction of JSON from <tool_call> tags.*
-- **`test_extract_json_tool_call_single_line`**
-  - *Test extraction from single-line tool_call.*
-- **`test_normalize_tool_call_computer_click`**
-  - *Test normalization of computer tool click action.*
-- **`test_normalize_tool_call_computer_right_click`**
-  - *Test normalization of right-click action.*
-- **`test_normalize_tool_call_serpico_terminate`**
-  - *Test normalization of serpico terminate action.*
-- **`test_normalize_tool_call_serpico_with_coordinates`**
-  - *Test normalization of serpico with found + x coordinate array.*
-- **`test_normalize_tool_call_computer_no_coordinates`**
-  - *Test normalization of computer action without coordinates.*
-- **`test_normalize_tool_call_unknown_tool`**
-  - *Test normalization of unknown tool returns None.*
-- **`test_extract_json_prefers_tool_call_over_raw_json`**
-  - *Test that <tool_call> format is preferred over raw JSON.*
-- **`test_locate_handles_tool_call_format`**
-  - *Test that locate() handles Fara's native tool_call format end-to-end.*
-- **`test_verify_handles_serpico_terminate`**
-  - *Test that verify() handles serpico terminate as 'not found'.*
+- **`test_facilitator_directory_listing_includes_full_paths`**
+  - *Regression test for Bug #49: Directory listing must include full paths.*
+- **`test_facilitator_directory_listing_handles_subdirs`**
+  - *Test that [DIR] markers are properly formatted with full paths.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1221,7 +1066,7 @@
   - *Test that service can be initialized without adapter (ADR-CORE-020).*
 - **`test_get_mcp_functions_returns_all_methods`**
   - *Test that get_mcp_functions exposes all service methods.*
-- **`test_infer_returns_structured_output`**
+- **`test_infer_returns_json_response`**
   - *Test that infer() returns judgment, reasoning, and confidence.*
 - **`test_infer_passes_context_to_llm`**
   - *Test that context is included in the LLM request.*
@@ -1247,8 +1092,8 @@
   - *Test that detect_contradiction invokes LLM adapter.*
 - **`test_assess_source_quality_calls_adapter`**
   - *Test that assess_source_quality invokes LLM adapter.*
-- **`test_infer_handles_empty_structured_output`**
-  - *Test that infer() handles missing structured_output gracefully.*
+- **`test_infer_handles_empty_json_response`**
+  - *Test that infer() handles missing json_response gracefully.*
 - **`test_infer_handles_empty_context`**
   - *Test that infer() handles empty context.*
 - **`test_infer_handles_unknown_format`**

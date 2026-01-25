@@ -171,3 +171,74 @@ def test_facilitator_reads_file_via_external_mcp_when_artifact_not_in_state(faci
     assert "yaml content" in result["artifacts"]["gathered_context"]
     # External MCP should have been called
     mock_sync.assert_called_once()
+
+
+def test_facilitator_directory_listing_includes_full_paths(facilitator):
+    """
+    Regression test for Bug #49: Directory listing must include full paths.
+
+    When Facilitator lists a directory, each item must include the parent
+    directory path. Otherwise, downstream specialists (like BatchProcessor)
+    generate file operations with incomplete paths (e.g., "b.txt" instead
+    of "subdir/b.txt").
+    """
+    plan = ContextPlan(
+        reasoning="Need to see directory contents",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="sort_by_contents",
+                description="List files to sort"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    # Mock the filesystem MCP to return directory contents
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["a.txt", "b.txt", "c.txt"]
+        result = facilitator.execute(state)
+
+    # Assert full paths are in the gathered context
+    gathered = result["artifacts"]["gathered_context"]
+    assert "### Directory: sort_by_contents" in gathered
+    assert "- sort_by_contents/a.txt" in gathered
+    assert "- sort_by_contents/b.txt" in gathered
+    assert "- sort_by_contents/c.txt" in gathered
+
+    # Should NOT have bare filenames without path
+    lines = gathered.split('\n')
+    file_lines = [l for l in lines if l.startswith('- ') and not l.startswith('- [DIR]')]
+    for line in file_lines:
+        # Each file line should contain the parent directory
+        assert "sort_by_contents/" in line, f"Missing full path in: {line}"
+
+
+def test_facilitator_directory_listing_handles_subdirs(facilitator):
+    """
+    Test that [DIR] markers are properly formatted with full paths.
+    """
+    plan = ContextPlan(
+        reasoning="Need to see directory contents",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="workspace",
+                description="List workspace"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["file.txt", "[DIR] subdir", "[DIR] another"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+    assert "- workspace/file.txt" in gathered
+    assert "- [DIR] workspace/subdir" in gathered
+    assert "- [DIR] workspace/another" in gathered
