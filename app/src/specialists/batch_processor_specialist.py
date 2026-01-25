@@ -177,8 +177,12 @@ Operation types:
 For SORT operations (e.g., "sort files into folders"):
 1. Identify the files to sort
 2. Decide appropriate destination directories based on file names
-3. Return "move" operations with correct destinations
+3. Return "move" operations with FULL destination paths (including filename)
 4. Create destination directories first with "mkdir" operations
+
+CRITICAL - Move destinations must include filename:
+- CORRECT: destination="a-m/e.txt" (full path with filename)
+- WRONG: destination="a-m/" (directory only - causes EISDIR error)
 
 For CREATE operations (e.g., "create files a.txt, b.txt"):
 1. Extract each file path

@@ -81,17 +81,19 @@ specialists:
 ```
 
 ```bash
-# .env
+# .env (for non-Docker usage)
 WORKSPACE_PATH=workspace
 ```
 
 ```yaml
-# docker-compose.yml
+# docker-compose.yml (sets WORKSPACE_PATH=/workspace in container)
+environment:
+  - WORKSPACE_PATH=/workspace
 volumes:
-  - app_workspace:/app/${WORKSPACE_PATH:-workspace}
+  - ./workspace:/workspace  # Same path in main app and filesystem-mcp
 ```
 
-This pattern ensures the FileSpecialist sandbox boundary, ConfigLoader path validation, and Docker volume mount all coordinate through a single definition in `.env`. Without env var interpolation, these three layers would be independent sources of truth that could drift out of sync.
+This pattern ensures path consistency across containers. The `./workspace` host directory is mounted at `/workspace` in both the main app and filesystem-mcp containers, eliminating path translation issues.
 
 ## 1.1 Distributed Inference (Multi-GPU Box Setup)
 

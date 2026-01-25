@@ -39,7 +39,7 @@ class FileOperation(BaseModel):
     )
     destination: Optional[str] = Field(
         default=None,
-        description="Destination path for move operations"
+        description="Full destination path including filename for move operations (e.g., 'archive/file.txt' not 'archive/')"
     )
 
 

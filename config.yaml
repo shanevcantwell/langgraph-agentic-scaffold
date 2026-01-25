@@ -334,6 +334,7 @@ specialists:
         - directory_tree
         - read_file
         - list_allowed_directories
+        - list_directory
 
   dialogue_specialist:
     type: "procedural"

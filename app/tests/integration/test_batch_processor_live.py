@@ -29,10 +29,10 @@ def batch_test_files():
     """
     Create test files in workspace directory visible to MCP file_specialist.
 
-    Path mapping:
+    Path mapping (consistent /workspace mount):
     - Host: ./workspace/test_batch/
-    - Main container (pytest): /app/workspace/test_batch/
-    - MCP file_specialist: /projects/test_batch/
+    - Main container (pytest): /workspace/test_batch/
+    - filesystem-mcp container: /workspace/test_batch/
     """
     test_dir = Path("workspace/test_batch")
     test_dir.mkdir(parents=True, exist_ok=True)

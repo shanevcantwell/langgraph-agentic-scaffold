@@ -21,16 +21,16 @@ services:
       # Exclude internal docker services from the proxy to prevent routing loops
       - NO_PROXY=localhost,127.0.0.1,app,web-ui,proxy,langgraph-app,vegas-terminal,host.docker.internal
       # WORKSPACE_PATH for FileSpecialist and external MCP containers (ADR-MCP-003)
-      - WORKSPACE_PATH=/app/workspace
+      # Uses /workspace (not /app/workspace) for path consistency with filesystem-mcp
+      - WORKSPACE_PATH=/workspace
     # This makes the host's services (Ollama, LM Studio) available to the container.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       # Mount the project directory for live code changes during development.
       - .:/app
-      # Mount host workspace directory directly for file visibility.
-      # Path is configured via WORKSPACE_PATH in .env (defaults to "workspace")
-      - ./workspace:/app/workspace
+      # Mount host workspace directory at /workspace for consistency with filesystem-mcp
+      - ./workspace:/workspace
       # Docker socket access for external MCP containers (ADR-MCP-003)
       - /var/run/docker.sock:/var/run/docker.sock
     # Add docker group permissions for external MCP container spawning
@@ -84,14 +84,14 @@ services:
     image: node:20-slim
     stdin_open: true  # Required for MCP stdio transport
     tty: true
-    working_dir: /app
+    working_dir: /workspace
     volumes:
-      # Mount workspace to /app (matches langgraph-app's view)
-      - ./workspace:/app
+      # Mount workspace at /workspace (same path as main app for consistency)
+      - ./workspace:/workspace
     tmpfs:
       # Ephemeral temp directory - cleared on container restart
       - /tmp:size=100M,mode=1777
-    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/app", "/tmp"]
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem", "/workspace", "/tmp"]
     restart: unless-stopped
 
   # surf-mcp - Browser automation with Fara visual grounding (ADR-CORE-027)

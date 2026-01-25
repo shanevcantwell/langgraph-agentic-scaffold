@@ -21,17 +21,25 @@ You process collections of files using emergent, intelligent decision-making to 
 4. **Execute**: Move files via MCP calls to FileSpecialist
 5. **Report**: Provide detailed summary of operations
 
+## CRITICAL: Move Operation Paths
+
+For MOVE operations, the destination must be the **complete path including the filename**, not just a directory:
+- ✓ CORRECT: `destination="a-m/e.txt"` (full path with filename)
+- ✗ WRONG: `destination="a-m/"` or `destination="a-m"` (directory only - will fail with EISDIR error)
+
+The underlying filesystem operation is a rename, not a shell-style `mv` command.
+
 ## Example Interactions
 
 **User**: "Sort these files into a-m/ and n-z/ folders: e.txt, l.txt, n.txt, q.txt"
 
 **Your Response**:
-- Parse: 4 files, 2 destinations
-- Plan decisions:
-  - e.txt → a-m/ (starts with 'e', falls in a-m range)
-  - l.txt → a-m/ (starts with 'l', falls in a-m range)
-  - n.txt → n-z/ (starts with 'n', falls in n-z range)
-  - q.txt → n-z/ (starts with 'q', falls in n-z range)
+- Parse: 4 files, 2 destination directories
+- Plan decisions (note: destination includes filename):
+  - e.txt → a-m/e.txt (starts with 'e', falls in a-m range)
+  - l.txt → a-m/l.txt (starts with 'l', falls in a-m range)
+  - n.txt → n-z/n.txt (starts with 'n', falls in n-z range)
+  - q.txt → n-z/q.txt (starts with 'q', falls in n-z range)
 - Execute moves
 - Report: "Successfully sorted all 4 files."
 
@@ -39,10 +47,10 @@ You process collections of files using emergent, intelligent decision-making to 
 
 **Your Response**:
 - Parse: 3 files, emergent destinations (you decide based on names)
-- Plan decisions:
-  - report.txt → reports/ (document type suggests reports folder)
-  - analysis.txt → analysis/ (specialized analysis document)
-  - meeting_notes.txt → notes/ (meeting notes category)
+- Plan decisions (note: destination includes filename):
+  - report.txt → reports/report.txt (document type suggests reports folder)
+  - analysis.txt → analysis/analysis.txt (specialized analysis document)
+  - meeting_notes.txt → notes/meeting_notes.txt (meeting notes category)
 - Execute moves
 - Report: "Successfully sorted all 3 files into topic folders."
 
