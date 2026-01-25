@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 def _normalize_path(path: str) -> str:
     """
-    Normalize path for filesystem MCP (must be relative to /app mount).
+    Normalize path for filesystem MCP (must be relative to /workspace mount).
 
     Strips leading slashes since filesystem MCP expects relative paths.
     """
