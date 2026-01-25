@@ -629,14 +629,15 @@ async def stream_graph_events(request: InvokeRequest):
 async def download_archive(filename: str):
     """
     Serves archive zip files for download.
-    Files are stored in logs/archive/ directory.
+    Uses AGENTIC_SCAFFOLD_ARCHIVE_PATH env var (same as ArchiverSpecialist).
     """
     # Security: only allow .zip files and prevent path traversal
     if not filename.endswith(".zip") or "/" in filename or "\\" in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
 
-    # Archive directory relative to app root
-    archive_dir = Path(__file__).parent.parent / "logs" / "archive"
+    # Use same archive path as ArchiverSpecialist for consistency
+    archive_path = os.getenv("AGENTIC_SCAFFOLD_ARCHIVE_PATH", "./logs/archive")
+    archive_dir = Path(os.path.expanduser(archive_path))
     file_path = archive_dir / filename
 
     if not file_path.exists():
