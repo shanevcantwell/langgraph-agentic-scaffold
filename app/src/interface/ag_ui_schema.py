@@ -13,6 +13,8 @@ class EventType(str, Enum):
     WORKFLOW_END = "workflow_end"
     STATUS_UPDATE = "status_update"
     LOG = "log"
+    # ADR-CORE-042: Interrupt events for "Raise Hand" pattern
+    CLARIFICATION_REQUIRED = "clarification_required"
 
 class AgUiEvent(BaseModel):
     """

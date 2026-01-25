@@ -236,6 +236,10 @@ class WorkflowRunner:
         run_id = uuid.uuid4()
         # Yield the run_id immediately so the client can start tracking traces
         yield {"run_id": str(run_id)}
+        # ADR-CORE-042: Also yield thread_id for interrupt handling (same as run_id)
+        # The stream formatter needs this to include in interrupt responses
+        if self.checkpointer:
+            yield {"thread_id": str(run_id)}
 
         config = {"recursion_limit": self.recursion_limit, "run_id": run_id}
         if self.checkpointer:

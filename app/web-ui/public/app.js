@@ -40,6 +40,13 @@ let abortController = null; // Controller for the fetch request
 let thoughtStreamEntries = []; // Track thought stream entries
 let currentArtifacts = {}; // Track artifacts as they're generated
 
+// ADR-CORE-042: Clarification state and DOM refs
+let pendingThreadId = null;
+const clarificationModal = document.getElementById('clarificationModal');
+const clarificationQuestions = document.getElementById('clarificationQuestions');
+const clarificationInput = document.getElementById('clarificationInput');
+const clarificationSubmitBtn = document.getElementById('clarificationSubmitBtn');
+
 // Theme Switcher Logic
 const themeBtns = document.querySelectorAll('.theme-btn');
 
@@ -199,6 +206,82 @@ tabBtns.forEach(btn => {
         document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
     });
 });
+
+// ADR-CORE-042: Clarification submission handlers
+if (clarificationSubmitBtn) {
+    clarificationSubmitBtn.addEventListener('click', submitClarification);
+}
+if (clarificationInput) {
+    clarificationInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            submitClarification();
+        }
+    });
+}
+// Close clarification modal on outside click
+window.addEventListener('click', (e) => {
+    if (e.target == clarificationModal) {
+        clarificationModal.style.display = 'none';
+    }
+});
+
+async function submitClarification() {
+    const userInput = clarificationInput.value.trim();
+    if (!userInput || !pendingThreadId) {
+        logStatus('► ERROR: No clarification provided');
+        return;
+    }
+
+    clarificationModal.style.display = 'none';
+    logStatus('► RESUMING WORKFLOW...');
+    addThoughtStreamEntry('SYSTEM', 'Resuming with user clarification', 'lifecycle');
+
+    try {
+        const response = await fetch(`${API_BASE}/graph/resume`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                thread_id: pendingThreadId,
+                user_input: userInput
+            })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        // Handle streamed response (resume returns SSE stream)
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        handleStreamEvent(data);
+                    } catch (e) {
+                        console.error("Error parsing resume SSE:", e);
+                    }
+                }
+            }
+        }
+
+        pendingThreadId = null;
+        logStatus('► WORKFLOW RESUMED SUCCESSFULLY');
+
+    } catch (error) {
+        logStatus(`❌ RESUME ERROR: ${error.message}`);
+        addThoughtStreamEntry('SYSTEM', `Resume failed: ${error.message}`, 'error');
+    }
+}
 
 async function executeWorkflow() {
     const prompt = promptInput.value.trim();
@@ -655,6 +738,35 @@ function handleStreamEvent(event) {
     const data = event.data || {};
     const source = event.source || 'system';
 
+    // ADR-CORE-042: Handle raw interrupt events from _stream_formatter
+    // These come as {interrupt: {...}, thread_id: "xxx"} without a type wrapper
+    if (event.interrupt || data.interrupt) {
+        const interruptData = event.interrupt || data.interrupt;
+        pendingThreadId = event.thread_id || data.thread_id;
+        const questions = interruptData.questions || [];
+
+        let questionsHtml = '<ul style="list-style: none; padding: 0;">';
+        questions.forEach(q => {
+            if (typeof q === 'object') {
+                questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q}`;
+                if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
+                questionsHtml += '</li>';
+            } else {
+                questionsHtml += `<li style="margin: 10px 0;">• ${q}</li>`;
+            }
+        });
+        questionsHtml += '</ul>';
+
+        clarificationQuestions.innerHTML = questionsHtml;
+        clarificationInput.value = '';
+        clarificationModal.style.display = 'block';
+        clarificationInput.focus();
+
+        addThoughtStreamEntry('SYSTEM', 'Clarification requested - awaiting user input', 'lifecycle');
+        logStatus('► AWAITING CLARIFICATION...');
+        return; // Don't process further - wait for user input
+    }
+
     switch (event.type) {
         case 'workflow_start':
             logStatus(`► WORKFLOW STARTED`);
@@ -806,6 +918,32 @@ function handleStreamEvent(event) {
             } else {
                 console.warn('[workflow_end] No archive data found!');
             }
+            break;
+
+        case 'clarification_required':
+            // ADR-CORE-042: Handle wrapped interrupt event (AgUiEvent type)
+            pendingThreadId = event.thread_id || data.thread_id;
+            const questions = data.questions || [];
+
+            let questionsHtml = '<ul style="list-style: none; padding: 0;">';
+            questions.forEach(q => {
+                if (typeof q === 'object') {
+                    questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q}`;
+                    if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
+                    questionsHtml += '</li>';
+                } else {
+                    questionsHtml += `<li style="margin: 10px 0;">• ${q}</li>`;
+                }
+            });
+            questionsHtml += '</ul>';
+
+            clarificationQuestions.innerHTML = questionsHtml;
+            clarificationInput.value = '';
+            clarificationModal.style.display = 'block';
+            clarificationInput.focus();
+
+            addThoughtStreamEntry('SYSTEM', 'Clarification requested - awaiting user input', 'lifecycle');
+            logStatus('► AWAITING CLARIFICATION...');
             break;
 
         default:

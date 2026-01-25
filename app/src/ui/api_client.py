@@ -6,6 +6,7 @@ from PIL import Image
 import io
 
 STREAM_URL = "http://127.0.0.1:8000/v1/graph/stream"
+RESUME_URL = "http://127.0.0.1:8000/v1/graph/resume"  # ADR-CORE-042
 
 class ApiClient:
     """Handles all communication with the backend agentic system API."""
@@ -68,3 +69,39 @@ class ApiClient:
                 
         except Exception as e:
             yield {"status": f"API Error: {e}", "logs": log_history + f"\nERROR: {e}"}
+
+    async def resume_workflow(self, thread_id: str, user_input: str):
+        """
+        ADR-CORE-042: Resume an interrupted workflow with user's clarification.
+
+        When a specialist calls interrupt() to request clarification, the stream
+        yields an interrupt event with a thread_id. This method resumes the workflow
+        with the user's response.
+
+        Args:
+            thread_id: The thread_id from the interrupt event
+            user_input: The user's clarification response
+
+        Yields:
+            Updates from the resumed workflow stream
+        """
+        payload = {"thread_id": thread_id, "user_input": user_input}
+
+        try:
+            async with httpx.AsyncClient(timeout=300.0) as client:
+                async with client.stream("POST", RESUME_URL, json=payload) as response:
+                    response.raise_for_status()
+
+                    async for line in response.aiter_lines():
+                        if line:
+                            decoded_line = line.strip()
+                            if decoded_line.startswith("data:"):
+                                try:
+                                    data_str = decoded_line[len("data:"):].strip()
+                                    data = json.loads(data_str)
+                                    yield data
+                                except json.JSONDecodeError:
+                                    yield {"logs": f"[UI-CLIENT-ERROR] Failed to parse JSON: {decoded_line}"}
+
+        except Exception as e:
+            yield {"status": f"Resume Error: {e}", "error": str(e)}

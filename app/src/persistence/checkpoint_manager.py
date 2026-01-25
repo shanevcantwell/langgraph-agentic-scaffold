@@ -1,35 +1,34 @@
 """
-Checkpoint Manager for stateless multi-request workflows (RECESS/ESM pattern).
+Checkpoint Manager for workflow state persistence.
 
-IMPORTANT ARCHITECTURAL DISTINCTION:
+ARCHITECTURAL PATTERNS:
 
-    1. ADR-CORE-018 HitL (DialogueSpecialist):
-       - Client maintains streaming connection during interrupt()
-       - LangGraph holds state IN-MEMORY while paused
-       - NO external checkpointing required for basic clarification flow
+    1. ADR-CORE-042 HitL (Raise Hand / interrupt-resume):
+       - MemorySaver (in-memory) enabled by default
+       - Supports interrupt() / resume() for clarification flows
+       - No database setup required
+       - Use: get_default_checkpointer()
 
     2. RECESS/ESM "Subgraph as a Service":
        - Stateless API: client disconnects between turns
        - State must survive across HTTP request boundaries
        - REQUIRES external persistence (PostgreSQL/Redis/SQLite)
+       - Use: create_checkpointer_context(config)
 
-This module provides checkpointing for pattern #2 (RECESS/ESM).
-Do NOT enable checkpointing for basic streaming/chat workflows - it adds
-unnecessary overhead when LangGraph already manages state in-memory.
+Default Usage (recommended for most workflows):
+    from .persistence.checkpoint_manager import get_default_checkpointer
+    checkpointer = get_default_checkpointer()
+    workflow_runner.set_async_checkpointer(checkpointer)
 
-See: design-docs/RECESS/docs/DESIGN_ The Emergent State Machine (ESM).md
-     Section 6: Service Architecture Considerations (Checkpointing)
-
-Usage:
-    # In FastAPI lifespan (async context) - ONLY for RECESS-style workflows:
+Advanced Usage (RECESS/ESM with external persistence):
     async with create_checkpointer_context(config) as checkpointer:
         graph = workflow.compile(checkpointer=checkpointer)
         yield  # app runs
         # checkpointer automatically cleaned up
 
-Configuration (user_settings.yaml):
+Configuration (user_settings.yaml) - only for external persistence:
     checkpointing:
-      enabled: false  # Default OFF - only enable for RECESS/ESM
+      enabled: true
       backend: "sqlite"  # or "postgres" for production
       sqlite_path: "./data/checkpoints.db"
       # postgres_url: "${DATABASE_URL}"  # for production
@@ -217,3 +216,27 @@ def _init_sync_sqlite_checkpointer(config: dict):
 
     conn = sqlite3.connect(db_path, check_same_thread=False)
     return SqliteSaver(conn)
+
+
+def get_default_checkpointer():
+    """
+    Returns the default checkpointer for interrupt/resume support.
+
+    ADR-CORE-042: Enables the "Raise Hand" pattern where any specialist
+    can pause workflow execution to request user clarification.
+
+    Currently returns MemorySaver (in-memory, no persistence).
+    State survives for the duration of the process but is lost on restart.
+
+    For persistent checkpointing (RECESS/ESM pattern), use
+    create_checkpointer_context() with appropriate config instead.
+
+    Future: This function can be extended to read from config to select
+    backend (memory/sqlite/postgres) while keeping the call site unchanged.
+
+    Returns:
+        A LangGraph checkpointer instance (MemorySaver).
+    """
+    from langgraph.checkpoint.memory import MemorySaver
+    logger.info("Initializing MemorySaver for in-memory checkpointing (ADR-CORE-042)")
+    return MemorySaver()

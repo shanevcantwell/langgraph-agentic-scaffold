@@ -33,6 +33,14 @@ async def lifespan(app: FastAPI):
     global langsmith_client, workflow_runner
     workflow_runner = WorkflowRunner()
 
+    # ADR-CORE-042: Enable checkpointing for interrupt/resume ("Raise Hand" pattern)
+    # This allows specialists to pause workflow and request user clarification
+    from .persistence.checkpoint_manager import get_default_checkpointer
+    checkpointer = get_default_checkpointer()
+    if checkpointer:
+        workflow_runner.set_async_checkpointer(checkpointer)
+        logger.info("--- FastAPI startup: Checkpointer enabled for interrupt/resume. ---")
+
     # Initialize external MCP services (Docker containers like filesystem)
     # This must be called after WorkflowRunner init to connect containers
     try:
@@ -174,12 +182,28 @@ async def _stream_formatter(generator):
     into the specific JSON structure the Gradio UI expects.
     """
     accumulated_state = None
+    current_thread_id = None  # ADR-CORE-042: Track for interrupt handling
 
     async for chunk in generator:
         # Check for run_id chunk (emitted first)
         if "run_id" in chunk:
             yield f"data: {json.dumps({'run_id': chunk['run_id']})}\n\n"
             continue
+
+        # ADR-CORE-042: Capture thread_id for interrupt handling
+        if "thread_id" in chunk:
+            current_thread_id = chunk["thread_id"]
+            continue
+
+        # ADR-CORE-042: Detect interrupt event ("Raise Hand" pattern)
+        # When a specialist calls interrupt(), LangGraph yields {"__interrupt__": [...]}
+        if "__interrupt__" in chunk:
+            interrupt_data = chunk["__interrupt__"]
+            if interrupt_data and len(interrupt_data) > 0:
+                # Extract the interrupt payload (questions, context, etc.)
+                payload = interrupt_data[0].value if hasattr(interrupt_data[0], 'value') else interrupt_data[0].get("value", {})
+                yield f"data: {json.dumps({'interrupt': payload, 'thread_id': current_thread_id, 'resumable': True})}\n\n"
+            return  # End stream - UI will call /resume endpoint
 
         # The raw stream from LangGraph is a dictionary where keys are node names.
         # We can inspect this to provide real-time status updates.
