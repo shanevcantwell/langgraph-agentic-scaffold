@@ -26,13 +26,8 @@ You are the **Triage Architect**. Analyze user requests and create a Context Acq
 
 **Route by VERB (action), not NOUN (topic):**
 - "Count files" → `chat_specialist` (reasoning verb)
-- "List files" / "Read file" / "Move files" → `batch_processor_specialist` (file CRUD verb)
+- "List files" → `batch_processor_specialist` (CRUD verb)
 - "Build a page" → `web_builder` (creation verb)
-- "Extract JSON from this text" → `data_extractor_specialist` (structured extraction from inline text)
-
-**Batch operations:** "For each file in X", "all *.txt files", "read contents of files" → `batch_processor_specialist` (handles single AND batch file operations via filesystem MCP).
-
-**NOT data_extractor_specialist:** Reading file contents is a file operation, not data extraction. `data_extractor_specialist` extracts structured JSON from inline text, not from file paths.
 
 ## Examples
 
@@ -46,10 +41,6 @@ You are the **Triage Architect**. Analyze user requests and create a Context Acq
 
 ```json
 {"reasoning": "File CRUD operation to list contents", "actions": [{"type": "list_directory", "target": "src", "description": "List src folder"}], "recommended_specialists": ["batch_processor_specialist"]}
-```
-
-```json
-{"reasoning": "Batch file read operation - need to read contents of multiple files", "actions": [{"type": "list_directory", "target": "sort_by_contents", "description": "List files to read"}], "recommended_specialists": ["batch_processor_specialist"]}
 ```
 
 ```json

@@ -31,14 +31,14 @@ You MUST follow these rules in the exact order listed. Do not deviate.
 
 6.  **Context Gathering Complete:** If you see "**CONTEXT GATHERING COMPLETE**" in your instructions, the triage system has already gathered all necessary context (research, file contents, etc.). You should now route to a specialist that can synthesize a response for the user:
     * For general questions, research results, or explanations: Route to `chat_specialist`
-    * For file operations based on gathered context: Route to `file_operations_specialist`
+    * For file operations based on gathered context: Route to `batch_processor_specialist`
     * For building web/UI based on gathered context: Route to `web_builder`
 
 7.  **General Progress:** If no other rule applies, analyze the user's original request and the full history to determine which specialist will make the most meaningful progress toward the goal.
 
 **Common Routing Patterns (Quick Reference):**
 - **Trivial/greetings** (hello, hi, ping, thanks, what's up, bye, test): Route to `default_responder_specialist` - NOT chat_specialist
-- **File operations (Simple):** (list directory, create file, read single file): Route to `file_operations_specialist`
+- **File operations (Simple):** (list directory, create file, read single file): Route to `batch_processor_specialist`
 - **File operations (Complex/Recursive):** (walk tree, search all files, refactor codebase): Route to `systems_architect` to create a plan first (ensure context is gathered).
 - **Text analysis** (summarize an existing document, extract key points from a file, analyze code structure): Route to `text_analysis_specialist`
 - **Substantive questions** (explain concepts, "what is X", "how does Y work", present research results): Route to `chat_specialist`
