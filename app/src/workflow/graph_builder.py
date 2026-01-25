@@ -1,6 +1,7 @@
 # app/src/workflow/graph_builder.py
 import logging
-from typing import Dict, Any, Callable
+import types
+from typing import Dict, Any, Callable, Optional
 
 from langgraph.graph import StateGraph, END
 
@@ -23,6 +24,98 @@ from .subgraphs.emergent_project import EmergentProjectSubgraph
 from ..specialists.tribe_conductor import TribeConductor
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# ReactEnabledSpecialist Wrapper (ADR-CORE-051)
+# =============================================================================
+
+class ReactEnabledSpecialist:
+    """
+    Wrapper that adds ReAct capability to any specialist via config.
+
+    This enables config-driven iterative tool use without requiring specialists
+    to explicitly inherit from ReActMixin. GraphBuilder wraps specialists with
+    this class when their config has `react: enabled: true`.
+
+    The wrapper injects ReActMixin methods onto the inner specialist instance,
+    allowing it to call self.execute_with_tools() for ReAct-style loops.
+
+    Config example:
+        specialists:
+          my_specialist:
+            type: "llm"
+            react:
+              enabled: true
+              max_iterations: 10
+              stop_on_error: false
+
+    See ADR-CORE-051 for architectural details.
+    """
+
+    def __init__(
+        self,
+        inner: "BaseSpecialist",
+        max_iterations: int = 10,
+        stop_on_error: bool = False
+    ):
+        """
+        Initialize the wrapper.
+
+        Args:
+            inner: The specialist instance to wrap
+            max_iterations: Default max iterations for ReAct loops
+            stop_on_error: Whether to halt on first tool error
+        """
+        self._inner = inner
+        self._max_iterations = max_iterations
+        self._stop_on_error = stop_on_error
+
+        # Inject ReActMixin methods onto the inner specialist
+        self._inject_react_capability()
+
+        logger.debug(
+            f"ReactEnabledSpecialist wrapping '{inner.specialist_name}' "
+            f"(max_iterations={max_iterations}, stop_on_error={stop_on_error})"
+        )
+
+    def _inject_react_capability(self):
+        """
+        Inject ReActMixin methods onto the inner specialist instance.
+
+        This allows the specialist's code to call self.execute_with_tools()
+        as if it had inherited from ReActMixin directly.
+        """
+        from ..specialists.mixins.react_mixin import ReActMixin
+
+        # Methods to inject from ReActMixin
+        methods_to_inject = [
+            'execute_with_tools',
+            '_build_tool_schemas',
+            '_execute_tool',
+            '_format_tool_result_message',
+        ]
+
+        for method_name in methods_to_inject:
+            if hasattr(ReActMixin, method_name):
+                method = getattr(ReActMixin, method_name)
+                # Bind the method to the inner specialist instance
+                bound_method = types.MethodType(method, self._inner)
+                setattr(self._inner, method_name, bound_method)
+
+        # Store config values on inner specialist for reference
+        self._inner._react_config = {
+            'max_iterations': self._max_iterations,
+            'stop_on_error': self._stop_on_error,
+        }
+
+    def __getattr__(self, name):
+        """Forward attribute access to the inner specialist."""
+        return getattr(self._inner, name)
+
+    def __repr__(self):
+        return f"ReactEnabledSpecialist({self._inner.specialist_name})"
+
 
 class GraphBuilder:
     """
@@ -176,10 +269,26 @@ class GraphBuilder:
             await self.external_mcp_client.cleanup()
             raise
 
-        # Attach external_mcp_client to specialists that need it
-        # Currently all specialists get access (they can choose whether to use it)
-        for instance in self.specialists.values():
-            instance.external_mcp_client = self.external_mcp_client
+        # ADR-CORE-051: Attach permissioned external MCP clients per specialist
+        # Permissions are defined in config.yaml under each specialist's "tools:" key
+        # Specialists without tools: config get no external MCP access (secure default)
+        from ..mcp import PermissionedMcpClient
+
+        for name, instance in self.specialists.items():
+            specialist_config = self.config.get("specialists", {}).get(name, {})
+            tool_permissions = specialist_config.get("tools", {})
+
+            if tool_permissions:
+                # Specialist has explicit tool config - wrap with permissions
+                instance.external_mcp_client = PermissionedMcpClient(
+                    self.external_mcp_client,
+                    allowed_tools=tool_permissions
+                )
+                logger.debug(f"Attached PermissionedMcpClient to '{name}' with tools: {list(tool_permissions.keys())}")
+            else:
+                # No tools config = no external MCP access (ADR-CORE-051 secure default)
+                instance.external_mcp_client = None
+                logger.debug(f"No external MCP access for '{name}' (no tools: config)")
 
         logger.info(
             f"External MCP initialization complete. "
@@ -197,10 +306,36 @@ class GraphBuilder:
             await self.external_mcp_client.cleanup()
             logger.info("External MCP cleanup complete")
 
+    def _format_tool_descriptions(self, tools: dict) -> str:
+        """
+        Format tool permissions for injection into specialist prompts (ADR-CORE-051).
+
+        Args:
+            tools: Dict mapping service names to tool lists or "*" wildcard
+                   Example: {"filesystem": ["read_file", "write_file"]}
+
+        Returns:
+            Formatted string for prompt injection, or empty string if no tools
+        """
+        if not tools:
+            return ""
+
+        lines = ["", "--- AVAILABLE MCP TOOLS ---"]
+        for service, tool_list in tools.items():
+            if tool_list == "*":
+                lines.append(f"- {service}: ALL tools available")
+            else:
+                lines.append(f"- {service}: {', '.join(tool_list)}")
+        lines.append("")
+        return "\n".join(lines)
+
     def _attach_llm_adapter(self, specialist_instance: BaseSpecialist):
         """
         Attaches an LLM adapter to a specialist instance if it is configured to use one.
         This is the single, authoritative method for adapter attachment.
+
+        ADR-CORE-051: Also injects tool descriptions into the prompt if specialist
+        has tools: config, keeping prompts in sync with actual permissions.
         """
         name = specialist_instance.specialist_name
         config = specialist_instance.specialist_config
@@ -212,6 +347,12 @@ class GraphBuilder:
                 system_prompt = load_prompt(prompt_file)
             elif prompt_file := config.get("prompt_file"):
                 system_prompt = load_prompt(prompt_file)
+
+            # ADR-CORE-051: Inject tool descriptions if specialist has tools config
+            tool_descriptions = self._format_tool_descriptions(config.get("tools", {}))
+            if tool_descriptions:
+                system_prompt = f"{system_prompt}{tool_descriptions}"
+
             specialist_instance.llm_adapter = self.adapter_factory.create_adapter(name, system_prompt)
             logger.debug(f"Attached LLM adapter to '{name}' using binding '{binding_key}'.")
 
@@ -331,7 +472,58 @@ class GraphBuilder:
                         exc_info=True
                     )
 
+        # ADR-CORE-051: Apply ReactEnabledSpecialist wrapper based on config
+        # Specialists with react.enabled: true get ReAct capability injected
+        loaded_specialists = self._apply_react_wrappers(loaded_specialists, all_configs)
+
         return loaded_specialists
+
+    def _apply_react_wrappers(
+        self,
+        specialists: Dict[str, BaseSpecialist],
+        configs: Dict
+    ) -> Dict[str, BaseSpecialist]:
+        """
+        Apply ReactEnabledSpecialist wrapper to specialists with react config (ADR-CORE-051).
+
+        Args:
+            specialists: Dict of loaded specialist instances
+            configs: Dict of specialist configurations
+
+        Returns:
+            Updated specialists dict with wrappers applied where configured
+        """
+        # Get global react defaults
+        global_react_defaults = self.config.get("react", {}).get("defaults", {})
+        default_max_iterations = global_react_defaults.get("max_iterations", 10)
+        default_stop_on_error = global_react_defaults.get("stop_on_error", False)
+
+        wrapped_specialists = {}
+
+        for name, instance in specialists.items():
+            spec_config = configs.get(name, {})
+            react_config = spec_config.get("react", {})
+
+            if react_config.get("enabled", False):
+                # Specialist has react enabled - wrap it
+                max_iterations = react_config.get("max_iterations", default_max_iterations)
+                stop_on_error = react_config.get("stop_on_error", default_stop_on_error)
+
+                wrapped = ReactEnabledSpecialist(
+                    inner=instance,
+                    max_iterations=max_iterations,
+                    stop_on_error=stop_on_error
+                )
+                wrapped_specialists[name] = wrapped
+                logger.info(
+                    f"Applied ReactEnabledSpecialist wrapper to '{name}' "
+                    f"(max_iterations={max_iterations})"
+                )
+            else:
+                # No react config - keep original instance
+                wrapped_specialists[name] = instance
+
+        return wrapped_specialists
 
     def _configure_router(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         router_instance = specialists[CoreSpecialist.ROUTER.value]

@@ -43,6 +43,17 @@ workflow:
   enable_menu_filter: true
 
 # ==============================================================================
+# REACT CONFIGURATION (ADR-CORE-051)
+# ==============================================================================
+# Global defaults for specialists with react.enabled: true.
+# Enables iterative tool use: LLM → tool → LLM → tool → ... → done
+# ==============================================================================
+react:
+  defaults:
+    max_iterations: 10
+    stop_on_error: false
+
+# ==============================================================================
 # MCP (MESSAGE-CENTRIC PROTOCOL) CONFIGURATION
 # ==============================================================================
 # MCP enables specialists to call each other's functions directly without routing
@@ -149,11 +160,31 @@ specialists:
     type: "hybrid"
     prompt_file: "navigator_browser_specialist_prompt.md"
     description: "Web browsing with visual grounding. Navigates URLs, clicks elements by natural language description, fills forms, and extracts page content. Use for 'go to example.com', 'click the Submit button', 'type hello in the search box'."
+    # ADR-CORE-051: surf-mcp browser tools
+    tools:
+      navigator:
+        - session_create
+        - session_destroy
+        - goto
+        - click
+        - type
+        - read
+        - snapshot
 
   batch_processor_specialist:
     type: "llm"
     prompt_file: "batch_processor_prompt.md"
     description: "Handles ALL file operations via dispatcher pattern: create, read, write, move, delete, list, mkdir. Works for single files ('read config.yaml', 'create notes.txt') AND batch operations ('create a.txt, b.txt, c.txt', 'move files to archive/', 'sort files into folders'). Primary specialist for any filesystem task."
+    # ADR-CORE-051: External MCP tool permissions
+    tools:
+      filesystem:
+        - read_file
+        - write_file
+        - create_directory
+        - move_file
+        - directory_tree
+        - edit_file
+        - get_file_info
 
   # --- Data & Analysis ---
   data_extractor_specialist:
@@ -271,6 +302,10 @@ specialists:
     prompt_file: "project_director_prompt.md"
     description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Uses an emergent state machine to gather information, refine understanding, and synthesize answers."
     tags: ["planning", "research", "complex_tasks"]
+    # ADR-CORE-051: ReAct capability for iterative research
+    react:
+      enabled: true
+      max_iterations: 15
 
   web_specialist:
     type: "procedural"
@@ -293,6 +328,12 @@ specialists:
     description: "Orchestrates the execution of a ContextPlan by calling Researcher, FileSpecialist, and Summarizer via MCP."
     requires_artifacts: ["context_plan"]
     tags: ["planning", "context_engineering"]
+    # ADR-CORE-051: Read-only filesystem access for context gathering
+    tools:
+      filesystem:
+        - directory_tree
+        - read_file
+        - list_allowed_directories
 
   dialogue_specialist:
     type: "procedural"

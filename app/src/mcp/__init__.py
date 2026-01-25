@@ -25,6 +25,7 @@ from .schemas import McpRequest, McpResponse
 from .registry import McpRegistry
 from .client import McpClient
 from .external_client import ExternalMcpClient, sync_call_external_mcp
+from .permissioned_client import PermissionedMcpClient
 from .utils import extract_text_from_mcp_result
 
 __all__ = [
@@ -33,6 +34,7 @@ __all__ = [
     "McpRegistry",
     "McpClient",
     "ExternalMcpClient",
+    "PermissionedMcpClient",
     "sync_call_external_mcp",
     "extract_text_from_mcp_result",
 ]

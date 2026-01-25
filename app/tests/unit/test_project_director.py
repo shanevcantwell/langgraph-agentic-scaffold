@@ -1,10 +1,13 @@
 """
-Integration tests for Emergent Project Subgraph - Phase 2 (ReActMixin)
+Integration tests for Emergent Project Subgraph - Phase 2 (ReAct capability)
 
 Phase 2 changes the architecture from graph-level cycling to internal iteration:
-- ProjectDirector uses ReActMixin to call search/browse via MCP
+- ProjectDirector uses ReAct to call search/browse via MCP
 - No custom graph edges (standard hub-and-spoke)
 - Loop controlled by max_iterations parameter
+
+ADR-CORE-051: ReAct capability is now config-driven, not mixin inheritance.
+GraphBuilder injects execute_with_tools() via ReactEnabledSpecialist wrapper.
 
 See ADR-CORE-029 for details.
 """
@@ -59,12 +62,22 @@ def mock_mcp_client():
 
 
 class TestProjectDirectorPhase2:
-    """Tests for ProjectDirector with ReActMixin internal iteration."""
+    """Tests for ProjectDirector with config-driven ReAct internal iteration."""
 
-    def test_project_director_inherits_react_mixin(self):
-        """Verify ProjectDirector has ReActMixin capabilities."""
+    def test_project_director_no_longer_inherits_react_mixin(self):
+        """
+        ADR-CORE-051: Verify ProjectDirector uses config-driven ReAct, not mixin.
+
+        ReAct capability is now injected by ReactEnabledSpecialist wrapper
+        when config has `react: enabled: true`. This test verifies the mixin
+        inheritance was removed as part of ADR-CORE-051.
+        """
         from app.src.specialists.mixins import ReActMixin
-        assert issubclass(ProjectDirector, ReActMixin)
+        # Should NOT inherit from ReActMixin anymore
+        assert not issubclass(ProjectDirector, ReActMixin)
+        # But should still be a BaseSpecialist
+        from app.src.specialists.base import BaseSpecialist
+        assert issubclass(ProjectDirector, BaseSpecialist)
 
     def test_project_director_defines_tools(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
         """Test that ProjectDirector defines search and browse tools."""
@@ -162,6 +175,21 @@ class TestProjectDirectorPhase2:
         director.mcp_client = mock_mcp_client
 
         assert director._get_max_iterations() == 15  # DEFAULT_MAX_ITERATIONS
+
+    def test_max_iterations_from_react_config(self, mock_llm_adapter, mock_mcp_client):
+        """
+        ADR-CORE-051: Test that _react_config (injected by ReactEnabledSpecialist)
+        takes precedence over legacy config.
+        """
+        director = ProjectDirector("project_director", {"type": "hybrid", "max_iterations": 5})
+        director.llm_adapter = mock_llm_adapter
+        director.mcp_client = mock_mcp_client
+
+        # Simulate what ReactEnabledSpecialist does
+        director._react_config = {"max_iterations": 20, "stop_on_error": False}
+
+        # Should use _react_config value, not legacy config
+        assert director._get_max_iterations() == 20
 
     def test_tool_result_serialization(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
         """Test that tool results are serialized correctly for artifacts."""

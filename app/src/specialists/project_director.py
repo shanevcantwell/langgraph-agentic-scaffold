@@ -5,15 +5,17 @@ from typing import Dict, Any, List, Optional
 from langchain_core.messages import HumanMessage, AIMessage
 
 from .base import BaseSpecialist
-from .mixins import ReActMixin, ToolDef, MaxIterationsExceeded, ToolResult
+# ADR-CORE-051: ReActMixin removed - capability now injected via config
+# Keep ToolDef, MaxIterationsExceeded, ToolResult for type hints and exception handling
+from .mixins import ToolDef, MaxIterationsExceeded, ToolResult
 from ..interface.project_context import ProjectContext, ProjectState
 
 logger = logging.getLogger(__name__)
 
 
-class ProjectDirector(BaseSpecialist, ReActMixin):
+class ProjectDirector(BaseSpecialist):
     """
-    Emergent Deep Research controller using ReActMixin for internal iteration.
+    Emergent Deep Research controller using config-driven ReAct for internal iteration.
 
     The LLM decides each iteration whether to:
     - search: Execute web search via MCP
@@ -23,6 +25,9 @@ class ProjectDirector(BaseSpecialist, ReActMixin):
     This approach avoids graph-level cycling (ProjectDirector -> WebSpecialist -> ProjectDirector)
     which triggers the 2-step cycle invariant. Instead, the loop is internal to this specialist,
     controlled by max_iterations parameter.
+
+    ADR-CORE-051: ReAct capability is now config-driven instead of mixin inheritance.
+    Requires `react: enabled: true` in config.yaml for this specialist.
 
     See ADR-CORE-029 for architectural details.
     """
@@ -155,7 +160,17 @@ Open questions to investigate:
 Begin your research now. If this is your first turn, start with a search query related to the goal."""
 
     def _get_max_iterations(self) -> int:
-        """Get max iterations from config or default."""
+        """
+        Get max iterations from config or default.
+
+        ADR-CORE-051: Check _react_config (injected by ReactEnabledSpecialist wrapper)
+        first, then fall back to legacy top-level max_iterations config.
+        """
+        # ADR-CORE-051: Prefer injected _react_config from wrapper
+        if hasattr(self, '_react_config') and self._react_config:
+            return self._react_config.get('max_iterations', self.DEFAULT_MAX_ITERATIONS)
+
+        # Legacy fallback: top-level max_iterations in specialist_config
         return self.specialist_config.get("max_iterations", self.DEFAULT_MAX_ITERATIONS)
 
     def _update_context_from_history(self, context: ProjectContext, history: List[ToolResult]) -> None:

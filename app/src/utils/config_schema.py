@@ -1,6 +1,6 @@
 # app/src/utils/config_schema.py
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Dict, Literal, Union, Optional, Any
+from typing import Dict, Literal, Union, Optional, Any, List
 
 
 class LLMProviderConfig(BaseModel):
@@ -40,6 +40,67 @@ class CheckpointingConfig(BaseModel):
     )
 
 
+class ReactConfig(BaseModel):
+    """
+    ADR-CORE-051: Per-specialist ReAct configuration.
+
+    Enables iterative tool use (LLM → tool → LLM → tool → ... → done) for specialists
+    that need to perform multiple tool calls within a single execution.
+
+    Example:
+        react:
+          enabled: true
+          max_iterations: 10
+          stop_on_error: false
+    """
+
+    enabled: bool = Field(
+        default=False,
+        description="Enable ReAct-style iterative tool use for this specialist."
+    )
+    max_iterations: Optional[int] = Field(
+        default=None,
+        description="Maximum number of LLM calls before stopping. Uses global default if not specified."
+    )
+    stop_on_error: Optional[bool] = Field(
+        default=None,
+        description="If true, halt on first tool error. If false, report error to LLM. Uses global default if not specified."
+    )
+
+
+class ReactDefaultsConfig(BaseModel):
+    """
+    ADR-CORE-051: Global defaults for ReAct configuration.
+
+    These defaults apply to any specialist with react.enabled=true that doesn't
+    specify its own max_iterations or stop_on_error values.
+
+    Example:
+        react:
+          defaults:
+            max_iterations: 10
+            stop_on_error: false
+    """
+
+    max_iterations: int = Field(
+        default=10,
+        description="Default maximum iterations for ReAct loops."
+    )
+    stop_on_error: bool = Field(
+        default=False,
+        description="Default error handling: halt vs report to LLM."
+    )
+
+
+class ReactRootConfig(BaseModel):
+    """ADR-CORE-051: Root-level ReAct configuration with global defaults."""
+
+    defaults: Optional[ReactDefaultsConfig] = Field(
+        default=None,
+        description="Global defaults for specialist ReAct configurations."
+    )
+
+
 class WorkflowConfig(BaseModel):
     """Defines the graph's execution flow."""
 
@@ -71,6 +132,20 @@ class BaseSpecialistConfig(BaseModel):
     description: str = Field(
         ...,
         description="A clear, concise description of the specialist's capabilities, used by the router for decision-making.",
+    )
+
+    # ADR-CORE-051: External MCP tool permissions
+    # Maps service names to allowed tools: {"filesystem": ["read_file", "write_file"]}
+    # Use "*" for wildcard access: {"filesystem": "*"}
+    tools: Optional[Dict[str, Union[List[str], str]]] = Field(
+        default=None,
+        description="External MCP tool permissions. Maps service name to tool list or '*' for all tools."
+    )
+
+    # ADR-CORE-051: ReAct configuration for iterative tool use
+    react: Optional[ReactConfig] = Field(
+        default=None,
+        description="ReAct configuration for iterative tool use loops."
     )
 
 
@@ -175,6 +250,11 @@ class RootConfig(BaseModel):
     workflow: WorkflowConfig
     specialists: Dict[str, SpecialistConfig]
     mcp: Optional[McpConfig] = Field(default=None, description="MCP configuration for internal and external services.")
+    # ADR-CORE-051: Global ReAct defaults
+    react: Optional[ReactRootConfig] = Field(
+        default=None,
+        description="Global defaults for specialist ReAct configurations."
+    )
 
 
 class UserSettings(BaseModel):
