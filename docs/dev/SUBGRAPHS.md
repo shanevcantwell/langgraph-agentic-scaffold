@@ -291,3 +291,63 @@ workflow.add_conditional_edges(
     }
 )
 ```
+
+---
+
+## The BaseSubgraph Interface
+
+All subgraphs inherit from `BaseSubgraph` and implement a standard interface for graph construction and exclusion management.
+
+### Required Methods
+
+```python
+class BaseSubgraph(ABC):
+    @abstractmethod
+    def build(self, workflow: StateGraph) -> None:
+        """Wire the subgraph nodes and edges into the main workflow."""
+        pass
+
+    @abstractmethod
+    def get_excluded_specialists(self) -> list[str]:
+        """Return specialists excluded from hub-and-spoke routing."""
+        pass
+```
+
+### Exclusion Methods (ADR-CORE-028, ADR-CORE-053)
+
+Subgraphs control which specialists are visible in various menus:
+
+| Method | Purpose | Default Behavior |
+|--------|---------|------------------|
+| `get_excluded_specialists()` | Hub-and-spoke edge exclusions | Abstract (must implement) |
+| `get_router_excluded_specialists()` | Router tool schema exclusions | Returns `get_excluded_specialists()` |
+| `get_triage_excluded_specialists()` | Triage menu exclusions | Returns `get_excluded_specialists()` |
+
+**Example - Context Engineering Subgraph:**
+
+```python
+class ContextEngineeringSubgraph(BaseSubgraph):
+    def get_excluded_specialists(self) -> list[str]:
+        """Internal nodes managed by this subgraph."""
+        return [
+            "triage_architect",
+            "facilitator_specialist",
+            "dialogue_specialist",
+        ]
+
+    def get_router_excluded_specialists(self) -> list[str]:
+        """Hide all internal nodes from router."""
+        return self.get_excluded_specialists()
+
+    def get_triage_excluded_specialists(self) -> list[str]:
+        """Hide facilitator/dialogue from triage (they're internal)."""
+        return ["facilitator_specialist", "dialogue_specialist"]
+```
+
+**When to Override:**
+
+- Override `get_router_excluded_specialists()` if router exclusions differ from edge exclusions
+- Override `get_triage_excluded_specialists()` if triage exclusions differ from edge exclusions
+- Default implementations return `get_excluded_specialists()` for backwards compatibility
+
+See CONFIGURATION_GUIDE.md § 5.0 for config-driven exclusions via `excluded_from`.

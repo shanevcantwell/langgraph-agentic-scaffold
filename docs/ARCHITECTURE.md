@@ -213,6 +213,15 @@ user_settings.yaml → Bindings (which model for which specialist)
 
 **Key insight:** Separation allows same structure with different runtime bindings.
 
+### 8.1 Specialist Menu Exclusions (ADR-CORE-053)
+
+Control which specialists appear in triage menus via config-driven exclusions:
+- `excluded_from: [triage_architect]` - Hide specialist from specific menus
+- `TRIAGE_INFRASTRUCTURE` - Built-in exclusions (router, archiver, end, critic)
+- `SpecialistCategories.get_triage_exclusions()` - Centralized exclusion logic
+
+See CONFIGURATION_GUIDE.md § 5.0 for details.
+
 ---
 
 ## 9. What Works Well (Keep for LAP)

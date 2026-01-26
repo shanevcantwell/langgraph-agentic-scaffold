@@ -337,6 +337,30 @@ specialists:
 
 After registering the specialist in the system blueprint (`config.yaml`), you can optionally bind it to a specific LLM configuration in your local `user_settings.yaml` file. If you don't, it will use the `default_llm_config`.
 
+#### Optional: Hiding from Triage Menus (ADR-CORE-053)
+
+If your specialist is **internal** (only called by other specialists, not user-routable), add the `excluded_from` field to prevent it from appearing in triage's recommendations:
+
+```yaml
+# config.yaml
+specialists:
+  internal_helper_specialist:
+    type: "llm"
+    prompt_file: "internal_helper_prompt.md"
+    description: "Called only by project_director..."
+    # Hide from triage menus
+    excluded_from:
+      - triage_architect
+      - prompt_triage_specialist
+```
+
+**When to use `excluded_from`:**
+- Internal execution engines (e.g., `batch_processor_specialist`)
+- Subgraph internal nodes (e.g., `tiered_synthesizer_specialist`)
+- System fallbacks (e.g., `default_responder_specialist`)
+
+See CONFIGURATION_GUIDE.md § 5.0 for complete exclusion options.
+
 ### Step 4: Testing Your New Specialist
 
 After creating your specialist, it's important to test it. You can write a simple unit test in the `app/tests/unit/` directory.

@@ -172,3 +172,69 @@ Ping failures generate warnings but don't block startup (some providers may be o
 Provider 'lmstudio_router' ping OK (245.3ms)
 Provider 'lmstudio_vision' failed ping: Connection refused
 ```
+
+## 5.0 Specialist Menu Exclusions (ADR-CORE-053)
+
+Control which specialists appear in triage menus via the `excluded_from` config field. This allows you to hide internal specialists (execution engines, subgraph nodes) from user-facing routing decisions without code changes.
+
+### 5.1 The `excluded_from` Field
+
+Add `excluded_from` to any specialist's config to prevent it from appearing in specified menus:
+
+```yaml
+# config.yaml
+specialists:
+  batch_processor_specialist:
+    type: "llm"
+    prompt_file: "batch_processor_prompt.md"
+    description: "Internal execution engine for file operations..."
+    # ADR-CORE-053: Hide from triage menus
+    excluded_from:
+      - triage_architect
+      - prompt_triage_specialist
+```
+
+### 5.2 Exclusion Taxonomy
+
+Three mechanisms control specialist visibility at different lifecycle stages:
+
+| Pattern | When | Who Decides | Mechanism |
+|---------|------|-------------|-----------|
+| `excluded_from` (config) | Graph build time | Config author | Baked into specialist_map at construction |
+| `forbidden_specialists` (ADR-016) | Runtime (loop detection) | InvariantMonitor | Checked per-turn via scratchpad |
+| `decline_task` (ADR-016) | Runtime (self-assessment) | Specialist | Removed from recommendations |
+
+### 5.3 Built-in Exclusions
+
+Some specialists are always excluded from triage menus via `TRIAGE_INFRASTRUCTURE`:
+- `router_specialist` - Central routing hub
+- `archiver_specialist` - Workflow reports
+- `end_specialist` - Termination and synthesis
+- `critic_specialist` - Artifact review
+
+These are defined in `specialist_categories.py` and cannot be overridden.
+
+### 5.4 Adding Exclusions
+
+To hide a specialist from triage's menu:
+
+1. Add the `excluded_from` field to the specialist's config in `config.yaml`
+2. List the triage specialists that should NOT see this specialist
+3. Restart the container to rebuild the graph
+
+**Example: Hiding an internal subgraph node**
+```yaml
+tiered_synthesizer_specialist:
+  type: "procedural"
+  description: "Combines progenitor responses..."
+  excluded_from:
+    - triage_architect
+```
+
+### 5.5 Future Extensibility
+
+When creating a new menu-building specialist (e.g., `plan_specialist`):
+1. Add `plan_specialist` to `excluded_from` lists for specialists that shouldn't appear
+2. Query `self.exclusion_index.get("plan_specialist", set())` in configuration code
+
+No code changes needed beyond config.yaml updates.
