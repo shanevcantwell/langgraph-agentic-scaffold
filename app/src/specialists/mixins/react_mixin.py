@@ -40,6 +40,9 @@ from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage, AIMessage, ToolMessage
 
+# External MCP support for filesystem operations
+from ...mcp import sync_call_external_mcp
+
 if TYPE_CHECKING:
     from ..base import BaseSpecialist
     from ...llm.adapter import BaseAdapter, StandardizedLLMRequest
@@ -243,6 +246,10 @@ class ReActMixin:
 
         return schemas
 
+    # Services that require external MCP (containerized)
+    # These are defined in config.yaml under mcp.external_mcp.services
+    EXTERNAL_MCP_SERVICES = {"filesystem"}
+
     def _execute_tool(
         self,
         tool_call: ToolCall,
@@ -251,6 +258,9 @@ class ReActMixin:
     ) -> ToolResult:
         """
         Execute a single tool call via MCP.
+
+        Routes to external MCP for containerized services (filesystem)
+        and internal MCP for Python-based specialists.
 
         Args:
             tool_call: The tool call to execute
@@ -270,22 +280,42 @@ class ReActMixin:
             return ToolResult(call=tool_call, success=False, error=error_msg)
 
         tool_def = tools[tool_name]
+        is_external = tool_def.service in self.EXTERNAL_MCP_SERVICES
 
-        if not hasattr(self, 'mcp_client') or self.mcp_client is None:
-            error_msg = "MCP client not available"
-            logger.warning(f"ReAct: {error_msg}")
-            if stop_on_error:
-                raise ToolExecutionError(tool_name, error_msg, [])
-            return ToolResult(call=tool_call, success=False, error=error_msg)
+        # Check for required MCP client
+        if is_external:
+            if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+                error_msg = f"External MCP client not available for service '{tool_def.service}'"
+                logger.warning(f"ReAct: {error_msg}")
+                if stop_on_error:
+                    raise ToolExecutionError(tool_name, error_msg, [])
+                return ToolResult(call=tool_call, success=False, error=error_msg)
+        else:
+            if not hasattr(self, 'mcp_client') or self.mcp_client is None:
+                error_msg = "Internal MCP client not available"
+                logger.warning(f"ReAct: {error_msg}")
+                if stop_on_error:
+                    raise ToolExecutionError(tool_name, error_msg, [])
+                return ToolResult(call=tool_call, success=False, error=error_msg)
 
-        logger.debug(f"ReAct: Executing {tool_def.full_name} with args: {tool_call.args}")
+        logger.debug(f"ReAct: Executing {tool_def.full_name} with args: {tool_call.args} (external={is_external})")
 
         try:
-            result = self.mcp_client.call(
-                tool_def.service,
-                tool_def.function,
-                **tool_call.args
-            )
+            if is_external:
+                # External MCP: containerized services (filesystem)
+                result = sync_call_external_mcp(
+                    self.external_mcp_client,
+                    tool_def.service,
+                    tool_def.function,
+                    tool_call.args
+                )
+            else:
+                # Internal MCP: Python specialists
+                result = self.mcp_client.call(
+                    tool_def.service,
+                    tool_def.function,
+                    **tool_call.args
+                )
             logger.debug(f"ReAct: {tool_name} returned: {str(result)[:200]}...")
             return ToolResult(call=tool_call, success=True, result=result)
 

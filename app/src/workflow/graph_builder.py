@@ -279,16 +279,20 @@ class GraphBuilder:
             specialist_config = self.config.get("specialists", {}).get(name, {})
             tool_permissions = specialist_config.get("tools", {})
 
+            # Unwrap ReactEnabledSpecialist to get the actual specialist instance
+            # The ReAct methods are bound to _inner, so external_mcp_client must be set there
+            target = instance._inner if hasattr(instance, '_inner') else instance
+
             if tool_permissions:
                 # Specialist has explicit tool config - wrap with permissions
-                instance.external_mcp_client = PermissionedMcpClient(
+                target.external_mcp_client = PermissionedMcpClient(
                     self.external_mcp_client,
                     allowed_tools=tool_permissions
                 )
                 logger.debug(f"Attached PermissionedMcpClient to '{name}' with tools: {list(tool_permissions.keys())}")
             else:
                 # No tools config = no external MCP access (ADR-CORE-051 secure default)
-                instance.external_mcp_client = None
+                target.external_mcp_client = None
                 logger.debug(f"No external MCP access for '{name}' (no tools: config)")
 
         logger.info(

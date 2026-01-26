@@ -191,7 +191,8 @@ specialists:
     # ADR-CORE-053: Internal execution engine - not user-routable
     excluded_from:
       - triage_architect
-
+      - router_specialist
+      
   # --- Data & Analysis ---
   data_extractor_specialist:
     type: "llm"
@@ -321,6 +322,13 @@ specialists:
     react:
       enabled: true
       max_iterations: 15
+    # ADR-CORE-051: Filesystem tool permissions (enables external_mcp_client injection)
+    tools:
+      filesystem:
+        - list_directory
+        - read_file
+        - create_directory
+        - move_file
 
   web_specialist:
     type: "procedural"

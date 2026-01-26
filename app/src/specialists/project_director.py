@@ -47,7 +47,9 @@ class ProjectDirector(BaseSpecialist):
         logger.info(f"ProjectDirector starting research: {project_context.project_goal}")
 
         # Define available tools (MCP services)
+        # Web tools use internal MCP, filesystem tools use external MCP (containerized)
         tools = {
+            # --- Web Research Tools (Internal MCP) ---
             "search": ToolDef(
                 service="web_specialist",
                 function="search",
@@ -57,6 +59,27 @@ class ProjectDirector(BaseSpecialist):
                 service="browse_specialist",
                 function="browse",
                 description="Fetch and parse a URL to read its content. Args: url (str). Returns page title and text content."
+            ),
+            # --- Filesystem Tools (External MCP) ---
+            "list_directory": ToolDef(
+                service="filesystem",
+                function="list_directory",
+                description="List files and directories in a path. Args: path (str). Returns list of entries."
+            ),
+            "read_file": ToolDef(
+                service="filesystem",
+                function="read_file",
+                description="Read the contents of a file. Args: path (str). Returns file content as string."
+            ),
+            "create_directory": ToolDef(
+                service="filesystem",
+                function="create_directory",
+                description="Create a new directory. Args: path (str). Creates the directory at the specified path."
+            ),
+            "move_file": ToolDef(
+                service="filesystem",
+                function="move_file",
+                description="Move or rename a file. Args: source (str), destination (str). Moves file from source to destination."
             ),
         }
 
