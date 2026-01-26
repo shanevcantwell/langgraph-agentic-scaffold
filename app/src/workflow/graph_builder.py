@@ -1,7 +1,8 @@
 # app/src/workflow/graph_builder.py
 import logging
 import types
-from typing import Dict, Any, Callable, Optional
+from collections import defaultdict
+from typing import Dict, Any, Callable, Optional, Set
 
 from langgraph.graph import StateGraph, END
 
@@ -427,6 +428,9 @@ class GraphBuilder:
         # --- Deferred Configuration and Adapter Attachment ---
         all_configs = self.config.get("specialists", {})
 
+        # ADR-CORE-053: Build config-driven exclusion index for triage menus
+        self.exclusion_index = self._build_exclusion_index(all_configs)
+
         # Note: Router configuration is deferred until after subgraphs are initialized
         # in __init__ because it needs to query subgraph exclusions (ADR-CORE-028).
         # Triage configuration can happen now as it doesn't depend on subgraphs.
@@ -526,6 +530,42 @@ class GraphBuilder:
 
         return wrapped_specialists
 
+    def _build_exclusion_index(self, configs: Dict[str, Any]) -> Dict[str, Set[str]]:
+        """
+        ADR-CORE-053: Build inverted index of config-driven exclusions.
+
+        Reads the `excluded_from` field from each specialist config and inverts it:
+        Input:  specialist_a: {excluded_from: ["triage_architect", "router"]}
+        Output: {"triage_architect": {"specialist_a"}, "router": {"specialist_a"}}
+
+        This allows any menu-building specialist to query which specialists should
+        be excluded from its menu by name.
+
+        Args:
+            configs: Dict of specialist configurations from config.yaml
+
+        Returns:
+            Dict mapping excluder name -> set of excluded specialist names
+        """
+        index: Dict[str, Set[str]] = defaultdict(set)
+        for name, conf in configs.items():
+            # Handle both dict configs and Pydantic model instances
+            if hasattr(conf, 'excluded_from'):
+                excluded_from = conf.excluded_from
+            else:
+                excluded_from = conf.get("excluded_from")
+
+            if excluded_from:
+                for excluder in excluded_from:
+                    index[excluder].add(name)
+
+        if index:
+            logger.info(f"ADR-CORE-053: Built exclusion index with {len(index)} excluders")
+            for excluder, excluded in index.items():
+                logger.debug(f"  {excluder} excludes: {sorted(excluded)}")
+
+        return dict(index)  # Convert defaultdict to regular dict
+
     def _configure_router(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         router_instance = specialists[CoreSpecialist.ROUTER.value]
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
@@ -571,7 +611,23 @@ class GraphBuilder:
         triage_instance = specialists[specialist_name]
         triage_config = configs.get(specialist_name, {})
         base_prompt = load_prompt(triage_config.get("prompt_file", ""))
-        excluded = [CoreSpecialist.ROUTER.value, CoreSpecialist.TRIAGE.value, CoreSpecialist.ARCHIVER.value, CoreSpecialist.END.value, CoreSpecialist.CRITIC.value, "triage_architect"]
+
+        # ADR-CORE-053: Config-driven exclusions via inverted index
+        config_exclusions = self.exclusion_index.get(specialist_name, set())
+
+        # Collect subgraph exclusions if subgraphs exist (initialized after triage)
+        subgraph_exclusions = []
+        if hasattr(self, 'subgraphs'):
+            for subgraph in self.subgraphs:
+                subgraph_exclusions.extend(subgraph.get_triage_excluded_specialists())
+
+        # Get combined exclusions from centralized logic
+        excluded = SpecialistCategories.get_triage_exclusions(
+            subgraph_exclusions=subgraph_exclusions,
+            config_exclusions=list(config_exclusions),
+            current_triage_name=specialist_name
+        )
+
         # Only include LLM-type specialists in triage menu (excludes procedural, MCP-only, internal subgraph nodes)
         available_specialists = {
             name: conf for name, conf in configs.items()

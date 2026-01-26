@@ -148,6 +148,12 @@ class BaseSpecialistConfig(BaseModel):
         description="ReAct configuration for iterative tool use loops."
     )
 
+    # ADR-CORE-053: Config-driven specialist menu exclusion
+    excluded_from: Optional[List[str]] = Field(
+        default=None,
+        description="List of specialist names whose menus should NOT include this specialist."
+    )
+
 
 class LLMSpecialistConfig(BaseSpecialistConfig):
     """Configuration for a specialist that uses a Large Language Model."""

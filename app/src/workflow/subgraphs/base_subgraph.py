@@ -39,3 +39,12 @@ class BaseSubgraph(ABC):
         See ADR-CORE-028 for details.
         """
         return self.get_excluded_specialists()
+
+    def get_triage_excluded_specialists(self) -> list[str]:
+        """
+        ADR-CORE-053: Returns specialists that should be excluded from triage's menu.
+
+        Default implementation returns same as get_excluded_specialists().
+        Override if triage exclusions differ from edge exclusions.
+        """
+        return self.get_excluded_specialists()

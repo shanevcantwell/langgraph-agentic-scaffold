@@ -40,6 +40,15 @@ class SpecialistCategories:
     # NOTE: file_specialist removed - superseded by external filesystem MCP container (ADR-CORE-035)
     SERVICE_LAYER: frozenset = frozenset([])
 
+    # ADR-CORE-053: Triage infrastructure - always excluded from triage menus
+    # These are core infrastructure specialists that should never appear in triage's recommendations
+    TRIAGE_INFRASTRUCTURE: frozenset = frozenset([
+        CoreSpecialist.ROUTER.value,
+        CoreSpecialist.ARCHIVER.value,
+        CoreSpecialist.END.value,
+        CoreSpecialist.CRITIC.value,
+    ])
+
     @classmethod
     def get_router_exclusions(cls, subgraph_exclusions: List[str] = None) -> Set[str]:
         """
@@ -77,3 +86,28 @@ class SpecialistCategories:
         Returns specialists that should NOT be added as graph nodes.
         """
         return set(cls.MCP_ONLY)
+
+    @classmethod
+    def get_triage_exclusions(
+        cls,
+        subgraph_exclusions: List[str] = None,
+        config_exclusions: List[str] = None,
+        current_triage_name: str = None
+    ) -> Set[str]:
+        """
+        ADR-CORE-053: Returns specialists that should NOT appear in triage's menu.
+
+        Combines:
+        - TRIAGE_INFRASTRUCTURE (router, archiver, end, critic)
+        - Subgraph-managed specialists (from subgraph.get_triage_excluded_specialists())
+        - Config-driven exclusions (from specialist.excluded_from lists)
+        - Current triage itself (cannot recommend itself)
+        """
+        exclusions = set(cls.TRIAGE_INFRASTRUCTURE)
+        if subgraph_exclusions:
+            exclusions.update(subgraph_exclusions)
+        if config_exclusions:
+            exclusions.update(config_exclusions)
+        if current_triage_name:
+            exclusions.add(current_triage_name)
+        return exclusions

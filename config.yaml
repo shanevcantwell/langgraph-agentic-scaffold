@@ -131,6 +131,9 @@ specialists:
     critique_strategy:
       type: "llm"
       prompt_file: "critic_prompt.md"
+      # ADR-CORE-053: Internal execution engine - not user-routable
+    excluded_from:
+      - triage_architect
 
   # --- Core Capabilities ---
   web_builder:
@@ -174,7 +177,7 @@ specialists:
   batch_processor_specialist:
     type: "llm"
     prompt_file: "batch_processor_prompt.md"
-    description: "Handles ALL file operations via dispatcher pattern: create, read, write, move, delete, list, mkdir. Works for single files ('read config.yaml', 'create notes.txt') AND batch operations ('create a.txt, b.txt, c.txt', 'move files to archive/', 'sort files into folders'). Primary specialist for any filesystem task."
+    description: "Callable only by project_director. Handles file operations via dispatcher pattern: create, read, write, move, delete, list, mkdir. Works for single files ('read config.yaml', 'create notes.txt') AND batch operations ('create a.txt, b.txt, c.txt', 'move files to archive/', 'sort files into folders'). Primary specialist for any filesystem task."
     # ADR-CORE-051: External MCP tool permissions
     tools:
       filesystem:
@@ -185,6 +188,9 @@ specialists:
         - directory_tree
         - edit_file
         - get_file_info
+    # ADR-CORE-053: Internal execution engine - not user-routable
+    excluded_from:
+      - triage_architect
 
   # --- Data & Analysis ---
   data_extractor_specialist:
@@ -242,31 +248,37 @@ specialists:
   # - See user_settings.yaml for model assignment strategies
   # ==============================================================================
 
-  # progenitor_alpha_specialist:
-  #   type: "llm"
-  #   prompt_file: "progenitor_alpha_prompt.md"
-  #   description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
-  #   # SYSTEM PROMPT: This specialist's LLM receives progenitor_alpha_prompt.md as its
-  #   # system prompt. Edit this file to define Alpha's personality, expertise, tone,
-  #   # and approach. Default: analytical/structured/methodical.
-  #   #
-  #   # EXAMPLE CUSTOMIZATIONS:
-  #   # - Technical expert (code-focused, precise terminology)
-  #   # - Formal academic (citations, research-oriented)
-  #   # - Beginner-friendly (simple explanations, analogies)
+  progenitor_alpha_specialist:
+    type: "llm"
+    prompt_file: "progenitor_alpha_prompt.md"
+    description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
+    # ADR-CORE-053: Internal execution engine - not user-routable
+    excluded_from:
+      - triage_architect
+    # SYSTEM PROMPT: This specialist's LLM receives progenitor_alpha_prompt.md as its
+    # system prompt. Edit this file to define Alpha's personality, expertise, tone,
+    # and approach. Default: analytical/structured/methodical.
+    #
+    # EXAMPLE CUSTOMIZATIONS:
+    # - Technical expert (code-focused, precise terminology)
+    # - Formal academic (citations, research-oriented)
+    # - Beginner-friendly (simple explanations, analogies)
 
-  # progenitor_bravo_specialist:
-  #   type: "llm"
-  #   prompt_file: "progenitor_bravo_prompt.md"
-  #   description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
-  #   # SYSTEM PROMPT: This specialist's LLM receives progenitor_bravo_prompt.md as its
-  #   # system prompt. Edit this file to define Bravo's personality, expertise, tone,
-  #   # and approach. Default: intuitive/contextual/human-centered.
-  #   #
-  #   # EXAMPLE CUSTOMIZATIONS:
-  #   # - Creative storyteller (metaphors, narratives)
-  #   # - Casual conversationalist (friendly, approachable)
-  #   # - Advanced expert (deep technical insights, edge cases)
+  progenitor_bravo_specialist:
+    type: "llm"
+    prompt_file: "progenitor_bravo_prompt.md"
+    description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
+    # ADR-CORE-053: Internal execution engine - not user-routable
+    excluded_from:
+      - triage_architect
+    # SYSTEM PROMPT: This specialist's LLM receives progenitor_bravo_prompt.md as its
+    # system prompt. Edit this file to define Bravo's personality, expertise, tone,
+    # and approach. Default: intuitive/contextual/human-centered.
+    #
+    # EXAMPLE CUSTOMIZATIONS:
+    # - Creative storyteller (metaphors, narratives)
+    # - Casual conversationalist (friendly, approachable)
+    # - Advanced expert (deep technical insights, edge cases)
 
   tiered_synthesizer_specialist:
     type: "procedural"
@@ -274,6 +286,9 @@ specialists:
     # SYSTEM PROMPT: None - this is procedural (no LLM call).
     # It performs simple markdown formatting of the two progenitor responses.
     # No prompt file or model binding needed.
+    # ADR-CORE-053: Internal subgraph node (tiered chat)
+    excluded_from:
+      - triage_architect
 
   chat_specialist:
     type: "llm"
@@ -300,7 +315,7 @@ specialists:
   project_director:
     type: "llm"
     prompt_file: "project_director_prompt.md"
-    description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Uses an emergent state machine to gather information, refine understanding, and synthesize answers."
+    description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Batch or recursive processes or deep agents to gather information, refine understanding, and generate actionable solutions."
     tags: ["planning", "research", "complex_tasks"]
     # ADR-CORE-051: ReAct capability for iterative research
     react:
@@ -322,6 +337,9 @@ specialists:
     prompt_file: "summarizer_prompt.md"
     description: "Distills large text artifacts into concise summaries. Requires 'text_to_process' artifact."
     requires_artifacts: ["text_to_process"]
+    # ADR-CORE-053: Internal execution engine - not user-routable
+    excluded_from:
+      - triage_architect
 
   facilitator_specialist:
     type: "procedural"
@@ -335,6 +353,9 @@ specialists:
         - read_file
         - list_allowed_directories
         - list_directory
+    # ADR-CORE-053: Internal context engineering node
+    excluded_from:
+      - triage_architect
 
   dialogue_specialist:
     type: "procedural"
@@ -343,6 +364,9 @@ specialists:
     # has executed automated actions. Flow: Triage → Facilitator → Dialogue → Router
     # If no ASK_USER actions exist, it's a no-op pass-through.
     tags: ["context_engineering"]
+    # ADR-CORE-053: Internal context engineering node
+    excluded_from:
+      - triage_architect
 
   image_specialist:
     type: "llm"
@@ -360,6 +384,9 @@ specialists:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
     description: "SYSTEM FALLBACK - NOT FOR TRIAGE RECOMMENDATION. Handles edge cases like greetings ('hello', 'ping') or genuinely ambiguous inputs. The triage specialist should NEVER recommend this - let the router select it automatically when no other specialist fits."
+    # ADR-CORE-053: System fallback - router-selected, not triage-recommended
+    excluded_from:
+      - triage_architect
 
   # --- Procedural Specialists with External Dependencies ---
   # open_interpreter_specialist REMOVED - replaced by MCP services
