@@ -367,14 +367,15 @@ specialists:
 
   dialogue_specialist:
     type: "procedural"
-    description: "Presents clarification questions to the user when the request is ambiguous but appears solveable with additional user input. Do research *before* invoking this."
-    # This specialist checks context_plan for ASK_USER actions AFTER FacilitatorSpecialist
-    # has executed automated actions. Flow: Triage → Facilitator → Dialogue → Router
-    # If no ASK_USER actions exist, it's a no-op pass-through.
-    tags: ["context_engineering"]
-    # ADR-CORE-053: Internal context engineering node
+    description: "DEPRECATED (ADR-CORE-059): Clarification is now handled by FacilitatorSpecialist via interrupt(). This specialist is no longer part of the graph flow."
+    # ADR-CORE-059: DialogueSpecialist deprecated - ASK_USER is just another context tool
+    # Facilitator handles all context actions uniformly: READ_FILE, LIST_DIRECTORY, RESEARCH, ASK_USER
+    # Old flow: Triage → Facilitator → Dialogue → Router
+    # New flow: Triage → Facilitator → Router
+    tags: ["context_engineering", "deprecated"]
     excluded_from:
       - triage_architect
+      - router_specialist
 
   image_specialist:
     type: "llm"

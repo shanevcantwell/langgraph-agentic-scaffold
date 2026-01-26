@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 68 | 573 |
+| Unit | 69 | 577 |
 | Integration | 28 | 195 |
 | Other | 7 | 90 |
-| **Total** | **103** | **858** |
+| **Total** | **104** | **862** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -930,8 +930,8 @@
   - *Per FACILITATOR.md: SUMMARIZE action calls summarizer_specialist.summarize.*
 - **`test_facilitator_summarize_with_file_path_reads_file_first`**
   - *Per FACILITATOR.md: If SUMMARIZE target looks like a file path (starts with / or ./),*
-- **`test_facilitator_skips_ask_user_action`**
-  - *Per FACILITATOR.md: ASK_USER actions are implicitly skipped (no handler in loop).*
+- **`test_facilitator_handles_ask_user_action_via_interrupt`**
+  - *ADR-CORE-059: Facilitator handles ASK_USER inline via LangGraph interrupt().*
 - **`test_facilitator_executes_multiple_actions`**
   - *Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,*
 - **`test_facilitator_sets_completion_flag`**
@@ -1822,6 +1822,17 @@
   - *Tests that the specialist does not run if no HumanMessage is available.*
 - **`test_sentiment_classifier_uses_last_human_message`**
   - *Tests that the specialist specifically analyzes the last HumanMessage.*
+
+## `app/tests/unit/test_smoke.py`
+
+- **`test_config_loads`**
+  - *Config loads without error using real ConfigLoader.*
+- **`test_graph_builder_initializes`**
+  - *GraphBuilder initializes with real config.*
+- **`test_workflow_runner_initializes`**
+  - *WorkflowRunner initializes (depends on GraphBuilder).*
+- **`test_api_imports`**
+  - *FastAPI app can be imported (triggers lifespan setup).*
 
 ## `app/tests/unit/test_specialist_helpers.py`
 

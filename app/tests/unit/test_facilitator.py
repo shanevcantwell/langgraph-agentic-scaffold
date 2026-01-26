@@ -319,11 +319,13 @@ def test_facilitator_summarize_with_file_path_reads_file_first(facilitator):
     )
 
 
-def test_facilitator_skips_ask_user_action(facilitator):
+def test_facilitator_handles_ask_user_action_via_interrupt(facilitator):
     """
-    Per FACILITATOR.md: ASK_USER actions are implicitly skipped (no handler in loop).
-    DialogueSpecialist handles these downstream.
+    ADR-CORE-059: Facilitator handles ASK_USER inline via LangGraph interrupt().
+    DialogueSpecialist is deprecated - ASK_USER is just another context tool.
     """
+    from unittest.mock import patch
+
     plan = ContextPlan(
         reasoning="Need user clarification",
         actions=[
@@ -338,15 +340,28 @@ def test_facilitator_skips_ask_user_action(facilitator):
         "artifacts": {"context_plan": plan.model_dump()}
     }
 
-    result = facilitator.execute(state)
+    # Mock interrupt() to simulate user providing clarification
+    # interrupt is imported locally in facilitator_specialist.py, so patch at source
+    with patch("langgraph.types.interrupt") as mock_interrupt:
+        mock_interrupt.return_value = "I prefer JSON format"
 
-    # No MCP calls should have been made
+        result = facilitator.execute(state)
+
+        # Verify interrupt was called with the question
+        mock_interrupt.assert_called_once()
+        call_payload = mock_interrupt.call_args[0][0]
+        assert call_payload["action_type"] == "ask_user"
+        # question_text uses action.description (or action.target if description is empty)
+        assert "clarify user preference" in call_payload["question"].lower()
+
+    # No MCP calls should have been made (ASK_USER uses interrupt, not MCP)
     facilitator.mcp_client.call.assert_not_called()
 
-    # gathered_context should be empty (ASK_USER produces no output)
-    assert result["artifacts"]["gathered_context"] == ""
+    # User's clarification should be in gathered_context
+    assert "I prefer JSON format" in result["artifacts"]["gathered_context"]
+    assert "User Clarification" in result["artifacts"]["gathered_context"]
 
-    # But completion flag should still be set
+    # Completion flag should be set
     assert result["scratchpad"]["facilitator_complete"] is True
 
 

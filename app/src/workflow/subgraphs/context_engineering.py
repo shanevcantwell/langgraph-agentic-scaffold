@@ -25,23 +25,18 @@ class ContextEngineeringSubgraph(BaseSubgraph):
             logger.info("Graph Edge: Added TriageArchitect conditional edge (ADR-CORE-018)")
 
         if "facilitator_specialist" in self.specialists:
-            # ADR-CORE-018: Facilitator → Dialogue → Router
-            # DialogueSpecialist checks for ASK_USER actions after automated context gathering
-            if "dialogue_specialist" in self.specialists:
-                workflow.add_edge("facilitator_specialist", "dialogue_specialist")
-                workflow.add_edge("dialogue_specialist", CoreSpecialist.ROUTER.value)
-                logger.info("Graph Edge: Added Facilitator -> Dialogue -> Router chain (ADR-CORE-018)")
-            else:
-                # Fallback if DialogueSpecialist not loaded
-                workflow.add_edge("facilitator_specialist", CoreSpecialist.ROUTER.value)
-                logger.info("Graph Edge: Added Facilitator -> Router edge (DialogueSpecialist not loaded)")
+            # ADR-CORE-059: DialogueSpecialist deprecated - Facilitator handles ASK_USER inline via interrupt()
+            # All context actions (READ_FILE, LIST_DIRECTORY, RESEARCH, ASK_USER) are handled uniformly
+            workflow.add_edge("facilitator_specialist", CoreSpecialist.ROUTER.value)
+            logger.info("Graph Edge: Added Facilitator -> Router edge (ADR-CORE-059)")
 
     def get_excluded_specialists(self) -> list[str]:
+        """Return specialists that have dedicated edges and shouldn't be in the general router menu."""
         excluded = []
         if "triage_architect" in self.specialists:
             excluded.append("triage_architect")
         if "facilitator_specialist" in self.specialists:
             excluded.append("facilitator_specialist")
-        if "dialogue_specialist" in self.specialists:
-            excluded.append("dialogue_specialist")
+        # Note: dialogue_specialist removed from chain per ADR-CORE-059
+        # It's excluded via config.yaml excluded_from instead
         return excluded
