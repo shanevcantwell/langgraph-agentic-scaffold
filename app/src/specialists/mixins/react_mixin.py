@@ -41,7 +41,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import BaseMessage, AIMessage, ToolMessage
 
 # External MCP support for filesystem operations
-from ...mcp import sync_call_external_mcp
+from ...mcp import sync_call_external_mcp, extract_text_from_mcp_result
 
 if TYPE_CHECKING:
     from ..base import BaseSpecialist
@@ -52,18 +52,101 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
+# Module-level helpers (don't require injection for config-driven ReAct)
+# =============================================================================
+
+def _enrich_filesystem_error(
+    error_msg: str,
+    failed_path: str,
+    successful_paths: List[str]
+) -> str:
+    """
+    Enrich filesystem errors with context from successful prior calls.
+
+    When a model gets ENOENT or similar errors, it often doesn't understand
+    why or how to recover. If we've seen successful calls to similar paths,
+    we can hint at what might have gone wrong.
+
+    Args:
+        error_msg: The original error message
+        failed_path: The path that failed
+        successful_paths: List of paths that worked earlier
+
+    Returns:
+        Enriched error message with recovery hints
+    """
+    # Only enrich common filesystem errors
+    enrichable_errors = ["ENOENT", "EISDIR", "EACCES", "ENOTDIR"]
+    if not any(err in error_msg for err in enrichable_errors):
+        return error_msg
+
+    if not successful_paths:
+        return error_msg
+
+    # Find paths that look similar to the failed one
+    failed_basename = failed_path.split('/')[-1] if '/' in failed_path else failed_path
+    similar = []
+    for p in successful_paths:
+        # Check if failed path is a suffix of successful path (forgot directory)
+        if p.endswith(failed_path) or p.endswith(f"/{failed_path}"):
+            similar.append(p)
+        # Check if same filename in different directory
+        elif failed_basename and p.endswith(f"/{failed_basename}"):
+            similar.append(p)
+
+    if similar:
+        # Use the most recent similar path
+        hint = f"\n\nHint: You previously succeeded with: {similar[-1]}"
+        hint += f"\nDid you forget the directory prefix?"
+        return error_msg + hint
+
+    return error_msg
+
+
+# =============================================================================
 # Exceptions
 # =============================================================================
 
-class MaxIterationsExceeded(Exception):
+class ReActLoopTerminated(Exception):
+    """Base exception for ReAct loop termination conditions."""
+
+    def __init__(self, message: str, iterations: int, history: List["ToolResult"]):
+        self.iterations = iterations
+        self.history = history
+        super().__init__(message)
+
+
+class MaxIterationsExceeded(ReActLoopTerminated):
     """Raised when ReAct loop exceeds max_iterations without completing."""
 
     def __init__(self, iterations: int, history: List["ToolResult"]):
-        self.iterations = iterations
-        self.history = history
         super().__init__(
             f"ReAct loop exceeded {iterations} iterations without final response. "
-            f"Tool history: {[h.tool_name for h in history]}"
+            f"Tool history: {[h.tool_name for h in history]}",
+            iterations,
+            history
+        )
+
+
+class StagnationDetected(ReActLoopTerminated):
+    """Raised when ReAct loop detects repeated identical tool calls (no progress)."""
+
+    def __init__(
+        self,
+        tool_name: str,
+        args: Dict[str, Any],
+        repeat_count: int,
+        iterations: int,
+        history: List["ToolResult"]
+    ):
+        self.tool_name = tool_name
+        self.args = args
+        self.repeat_count = repeat_count
+        super().__init__(
+            f"Stagnation detected: '{tool_name}' called {repeat_count} times "
+            f"with identical args {args}. Loop terminated to prevent waste.",
+            iterations,
+            history
         )
 
 
@@ -129,11 +212,50 @@ class ReActMixin:
     2. If LLM returns tool_calls, execute them via MCP
     3. Append tool results to messages, loop back to step 1
     4. If LLM returns text (no tool_calls), return as final response
+
+    Stagnation detection (inspired by invariants.py):
+    - Tracks recent tool call signatures (name + args hash)
+    - If same call repeated STAGNATION_THRESHOLD times, raises StagnationDetected
+    - Allows productive loops (varied calls) while catching stuck loops fast
     """
 
     # Type hints for expected attributes (provided by BaseSpecialist)
     llm_adapter: "BaseAdapter"
     mcp_client: Optional["McpClient"]
+
+    # Stagnation detection: same call N times in a row = stuck
+    STAGNATION_THRESHOLD = 3
+
+    # Tool parameter schemas for proper function calling
+    # Maps tool name -> dict of {param_name: (type, Field(...))}
+    # This enables LLMs to distinguish between tools with different signatures
+    TOOL_PARAMETERS: Dict[str, Dict[str, tuple]] = {
+        # Filesystem tools (external MCP)
+        "list_directory": {
+            "path": (str, Field(description="Directory path to list"))
+        },
+        "read_file": {
+            "path": (str, Field(description="File path to read"))
+        },
+        "move_file": {
+            "source": (str, Field(description="Source file path")),
+            "destination": (str, Field(description="Destination file path"))
+        },
+        "create_directory": {
+            "path": (str, Field(description="Directory path to create"))
+        },
+        "write_file": {
+            "path": (str, Field(description="File path to write")),
+            "content": (str, Field(description="Content to write to file"))
+        },
+        # Web research tools (internal MCP)
+        "search": {
+            "query": (str, Field(description="Search query string"))
+        },
+        "browse": {
+            "url": (str, Field(description="URL to fetch and parse"))
+        },
+    }
 
     def execute_with_tools(
         self,
@@ -169,6 +291,12 @@ class ReActMixin:
         working_messages = list(messages)
         tool_history: List[ToolResult] = []
 
+        # Stagnation detection: track recent call signatures
+        recent_call_signatures: List[tuple] = []
+
+        # Error enrichment: track successful filesystem paths for recovery hints
+        successful_paths: List[str] = []
+
         logger.info(f"ReAct: Starting loop with {len(tools)} tools, max_iterations={max_iterations}")
 
         for iteration in range(max_iterations):
@@ -202,9 +330,34 @@ class ReActMixin:
                     args=tc.get("args", {})
                 )
 
-                # Execute the tool
-                result = self._execute_tool(tool_call, tools, stop_on_error)
+                # Execute the tool (pass successful_paths for error enrichment)
+                result = self._execute_tool(tool_call, tools, stop_on_error, successful_paths)
                 tool_history.append(result)
+
+                # Track successful filesystem paths for error recovery hints
+                if result.success and tool_call.name in ("list_directory", "read_file", "move_file"):
+                    path = tool_call.args.get("path") or tool_call.args.get("source")
+                    if path:
+                        successful_paths.append(path)
+
+                # Stagnation detection: compute call signature and check for repeats
+                call_signature = self._compute_call_signature(tool_call)
+                recent_call_signatures.append(call_signature)
+
+                if len(recent_call_signatures) >= self.STAGNATION_THRESHOLD:
+                    window = recent_call_signatures[-self.STAGNATION_THRESHOLD:]
+                    if len(set(window)) == 1:  # All signatures identical
+                        logger.warning(
+                            f"ReAct: Stagnation detected - '{tool_call.name}' called "
+                            f"{self.STAGNATION_THRESHOLD} times with identical args"
+                        )
+                        raise StagnationDetected(
+                            tool_name=tool_call.name,
+                            args=tool_call.args,
+                            repeat_count=self.STAGNATION_THRESHOLD,
+                            iterations=iteration + 1,
+                            history=tool_history
+                        )
 
                 # Append result to messages for next LLM call
                 working_messages.append(self._format_tool_result_message(result))
@@ -218,33 +371,64 @@ class ReActMixin:
 
         Returns list of Pydantic model classes that the adapter will convert
         to JSON schemas for function calling.
+
+        Uses TOOL_PARAMETERS registry to generate proper typed parameters,
+        enabling LLMs to distinguish between tools with different signatures.
         """
-        # For now, we create simple schema classes dynamically
-        # This could be enhanced to support more complex parameter schemas
         schemas = []
 
         for name, tool_def in tools.items():
-            # Create a dynamic Pydantic model for the tool
-            # The model name becomes the function name in the API
             description = tool_def.description or f"Call {tool_def.full_name}"
 
-            # We need to create a proper Pydantic model class
-            # For simplicity, we create a generic "args" parameter
-            # In production, you'd want typed parameters per tool
+            # Look up parameter definitions from registry
+            param_defs = self.TOOL_PARAMETERS.get(name, {})
 
-            # Create class dynamically
-            model = type(
-                name,  # Class name = tool name
-                (BaseModel,),
-                {
-                    "__doc__": description,
-                    "__annotations__": {},
-                    "model_config": {"extra": "allow"},  # Allow arbitrary kwargs
-                }
-            )
+            if param_defs:
+                # Build proper annotations and field defaults
+                annotations = {}
+                namespace = {"__doc__": description, "model_config": {"extra": "forbid"}}
+
+                for param_name, (param_type, field_info) in param_defs.items():
+                    annotations[param_name] = param_type
+                    namespace[param_name] = field_info
+
+                namespace["__annotations__"] = annotations
+
+                model = type(name, (BaseModel,), namespace)
+            else:
+                # Fallback for unknown tools: allow arbitrary kwargs
+                # Log a warning so we can add missing tools to the registry
+                logger.warning(
+                    f"ReAct: Tool '{name}' not in TOOL_PARAMETERS registry. "
+                    f"Using permissive schema - LLM may have difficulty with parameters."
+                )
+                model = type(
+                    name,
+                    (BaseModel,),
+                    {
+                        "__doc__": description,
+                        "__annotations__": {},
+                        "model_config": {"extra": "allow"},
+                    }
+                )
+
             schemas.append(model)
 
         return schemas
+
+    def _compute_call_signature(self, tool_call: ToolCall) -> tuple:
+        """
+        Compute a hashable signature for a tool call (name + sorted args).
+
+        Used for stagnation detection - identical signatures indicate
+        the LLM is making the same call repeatedly without progress.
+
+        Returns:
+            Tuple of (tool_name, tuple of sorted (key, value) pairs)
+        """
+        # Sort args to ensure consistent ordering
+        sorted_args = tuple(sorted(tool_call.args.items()))
+        return (tool_call.name, sorted_args)
 
     # Services that require external MCP (containerized)
     # These are defined in config.yaml under mcp.external_mcp.services
@@ -254,7 +438,8 @@ class ReActMixin:
         self,
         tool_call: ToolCall,
         tools: Dict[str, ToolDef],
-        stop_on_error: bool
+        stop_on_error: bool,
+        successful_paths: Optional[List[str]] = None
     ) -> ToolResult:
         """
         Execute a single tool call via MCP.
@@ -266,10 +451,12 @@ class ReActMixin:
             tool_call: The tool call to execute
             tools: Tool definitions dict
             stop_on_error: Whether to raise on error
+            successful_paths: List of paths that worked earlier (for error hints)
 
         Returns:
             ToolResult with success/error status
         """
+        successful_paths = successful_paths or []
         tool_name = tool_call.name
 
         if tool_name not in tools:
@@ -303,12 +490,15 @@ class ReActMixin:
         try:
             if is_external:
                 # External MCP: containerized services (filesystem)
-                result = sync_call_external_mcp(
+                raw_result = sync_call_external_mcp(
                     self.external_mcp_client,
                     tool_def.service,
                     tool_def.function,
                     tool_call.args
                 )
+                # Extract text content from MCP CallToolResult object
+                # Without this, LLM sees object repr instead of actual content
+                result = extract_text_from_mcp_result(raw_result)
             else:
                 # Internal MCP: Python specialists
                 result = self.mcp_client.call(
@@ -322,6 +512,12 @@ class ReActMixin:
         except Exception as e:
             error_msg = str(e)
             logger.warning(f"ReAct: Tool {tool_name} failed: {error_msg}")
+
+            # Enrich filesystem errors with recovery hints
+            if is_external and tool_def.service == "filesystem":
+                failed_path = tool_call.args.get("path") or tool_call.args.get("source") or ""
+                error_msg = _enrich_filesystem_error(error_msg, failed_path, successful_paths)
+
             if stop_on_error:
                 raise ToolExecutionError(tool_name, error_msg, [])
             return ToolResult(call=tool_call, success=False, error=error_msg)
