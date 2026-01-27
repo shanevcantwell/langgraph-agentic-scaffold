@@ -181,6 +181,7 @@ specialists:
     # ADR-CORE-051: External MCP tool permissions
     tools:
       filesystem:
+        - list_directory
         - read_file
         - write_file
         - create_directory

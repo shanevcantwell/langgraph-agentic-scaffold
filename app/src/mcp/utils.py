@@ -26,7 +26,9 @@ def extract_text_from_mcp_result(result: Any) -> str:
         if isinstance(content, list) and len(content) > 0:
             first = content[0]
             if hasattr(first, 'text'):
-                return first.text
+                # Ensure text is always a string (MCP may have parsed JSON into dicts)
+                text = first.text
+                return text if isinstance(text, str) else str(text)
             return str(first)
         return str(content)
 

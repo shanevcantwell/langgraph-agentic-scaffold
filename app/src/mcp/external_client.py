@@ -28,8 +28,7 @@ except ImportError:
     MCP_AVAILABLE = False
     # Graceful handling if mcp package not installed
     ClientSession = None  # type: ignore
-    StdioServerParameters = None  # type: ignore
-    stdio_client = None  # type: ignore
+
 
 logger = logging.getLogger(__name__)
 
