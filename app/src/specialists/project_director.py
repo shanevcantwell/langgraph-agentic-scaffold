@@ -6,8 +6,8 @@ from langchain_core.messages import HumanMessage, AIMessage
 
 from .base import BaseSpecialist
 # ADR-CORE-051: ReActMixin removed - capability now injected via config
-# Keep ToolDef, MaxIterationsExceeded, ToolResult for type hints and exception handling
-from .mixins import ToolDef, MaxIterationsExceeded, ToolResult
+# Keep ToolDef, MaxIterationsExceeded, StagnationDetected, ToolResult for type hints and exception handling
+from .mixins import ToolDef, MaxIterationsExceeded, StagnationDetected, ToolResult
 from ..interface.project_context import ProjectContext, ProjectState
 
 logger = logging.getLogger(__name__)
@@ -112,6 +112,37 @@ class ProjectDirector(BaseSpecialist):
                 }
             }
 
+        except StagnationDetected as e:
+            # Stagnation: LLM is making the same call repeatedly without progress
+            logger.warning(
+                f"ProjectDirector stagnation detected: '{e.tool_name}' called "
+                f"{e.repeat_count} times with identical args after {e.iterations} iterations"
+            )
+
+            project_context.update_state(ProjectState.SYNTHESIZING)
+            self._update_context_from_history(project_context, e.history)
+
+            stagnation_message = (
+                f"I encountered a problem: I was repeatedly calling '{e.tool_name}' "
+                f"with the same arguments ({e.args}) without making progress. "
+                f"This may indicate the task requires a different approach.\n\n"
+                f"Progress before stagnation:\n"
+                f"{self._summarize_tool_history(e.history)}"
+            )
+
+            return {
+                "messages": [AIMessage(content=stagnation_message)],
+                "artifacts": {
+                    "project_context": project_context.model_dump(),
+                    "research_trace": [self._serialize_tool_result(h) for h in e.history],
+                    "iterations_used": e.iterations,
+                    "stagnation_detected": True,
+                    "stagnation_tool": e.tool_name,
+                    "stagnation_args": e.args,
+                    "research_status": "stagnated"
+                }
+            }
+
         except MaxIterationsExceeded as e:
             # Graceful degradation: synthesize what we have
             logger.warning(f"ProjectDirector hit max iterations ({e.iterations}), synthesizing partial results")
@@ -140,15 +171,15 @@ class ProjectDirector(BaseSpecialist):
         if project_context_data:
             return ProjectContext(**project_context_data)
 
-        # Initialize from user request
-        messages = state.get("messages", [])
-        user_request = messages[-1].content if messages else "Unknown research goal"
+        # Read verbatim user request from artifacts (set by state_factory.py)
+        user_request = artifacts.get("user_request", "Unknown request")
+
         context = ProjectContext(project_goal=user_request)
         logger.info(f"Initialized new ProjectContext: {context.project_goal}")
         return context
 
     def _build_research_prompt(self, context: ProjectContext) -> str:
-        """Build the research context prompt for the LLM."""
+        """Build the task prompt for the LLM."""
         knowledge_section = ""
         if context.knowledge_base:
             knowledge_section = f"""
@@ -163,24 +194,23 @@ Open questions to investigate:
 {chr(10).join(f'- {q}' for q in context.open_questions)}
 """
 
-        return f"""You are a research assistant conducting deep research on the following topic:
-
-**Research Goal:** {context.project_goal}
+        return f"""**Goal:** {context.project_goal}
 {knowledge_section}
 {questions_section}
+**Available Tools:**
+- `search`: Web search (args: query)
+- `browse`: Fetch URL content (args: url)
+- `list_directory`: List files in a directory (args: path)
+- `read_file`: Read file contents (args: path)
+- `create_directory`: Create a directory (args: path)
+- `move_file`: Move a file (args: source, destination)
+
 **Instructions:**
-1. Use the 'search' tool to find relevant information (pass a search query string)
-2. Use the 'browse' tool to read specific pages in detail (pass a URL string)
-3. Build up your understanding iteratively - search, read results, browse promising links
-4. When you have gathered enough information to answer the research goal comprehensively, provide your final synthesis WITHOUT calling any tools
+1. Analyze the goal - is this a web research task or a filesystem task?
+2. Call the appropriate tools to gather information or perform actions
+3. When the goal is complete, provide your final response WITHOUT calling any tools
 
-**Your final synthesis should:**
-- Directly answer the research goal
-- Include specific facts and findings
-- Cite sources (URLs) where relevant
-- Note any remaining uncertainties or areas needing further research
-
-Begin your research now. If this is your first turn, start with a search query related to the goal."""
+**Important:** To finish, respond with plain text only (no tool calls). The loop continues as long as you call tools."""
 
     def _get_max_iterations(self) -> int:
         """
@@ -271,3 +301,30 @@ Begin your research now. If this is your first turn, start with a search query r
             # Truncate large results for storage
             "result_preview": str(result.result)[:500] if result.result else None
         }
+
+    def _summarize_tool_history(self, history: List[ToolResult]) -> str:
+        """Summarize tool history for stagnation messages."""
+        if not history:
+            return "No tool calls completed."
+
+        # Group by tool name
+        tool_counts: Dict[str, int] = {}
+        successful_results: List[str] = []
+
+        for h in history:
+            tool_counts[h.call.name] = tool_counts.get(h.call.name, 0) + 1
+            if h.success and h.result:
+                # Include first few successful results as context
+                if len(successful_results) < 5:
+                    result_preview = str(h.result)[:100]
+                    successful_results.append(f"- {h.call.name}: {result_preview}...")
+
+        summary_parts = [
+            f"Tool calls: {', '.join(f'{name}({count})' for name, count in tool_counts.items())}"
+        ]
+
+        if successful_results:
+            summary_parts.append("\nSuccessful results:")
+            summary_parts.extend(successful_results)
+
+        return "\n".join(summary_parts)

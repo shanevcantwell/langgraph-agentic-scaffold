@@ -66,6 +66,9 @@ def create_initial_state(
     if distillation_state is not None:
         initial_state["distillation_state"] = distillation_state
 
+    # Store verbatim user request for specialists (distinct from specialist-internal *_goal fields)
+    initial_state["artifacts"]["user_request"] = goal
+
     # Populate artifacts
     if text_to_process:
         initial_state["artifacts"]["text_to_process"] = text_to_process
