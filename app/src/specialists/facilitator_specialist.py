@@ -167,11 +167,25 @@ class FacilitatorSpecialist(BaseSpecialist):
                         gathered_context.append(f"### Directory: {action.target}\n[Filesystem service unavailable]")
                     elif isinstance(items, list):
                         # Include full path for each item so downstream specialists have unambiguous paths
-                        formatted_items = "\n".join([
-                            f"- {action.target}/{item}" if not item.startswith('[DIR]')
-                            else f"- [DIR] {action.target}/{item.replace('[DIR] ', '')}"
-                            for item in items
-                        ])
+                        # Handle both string items and dict items (directory_tree returns dicts)
+                        formatted_lines = []
+                        for item in items:
+                            if isinstance(item, dict):
+                                # directory_tree format: {"name": "...", "type": "file/directory"}
+                                name = item.get("name", str(item))
+                                is_dir = item.get("type") == "directory"
+                                prefix = "[DIR] " if is_dir else ""
+                                formatted_lines.append(f"- {prefix}{action.target}/{name}")
+                            elif isinstance(item, str):
+                                if item.startswith('[DIR]'):
+                                    formatted_lines.append(f"- [DIR] {action.target}/{item.replace('[DIR] ', '')}")
+                                elif item.startswith('[FILE]'):
+                                    formatted_lines.append(f"- [FILE] {action.target}/{item.replace('[FILE] ', '')}")
+                                else:
+                                    formatted_lines.append(f"- {action.target}/{item}")
+                            else:
+                                formatted_lines.append(f"- {action.target}/{str(item)}")
+                        formatted_items = "\n".join(formatted_lines)
                         gathered_context.append(f"### Directory: {action.target}\n{formatted_items}")
                     else:
                         gathered_context.append(f"### Directory: {action.target}\n{str(items)}")
