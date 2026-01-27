@@ -103,6 +103,37 @@ def _enrich_filesystem_error(
     return error_msg
 
 
+def _enrich_list_directory_result(result: str, queried_path: str) -> str:
+    """
+    Prepend directory path to list_directory entries for unambiguous paths.
+
+    Raw MCP returns: "[FILE] c.txt"
+    Enriched output: "[FILE] sort_by_contents/c.txt"
+
+    This matches Facilitator's gathered_context format, ensuring the model
+    sees consistent paths regardless of context source (ADR-ROADMAP-001:
+    Facilitator operates in token space - precise context construction).
+    """
+    if not queried_path:
+        return result  # No path to prepend
+
+    lines = result.split('\n')
+    enriched = []
+    for line in lines:
+        if line.startswith('[DIR] '):
+            name = line[6:]  # len('[DIR] ') = 6
+            enriched.append(f"[DIR] {queried_path}/{name}")
+        elif line.startswith('[FILE] '):
+            name = line[7:]  # len('[FILE] ') = 7
+            enriched.append(f"[FILE] {queried_path}/{name}")
+        elif line.strip():
+            # Unknown format - still prepend path
+            enriched.append(f"{queried_path}/{line}")
+        else:
+            enriched.append(line)  # Preserve empty lines
+    return '\n'.join(enriched)
+
+
 # =============================================================================
 # Exceptions
 # =============================================================================
@@ -499,6 +530,12 @@ class ReActMixin:
                 # Extract text content from MCP CallToolResult object
                 # Without this, LLM sees object repr instead of actual content
                 result = extract_text_from_mcp_result(raw_result)
+
+                # Enrich list_directory results with full paths
+                # Ensures consistency with Facilitator's gathered_context format
+                if tool_def.function == "list_directory":
+                    queried_path = tool_call.args.get("path", "")
+                    result = _enrich_list_directory_result(result, queried_path)
             else:
                 # Internal MCP: Python specialists
                 result = self.mcp_client.call(
