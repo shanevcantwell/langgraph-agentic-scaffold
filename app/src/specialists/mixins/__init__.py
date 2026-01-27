@@ -11,7 +11,9 @@ from .react_mixin import (
     ToolDef,
     ToolCall,
     ToolResult,
+    ReActLoopTerminated,
     MaxIterationsExceeded,
+    StagnationDetected,
     ToolExecutionError,
 )
 
@@ -20,6 +22,8 @@ __all__ = [
     "ToolDef",
     "ToolCall",
     "ToolResult",
+    "ReActLoopTerminated",
     "MaxIterationsExceeded",
+    "StagnationDetected",
     "ToolExecutionError",
 ]

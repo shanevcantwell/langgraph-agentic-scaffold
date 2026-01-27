@@ -95,6 +95,7 @@ class ReactEnabledSpecialist:
             '_build_tool_schemas',
             '_execute_tool',
             '_format_tool_result_message',
+            '_compute_call_signature',  # For stagnation detection
         ]
 
         for method_name in methods_to_inject:
@@ -103,6 +104,17 @@ class ReactEnabledSpecialist:
                 # Bind the method to the inner specialist instance
                 bound_method = types.MethodType(method, self._inner)
                 setattr(self._inner, method_name, bound_method)
+
+        # Inject class attributes needed by the methods (fixes #69)
+        class_attrs_to_inject = [
+            'EXTERNAL_MCP_SERVICES',
+            'STAGNATION_THRESHOLD',  # For stagnation detection
+            'TOOL_PARAMETERS',  # For proper tool schema generation
+        ]
+
+        for attr_name in class_attrs_to_inject:
+            if hasattr(ReActMixin, attr_name):
+                setattr(self._inner, attr_name, getattr(ReActMixin, attr_name))
 
         # Store config values on inner specialist for reference
         self._inner._react_config = {
