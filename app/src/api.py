@@ -217,13 +217,15 @@ async def _stream_formatter(generator):
                 logs_update = f"Entering node: {node_name}"
                 yield f"data: {json.dumps({'status': status_update, 'logs': logs_update})}\n\n"
 
-                # Check for errors (Task 2.7: error_report moved to scratchpad)
+                # Check for errors (Issue #70: both error and error_report now in scratchpad)
+                # GraphState doesn't define top-level "error" field, so it must live in scratchpad
                 scratchpad = node_output.get("scratchpad", {})
-                error_report = scratchpad.get("error_report", "") if isinstance(scratchpad, dict) else ""
-                if "error" in node_output or error_report:
-                    error_msg = node_output.get("error", "Unknown error")
-                    # Stream error immediately
-                    yield f"data: {json.dumps({'error': error_msg, 'error_report': error_report})}\n\n"
+                if isinstance(scratchpad, dict):
+                    error_msg = scratchpad.get("error", "")
+                    error_report = scratchpad.get("error_report", "")
+                    if error_msg or error_report:
+                        # Stream error immediately with both message and full report
+                        yield f"data: {json.dumps({'error': error_msg or 'Unknown error', 'error_report': error_report})}\n\n"
 
                 # Stream scratchpad reasoning fields in real-time for THOUGHT STREAM visibility
                 if isinstance(scratchpad, dict):
@@ -275,12 +277,14 @@ async def _stream_formatter(generator):
                 })
 
         # Task 2.7: recommended_specialists and error_report moved to scratchpad
+        # Issue #70: error message also in scratchpad (GraphState doesn't have top-level error)
         final_state_summary = {
             "routing_history": accumulated_state.get("routing_history", []),
             "turn_count": accumulated_state.get("turn_count", 0),
             "task_is_complete": accumulated_state.get("task_is_complete", False),
             "next_specialist": accumulated_state.get("next_specialist"),
             "recommended_specialists": scratchpad.get("recommended_specialists") if isinstance(scratchpad, dict) else None,
+            "error": scratchpad.get("error") if isinstance(scratchpad, dict) else None,
             "error_report": scratchpad.get("error_report") if isinstance(scratchpad, dict) else None,
             "artifacts": list(artifacts.keys()) if artifacts else [],
             "scratchpad": {k: (v if not isinstance(v, (dict, list)) or len(str(v)) < 500 else f"<{type(v).__name__} with {len(v)} items>") for k, v in scratchpad.items()},

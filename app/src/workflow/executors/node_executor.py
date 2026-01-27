@@ -286,9 +286,13 @@ class NodeExecutor:
                 markdown_report = state_pruner.generate_report(report_data)
                 # CENTRALIZED ROUTING HISTORY TRACKING (error case)
                 # Ensure failed executions are also tracked for observability
+                # NOTE: "error" moved INTO scratchpad because GraphState doesn't define
+                # a top-level "error" field - LangGraph would drop it. Issue #70.
                 return {
-                    "error": f"Specialist '{specialist_name}' failed. See report for details.",
-                    "scratchpad": {"error_report": markdown_report},  # Task 2.7: moved to scratchpad
+                    "scratchpad": {
+                        "error": f"Specialist '{specialist_name}' failed. See report for details.",
+                        "error_report": markdown_report
+                    },
                     "routing_history": [routing_entry]
                 }
 
