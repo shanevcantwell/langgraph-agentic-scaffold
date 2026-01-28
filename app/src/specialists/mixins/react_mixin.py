@@ -286,6 +286,10 @@ class ReActMixin:
         "browse": {
             "url": (str, Field(description="URL to fetch and parse"))
         },
+        # Terminal tools (external MCP - ADR-MCP-005)
+        "run_command": {
+            "command": (str, Field(description="Shell command to execute (allowlist: pwd, ls, cat, head, tail, grep, etc.)"))
+        },
     }
 
     def execute_with_tools(
@@ -463,7 +467,7 @@ class ReActMixin:
 
     # Services that require external MCP (containerized)
     # These are defined in config.yaml under mcp.external_mcp.services
-    EXTERNAL_MCP_SERVICES = {"filesystem"}
+    EXTERNAL_MCP_SERVICES = {"filesystem", "terminal"}
 
     def _execute_tool(
         self,

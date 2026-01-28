@@ -96,6 +96,17 @@ mcp:
         container_name: "surf-mcp"  # Use docker exec instead of docker run
         timeout_ms: 30000
 
+      # Terminal MCP - Sandboxed shell command execution (ADR-MCP-005)
+      # Provides: run_command, get_cwd, get_allowed_commands
+      # Security: Allowlist-based command filtering (pwd, ls, cat, head, tail, grep, etc.)
+      # Infrastructure defined in docker-compose.yml (profile: terminal)
+      terminal:
+        enabled: true
+        required: false  # Graceful degradation if container not running
+        command: "docker"
+        args: ["exec", "-i", "terminal-mcp", "python", "-u", "terminal_mcp_server.py"]
+        timeout_ms: 30000
+
 # ==============================================================================
 # SPECIALIST CONFIGURATION
 # ==============================================================================
@@ -323,13 +334,18 @@ specialists:
     react:
       enabled: true
       max_iterations: 15
-    # ADR-CORE-051: Filesystem tool permissions (enables external_mcp_client injection)
+    # ADR-CORE-051: Tool permissions (enables external_mcp_client injection)
     tools:
       filesystem:
         - list_directory
         - read_file
         - create_directory
         - move_file
+      # ADR-MCP-005: Terminal commands for procedural operations
+      terminal:
+        - run_command
+        - get_cwd
+        - get_allowed_commands
 
   web_specialist:
     type: "procedural"

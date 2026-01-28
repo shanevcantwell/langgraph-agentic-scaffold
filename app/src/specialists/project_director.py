@@ -81,6 +81,12 @@ class ProjectDirector(BaseSpecialist):
                 function="move_file",
                 description="Move or rename a file. Args: source (str), destination (str). Moves file from source to destination."
             ),
+            # --- Terminal Tools (External MCP - ADR-MCP-005) ---
+            "run_command": ToolDef(
+                service="terminal",
+                function="run_command",
+                description="Execute a shell command. Args: command (str). Only allowlisted commands work (pwd, ls, cat, head, tail, grep, etc.)."
+            ),
         }
 
         # Build the research prompt with current context
@@ -221,12 +227,14 @@ Open questions to investigate:
 - `read_file`: Read file contents (args: path)
 - `create_directory`: Create a directory (args: path)
 - `move_file`: Move a file (args: source, destination)
+- `run_command`: Execute shell command (args: command). For text processing: head, tail, cat, grep, sort, etc.
 
 **Instructions:**
 1. Analyze the goal - is this a web research task or a filesystem task?
 2. If system context was provided above, USE those paths exactly (they are relative to workspace root)
-3. Call the appropriate tools to gather information or perform actions
-4. When the goal is complete, provide your final response WITHOUT calling any tools
+3. For text extraction (e.g., first character), use `run_command` with shell commands like `head -c1 file.txt`
+4. Call the appropriate tools to gather information or perform actions
+5. When the goal is complete, provide your final response WITHOUT calling any tools
 
 **Important:** To finish, respond with plain text only (no tool calls). The loop continues as long as you call tools."""
 

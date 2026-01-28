@@ -95,6 +95,30 @@ services:
     command: ["tail", "-f", "/dev/null"]
     restart: unless-stopped
 
+  # terminal-mcp - Sandboxed shell command execution (ADR-MCP-005)
+  # Provides: run_command, get_cwd, get_allowed_commands
+  # Security: Allowlist-based command filtering, runs as non-root, NO NETWORK ACCESS
+  # Optional service - use: docker-compose --profile terminal up
+  terminal:
+    profiles: ["terminal"]  # Only starts with --profile terminal
+    container_name: terminal-mcp
+    build:
+      context: ./docker/terminal-mcp
+    stdin_open: true  # Required for MCP stdio transport
+    tty: true
+    working_dir: /workspace
+    # SECURITY: Complete network isolation - no internet, no internal network
+    network_mode: "none"
+    volumes:
+      # Mount workspace at /workspace (same path as main app for consistency)
+      - ./workspace:/workspace
+    environment:
+      - SECURITY_MODE=allowlist
+      - WORKSPACE_PATH=/workspace
+    # Keep container alive; LAS starts MCP server via docker exec (see config.yaml)
+    command: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+
   # surf-mcp - Browser automation with Fara visual grounding (ADR-CORE-027)
   # Browser-only. For filesystem ops, use filesystem-mcp above.
   # Optional service - use: docker-compose --profile surf up
