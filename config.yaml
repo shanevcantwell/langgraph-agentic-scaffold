@@ -104,7 +104,7 @@ mcp:
         enabled: true
         required: false  # Graceful degradation if container not running
         command: "docker"
-        args: ["exec", "-i", "terminal-mcp", "python", "-u", "terminal_mcp_server.py"]
+        args: ["exec", "-i", "terminal-mcp", "python", "-u", "/app/terminal_mcp_server.py"]
         timeout_ms: 30000
 
 # ==============================================================================
