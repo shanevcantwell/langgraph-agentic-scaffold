@@ -385,19 +385,21 @@ class ReActMixin:
 
                 # Cycle detection: catch both identical calls (A-A-A) and cyclic patterns (A-B-C-D-A-B-C-D)
                 # This addresses Issue #78 - batch operations create cycles with period = batch size
+                # Use getattr for compatibility with injected execute_with_tools (ADR-CORE-051)
+                min_reps = getattr(self, 'CYCLE_MIN_REPETITIONS', 2)
                 period, pattern = detect_cycle_with_pattern(
                     recent_call_signatures,
-                    min_repetitions=self.CYCLE_MIN_REPETITIONS
+                    min_repetitions=min_reps
                 )
                 if period is not None:
                     logger.warning(
                         f"ReAct: Cycle detected - period {period} pattern repeated "
-                        f"{self.CYCLE_MIN_REPETITIONS} times: {pattern}"
+                        f"{min_reps} times: {pattern}"
                     )
                     raise StagnationDetected(
                         tool_name=tool_call.name,
                         args=tool_call.args,
-                        repeat_count=period * self.CYCLE_MIN_REPETITIONS,
+                        repeat_count=period * min_reps,
                         iterations=iteration + 1,
                         history=tool_history
                     )
