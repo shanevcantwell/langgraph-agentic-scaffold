@@ -43,6 +43,9 @@ from langchain_core.messages import BaseMessage, AIMessage, ToolMessage
 # External MCP support for filesystem operations
 from ...mcp import sync_call_external_mcp, extract_text_from_mcp_result
 
+# Cycle detection for stagnation (Issue #78)
+from ...resilience.cycle_detection import detect_cycle_with_pattern
+
 if TYPE_CHECKING:
     from ..base import BaseSpecialist
     from ...llm.adapter import BaseAdapter, StandardizedLLMRequest
@@ -254,8 +257,9 @@ class ReActMixin:
     llm_adapter: "BaseAdapter"
     mcp_client: Optional["McpClient"]
 
-    # Stagnation detection: same call N times in a row = stuck
-    STAGNATION_THRESHOLD = 3
+    # Cycle detection: detect repeating patterns in tool calls (Issue #78)
+    # Catches both identical calls (A-A-A) and cyclic patterns (A-B-C-D-A-B-C-D)
+    CYCLE_MIN_REPETITIONS = 2  # Cycle must repeat at least this many times
 
     # Tool parameter schemas for proper function calling
     # Maps tool name -> dict of {param_name: (type, Field(...))}
@@ -379,20 +383,24 @@ class ReActMixin:
                 call_signature = self._compute_call_signature(tool_call)
                 recent_call_signatures.append(call_signature)
 
-                if len(recent_call_signatures) >= self.STAGNATION_THRESHOLD:
-                    window = recent_call_signatures[-self.STAGNATION_THRESHOLD:]
-                    if len(set(window)) == 1:  # All signatures identical
-                        logger.warning(
-                            f"ReAct: Stagnation detected - '{tool_call.name}' called "
-                            f"{self.STAGNATION_THRESHOLD} times with identical args"
-                        )
-                        raise StagnationDetected(
-                            tool_name=tool_call.name,
-                            args=tool_call.args,
-                            repeat_count=self.STAGNATION_THRESHOLD,
-                            iterations=iteration + 1,
-                            history=tool_history
-                        )
+                # Cycle detection: catch both identical calls (A-A-A) and cyclic patterns (A-B-C-D-A-B-C-D)
+                # This addresses Issue #78 - batch operations create cycles with period = batch size
+                period, pattern = detect_cycle_with_pattern(
+                    recent_call_signatures,
+                    min_repetitions=self.CYCLE_MIN_REPETITIONS
+                )
+                if period is not None:
+                    logger.warning(
+                        f"ReAct: Cycle detected - period {period} pattern repeated "
+                        f"{self.CYCLE_MIN_REPETITIONS} times: {pattern}"
+                    )
+                    raise StagnationDetected(
+                        tool_name=tool_call.name,
+                        args=tool_call.args,
+                        repeat_count=period * self.CYCLE_MIN_REPETITIONS,
+                        iterations=iteration + 1,
+                        history=tool_history
+                    )
 
                 # Append result to messages for next LLM call
                 working_messages.append(self._format_tool_result_message(result))

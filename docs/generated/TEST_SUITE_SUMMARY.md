@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 69 | 577 |
+| Unit | 70 | 594 |
 | Integration | 28 | 195 |
 | Other | 7 | 90 |
-| **Total** | **104** | **862** |
+| **Total** | **105** | **879** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -858,6 +858,43 @@
   - *Tests that the specialist recommends revision and a target specialist.*
 - **`test_critic_specialist_handles_strategy_failure`**
   - *Tests that the specialist handles unrecoverable failure from its strategy.*
+
+## `app/tests/unit/test_cycle_detection.py`
+
+- **`test_single_item_repeated`**
+  - *Period-1 cycle: A-A-A-A.*
+- **`test_two_step_cycle`**
+  - *Period-2 cycle: A-B-A-B-A-B.*
+- **`test_four_step_cycle`**
+  - *Period-4 cycle: A-B-C-D-A-B-C-D (batch of 4 files).*
+- **`test_four_step_cycle_with_more_repetitions`**
+  - *Period-4 cycle repeated 3 times.*
+- **`test_no_cycle_short_history`**
+  - *Not enough items to detect cycle.*
+- **`test_no_cycle_different_items`**
+  - *No repeating pattern.*
+- **`test_cycle_at_end_only`**
+  - *Cycle detection should focus on the end of history.*
+- **`test_shortest_cycle_found_first`**
+  - *When multiple cycles match, shortest period wins.*
+- **`test_max_period_limit`**
+  - *Respect max_period parameter.*
+- **`test_tool_call_signatures`**
+  - *Real-world tool call signature cycle (Issue #78 scenario).*
+- **`test_empty_history`**
+  - *Empty history returns None.*
+- **`test_returns_pattern`**
+  - *Should return both period and pattern.*
+- **`test_four_item_pattern`**
+  - *Four-item pattern from batch operation.*
+- **`test_no_cycle_returns_none`**
+  - *No cycle returns (None, None).*
+- **`test_single_item_pattern`**
+  - *Period-1 cycle has single-item pattern.*
+- **`test_min_repetitions_1_not_useful`**
+  - *min_repetitions=1 would match everything, so not typically used.*
+- **`test_high_min_repetitions`**
+  - *Need enough history for high min_repetitions.*
 
 ## `app/tests/unit/test_data_extractor_specialist.py`
 

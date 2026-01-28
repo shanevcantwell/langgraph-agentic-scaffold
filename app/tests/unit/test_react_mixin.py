@@ -223,10 +223,21 @@ class TestReActMixinErrors:
 
     def test_max_iterations_exceeded(self, specialist, basic_tools):
         """Test that MaxIterationsExceeded is raised when limit hit."""
-        # Arrange: LLM always returns tool calls, never final response
-        specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"id": "call_loop", "name": "screenshot", "args": {}}]
-        }
+        # Arrange: LLM always returns tool calls with different args each time
+        # This avoids triggering cycle detection while still testing max_iterations
+        call_count = [0]
+
+        def make_unique_call(*args, **kwargs):
+            call_count[0] += 1
+            return {
+                "tool_calls": [{
+                    "id": f"call_{call_count[0]}",
+                    "name": "screenshot",
+                    "args": {"unique_arg": call_count[0]}  # Different args each time
+                }]
+            }
+
+        specialist.llm_adapter.invoke.side_effect = make_unique_call
         specialist.mcp_client.call.return_value = "screenshot_data"
 
         messages = [HumanMessage(content="Loop forever")]
