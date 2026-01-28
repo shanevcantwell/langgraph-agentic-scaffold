@@ -84,7 +84,8 @@ class ProjectDirector(BaseSpecialist):
         }
 
         # Build the research prompt with current context
-        research_prompt = self._build_research_prompt(project_context)
+        # Issue #75: Include gathered_context from Facilitator
+        research_prompt = self._build_research_prompt(project_context, state)
         messages = [HumanMessage(content=research_prompt)]
 
         try:
@@ -178,8 +179,25 @@ class ProjectDirector(BaseSpecialist):
         logger.info(f"Initialized new ProjectContext: {context.project_goal}")
         return context
 
-    def _build_research_prompt(self, context: ProjectContext) -> str:
-        """Build the task prompt for the LLM."""
+    def _build_research_prompt(self, context: ProjectContext, state: dict) -> str:
+        """
+        Build the task prompt for the LLM.
+
+        Issue #75: Now includes gathered_context from Facilitator if available.
+        This ensures ProjectDirector sees directory listings, file contents, and
+        other context gathered before routing.
+        """
+        # Issue #75: Extract gathered_context from artifacts (set by Facilitator)
+        gathered_context = state.get("artifacts", {}).get("gathered_context", "")
+
+        context_section = ""
+        if gathered_context:
+            context_section = f"""
+**System Context (gathered before your invocation):**
+{gathered_context}
+"""
+            logger.info("ProjectDirector: Injected gathered_context into prompt")
+
         knowledge_section = ""
         if context.knowledge_base:
             knowledge_section = f"""
@@ -195,8 +213,7 @@ Open questions to investigate:
 """
 
         return f"""**Goal:** {context.project_goal}
-{knowledge_section}
-{questions_section}
+{context_section}{knowledge_section}{questions_section}
 **Available Tools:**
 - `search`: Web search (args: query)
 - `browse`: Fetch URL content (args: url)
@@ -207,8 +224,9 @@ Open questions to investigate:
 
 **Instructions:**
 1. Analyze the goal - is this a web research task or a filesystem task?
-2. Call the appropriate tools to gather information or perform actions
-3. When the goal is complete, provide your final response WITHOUT calling any tools
+2. If system context was provided above, USE those paths exactly (they are relative to workspace root)
+3. Call the appropriate tools to gather information or perform actions
+4. When the goal is complete, provide your final response WITHOUT calling any tools
 
 **Important:** To finish, respond with plain text only (no tool calls). The loop continues as long as you call tools."""
 
