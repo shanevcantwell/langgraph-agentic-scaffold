@@ -378,11 +378,9 @@ def get_graph_topology():
         "default_responder_specialist": "chat",
         # Data & Analysis
         "data_extractor_specialist": "data",
-        "sentiment_classifier_specialist": "data",
         "data_processor_specialist": "data",
         "text_analysis_specialist": "data",
         # File Operations
-        "file_operations_specialist": "files",
         "navigator_specialist": "files",
         "batch_processor_specialist": "files",
         # Browser

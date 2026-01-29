@@ -104,7 +104,7 @@ def test_triage_recommends_chat_for_counting(initialized_app):
     """
     Triage should recommend chat_specialist for counting tasks (reasoning verb).
 
-    The verb "count" indicates reasoning/analysis, not file CRUD.
+    The verb "count" indicates reasoning/analysis, not file operations.
     Triage's recommended_specialists should include chat_specialist.
     """
     with TestClient(initialized_app) as client:
@@ -117,17 +117,17 @@ def test_triage_recommends_chat_for_counting(initialized_app):
 
         result = response.json()
         final_state = result.get("final_output", {})
-        scratchpad = final_state.get("scratchpad", {})
+        artifacts = final_state.get("artifacts", {})
+        context_plan = artifacts.get("context_plan", {})
 
-        # Triage stores its recommendations in scratchpad
-        recommended = scratchpad.get("recommended_specialists") or []
+        # Triage recommendations persist in the context_plan artifact
+        recommended = context_plan.get("recommended_specialists", [])
 
         # Debug output
         print(f"\n=== TEST: triage_recommends_chat_for_counting ===")
-        print(f"Scratchpad keys: {list(scratchpad.keys()) if scratchpad else 'None'}")
+        print(f"Context plan: {context_plan}")
         print(f"Recommended specialists: {recommended}")
         print(f"Routing history: {final_state.get('routing_history', [])}")
-        print(f"Triage reasoning: {scratchpad.get('triage_reasoning', 'N/A')}")
 
         # Primary assertion: Router should route to chat subgraph for counting
         routing_history = final_state.get("routing_history", [])
@@ -138,12 +138,10 @@ def test_triage_recommends_chat_for_counting(initialized_app):
                 "progenitor_bravo_specialist",
             ]
         )
-        file_ops_ran = "file_operations_specialist" in routing_history
 
-        assert chat_subgraph_ran and not file_ops_ran, (
-            f"Expected chat subgraph for counting, not file_operations.\n"
+        assert chat_subgraph_ran, (
+            f"Expected chat subgraph for counting task.\n"
             f"Chat subgraph ran: {chat_subgraph_ran}\n"
-            f"File ops ran: {file_ops_ran}\n"
             f"Routing history: {routing_history}"
         )
 
@@ -157,12 +155,12 @@ def test_triage_recommends_chat_for_counting(initialized_app):
 
 @pytest.mark.live_llm
 @pytest.mark.integration
-def test_triage_recommends_file_ops_for_listing(initialized_app):
+def test_triage_recommends_project_director_for_listing(initialized_app):
     """
-    Triage should recommend file_operations_specialist for listing tasks (CRUD verb).
+    Triage should recommend project_director for file listing tasks.
 
-    The verb "list" indicates file system CRUD operation.
-    Triage's recommended_specialists should include file_operations_specialist.
+    The verb "list" indicates file system operation, which routes to project_director
+    per triage prompt: "Multi-step tasks, file operations, iteration → project_director"
     """
     with TestClient(initialized_app) as client:
         response = client.post("/v1/graph/invoke", json={
@@ -174,29 +172,30 @@ def test_triage_recommends_file_ops_for_listing(initialized_app):
 
         result = response.json()
         final_state = result.get("final_output", {})
-        scratchpad = final_state.get("scratchpad", {})
+        artifacts = final_state.get("artifacts", {})
+        context_plan = artifacts.get("context_plan", {})
 
-        recommended = scratchpad.get("recommended_specialists") or []
+        # Triage recommendations persist in the context_plan artifact
+        recommended = context_plan.get("recommended_specialists", [])
 
         # Debug output
-        print(f"\n=== TEST: triage_recommends_file_ops_for_listing ===")
-        print(f"Scratchpad keys: {list(scratchpad.keys()) if scratchpad else 'None'}")
+        print(f"\n=== TEST: triage_recommends_project_director_for_listing ===")
+        print(f"Context plan: {context_plan}")
         print(f"Recommended specialists: {recommended}")
         print(f"Routing history: {final_state.get('routing_history', [])}")
-        print(f"Triage reasoning: {scratchpad.get('triage_reasoning', 'N/A')}")
 
-        # Primary assertion: Router should route to file_operations for listing
+        # Primary assertion: Router should route to project_director for file listing
         routing_history = final_state.get("routing_history", [])
-        file_ops_ran = "file_operations_specialist" in routing_history
+        project_director_ran = "project_director" in routing_history
 
-        assert file_ops_ran, (
-            f"Expected file_operations_specialist for listing task.\n"
+        assert project_director_ran, (
+            f"Expected project_director for file listing task.\n"
             f"Routing history: {routing_history}"
         )
 
-        # Secondary: If triage recommends anything, file_operations should be included
+        # Secondary: Triage should have recommended project_director
         if recommended:
-            assert "file_operations_specialist" in recommended, (
-                f"Triage recommended specialists but omitted file_operations_specialist.\n"
+            assert "project_director" in recommended, (
+                f"Triage recommended specialists but omitted project_director.\n"
                 f"Got: {recommended}"
             )

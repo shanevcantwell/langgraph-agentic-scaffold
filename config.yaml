@@ -213,11 +213,6 @@ specialists:
     # NOTE: requires_artifacts removed - specialist now falls back to message content
     # Proper solution pending ADR-CORE-040 (Context State Model). See Issue #8.
 
-  # sentiment_classifier_specialist:
-  #   type: "llm"
-  #   prompt_file: "sentiment_classifier_prompt.md"
-  #   description: "Classifies the sentiment of a given text as positive, negative, or neutral."
-
   data_processor_specialist:
     type: "procedural"
     description: "A specialist that performs deterministic data processing tasks, like formatting or cleaning, without calling an LLM."

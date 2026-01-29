@@ -59,14 +59,6 @@ ROUTING_TEST_CASES = [
         True,  # Either is valid for greetings
     ),
 
-    # --- Sentiment Analysis ---
-    (
-        "Analyze the sentiment of this review: 'This product exceeded all my expectations! Absolutely love it!'",
-        ["sentiment_classifier_specialist", "chat_specialist"],
-        "sentiment_analysis",
-        True,  # Chat may handle this too
-    ),
-
     # --- Research ---
     (
         "Search for and summarize the latest features in Python 3.12",

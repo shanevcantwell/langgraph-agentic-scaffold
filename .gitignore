@@ -66,3 +66,6 @@ config.yaml
 # output
 data/*
 logs/*
+
+# docker workspace
+workspace/
