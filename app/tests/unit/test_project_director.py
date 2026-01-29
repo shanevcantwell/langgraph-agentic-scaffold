@@ -96,14 +96,14 @@ class TestProjectDirectorPhase2:
         assert "browse" in tools
 
     def test_project_context_initialization(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
-        """Test that ProjectContext is initialized from user message."""
+        """Test that ProjectContext is initialized from user_request artifact."""
         director = ProjectDirector("project_director", mock_specialist_config)
         director.llm_adapter = mock_llm_adapter
         director.mcp_client = mock_mcp_client
 
         state = {
             "messages": [HumanMessage(content="Research quantum computing trends")],
-            "artifacts": {},
+            "artifacts": {"user_request": "Research quantum computing trends"},
             "scratchpad": {}
         }
 
@@ -152,7 +152,8 @@ class TestProjectDirectorPhase2:
             open_questions=["What are current approaches?"]
         )
 
-        prompt = director._build_research_prompt(context)
+        state = {"artifacts": {}, "scratchpad": {}}
+        prompt = director._build_research_prompt(context, state)
 
         assert "Research AI safety" in prompt
         assert "AI alignment is important" in prompt
