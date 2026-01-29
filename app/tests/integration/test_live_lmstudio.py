@@ -21,9 +21,9 @@ def test_live_lmstudio_adapter_interaction():
         # Instantiate the factory with the loaded config
         factory = AdapterFactory(config)
         adapter = factory.create_adapter(
-            # This specialist must be bound to an lmstudio provider in your user_settings.yaml
-            # for this test to work correctly.
-            specialist_name="prompt_specialist",
+            # Use chat_specialist - a core specialist that should always be available.
+            # This specialist must be bound to an lmstudio provider in your config.
+            specialist_name="chat_specialist",
             system_prompt="You are a helpful assistant."
         )
 
