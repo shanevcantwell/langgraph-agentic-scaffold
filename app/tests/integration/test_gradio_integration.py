@@ -137,7 +137,8 @@ async def test_gradio_handle_submit_integration():
     # Create mock UI components (since we're not testing Gradio itself)
     mock_components = {key: MagicMock(name=key) for key in [
         "status_output", "log_output", "json_output", "html_output",
-        "image_output", "archive_output"
+        "image_output", "archive_output", "clarification_row",
+        "clarification_input", "clarification_thread_id"
     ]}
 
     submit_handler = handle_submit(api_client, **mock_components)
