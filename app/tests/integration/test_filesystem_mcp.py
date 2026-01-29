@@ -82,8 +82,8 @@ async def test_list_directory(connected_filesystem_client, test_folder):
         }
     )
 
-    # MCP path is relative to /projects mount
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}"
+    # MCP path uses /workspace mount (filesystem-mcp container mount point)
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}"
 
     result = await connected_filesystem_client.call_tool(
         "filesystem",
@@ -107,7 +107,7 @@ async def test_read_file(connected_filesystem_client, test_folder):
         {"test_read.txt": "Hello from test file"}
     )
 
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}/test_read.txt"
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}/test_read.txt"
 
     result = await connected_filesystem_client.call_tool(
         "filesystem",
@@ -123,7 +123,7 @@ async def test_read_file(connected_filesystem_client, test_folder):
 @pytest.mark.asyncio
 async def test_write_file(connected_filesystem_client, test_folder):
     """Test write_file creates file with content."""
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}/test_write.txt"
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}/test_write.txt"
 
     await connected_filesystem_client.call_tool(
         "filesystem",
@@ -148,7 +148,7 @@ async def test_create_directory(connected_filesystem_client, test_folder):
     Note: Filesystem MCP doesn't support recursive mkdir.
     Parent directory must already exist.
     """
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}/newdir"
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}/newdir"
 
     await connected_filesystem_client.call_tool(
         "filesystem",
@@ -172,7 +172,7 @@ async def test_move_file(connected_filesystem_client, test_folder):
         {"source.txt": "Content to move"}
     )
 
-    base_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}"
+    base_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}"
 
     await connected_filesystem_client.call_tool(
         "filesystem",
@@ -198,7 +198,7 @@ async def test_get_file_info(connected_filesystem_client, test_folder):
         {"info_test.txt": "Some content"}
     )
 
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}/info_test.txt"
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}/info_test.txt"
 
     result = await connected_filesystem_client.call_tool(
         "filesystem",
@@ -244,7 +244,7 @@ async def test_sync_bridge_list_directory(connected_filesystem_client, test_fold
         {"sync_test.txt": "sync bridge test content"}
     )
 
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}"
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}"
 
     # Call via sync bridge (this is what specialists use)
     result = sync_call_external_mcp(
@@ -274,7 +274,7 @@ async def test_sync_bridge_read_file(connected_filesystem_client, test_folder):
         {"sync_read.txt": "Hello from sync bridge"}
     )
 
-    mcp_path = f"/app/{test_folder.relative_to(Path('workspace').resolve())}/sync_read.txt"
+    mcp_path = f"/workspace/{test_folder.relative_to(Path('workspace').resolve())}/sync_read.txt"
 
     result = sync_call_external_mcp(
         connected_filesystem_client,
@@ -299,7 +299,7 @@ async def test_read_nonexistent_file_raises(connected_filesystem_client):
         await connected_filesystem_client.call_tool(
             "filesystem",
             "read_file",
-            {"path": "/app/nonexistent_file_abc123.txt"}
+            {"path": "/workspace/nonexistent_file_abc123.txt"}
         )
 
     assert "fail" in str(exc_info.value).lower() or "error" in str(exc_info.value).lower()
@@ -313,7 +313,7 @@ async def test_list_nonexistent_directory_raises(connected_filesystem_client):
         await connected_filesystem_client.call_tool(
             "filesystem",
             "list_directory",
-            {"path": "/app/nonexistent_dir_abc123"}
+            {"path": "/workspace/nonexistent_dir_abc123"}
         )
 
     assert "fail" in str(exc_info.value).lower() or "error" in str(exc_info.value).lower()
