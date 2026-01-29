@@ -7,6 +7,7 @@ Run with: docker exec langgraph-app pytest app/tests/integration/test_file_sort.
 """
 import pytest
 import random
+from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.tests.helpers import (
@@ -44,7 +45,7 @@ def test_count_files_in_folder(initialized_app, test_folder):
     """
     num_files = random.randint(3, 7)
     folder_path = folder_of_empty_files(
-        str(test_folder.relative_to("workspace")),
+        str(test_folder.relative_to(Path("workspace").resolve())),
         "file_{n}.txt",
         num_files,
     )
