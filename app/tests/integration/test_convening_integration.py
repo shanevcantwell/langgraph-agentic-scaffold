@@ -25,11 +25,13 @@ class TestConveningIntegration:
     @patch("app.src.workflow.graph_builder.AdapterFactory")
     @patch("app.src.workflow.graph_builder.NodeExecutor")
     @patch("app.src.workflow.graph_builder.GraphBuilder._load_and_configure_specialists")
+    @patch("app.src.workflow.graph_builder.GraphBuilder._configure_router")
     def test_graph_builder_wires_convening_architecture(
-        self, 
-        mock_load_specialists, 
-        mock_executor, 
-        mock_factory, 
+        self,
+        mock_configure_router,
+        mock_load_specialists,
+        mock_executor,
+        mock_factory,
         mock_loader,
         convening_config
     ):
@@ -77,17 +79,20 @@ class TestConveningIntegration:
     @patch("app.src.workflow.graph_builder.AdapterFactory")
     @patch("app.src.workflow.graph_builder.NodeExecutor")
     @patch("app.src.workflow.graph_builder.GraphBuilder._load_and_configure_specialists")
+    @patch("app.src.workflow.graph_builder.GraphBuilder._configure_router")
     def test_default_architecture_fallback(
-        self, 
-        mock_load_specialists, 
-        mock_executor, 
-        mock_factory, 
+        self,
+        mock_configure_router,
+        mock_load_specialists,
+        mock_executor,
+        mock_factory,
         mock_loader
     ):
-        # Config without architecture flag
-        config = {"specialists": {"router_specialist": MagicMock()}}
+        # Config without architecture flag - need proper dict, not MagicMock
+        mock_router = MagicMock()
+        config = {"specialists": {"router_specialist": {"type": "llm"}}}
         mock_loader.return_value.get_config.return_value = config
-        mock_load_specialists.return_value = config["specialists"]
+        mock_load_specialists.return_value = {"router_specialist": mock_router}
         
         builder = GraphBuilder()
         graph = builder.build()
