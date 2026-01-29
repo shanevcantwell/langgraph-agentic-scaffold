@@ -39,11 +39,12 @@ def test_safe_executor_handles_specialist_exception(node_executor_instance):
     result = safe_executor(initial_state)
 
     # Assert
-    assert "error" in result
-    # Task 2.7: error_report moved to scratchpad
-    assert "scratchpad" in result and "error_report" in result["scratchpad"]
-    assert isinstance(result["error"], str)
-    assert "failing_specialist" in result["error"]
+    # Task 2.7: error and error_report both moved to scratchpad
+    assert "scratchpad" in result
+    assert "error" in result["scratchpad"]
+    assert "error_report" in result["scratchpad"]
+    assert isinstance(result["scratchpad"]["error"], str)
+    assert "failing_specialist" in result["scratchpad"]["error"]
     assert isinstance(result["scratchpad"]["error_report"], str)
     assert "Traceback" in result["scratchpad"]["error_report"]
     assert "Something went wrong!" in result["scratchpad"]["error_report"]
@@ -72,9 +73,10 @@ def test_safe_executor_handles_generic_exception(node_executor_instance):
     result = safe_executor(initial_state)
 
     # Assert
-    assert "error" in result
-    # Task 2.7: error_report moved to scratchpad
-    assert "scratchpad" in result and "error_report" in result["scratchpad"]
+    # Task 2.7: error and error_report both moved to scratchpad
+    assert "scratchpad" in result
+    assert "error" in result["scratchpad"]
+    assert "error_report" in result["scratchpad"]
     assert "A generic error" in result["scratchpad"]["error_report"]
 
 def test_safe_executor_success_path(node_executor_instance):

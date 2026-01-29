@@ -25,12 +25,21 @@ mock_graph_builder_instance.cleanup_external_mcp = AsyncMock()
 # 2. AdapterFactory (in the graph_builder module): Prevents the real LLM adapters from being created
 #    when the GraphBuilder logic is executed. This is the key to stopping live API calls.
 # NOTE: Using patch.start() instead of `with patch()` keeps patches active for test execution, not just imports.
+# NOTE: We must stop these patches in a module-scoped fixture to avoid polluting subsequent test modules.
 _graph_builder_patch = patch('app.src.workflow.runner.GraphBuilder', mock_graph_builder_instance)
 _adapter_factory_patch = patch('app.src.workflow.graph_builder.AdapterFactory', MagicMock())
 _graph_builder_patch.start()
 _adapter_factory_patch.start()
 
 from app.src import api
+
+# Fixture to ensure patches are stopped after this module's tests complete
+@pytest.fixture(scope="module", autouse=True)
+def cleanup_module_patches():
+    """Stop module-level patches after all tests in this module complete."""
+    yield
+    _graph_builder_patch.stop()
+    _adapter_factory_patch.stop()
 from fastapi.testclient import TestClient
  
 async def mock_streaming_gen(*args, **kwargs):

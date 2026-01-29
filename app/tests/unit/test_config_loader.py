@@ -49,10 +49,17 @@ llm_providers:
 
 @pytest.fixture(autouse=True)
 def clear_singleton():
-    """Fixture to automatically reset the ConfigLoader singleton before each test."""
+    """Fixture to automatically reset the ConfigLoader singleton before each test and restore after."""
+    # Save original state
+    original_instance = ConfigLoader._instance
+    original_config = ConfigLoader._merged_config
+    # Clear for test isolation
     ConfigLoader._instance = None
     ConfigLoader._merged_config = None
     yield
+    # Restore original state to avoid polluting subsequent tests
+    ConfigLoader._instance = original_instance
+    ConfigLoader._merged_config = original_config
 
 def test_singleton_pattern(mocker):
     """Tests that ConfigLoader is a singleton."""

@@ -20,7 +20,8 @@ def mock_ui_components():
     # actual Gradio component objects, since they are just used as keys.
     return {key: MagicMock(name=key) for key in [
         "status_output", "log_output", "json_output", "html_output",
-        "image_output", "archive_output"
+        "image_output", "archive_output", "clarification_row",
+        "clarification_input", "clarification_thread_id"
     ]}
 
 @pytest.fixture(autouse=True)

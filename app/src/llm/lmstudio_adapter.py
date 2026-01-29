@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional, Type
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
 import httpx
 from langchain_core.messages import BaseMessage, HumanMessage
-from tenacity import retry, stop_after_attempt, wait_exponential
+# tenacity removed: LMStudio is local and won't rate-limit; retry logic was dead code
 from pydantic import BaseModel
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, RateLimitError, ProxyError
@@ -154,11 +154,6 @@ class LMStudioAdapter(BaseAdapter):
         )
         return pruned_messages
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        reraise=True
-    )
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         """
         Invokes the model, dynamically using the 'response_format' parameter

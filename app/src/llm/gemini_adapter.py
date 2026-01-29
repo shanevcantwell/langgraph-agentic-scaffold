@@ -5,6 +5,7 @@ Migrated from deprecated google-generativeai package.
 """
 import logging
 import json
+import os
 import time
 from typing import Dict, Optional, Any
 
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 class GeminiAdapter(BaseAdapter):
     def __init__(self, model_config: Dict[str, Any], api_key: str, system_prompt: str):
+        # Note: API key validation is in from_config() which is the standard entry point
         super().__init__(model_config)
         self._api_key = api_key
         # New SDK: Create a Client instead of configuring globally
@@ -39,13 +41,14 @@ class GeminiAdapter(BaseAdapter):
         return self._api_key
 
     @classmethod
-    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> "GeminiAdapter":
+    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> Optional["GeminiAdapter"]:
         """Creates a GeminiAdapter instance from the provider configuration."""
         if not provider_config.get("api_key"):
-            raise ValueError(
-                f"Cannot create GeminiAdapter for provider binding '{provider_config.get('binding_key')}': "
-                "Missing 'api_key'. Please ensure the GOOGLE_API_KEY environment variable is set."
+            logger.warning(
+                f"GeminiAdapter not available for '{provider_config.get('binding_key')}': "
+                "GOOGLE_API_KEY not set. Adapter will be skipped."
             )
+            return None
         model_config = {
             "api_identifier": provider_config.get("api_identifier"),
             "parameters": provider_config.get("parameters", {}),
