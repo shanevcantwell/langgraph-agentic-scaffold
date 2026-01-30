@@ -161,48 +161,6 @@ class TestChatSpecialistExecution:
 
 
 # =============================================================================
-# SENTIMENT CLASSIFIER TESTS
-# =============================================================================
-
-class TestSentimentClassifierExecution:
-    """Test SentimentClassifierSpecialist execution."""
-
-    def test_sentiment_classifier_classifies_positive(
-        self, initialized_specialist_factory, mock_llm_response
-    ):
-        """Verify SentimentClassifier identifies positive sentiment."""
-        classifier = initialized_specialist_factory("SentimentClassifierSpecialist")
-
-        state = create_test_state(
-            messages=[HumanMessage(content="I absolutely love this product!")]
-        )
-
-        classifier.llm_adapter.invoke.return_value = mock_llm_response(
-            json.dumps({"sentiment": "positive", "confidence": 0.95})
-        )
-
-        result = classifier.execute(state)
-        assert result is not None
-
-    def test_sentiment_classifier_classifies_negative(
-        self, initialized_specialist_factory, mock_llm_response
-    ):
-        """Verify SentimentClassifier identifies negative sentiment."""
-        classifier = initialized_specialist_factory("SentimentClassifierSpecialist")
-
-        state = create_test_state(
-            messages=[HumanMessage(content="This is terrible and I hate it.")]
-        )
-
-        classifier.llm_adapter.invoke.return_value = mock_llm_response(
-            json.dumps({"sentiment": "negative", "confidence": 0.92})
-        )
-
-        result = classifier.execute(state)
-        assert result is not None
-
-
-# =============================================================================
 # TEXT ANALYSIS SPECIALIST TESTS
 # =============================================================================
 
@@ -592,10 +550,10 @@ class TestSpecialistLoading:
         "SystemsArchitect",
         "WebBuilder",
         "ChatSpecialist",
-        "SentimentClassifierSpecialist",
+        # "SentimentClassifierSpecialist",  # Removed in Issue #82
         "TextAnalysisSpecialist",
         "BatchProcessorSpecialist",
-        # "ResearcherSpecialist", # Removed in Phase 1
+        # "ResearcherSpecialist",  # Removed in Phase 1
         "SummarizerSpecialist",
         "PromptSpecialist",
         "DefaultResponderSpecialist",
