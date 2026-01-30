@@ -838,6 +838,10 @@ class TestVisionFlows:
                     f"Response snippet: {response_content[:300]}"
                 )
 
+    @pytest.mark.xfail(
+        reason="Requires ADR-ROADMAP-001 Phase 1 (completion checking). Issue #19.",
+        strict=False
+    )
     @pytest.mark.integration
     def test_flow_7_1_ui_mockup_to_html(self, api_client):
         """

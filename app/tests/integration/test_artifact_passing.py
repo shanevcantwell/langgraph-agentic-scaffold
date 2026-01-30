@@ -23,25 +23,29 @@ def test_artifact_required_validation_missing_artifact():
     Tests that specialists with required_artifacts fail gracefully when artifacts are missing.
 
     This validates the safe_executor precondition checking in GraphOrchestrator.
+
+    Updated post ADR-CORE-035: Uses data_processor_specialist which requires json_artifact
+    with data_extractor_specialist as provider.
     """
     # --- Arrange ---
     config_loader = ConfigLoader()
     builder = GraphBuilder(config_loader=config_loader)
 
-    # Get data_extractor_specialist which requires "text_to_process" artifact
-    data_extractor = builder.specialists['data_extractor_specialist']
+    # Get data_processor_specialist which requires "json_artifact" artifact
+    # (data_extractor_specialist no longer has requires_artifacts after ADR-CORE-035)
+    data_processor = builder.specialists['data_processor_specialist']
 
     # Verify it has required artifacts configured
-    assert data_extractor.specialist_config.get('requires_artifacts') == ['text_to_process'], \
-        "data_extractor_specialist should require text_to_process artifact"
+    assert data_processor.specialist_config.get('requires_artifacts') == ['json_artifact'], \
+        "data_processor_specialist should require json_artifact artifact"
 
     # Create safe executor (this is what GraphOrchestrator does)
-    safe_executor = builder.node_executor.create_safe_executor(data_extractor)
+    safe_executor = builder.node_executor.create_safe_executor(data_processor)
 
     # Create state WITHOUT the required artifact
     state = {
-        "messages": [HumanMessage(content="Extract data")],
-        "artifacts": {},  # Missing text_to_process
+        "messages": [HumanMessage(content="Process data")],
+        "artifacts": {},  # Missing json_artifact
         "turn_count": 0,
         "routing_history": [],
         "task_is_complete": False,
@@ -52,38 +56,40 @@ def test_artifact_required_validation_missing_artifact():
     result = safe_executor(state)
 
     # --- Assert ---
-    # Should return missing artifact response, not crash
-    assert "messages" in result, \
-        "Safe executor should return messages when artifact missing"
+    # Missing artifact response now uses scratchpad signals only (no messages)
+    # per ADR-CORE-016 to avoid polluting user-visible stream
+    assert "scratchpad" in result, \
+        "Safe executor should return scratchpad signals when artifact missing"
 
-    assert len(result["messages"]) > 0, \
-        "Should have at least one message explaining missing artifact"
+    scratchpad = result["scratchpad"]
 
-    message_content = result["messages"][0].content.lower()
-    assert "cannot execute" in message_content or "missing" in message_content, \
-        f"Message should explain missing artifact. Got: {message_content}"
-
-    assert "text_to_process" in message_content, \
-        "Message should mention the missing artifact name"
-
-    # Should recommend the provider (Task 2.7: recommended_specialists moved to scratchpad)
-    scratchpad = result.get("scratchpad", {})
+    # Should recommend the provider
     assert "recommended_specialists" in scratchpad, \
         "Should recommend specialist that can provide the artifact"
 
-    assert "file_specialist" in scratchpad["recommended_specialists"], \
-        "Should recommend file_specialist as the provider"
+    assert "data_extractor_specialist" in scratchpad["recommended_specialists"], \
+        "Should recommend data_extractor_specialist as the provider"
+
+    # Should add blocked specialist to forbidden_specialists
+    assert "forbidden_specialists" in scratchpad, \
+        "Should add blocked specialist to forbidden_specialists"
+
+    assert "data_processor_specialist" in scratchpad["forbidden_specialists"], \
+        "Should block data_processor_specialist until dependency satisfied"
 
     print("\n✓ Required artifact validation works correctly")
-    print(f"  ✓ Missing artifact detected: text_to_process")
-    print(f"  ✓ Clear error message generated")
+    print(f"  ✓ Missing artifact detected (scratchpad signals)")
     print(f"  ✓ Provider recommendation: {scratchpad['recommended_specialists']}")
+    print(f"  ✓ Blocked specialist added to forbidden: {scratchpad['forbidden_specialists']}")
 
 
 @pytest.mark.integration
 def test_artifact_passing_simple_producer_consumer():
     """
-    Tests simple artifact passing: file_specialist → data_extractor_specialist
+    Tests simple artifact passing: systems_architect → web_builder
+
+    Updated post ADR-CORE-035: Uses systems_architect (produces system_plan)
+    and web_builder (requires system_plan) instead of removed file_specialist.
 
     This validates that:
     1. Producer writes artifact to state.artifacts
@@ -94,38 +100,38 @@ def test_artifact_passing_simple_producer_consumer():
     config_loader = ConfigLoader()
     builder = GraphBuilder(config_loader=config_loader)
 
-    file_specialist = builder.specialists['file_specialist']
-    data_extractor = builder.specialists['data_extractor_specialist']
+    systems_architect = builder.specialists['systems_architect']
+    web_builder = builder.specialists['web_builder']
 
-    # Mock file_specialist to produce text_to_process artifact
-    def mock_file_specialist_execute(state):
-        """Simulates file_specialist reading a file and producing artifact."""
-        return {
-            "artifacts": {
-                "text_to_process": "Sample text data for extraction"
-            },
-            "messages": [HumanMessage(content="File read successfully")]
-        }
+    # Mock systems_architect to produce system_plan artifact
+    with patch.object(systems_architect, 'llm_adapter') as mock_architect_adapter, \
+         patch.object(web_builder, 'llm_adapter') as mock_builder_adapter:
 
-    # Mock data_extractor LLM to process the artifact
-    with patch.object(file_specialist, '_execute_logic', side_effect=mock_file_specialist_execute), \
-         patch.object(data_extractor, 'llm_adapter') as mock_extractor_adapter:
-
-        # Data extractor expects json_response with extracted_json field
-        mock_extractor_adapter.invoke.return_value = {
+        # Systems architect produces system_plan
+        mock_architect_adapter.invoke.return_value = {
             "json_response": {
-                "extracted_json": {"sample_field": "extracted_value"}
+                "plan_summary": "Build a simple webpage",
+                "required_components": ["HTML", "CSS"],
+                "execution_steps": ["Create HTML structure", "Add styling"]
             }
         }
-        mock_extractor_adapter.model_name = "test-model"
+        mock_architect_adapter.model_name = "test-model"
+
+        # Web builder produces HTML
+        mock_builder_adapter.invoke.return_value = {
+            "json_response": {
+                "html_document": "<html><body>Test webpage</body></html>"
+            }
+        }
+        mock_builder_adapter.model_name = "test-model"
 
         # Create executors
-        file_executor = builder.node_executor.create_safe_executor(file_specialist)
-        extractor_executor = builder.node_executor.create_safe_executor(data_extractor)
+        architect_executor = builder.node_executor.create_safe_executor(systems_architect)
+        builder_executor = builder.node_executor.create_safe_executor(web_builder)
 
         # Initial state
         state = {
-            "messages": [HumanMessage(content="Process file data")],
+            "messages": [HumanMessage(content="Build a webpage")],
             "artifacts": {},
             "turn_count": 0,
             "routing_history": [],
@@ -134,35 +140,32 @@ def test_artifact_passing_simple_producer_consumer():
         }
 
         # --- Act ---
-        # Step 1: File specialist produces artifact
-        state_after_file = file_executor(state)
+        # Step 1: Systems architect produces system_plan artifact
+        state_after_architect = architect_executor(state)
 
         # Merge state (simulating graph state update)
-        state["artifacts"].update(state_after_file.get("artifacts", {}))
-        state["messages"].extend(state_after_file.get("messages", []))
+        state["artifacts"].update(state_after_architect.get("artifacts", {}))
+        state["messages"].extend(state_after_architect.get("messages", []))
 
-        # Step 2: Data extractor consumes artifact
-        state_after_extractor = extractor_executor(state)
+        # Step 2: Web builder consumes system_plan artifact
+        state_after_builder = builder_executor(state)
 
         # --- Assert ---
-        # File specialist should have produced artifact
-        assert "text_to_process" in state["artifacts"], \
-            "File specialist should produce text_to_process artifact"
+        # Systems architect should have produced artifact
+        assert "system_plan" in state["artifacts"], \
+            "Systems architect should produce system_plan artifact"
 
-        assert state["artifacts"]["text_to_process"] == "Sample text data for extraction", \
-            "Artifact content should match what file specialist produced"
+        # Web builder should have successfully processed (no error)
+        assert "error" not in state_after_builder, \
+            "Web builder should not error when system_plan is present"
 
-        # Data extractor should have successfully processed (no error)
-        assert "error" not in state_after_extractor, \
-            "Data extractor should not error when artifact is present"
-
-        # Data extractor should have invoked LLM
-        assert mock_extractor_adapter.invoke.call_count == 1, \
-            "Data extractor should invoke LLM to process artifact"
+        # Web builder should have invoked LLM
+        assert mock_builder_adapter.invoke.call_count == 1, \
+            "Web builder should invoke LLM to process artifact"
 
         print("\n✓ Artifact passing works correctly")
-        print(f"  ✓ Producer (file_specialist) created artifact: text_to_process")
-        print(f"  ✓ Consumer (data_extractor_specialist) received artifact")
+        print(f"  ✓ Producer (systems_architect) created artifact: system_plan")
+        print(f"  ✓ Consumer (web_builder) received artifact")
         print(f"  ✓ Workflow completed successfully")
 
 
@@ -302,11 +305,13 @@ def test_artifact_chain_three_specialists():
 @pytest.mark.integration
 def test_conditional_artifacts_any_of():
     """
-    Tests conditional artifact requirements (any-of pattern).
+    Tests conditional artifact requirements (all-of pattern within a list).
 
-    Some specialists accept EITHER artifact A OR artifact B.
-    This is represented as requires_artifacts: [[artifact_a, artifact_b]]
-    (list of lists - any inner list satisfied = pass)
+    When requires_artifacts is [[artifact_a, artifact_b]], the specialist
+    needs ALL artifacts in the inner list to proceed.
+
+    Updated: Missing artifact response now uses scratchpad signals only
+    (no messages) per ADR-CORE-016 to avoid polluting user-visible stream.
     """
     # --- Arrange ---
     config_loader = ConfigLoader()
@@ -319,7 +324,7 @@ def test_conditional_artifacts_any_of():
         def _execute_logic(self, state):
             return {"messages": [HumanMessage(content="Executed")]}
 
-    # Configure with conditional requirements (any of these)
+    # Configure with conditional requirements (needs ALL of these)
     conditional_specialist = ConditionalArtifactSpecialist(
         "conditional_test",
         {
@@ -345,8 +350,13 @@ def test_conditional_artifacts_any_of():
     }
 
     result_empty = safe_executor(state_empty)
-    assert "cannot execute" in result_empty["messages"][0].content.lower(), \
-        "Should fail when neither artifact present"
+    # Missing artifact now signals via scratchpad, not messages
+    assert "scratchpad" in result_empty, \
+        "Should return scratchpad signals when artifact missing"
+    assert "recommended_specialists" in result_empty["scratchpad"], \
+        "Should recommend provider via scratchpad"
+    assert "forbidden_specialists" in result_empty["scratchpad"], \
+        "Should add self to forbidden_specialists"
 
     # --- Act & Assert: Only artifact_a present (need both) ---
     state_partial = {
@@ -359,8 +369,11 @@ def test_conditional_artifacts_any_of():
     }
 
     result_partial = safe_executor(state_partial)
-    assert "cannot execute" in result_partial["messages"][0].content.lower(), \
-        "Should fail when only one artifact present (needs both)"
+    # Still missing artifact_b
+    assert "scratchpad" in result_partial, \
+        "Should return scratchpad signals when artifact missing"
+    assert "forbidden_specialists" in result_partial["scratchpad"], \
+        "Should block self when partial artifacts present"
 
     # --- Act & Assert: Both artifacts present ---
     state_full = {
@@ -376,12 +389,14 @@ def test_conditional_artifacts_any_of():
     }
 
     result_full = safe_executor(state_full)
+    assert "messages" in result_full, \
+        "Should return messages when executed successfully"
     assert "executed" in result_full["messages"][0].content.lower(), \
         "Should succeed when both artifacts present"
 
     print("\n✓ Conditional artifact validation works correctly")
-    print("  ✓ Fails when neither artifact present")
-    print("  ✓ Fails when only partial artifacts present")
+    print("  ✓ Blocks when neither artifact present (scratchpad signals)")
+    print("  ✓ Blocks when only partial artifacts present")
     print("  ✓ Succeeds when all required artifacts present")
 
 
@@ -390,6 +405,8 @@ def test_artifact_cleanup_not_leaked():
     """
     Tests that artifacts don't leak between workflow runs.
 
+    Updated post ADR-CORE-035: Uses systems_architect instead of removed file_specialist.
+
     This validates that state management properly isolates artifacts per workflow.
     (Note: Actual cleanup happens in EndSpecialist or between graph invocations)
     """
@@ -397,16 +414,16 @@ def test_artifact_cleanup_not_leaked():
     config_loader = ConfigLoader()
     builder = GraphBuilder(config_loader=config_loader)
 
-    file_specialist = builder.specialists['file_specialist']
+    systems_architect = builder.specialists['systems_architect']
 
-    def mock_file_produce_artifact(state):
+    def mock_produce_artifact(state):
         return {
-            "artifacts": {"text_to_process": "Run 1 data"},
+            "artifacts": {"system_plan": {"summary": "Run 1 plan"}},
             "messages": [HumanMessage(content="Artifact produced")]
         }
 
-    with patch.object(file_specialist, '_execute_logic', side_effect=mock_file_produce_artifact):
-        executor = builder.node_executor.create_safe_executor(file_specialist)
+    with patch.object(systems_architect, '_execute_logic', side_effect=mock_produce_artifact):
+        executor = builder.node_executor.create_safe_executor(systems_architect)
 
         # Run 1: Produce artifact
         state_run1 = {
@@ -433,14 +450,14 @@ def test_artifact_cleanup_not_leaked():
 
         # --- Assert ---
         # Run 1 should have artifact
-        assert "text_to_process" in state_run1["artifacts"], \
+        assert "system_plan" in state_run1["artifacts"], \
             "Run 1 should have produced artifact"
 
-        assert state_run1["artifacts"]["text_to_process"] == "Run 1 data", \
+        assert state_run1["artifacts"]["system_plan"]["summary"] == "Run 1 plan", \
             "Run 1 artifact should have correct data"
 
         # Run 2 should NOT have Run 1's artifact (fresh state)
-        assert "text_to_process" not in state_run2["artifacts"], \
+        assert "system_plan" not in state_run2["artifacts"], \
             "Run 2 should start with empty artifacts (no leakage from Run 1)"
 
         print("\n✓ Artifact isolation works correctly")
