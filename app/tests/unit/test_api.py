@@ -1,8 +1,10 @@
 # app/tests/unit/test_api.py
 import pytest
 import json
+import sys
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.src.utils.errors import WorkflowError
+from fastapi.testclient import TestClient
 
 # Per ADR-TS-001, Task 2.3, we patch GraphBuilder to prevent the real graph
 # from being built during the FastAPI app's lifespan startup event.
@@ -20,27 +22,45 @@ mock_graph_builder_instance.build.return_value = mock_compiled_app
 mock_graph_builder_instance.initialize_external_mcp = AsyncMock()
 mock_graph_builder_instance.cleanup_external_mcp = AsyncMock()
 
-# We apply two critical patches using patch.start() to keep them active for the module lifetime:
-# 1. GraphBuilder (in the runner module): Prevents the real graph from being built when WorkflowRunner is initialized.
-# 2. AdapterFactory (in the graph_builder module): Prevents the real LLM adapters from being created
-#    when the GraphBuilder logic is executed. This is the key to stopping live API calls.
-# NOTE: Using patch.start() instead of `with patch()` keeps patches active for test execution, not just imports.
-# NOTE: We must stop these patches in a module-scoped fixture to avoid polluting subsequent test modules.
-_graph_builder_patch = patch('app.src.workflow.runner.GraphBuilder', mock_graph_builder_instance)
-_adapter_factory_patch = patch('app.src.workflow.graph_builder.AdapterFactory', MagicMock())
-_graph_builder_patch.start()
-_adapter_factory_patch.start()
 
-from app.src import api
+@pytest.fixture(scope="module")
+def patched_api():
+    """
+    Provides the api module with GraphBuilder and AdapterFactory mocked.
 
-# Fixture to ensure patches are stopped after this module's tests complete
-@pytest.fixture(scope="module", autouse=True)
-def cleanup_module_patches():
-    """Stop module-level patches after all tests in this module complete."""
-    yield
-    _graph_builder_patch.stop()
-    _adapter_factory_patch.stop()
-from fastapi.testclient import TestClient
+    This fixture properly isolates the mocking to this test module by:
+    1. Starting patches before importing api
+    2. Clearing sys.modules cache for api so it imports fresh with patches
+    3. Stopping patches and clearing cache again after tests complete
+
+    This prevents the test isolation bug where api.workflow_runner would
+    remain a MagicMock for subsequent integration tests.
+    """
+    # Create and start patches
+    graph_builder_patch = patch('app.src.workflow.runner.GraphBuilder', mock_graph_builder_instance)
+    adapter_factory_patch = patch('app.src.workflow.graph_builder.AdapterFactory', MagicMock())
+
+    graph_builder_patch.start()
+    adapter_factory_patch.start()
+
+    # Clear any existing api imports so we get a fresh import with patches active
+    mods_to_remove = [k for k in list(sys.modules.keys()) if 'app.src.api' in k]
+    for mod in mods_to_remove:
+        del sys.modules[mod]
+
+    # Import api fresh with patches active
+    from app.src import api
+
+    yield api
+
+    # Cleanup: stop patches
+    graph_builder_patch.stop()
+    adapter_factory_patch.stop()
+
+    # Remove api from sys.modules so integration tests get the real version
+    mods_to_remove = [k for k in list(sys.modules.keys()) if 'app.src.api' in k]
+    for mod in mods_to_remove:
+        del sys.modules[mod]
  
 async def mock_streaming_gen(*args, **kwargs):
     """
@@ -50,26 +70,28 @@ async def mock_streaming_gen(*args, **kwargs):
     yield {"router_specialist": {"messages": ["routed to next"]}}
     yield {"file_specialist": {"messages": ["wrote a file"]}}
 
+
 @pytest.fixture
-async def client():
+async def client(patched_api):
     """
     Provides a FastAPI TestClient. This fixture handles the async lifespan
     of the app to ensure startup events are properly mocked and executed.
     """
-    async with api.app.router.lifespan_context(api.app):
-        with TestClient(api.app) as c:
+    async with patched_api.app.router.lifespan_context(patched_api.app):
+        with TestClient(patched_api.app) as c:
             yield c
 
+
 @pytest.fixture(autouse=True)
-async def reset_mocks(client, mocker):  # Depend on client to ensure lifespan has run
+async def reset_mocks(client, patched_api, mocker):  # Depend on client to ensure lifespan has run
     """Reset mocks before each test to ensure isolation."""
     mock_graph_builder_instance.reset_mock()
     mock_compiled_app.reset_mock()
 
     # Patch the methods on the *instance* of the runner created during app lifespan.
     # This is the correct way to mock instance methods for testing.
-    mocker.patch.object(api.workflow_runner, 'run', return_value={"status": "success"})
-    mocker.patch.object(api.workflow_runner, 'run_streaming', return_value=mock_streaming_gen())
+    mocker.patch.object(patched_api.workflow_runner, 'run', return_value={"status": "success"})
+    mocker.patch.object(patched_api.workflow_runner, 'run_streaming', return_value=mock_streaming_gen())
 
 
 @pytest.mark.asyncio
@@ -79,7 +101,7 @@ async def test_read_root(client: TestClient):
     assert response.status_code == 200
     assert response.json() == {"status": "API is running"}
 
-def test_invoke_graph_sync(client):
+def test_invoke_graph_sync(client, patched_api):
     """Tests the synchronous /v1/graph/invoke endpoint."""
     # Arrange
     payload = {
@@ -95,13 +117,13 @@ def test_invoke_graph_sync(client):
     # Assert
     assert response.status_code == 200
     assert response.json() == {"final_output": {"status": "success"}}
-    api.workflow_runner.run.assert_called_once_with(goal="test prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
+    patched_api.workflow_runner.run.assert_called_once_with(goal="test prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
 
-def test_invoke_graph_sync_handles_runner_error(client, mocker):
+def test_invoke_graph_sync_handles_runner_error(client, patched_api, mocker):
     """Tests that the sync endpoint returns a 500 if the runner fails."""
     # Arrange
     payload = {"input_prompt": "failing prompt"}
-    api.workflow_runner.run.side_effect = WorkflowError("Graph execution failed")
+    patched_api.workflow_runner.run.side_effect = WorkflowError("Graph execution failed")
 
     # Act
     response = client.post("/v1/graph/invoke", json=payload)
@@ -116,7 +138,7 @@ def test_invoke_graph_sync_invalid_input(client):
     assert response.status_code == 422 # Unprocessable Entity
 
 @pytest.mark.asyncio
-async def test_stream_graph_async(client):
+async def test_stream_graph_async(client, patched_api):
     """Tests the asynchronous /v1/graph/stream endpoint."""
     payload = {
         "input_prompt": "test stream prompt",
@@ -133,14 +155,14 @@ async def test_stream_graph_async(client):
     # We check that the formatter correctly processed our mock dicts into status updates
     assert '"status": "Executing specialist: router_specialist..."' in response.text
     assert '"status": "Executing specialist: file_specialist..."' in response.text
-    api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
+    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
 
 @pytest.mark.asyncio
-async def test_stream_graph_async_handles_runner_error(client, mocker):
+async def test_stream_graph_async_handles_runner_error(client, patched_api, mocker):
     """Tests that the stream endpoint returns a 500 if the runner fails."""
     # Arrange
     payload = {"input_prompt": "failing stream prompt"}
-    api.workflow_runner.run_streaming.side_effect = WorkflowError("Streaming failed")
+    patched_api.workflow_runner.run_streaming.side_effect = WorkflowError("Streaming failed")
 
     # Act
     response = client.post("/v1/graph/stream", json=payload)
@@ -156,7 +178,7 @@ async def test_stream_graph_async_invalid_input(client):
     assert response.status_code == 422 # Unprocessable Entity
 
 @pytest.mark.asyncio
-async def test_stream_graph_events_async(client):
+async def test_stream_graph_events_async(client, patched_api):
     """Tests the standardized /v1/graph/stream/events endpoint."""
     payload = {
         "input_prompt": "test standard stream",
@@ -169,13 +191,13 @@ async def test_stream_graph_events_async(client):
 
     # Assert
     assert response.status_code == 200
-    
+
     # Parse SSE lines to verify structure robustly
     lines = response.text.strip().split('\n\n')
     found_status = False
     found_router = False
     found_file = False
-    
+
     for line in lines:
         if line.startswith("data: "):
             data = json.loads(line[6:])
@@ -185,9 +207,9 @@ async def test_stream_graph_events_async(client):
                 found_router = True
             if data.get("source") == "file_specialist":
                 found_file = True
-                
+
     assert found_status
     assert found_router
     assert found_file
-    
-    api.workflow_runner.run_streaming.assert_called_once_with(goal="test standard stream", text_to_process=None, image_to_process=None, use_simple_chat=False)
+
+    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test standard stream", text_to_process=None, image_to_process=None, use_simple_chat=False)
