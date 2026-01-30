@@ -293,16 +293,13 @@ docker exec langgraph-app pytest app/tests/ -v --tb=short
 - Zombie containers accumulate and consume resources indefinitely
 - If you see containers named `langgraph-agentic-scaffold-app-run-<hash>`, prune them: `docker container prune`
 
-**ALWAYS capture integration test output to a file.** Integration tests hit live LLMs and take 15+ minutes. Don't lose results:
+**Run tests in foreground without redirects.** Shell redirects (`>`, `2>&1`, `tee`) are unreliable in Claude Code's execution environment - output buffering causes lost results. Instead:
 ```bash
-# Capture stdout and stderr to known files
-docker exec langgraph-app pytest app/tests/integration/ -v --tb=short \
-  > /tmp/integration_results.txt 2>&1
-
-# Or split stdout/stderr
-docker exec langgraph-app pytest app/tests/integration/ -v --tb=short \
-  > /tmp/integration_results.txt 2> /tmp/integration_errors.txt
+# Run directly in foreground - output streams reliably
+docker exec langgraph-app pytest app/tests/integration/ -v --tb=short
 ```
+
+Integration tests hit live LLMs and take 15+ minutes.
 
 Never dismiss integration failures as "environmental" without confirming Docker context.
 
