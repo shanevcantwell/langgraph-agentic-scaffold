@@ -238,3 +238,45 @@ When creating a new menu-building specialist (e.g., `plan_specialist`):
 2. Query `self.exclusion_index.get("plan_specialist", set())` in configuration code
 
 No code changes needed beyond config.yaml updates.
+
+## 6.0 ReAct Loop Configuration
+
+Specialists using the ReAct pattern (like `project_director`) iteratively call tools until they synthesize a final response. The loop includes safeguards against infinite loops and stagnation.
+
+### 6.1 Max Iterations
+
+Control how many tool calls a ReAct specialist can make before being forced to synthesize:
+
+```yaml
+# config.yaml
+specialists:
+  project_director:
+    type: "llm"
+    react:
+      enabled: true
+      max_iterations: 15  # Default: 15
+```
+
+If the limit is reached, the specialist produces a partial synthesis with whatever progress was made.
+
+### 6.2 Cycle Detection (Stagnation)
+
+The ReAct loop detects when the LLM is stuck making the same tool calls repeatedly. This catches both:
+- **Identical calls**: `list_directory(X)` → `list_directory(X)` → `list_directory(X)`
+- **Cyclic patterns**: `read(A)` → `move(A)` → `read(A)` → `move(A)` (period 2, repeated)
+
+**Configuration** (code-level, in `react_mixin.py`):
+```python
+CYCLE_MIN_REPETITIONS = 3  # Pattern must repeat this many times to trigger stagnation
+```
+
+- **Value of 2**: Aggressive detection, catches loops fast but may false-positive on legitimate batch operations
+- **Value of 3** (default): Gives one "grace" repeat, better for file operations that naturally repeat patterns
+- **Higher values**: More permissive, but wastes more tokens before detecting true stagnation
+
+**When stagnation is detected**, the specialist:
+1. Stops the loop immediately
+2. Returns a message explaining what happened
+3. Includes artifacts showing the tool history and the repeating pattern
+
+This is particularly relevant for file operations like "sort files by content" where the natural pattern is `read → move → read → move` for each file.

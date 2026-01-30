@@ -259,7 +259,9 @@ class ReActMixin:
 
     # Cycle detection: detect repeating patterns in tool calls (Issue #78)
     # Catches both identical calls (A-A-A) and cyclic patterns (A-B-C-D-A-B-C-D)
-    CYCLE_MIN_REPETITIONS = 2  # Cycle must repeat at least this many times
+    # Value of 3 gives one "grace" repeat for batch operations where LLM might
+    # legitimately repeat a pattern (e.g., read/move for each file in a set)
+    CYCLE_MIN_REPETITIONS = 3  # Cycle must repeat at least this many times
 
     # Tool parameter schemas for proper function calling
     # Maps tool name -> dict of {param_name: (type, Field(...))}

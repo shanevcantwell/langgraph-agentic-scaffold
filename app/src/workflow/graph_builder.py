@@ -108,7 +108,7 @@ class ReactEnabledSpecialist:
         # Inject class attributes needed by the methods (fixes #69)
         class_attrs_to_inject = [
             'EXTERNAL_MCP_SERVICES',
-            'STAGNATION_THRESHOLD',  # For stagnation detection
+            'CYCLE_MIN_REPETITIONS',  # For stagnation/cycle detection
             'TOOL_PARAMETERS',  # For proper tool schema generation
         ]
 
