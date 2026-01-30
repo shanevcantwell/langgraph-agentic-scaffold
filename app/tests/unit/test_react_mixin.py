@@ -9,6 +9,7 @@ Tests cover:
 - Tool error handling
 - Unknown tool handling
 - Missing dependencies
+- ADR-CORE-055: Trace-based serialization includes AIMessage with tool_calls
 """
 import pytest
 from unittest.mock import MagicMock, patch
@@ -19,6 +20,7 @@ from app.src.specialists.mixins import (
     ToolDef,
     ToolCall,
     ToolResult,
+    ReActIteration,  # ADR-CORE-055
     MaxIterationsExceeded,
     ToolExecutionError,
 )
@@ -119,6 +121,40 @@ class TestToolResult:
         assert result.error == "Element not found"
 
 
+class TestReActIteration:
+    """Tests for ReActIteration schema (ADR-CORE-055)."""
+
+    def test_successful_iteration(self):
+        """Test creating a successful iteration record."""
+        call = ToolCall(id="call_123", name="screenshot", args={})
+        iteration = ReActIteration(
+            iteration=0,
+            tool_call=call,
+            observation="base64_image_data",
+            success=True
+        )
+        assert iteration.iteration == 0
+        assert iteration.tool_call.name == "screenshot"
+        assert iteration.observation == "base64_image_data"
+        assert iteration.success is True
+        assert iteration.thought is None
+
+    def test_failed_iteration(self):
+        """Test creating a failed iteration record."""
+        call = ToolCall(id="call_456", name="click", args={"x": 100, "y": 200})
+        iteration = ReActIteration(
+            iteration=1,
+            tool_call=call,
+            observation="Error: Element not found",
+            success=False,
+            thought="I'll try clicking the button"
+        )
+        assert iteration.iteration == 1
+        assert iteration.success is False
+        assert "Error:" in iteration.observation
+        assert iteration.thought == "I'll try clicking the button"
+
+
 # =============================================================================
 # ReActMixin Tests - Happy Path
 # =============================================================================
@@ -134,18 +170,19 @@ class TestReActMixinHappyPath:
             "tool_calls": []
         }
 
-        messages = [HumanMessage(content="Check if the button exists")]
+        # ADR-CORE-055: Use task_prompt string instead of messages list
+        task_prompt = "Check if the button exists"
 
         # Act
-        final_response, history = specialist.execute_with_tools(
-            messages=messages,
+        final_response, trace = specialist.execute_with_tools(
+            task_prompt=task_prompt,
             tools=basic_tools,
             max_iterations=10
         )
 
         # Assert
         assert final_response == "The task is complete."
-        assert len(history) == 0
+        assert len(trace) == 0
         specialist.llm_adapter.invoke.assert_called_once()
 
     def test_single_tool_call_then_final_response(self, specialist, basic_tools):
@@ -164,21 +201,22 @@ class TestReActMixinHappyPath:
         # Mock MCP tool execution
         specialist.mcp_client.call.return_value = "base64_screenshot_data"
 
-        messages = [HumanMessage(content="Take a screenshot")]
+        task_prompt = "Take a screenshot"
 
         # Act
-        final_response, history = specialist.execute_with_tools(
-            messages=messages,
+        final_response, trace = specialist.execute_with_tools(
+            task_prompt=task_prompt,
             tools=basic_tools,
             max_iterations=10
         )
 
         # Assert
         assert final_response == "Screenshot captured successfully."
-        assert len(history) == 1
-        assert history[0].success is True
-        assert history[0].tool_name == "screenshot"
-        assert history[0].result == "base64_screenshot_data"
+        assert len(trace) == 1
+        # ADR-CORE-055: ReActIteration has observation, not result
+        assert trace[0].success is True
+        assert trace[0].tool_call.name == "screenshot"
+        assert trace[0].observation == "base64_screenshot_data"
 
         # Verify MCP was called correctly
         specialist.mcp_client.call.assert_called_once_with("fara", "screenshot")
@@ -197,20 +235,20 @@ class TestReActMixinHappyPath:
             True,  # verify result
         ]
 
-        messages = [HumanMessage(content="Verify the submit button exists")]
+        task_prompt = "Verify the submit button exists"
 
         # Act
-        final_response, history = specialist.execute_with_tools(
-            messages=messages,
+        final_response, trace = specialist.execute_with_tools(
+            task_prompt=task_prompt,
             tools=basic_tools,
             max_iterations=10
         )
 
         # Assert
         assert final_response == "Button verified and visible."
-        assert len(history) == 2
-        assert history[0].tool_name == "screenshot"
-        assert history[1].tool_name == "verify"
+        assert len(trace) == 2
+        assert trace[0].tool_call.name == "screenshot"
+        assert trace[1].tool_call.name == "verify"
         assert specialist.llm_adapter.invoke.call_count == 3
 
 
@@ -240,12 +278,12 @@ class TestReActMixinErrors:
         specialist.llm_adapter.invoke.side_effect = make_unique_call
         specialist.mcp_client.call.return_value = "screenshot_data"
 
-        messages = [HumanMessage(content="Loop forever")]
+        task_prompt = "Loop forever"
 
         # Act & Assert
         with pytest.raises(MaxIterationsExceeded) as exc_info:
             specialist.execute_with_tools(
-                messages=messages,
+                task_prompt=task_prompt,
                 tools=basic_tools,
                 max_iterations=3
             )
@@ -261,20 +299,20 @@ class TestReActMixinErrors:
             {"text_response": "I couldn't find that tool, but I'm done.", "tool_calls": []}
         ]
 
-        messages = [HumanMessage(content="Do something")]
+        task_prompt = "Do something"
 
         # Act
-        final_response, history = specialist.execute_with_tools(
-            messages=messages,
+        final_response, trace = specialist.execute_with_tools(
+            task_prompt=task_prompt,
             tools=basic_tools,
             max_iterations=10,
             stop_on_error=False  # Report error to LLM, don't raise
         )
 
         # Assert
-        assert len(history) == 1
-        assert history[0].success is False
-        assert "Unknown tool" in history[0].error
+        assert len(trace) == 1
+        assert trace[0].success is False
+        assert "Unknown tool" in trace[0].observation
         assert final_response == "I couldn't find that tool, but I'm done."
 
     def test_tool_execution_error_reported_to_llm(self, specialist, basic_tools):
@@ -286,20 +324,20 @@ class TestReActMixinErrors:
         ]
         specialist.mcp_client.call.side_effect = Exception("Element not clickable")
 
-        messages = [HumanMessage(content="Click the button")]
+        task_prompt = "Click the button"
 
         # Act
-        final_response, history = specialist.execute_with_tools(
-            messages=messages,
+        final_response, trace = specialist.execute_with_tools(
+            task_prompt=task_prompt,
             tools=basic_tools,
             max_iterations=10,
             stop_on_error=False
         )
 
         # Assert
-        assert len(history) == 1
-        assert history[0].success is False
-        assert "Element not clickable" in history[0].error
+        assert len(trace) == 1
+        assert trace[0].success is False
+        assert "Element not clickable" in trace[0].observation
         assert final_response == "Click failed, but I handled it."
 
     def test_tool_execution_error_raises_when_stop_on_error(self, specialist, basic_tools):
@@ -310,12 +348,12 @@ class TestReActMixinErrors:
         }
         specialist.mcp_client.call.side_effect = Exception("Element not clickable")
 
-        messages = [HumanMessage(content="Click the button")]
+        task_prompt = "Click the button"
 
         # Act & Assert
         with pytest.raises(ToolExecutionError) as exc_info:
             specialist.execute_with_tools(
-                messages=messages,
+                task_prompt=task_prompt,
                 tools=basic_tools,
                 max_iterations=10,
                 stop_on_error=True
@@ -341,10 +379,10 @@ class TestReActMixinDependencies:
                 # No llm_adapter!
 
         specialist = NoAdapterSpecialist()
-        messages = [HumanMessage(content="Test")]
+        task_prompt = "Test"
 
         with pytest.raises(ValueError, match="llm_adapter"):
-            specialist.execute_with_tools(messages, basic_tools)
+            specialist.execute_with_tools(task_prompt, basic_tools)
 
     def test_missing_mcp_client_returns_error(self, basic_tools):
         """Test that missing mcp_client returns error result."""
@@ -360,30 +398,35 @@ class TestReActMixinDependencies:
             {"text_response": "Done anyway.", "tool_calls": []}
         ]
 
-        messages = [HumanMessage(content="Test")]
+        task_prompt = "Test"
 
         # Act
-        final_response, history = specialist.execute_with_tools(
-            messages=messages,
+        final_response, trace = specialist.execute_with_tools(
+            task_prompt=task_prompt,
             tools=basic_tools,
             stop_on_error=False
         )
 
         # Assert: Tool failed due to missing MCP client
-        assert len(history) == 1
-        assert history[0].success is False
-        assert "MCP client not available" in history[0].error
+        assert len(trace) == 1
+        assert trace[0].success is False
+        assert "MCP client not available" in trace[0].observation
 
 
 # =============================================================================
-# ReActMixin Tests - Message Formatting
+# ReActMixin Tests - Message Formatting (ADR-CORE-055)
 # =============================================================================
 
 class TestReActMixinMessageFormatting:
-    """Tests for message formatting in the ReAct loop."""
+    """Tests for message formatting in the ReAct loop (ADR-CORE-055)."""
 
-    def test_tool_result_appended_as_tool_message(self, specialist, basic_tools):
-        """Test that tool results are formatted as ToolMessage."""
+    def test_ai_message_with_tool_calls_included_in_chain(self, specialist, basic_tools):
+        """
+        ADR-CORE-055: Verify AIMessage with tool_calls is included in message chain.
+
+        This is THE core fix for Issue #88 - previously the LLM's decision
+        (AIMessage with tool_calls) was NOT being included, only ToolMessage.
+        """
         # Arrange
         specialist.llm_adapter.invoke.side_effect = [
             {"tool_calls": [{"id": "call_1", "name": "screenshot", "args": {}}]},
@@ -391,21 +434,64 @@ class TestReActMixinMessageFormatting:
         ]
         specialist.mcp_client.call.return_value = "image_data"
 
-        messages = [HumanMessage(content="Test")]
+        task_prompt = "Test"
 
         # Act
-        specialist.execute_with_tools(messages, basic_tools)
+        specialist.execute_with_tools(task_prompt, basic_tools)
 
-        # Assert: Second LLM call should include ToolMessage
+        # Assert: Second LLM call should include BOTH AIMessage (decision) AND ToolMessage (result)
         second_call = specialist.llm_adapter.invoke.call_args_list[1]
         request = second_call[0][0]
 
-        # Find the ToolMessage in the messages
+        # Find the AIMessage with tool_calls
+        ai_messages = [m for m in request.messages if isinstance(m, AIMessage)]
+        assert len(ai_messages) == 1, "ADR-CORE-055: AIMessage with tool_calls must be included"
+        assert ai_messages[0].tool_calls is not None
+        assert len(ai_messages[0].tool_calls) == 1
+        assert ai_messages[0].tool_calls[0]["name"] == "screenshot"
+
+        # Find the ToolMessage with result
         tool_messages = [m for m in request.messages if isinstance(m, ToolMessage)]
         assert len(tool_messages) == 1
         assert tool_messages[0].content == "image_data"
         assert tool_messages[0].tool_call_id == "call_1"
         assert tool_messages[0].name == "screenshot"
+
+    def test_message_chain_order_preserved(self, specialist, basic_tools):
+        """
+        ADR-CORE-055: Verify message chain maintains correct order:
+        HumanMessage → AIMessage (tool_call 1) → ToolMessage (result 1) →
+        AIMessage (tool_call 2) → ToolMessage (result 2) → ...
+        """
+        # Arrange: Two tool calls in sequence
+        specialist.llm_adapter.invoke.side_effect = [
+            {"tool_calls": [{"id": "call_1", "name": "screenshot", "args": {}}]},
+            {"tool_calls": [{"id": "call_2", "name": "verify", "args": {"desc": "button"}}]},
+            {"text_response": "Done", "tool_calls": []}
+        ]
+        specialist.mcp_client.call.side_effect = ["screenshot_data", "verified"]
+
+        task_prompt = "Test"
+
+        # Act
+        specialist.execute_with_tools(task_prompt, basic_tools)
+
+        # Assert: Third LLM call has full chain
+        third_call = specialist.llm_adapter.invoke.call_args_list[2]
+        request = third_call[0][0]
+        messages = request.messages
+
+        # Expected order: Human, AI(tool_call_1), Tool(result_1), AI(tool_call_2), Tool(result_2)
+        assert len(messages) == 5
+        assert isinstance(messages[0], HumanMessage)
+        assert isinstance(messages[1], AIMessage)
+        assert messages[1].tool_calls[0]["name"] == "screenshot"
+        assert isinstance(messages[2], ToolMessage)
+        assert messages[2].content == "screenshot_data"
+        assert isinstance(messages[3], AIMessage)
+        assert messages[3].tool_calls[0]["name"] == "verify"
+        assert isinstance(messages[4], ToolMessage)
+        assert messages[4].content == "verified"
 
     def test_error_result_formatted_correctly(self, specialist, basic_tools):
         """Test that error results are formatted with 'Error:' prefix."""
@@ -416,10 +502,10 @@ class TestReActMixinMessageFormatting:
         ]
         specialist.mcp_client.call.side_effect = Exception("Click failed")
 
-        messages = [HumanMessage(content="Test")]
+        task_prompt = "Test"
 
         # Act
-        specialist.execute_with_tools(messages, basic_tools, stop_on_error=False)
+        specialist.execute_with_tools(task_prompt, basic_tools, stop_on_error=False)
 
         # Assert: Second LLM call should include error message
         second_call = specialist.llm_adapter.invoke.call_args_list[1]
@@ -429,3 +515,74 @@ class TestReActMixinMessageFormatting:
         assert len(tool_messages) == 1
         assert tool_messages[0].content.startswith("Error:")
         assert "Click failed" in tool_messages[0].content
+
+
+# =============================================================================
+# ReActMixin Tests - Serialize for Provider (ADR-CORE-055)
+# =============================================================================
+
+class TestSerializeForProvider:
+    """Tests for _serialize_for_provider method (ADR-CORE-055)."""
+
+    def test_empty_trace_produces_human_message_only(self, specialist):
+        """Empty trace should produce just the goal as HumanMessage."""
+        messages = specialist._serialize_for_provider(
+            goal="Sort the files",
+            trace=[]
+        )
+
+        assert len(messages) == 1
+        assert isinstance(messages[0], HumanMessage)
+        assert messages[0].content == "Sort the files"
+
+    def test_single_iteration_produces_three_messages(self, specialist):
+        """One iteration should produce: Human, AI, Tool."""
+        call = ToolCall(id="call_1", name="read_file", args={"path": "test.txt"})
+        step = ReActIteration(
+            iteration=0,
+            tool_call=call,
+            observation="file contents here",
+            success=True
+        )
+
+        messages = specialist._serialize_for_provider(
+            goal="Read the file",
+            trace=[step]
+        )
+
+        assert len(messages) == 3
+        assert isinstance(messages[0], HumanMessage)
+        assert isinstance(messages[1], AIMessage)
+        assert isinstance(messages[2], ToolMessage)
+
+        # Verify AIMessage has tool_calls
+        assert messages[1].tool_calls[0]["name"] == "read_file"
+        assert messages[1].tool_calls[0]["id"] == "call_1"
+
+        # Verify ToolMessage has result
+        assert messages[2].content == "file contents here"
+        assert messages[2].tool_call_id == "call_1"
+
+    def test_multiple_iterations_preserve_order(self, specialist):
+        """Multiple iterations maintain: Human, [AI, Tool]* pattern."""
+        call1 = ToolCall(id="call_1", name="list_directory", args={"path": "."})
+        call2 = ToolCall(id="call_2", name="read_file", args={"path": "a.txt"})
+        call3 = ToolCall(id="call_3", name="move_file", args={"source": "a.txt", "destination": "b.txt"})
+
+        trace = [
+            ReActIteration(iteration=0, tool_call=call1, observation="[FILE] a.txt", success=True),
+            ReActIteration(iteration=1, tool_call=call2, observation="apple", success=True),
+            ReActIteration(iteration=2, tool_call=call3, observation="moved", success=True),
+        ]
+
+        messages = specialist._serialize_for_provider(
+            goal="Sort files alphabetically",
+            trace=trace
+        )
+
+        # Human + 3*(AI + Tool) = 7 messages
+        assert len(messages) == 7
+        assert isinstance(messages[0], HumanMessage)
+        for i in range(3):
+            assert isinstance(messages[1 + i*2], AIMessage)
+            assert isinstance(messages[2 + i*2], ToolMessage)

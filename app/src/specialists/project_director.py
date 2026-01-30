@@ -2,12 +2,12 @@ import logging
 import json
 from typing import Dict, Any, List, Optional
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
 # ADR-CORE-051: ReActMixin removed - capability now injected via config
-# Keep ToolDef, MaxIterationsExceeded, StagnationDetected, ToolResult for type hints and exception handling
-from .mixins import ToolDef, MaxIterationsExceeded, StagnationDetected, ToolResult
+# ADR-CORE-055: ReActIteration for trace-based serialization
+from .mixins import ToolDef, MaxIterationsExceeded, StagnationDetected, ToolResult, ReActIteration
 from ..interface.project_context import ProjectContext, ProjectState
 
 logger = logging.getLogger(__name__)
@@ -91,13 +91,14 @@ class ProjectDirector(BaseSpecialist):
 
         # Build the research prompt with current context
         # Issue #75: Include gathered_context from Facilitator
-        research_prompt = self._build_research_prompt(project_context, state)
-        messages = [HumanMessage(content=research_prompt)]
+        # ADR-CORE-055: Pass task_prompt string directly (not HumanMessage)
+        task_prompt = self._build_research_prompt(project_context, state)
 
         try:
-            # ReAct loop: LLM decides tool calls until it returns text-only response
-            final_response, tool_history = self.execute_with_tools(
-                messages=messages,
+            # ADR-CORE-055: ReAct loop with trace-based serialization
+            # LLM decides tool calls until it returns text-only response
+            final_response, trace = self.execute_with_tools(
+                task_prompt=task_prompt,
                 tools=tools,
                 max_iterations=self._get_max_iterations(),
                 stop_on_error=False  # Report errors to LLM for adaptive recovery
@@ -105,16 +106,16 @@ class ProjectDirector(BaseSpecialist):
 
             # Research complete - update context
             project_context.update_state(ProjectState.COMPLETE)
-            self._update_context_from_history(project_context, tool_history)
+            self._update_context_from_trace(project_context, trace)
 
-            logger.info(f"ProjectDirector completed research after {len(tool_history)} tool calls")
+            logger.info(f"ProjectDirector completed research after {len(trace)} tool calls")
 
             return {
                 "messages": [AIMessage(content=final_response)],
                 "artifacts": {
                     "project_context": project_context.model_dump(),
-                    "research_trace": [self._serialize_tool_result(h) for h in tool_history],
-                    "iterations_used": len(tool_history),
+                    "research_trace": [self._serialize_react_iteration(step) for step in trace],
+                    "iterations_used": len(trace),
                     "research_status": "complete"
                 }
             }
@@ -327,6 +328,46 @@ Open questions to investigate:
             # Truncate large results for storage
             "result_preview": str(result.result)[:500] if result.result else None
         }
+
+    def _serialize_react_iteration(self, step: ReActIteration) -> Dict[str, Any]:
+        """
+        Serialize a ReActIteration for artifact storage.
+
+        ADR-CORE-055: ReActIteration is the canonical trace record from
+        trace-based serialization.
+        """
+        return {
+            "iteration": step.iteration,
+            "tool": step.tool_call.name,
+            "args": step.tool_call.args,
+            "success": step.success,
+            "thought": step.thought,
+            # Truncate large observations for storage
+            "observation_preview": step.observation[:500] if step.observation else None
+        }
+
+    def _update_context_from_trace(self, context: ProjectContext, trace: List[ReActIteration]) -> None:
+        """
+        Update ProjectContext with insights from ReAct trace.
+
+        ADR-CORE-055: Works with ReActIteration trace (success path).
+        """
+        for step in trace:
+            if not step.success:
+                continue
+
+            if step.tool_call.name == "search":
+                # Track that we searched
+                query = step.tool_call.args.get("query", "unknown query")
+                # Observation contains search results as string
+                context.add_knowledge(f"Searched for '{query}'")
+
+            elif step.tool_call.name == "browse":
+                # Track that we browsed
+                url = step.tool_call.args.get("url", "unknown url")
+                context.add_knowledge(f"Read content from {url}")
+
+        context.iteration = len(trace)
 
     def _summarize_tool_history(self, history: List[ToolResult]) -> str:
         """Summarize tool history for stagnation messages."""

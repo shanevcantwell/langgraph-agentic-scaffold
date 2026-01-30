@@ -229,6 +229,25 @@ class ToolResult(BaseModel):
         return self.call.name
 
 
+class ReActIteration(BaseModel):
+    """
+    A single iteration in the ReAct loop - the canonical trace record.
+
+    ADR-CORE-055: This replaces message accumulation with trace-based serialization.
+    The trace is the canonical record; messages are rebuilt fresh each iteration
+    via _serialize_for_provider().
+
+    This abstraction keeps LangChain types (AIMessage, ToolMessage) at the
+    serialization boundary, enabling clean separation between specialist logic
+    and provider-specific message formats.
+    """
+    iteration: int = Field(..., description="0-indexed iteration number")
+    tool_call: ToolCall = Field(..., description="The tool call made by the LLM")
+    observation: str = Field(..., description="Tool result or error message")
+    success: bool = Field(..., description="Whether the tool executed successfully")
+    thought: Optional[str] = Field(None, description="LLM reasoning text if provided with tool call")
+
+
 # =============================================================================
 # ReActMixin
 # =============================================================================
@@ -300,25 +319,31 @@ class ReActMixin:
 
     def execute_with_tools(
         self,
-        messages: List[BaseMessage],
+        task_prompt: str,
         tools: Dict[str, ToolDef],
         max_iterations: int = 10,
         stop_on_error: bool = False,
-    ) -> Tuple[str, List[ToolResult]]:
+    ) -> Tuple[str, List[ReActIteration]]:
         """
         Execute a ReAct loop with the given tools.
 
+        ADR-CORE-055: Uses trace-based serialization instead of message accumulation.
+        Messages are rebuilt fresh each iteration from the canonical trace, ensuring
+        the LLM sees both its decisions (AIMessage with tool_calls) and their results
+        (ToolMessage).
+
         Args:
-            messages: Initial conversation messages
+            task_prompt: The task description (built from state/artifacts by caller)
             tools: Dict mapping tool names to ToolDef objects
-            max_iterations: Maximum number of LLM calls before raising
+            max_iterations: Maximum iterations before raising MaxIterationsExceeded
             stop_on_error: If True, raise on first tool error. If False, report error to LLM.
 
         Returns:
-            Tuple of (final_response: str, tool_history: List[ToolResult])
+            Tuple of (final_response: str, trace: List[ReActIteration])
 
         Raises:
             MaxIterationsExceeded: If loop doesn't complete within max_iterations
+            StagnationDetected: If same tool call pattern repeats CYCLE_MIN_REPETITIONS times
             ToolExecutionError: If stop_on_error=True and a tool fails
             ValueError: If llm_adapter is not set
         """
@@ -328,12 +353,8 @@ class ReActMixin:
         # Build tool schemas for LLM
         tool_schemas = self._build_tool_schemas(tools)
 
-        # Working copy of messages (we'll append tool results)
-        working_messages = list(messages)
-        tool_history: List[ToolResult] = []
-
-        # Stagnation detection: track recent call signatures
-        recent_call_signatures: List[tuple] = []
+        # ADR-CORE-055: Trace is the canonical record, messages rebuilt each iteration
+        trace: List[ReActIteration] = []
 
         # Error enrichment: track successful filesystem paths for recovery hints
         successful_paths: List[str] = []
@@ -343,12 +364,15 @@ class ReActMixin:
         for iteration in range(max_iterations):
             logger.debug(f"ReAct: Iteration {iteration + 1}/{max_iterations}")
 
+            # ADR-CORE-055: Rebuild messages fresh from trace each iteration
+            # This ensures AIMessage with tool_calls is always included
+            messages = self._serialize_for_provider(goal=task_prompt, trace=trace)
+
             # Call LLM
-            from ..base import BaseSpecialist
             from ...llm.adapter import StandardizedLLMRequest
 
             request = StandardizedLLMRequest(
-                messages=working_messages,
+                messages=messages,
                 tools=tool_schemas if tool_schemas else None,
             )
 
@@ -360,20 +384,34 @@ class ReActMixin:
             if not tool_calls:
                 # No tool calls = final response
                 final_text = response.get("text_response", "")
-                logger.info(f"ReAct: Completed after {iteration + 1} iterations, {len(tool_history)} tool calls")
-                return final_text, tool_history
+                logger.info(f"ReAct: Completed after {iteration + 1} iterations, {len(trace)} tool calls")
+                return final_text, trace
 
-            # Execute tool calls
+            # Execute tool calls and build trace
             for tc in tool_calls:
                 tool_call = ToolCall(
-                    id=tc.get("id", f"call_{iteration}_{len(tool_history)}"),
+                    id=tc.get("id", f"call_{iteration}_{len(trace)}"),
                     name=tc.get("name", ""),
                     args=tc.get("args", {})
                 )
 
                 # Execute the tool (pass successful_paths for error enrichment)
                 result = self._execute_tool(tool_call, tools, stop_on_error, successful_paths)
-                tool_history.append(result)
+
+                # Build observation string from result
+                if result.success:
+                    observation = str(result.result)
+                else:
+                    observation = f"Error: {result.error}"
+
+                # ADR-CORE-055: Append ReActIteration to trace (canonical record)
+                trace.append(ReActIteration(
+                    iteration=iteration,
+                    tool_call=tool_call,
+                    observation=observation,
+                    success=result.success,
+                    thought=response.get("text_response"),  # LLM reasoning if provided with tool call
+                ))
 
                 # Track successful filesystem paths for error recovery hints
                 if result.success and tool_call.name in ("list_directory", "read_file", "move_file"):
@@ -381,19 +419,11 @@ class ReActMixin:
                     if path:
                         successful_paths.append(path)
 
-                # Stagnation detection: compute call signature and check for repeats
-                call_signature = self._compute_call_signature(tool_call)
-                recent_call_signatures.append(call_signature)
-
-                # Cycle detection: catch both identical calls (A-A-A) and cyclic patterns (A-B-C-D-A-B-C-D)
-                # This addresses Issue #78 - batch operations create cycles with period = batch size
-                # Use getattr for compatibility with injected execute_with_tools (ADR-CORE-051)
-                min_reps = getattr(self, 'CYCLE_MIN_REPETITIONS', 2)
-                period, pattern = detect_cycle_with_pattern(
-                    recent_call_signatures,
-                    min_repetitions=min_reps
-                )
-                if period is not None:
+                # Stagnation detection: check trace for repeating patterns
+                min_reps = getattr(self, 'CYCLE_MIN_REPETITIONS', 3)
+                cycle_result = self._check_stagnation(trace, min_reps)
+                if cycle_result is not None:
+                    period, pattern = cycle_result
                     logger.warning(
                         f"ReAct: Cycle detected - period {period} pattern repeated "
                         f"{min_reps} times: {pattern}"
@@ -403,14 +433,28 @@ class ReActMixin:
                         args=tool_call.args,
                         repeat_count=period * min_reps,
                         iterations=iteration + 1,
-                        history=tool_history
+                        history=[self._trace_to_tool_result(step) for step in trace]
                     )
 
-                # Append result to messages for next LLM call
-                working_messages.append(self._format_tool_result_message(result))
-
         # Exceeded max iterations
-        raise MaxIterationsExceeded(max_iterations, tool_history)
+        raise MaxIterationsExceeded(
+            max_iterations,
+            [self._trace_to_tool_result(step) for step in trace]
+        )
+
+    def _trace_to_tool_result(self, step: ReActIteration) -> ToolResult:
+        """
+        Convert a ReActIteration to a ToolResult for backward compatibility.
+
+        ADR-CORE-055: Exceptions still use List[ToolResult] for compatibility
+        with existing exception handlers.
+        """
+        return ToolResult(
+            call=step.tool_call,
+            success=step.success,
+            result=step.observation if step.success else None,
+            error=step.observation if not step.success else None
+        )
 
     def _build_tool_schemas(self, tools: Dict[str, ToolDef]) -> List[Any]:
         """
@@ -589,3 +633,86 @@ class ReActMixin:
             tool_call_id=result.call.id,
             name=result.call.name
         )
+
+    def _serialize_for_provider(
+        self,
+        goal: str,
+        trace: List[ReActIteration]
+    ) -> List[BaseMessage]:
+        """
+        Convert task prompt and trace into provider-ready message list.
+
+        ADR-CORE-055: This is the ONLY place LangChain message types are constructed
+        within the ReAct loop. Messages are rebuilt fresh each iteration from the
+        canonical trace, ensuring the LLM sees both its decisions (AIMessage with
+        tool_calls) and their results (ToolMessage).
+
+        The system prompt is handled separately by the LLM adapter layer
+        (e.g., lmstudio_adapter.py passes it via static_system_prompt).
+
+        Args:
+            goal: The task prompt string (built from artifacts, not messages)
+            trace: List of ReActIteration records from prior iterations
+
+        Returns:
+            List of LangChain messages ready for the adapter's invoke() method
+        """
+        from langchain_core.messages import HumanMessage
+
+        # Start with the goal as the initial human message
+        messages: List[BaseMessage] = [HumanMessage(content=goal)]
+
+        for step in trace:
+            # AIMessage with tool_calls - the LLM's decision
+            ai_msg = AIMessage(
+                content=step.thought or "",
+                tool_calls=[{
+                    "id": step.tool_call.id,
+                    "name": step.tool_call.name,
+                    "args": step.tool_call.args
+                }]
+            )
+            messages.append(ai_msg)
+
+            # ToolMessage with result - the observation
+            tool_msg = ToolMessage(
+                content=step.observation,
+                tool_call_id=step.tool_call.id,
+                name=step.tool_call.name
+            )
+            messages.append(tool_msg)
+
+        return messages
+
+    def _check_stagnation(
+        self,
+        trace: List[ReActIteration],
+        min_repetitions: int
+    ) -> Optional[tuple]:
+        """
+        Check trace for repeating patterns indicating stagnation.
+
+        ADR-CORE-055: Refactored to work with ReActIteration trace instead of
+        separate signature list.
+
+        Args:
+            trace: List of ReActIteration records
+            min_repetitions: Minimum pattern repetitions to trigger stagnation
+
+        Returns:
+            Tuple of (period, pattern) if stagnation detected, None otherwise
+        """
+        # Build signature list from trace
+        signatures = [
+            (step.tool_call.name, tuple(sorted(step.tool_call.args.items())))
+            for step in trace
+        ]
+
+        # Use existing cycle detection
+        period, pattern = detect_cycle_with_pattern(signatures, min_repetitions=min_repetitions)
+
+        # Return None if no cycle detected (detect_cycle_with_pattern returns (None, None))
+        if period is None:
+            return None
+
+        return (period, pattern)

@@ -107,18 +107,19 @@ def test_data_extractor_handles_llm_invocation_error(data_extractor_specialist):
     with pytest.raises(LLMInvocationError, match="API connection failed"):
         data_extractor_specialist._execute_logic(initial_state)
 
-@pytest.mark.skip(reason="Assertion expects old behavior. See Issue #13: https://github.com/shanevcantwell/langgraph-agentic-scaffold/issues/13")
 @pytest.mark.parametrize("text_input", [
     "",
     "   "
 ], ids=["empty_string", "whitespace_only"])
 def test_data_extractor_no_text_to_process_on_empty_string(data_extractor_specialist, text_input):
     """
-    Tests that the specialist self-corrects if the input text is empty or just whitespace.
+    Tests that the specialist returns an error message when input text is empty or whitespace.
+    The LLM should NOT be invoked when there's nothing to extract from.
     """
     # Arrange
     initial_state = {"messages": [], "artifacts": {"text_to_process": text_input}}
     result_state = data_extractor_specialist._execute_logic(initial_state)
-    # Assert
+    # Assert: LLM not called, returns helpful message
     data_extractor_specialist.llm_adapter.invoke.assert_not_called()
-    assert "'file_specialist' should probably run first" in result_state["messages"][-1].content
+    assert "cannot extract data" in result_state["messages"][-1].content.lower()
+    assert "no text" in result_state["messages"][-1].content.lower()

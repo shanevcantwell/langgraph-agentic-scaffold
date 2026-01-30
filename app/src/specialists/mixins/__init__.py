@@ -11,6 +11,7 @@ from .react_mixin import (
     ToolDef,
     ToolCall,
     ToolResult,
+    ReActIteration,  # ADR-CORE-055: Trace record type
     ReActLoopTerminated,
     MaxIterationsExceeded,
     StagnationDetected,
@@ -22,6 +23,7 @@ __all__ = [
     "ToolDef",
     "ToolCall",
     "ToolResult",
+    "ReActIteration",  # ADR-CORE-055: Trace record type
     "ReActLoopTerminated",
     "MaxIterationsExceeded",
     "StagnationDetected",
