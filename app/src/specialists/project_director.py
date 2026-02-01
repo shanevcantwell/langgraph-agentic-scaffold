@@ -110,11 +110,13 @@ class ProjectDirector(BaseSpecialist):
 
             logger.info(f"ProjectDirector completed research after {len(trace)} tool calls")
 
+            # Issue #91: Use indexed key to preserve traces across invocations
+            trace_key = self._get_trace_key(state)
             return {
                 "messages": [AIMessage(content=final_response)],
                 "artifacts": {
                     "project_context": project_context.model_dump(),
-                    "research_trace": [self._serialize_react_iteration(step) for step in trace],
+                    trace_key: [self._serialize_react_iteration(step) for step in trace],
                     "iterations_used": len(trace),
                     "research_status": "complete"
                 }
@@ -138,11 +140,13 @@ class ProjectDirector(BaseSpecialist):
                 f"{self._summarize_tool_history(e.history)}"
             )
 
+            # Issue #91: Use indexed key to preserve traces across invocations
+            trace_key = self._get_trace_key(state)
             return {
                 "messages": [AIMessage(content=stagnation_message)],
                 "artifacts": {
                     "project_context": project_context.model_dump(),
-                    "research_trace": [self._serialize_tool_result(h) for h in e.history],
+                    trace_key: [self._serialize_tool_result(h) for h in e.history],
                     "iterations_used": e.iterations,
                     "stagnation_detected": True,
                     "stagnation_tool": e.tool_name,
@@ -160,11 +164,13 @@ class ProjectDirector(BaseSpecialist):
 
             partial_synthesis = self._synthesize_partial(project_context, e.history)
 
+            # Issue #91: Use indexed key to preserve traces across invocations
+            trace_key = self._get_trace_key(state)
             return {
                 "messages": [AIMessage(content=partial_synthesis)],
                 "artifacts": {
                     "project_context": project_context.model_dump(),
-                    "research_trace": [self._serialize_tool_result(h) for h in e.history],
+                    trace_key: [self._serialize_tool_result(h) for h in e.history],
                     "iterations_used": e.iterations,
                     "max_iterations_exceeded": True,
                     "research_status": "partial"
@@ -185,6 +191,17 @@ class ProjectDirector(BaseSpecialist):
         context = ProjectContext(project_goal=user_request)
         logger.info(f"Initialized new ProjectContext: {context.project_goal}")
         return context
+
+    def _get_trace_key(self, state: dict) -> str:
+        """
+        Generate indexed trace key to avoid overwrites (Issue #91).
+
+        Each invocation gets a unique key (research_trace_0, research_trace_1, etc.)
+        so subsequent invocations don't overwrite forensic evidence.
+        """
+        artifacts = state.get("artifacts", {})
+        existing_traces = [k for k in artifacts.keys() if k.startswith("research_trace")]
+        return f"research_trace_{len(existing_traces)}"
 
     def _build_research_prompt(self, context: ProjectContext, state: dict) -> str:
         """
