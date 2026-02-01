@@ -96,6 +96,9 @@ class ReactEnabledSpecialist:
             '_execute_tool',
             '_format_tool_result_message',
             '_compute_call_signature',  # For stagnation detection
+            '_serialize_for_provider',  # ADR-CORE-055: trace-based message serialization
+            '_check_stagnation',  # ADR-CORE-055: cycle detection
+            '_trace_to_tool_result',  # ADR-CORE-055: trace conversion helper
         ]
 
         for method_name in methods_to_inject:

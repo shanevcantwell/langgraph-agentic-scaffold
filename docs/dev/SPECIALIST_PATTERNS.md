@@ -405,7 +405,7 @@ specialists:
 
 ```python
 from app.src.specialists.base import BaseSpecialist
-from app.src.specialists.mixins import ToolDef, MaxIterationsExceeded
+from app.src.specialists.mixins import ToolDef, MaxIterationsExceeded, ReActIteration
 
 class MyAgenticSpecialist(BaseSpecialist):
     # Note: ReActMixin methods are injected by GraphBuilder when react.enabled: true
@@ -418,9 +418,12 @@ class MyAgenticSpecialist(BaseSpecialist):
             "click": ToolDef(service="fara", function="click"),
         }
 
+        # Build a task prompt string (ADR-CORE-055: uses task_prompt, not messages)
+        task_prompt = self._build_task_prompt(state)
+
         try:
-            final_response, history = self.execute_with_tools(
-                messages=state["messages"],
+            final_response, trace = self.execute_with_tools(
+                task_prompt=task_prompt,  # String, not List[BaseMessage]
                 tools=tools,
                 max_iterations=15
             )
@@ -428,21 +431,37 @@ class MyAgenticSpecialist(BaseSpecialist):
             # Handle runaway loops
             return {
                 "messages": [AIMessage(content=f"Task incomplete after {e.iterations} iterations")],
-                "artifacts": {"react_trace": [h.model_dump() for h in e.history]}
+                "artifacts": {"react_trace": [step.model_dump() for step in e.history]}
             }
 
+        # trace is List[ReActIteration] - the canonical record
         return {
-            "artifacts": {"react_trace": [h.model_dump() for h in history]},
+            "artifacts": {"react_trace": [step.model_dump() for step in trace]},
             "messages": [AIMessage(content=final_response)]
         }
 ```
 
-### How It Works
+### How It Works (ADR-CORE-055: Trace-Based Serialization)
 
-1. **Send messages + tool definitions** to LLM
-2. **If LLM returns tool_calls**: Execute them via MCP, append results to messages
-3. **Loop back** to step 1
-4. **If LLM returns text** (no tool_calls): Return as final response
+1. **Build task prompt** from state/artifacts (string, not messages)
+2. **Serialize messages** from trace: `_serialize_for_provider(goal, trace)` rebuilds the full message chain
+3. **Send to LLM** with tool definitions
+4. **If LLM returns tool_calls**: Execute via MCP, record in `ReActIteration`, loop back
+5. **If LLM returns text** (no tool_calls): Return as final response
+
+**Key insight:** Messages are rebuilt fresh each iteration from the canonical trace. This ensures the LLM sees its own reasoning (AIMessage with tool_calls) before observing results (ToolMessage). Without this, open-weights models may "forget" their reasoning chain and fail to progress.
+
+### ReActIteration (Canonical Trace Record)
+
+```python
+class ReActIteration(BaseModel):
+    """One iteration of the ReAct loop."""
+    iteration: int          # 0-indexed iteration number
+    tool_call: ToolCall     # What tool was called and with what args
+    observation: str        # Result from tool execution
+    success: bool           # Whether tool execution succeeded
+    thought: Optional[str]  # LLM's reasoning (if extracted)
+```
 
 ### Tool Definitions
 
@@ -471,18 +490,35 @@ tools = {
 
 ```python
 # Fail fast on first error
-final_response, history = self.execute_with_tools(
-    messages=messages,
+final_response, trace = self.execute_with_tools(
+    task_prompt=task_prompt,
     tools=tools,
     stop_on_error=True  # Raises ToolExecutionError
 )
 
 # Or continue and report errors to LLM
-final_response, history = self.execute_with_tools(
-    messages=messages,
+final_response, trace = self.execute_with_tools(
+    task_prompt=task_prompt,
     tools=tools,
-    stop_on_error=False  # Default: LLM sees error, may retry
+    stop_on_error=False  # Default: LLM sees error in observation, may retry
 )
+```
+
+### Stagnation Detection (Cycle Prevention)
+
+The ReAct loop includes automatic cycle detection via `_check_stagnation()`. If the same tool call pattern repeats `CYCLE_MIN_REPETITIONS` times (default: 3), a `StagnationDetected` exception is raised.
+
+```python
+from app.src.specialists.mixins import StagnationDetected
+
+try:
+    final_response, trace = self.execute_with_tools(task_prompt, tools)
+except StagnationDetected as e:
+    # LLM is stuck in a loop (e.g., read→read→read without progressing)
+    return {
+        "messages": [AIMessage(content=f"Task stalled: {e.message}")],
+        "artifacts": {"react_trace": [step.model_dump() for step in e.history]}
+    }
 ```
 
 ---

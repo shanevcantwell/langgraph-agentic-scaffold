@@ -120,6 +120,44 @@ unzip -p <archive.zip> llm_traces.jsonl | jq -r 'select(.specialist=="triage_arc
 2. Check Router's llm_trace for its final decision
 3. Check Router's prompt (includes specialist descriptions and recommendations)
 
+### 5. ReactEnabledSpecialist missing attribute error
+
+**Symptom:** `AttributeError: 'MySpecialist' object has no attribute '_serialize_for_provider'` (or `_check_stagnation`, `_trace_to_tool_result`, etc.)
+
+**Cause:** When ReAct is enabled via config (`react: enabled: true`), GraphBuilder's `ReactEnabledSpecialist` wrapper injects ReActMixin methods onto the specialist at runtime. If new methods are added to ReActMixin (e.g., for ADR-CORE-055), the injection list must also be updated.
+
+**Diagnosis:**
+```bash
+# Check the injection list in graph_builder.py
+grep -A 15 "methods_to_inject" app/src/workflow/graph_builder.py
+```
+
+**Fix:** Ensure `methods_to_inject` in [graph_builder.py](../../app/src/workflow/graph_builder.py) (line ~93) includes all methods called by `execute_with_tools()`:
+
+```python
+methods_to_inject = [
+    'execute_with_tools',
+    '_build_tool_schemas',
+    '_execute_tool',
+    '_format_tool_result_message',
+    '_compute_call_signature',      # Stagnation detection
+    '_serialize_for_provider',      # ADR-CORE-055: trace-based serialization
+    '_check_stagnation',            # ADR-CORE-055: cycle detection
+    '_trace_to_tool_result',        # ADR-CORE-055: trace conversion
+]
+```
+
+Also check class attributes are injected (line ~109):
+```python
+attributes_to_inject = [
+    'CYCLE_MIN_REPETITIONS',  # Stagnation threshold
+    'TOOL_PARAMETERS',        # MCP tool schema cache
+    'EXTERNAL_MCP_SERVICES',  # External MCP service list
+]
+```
+
+**Related:** ADR-CORE-055 (trace-based ReAct serialization)
+
 ---
 
 ## Code Paths for Deep Investigation
