@@ -12,7 +12,6 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel
 
 from .adapter import BaseAdapter, StandardizedLLMRequest, LLMInvocationError, RateLimitError, ProxyError
-from . import adapters_helpers
 from .tracing import capture_trace
 import html
 
@@ -154,6 +153,57 @@ class LMStudioAdapter(BaseAdapter):
         )
         return pruned_messages
 
+    def _format_lmstudio_messages(self, messages: List[BaseMessage]) -> List[Dict[str, Any]]:
+        """
+        Format LangChain messages for LMStudio API.
+
+        Issue #89: LMStudio-specific formatting, not shared with OpenAI adapter.
+        - Combines static and runtime system prompts into single system message
+        - Converts tool_calls to OpenAI format: {id, type, function: {name, arguments}}
+        - Uses content: "" (not null) when tool_calls present (LMStudio requirement)
+        """
+        # Collect all system instructions
+        all_system_contents = [self.system_prompt] if self.system_prompt else []
+        runtime_system_contents = [msg.content for msg in messages if msg.type == 'system']
+        all_system_contents.extend(runtime_system_contents)
+        final_system_content = "\n\n".join(filter(None, all_system_contents))
+
+        api_messages = []
+        if final_system_content:
+            api_messages.append({"role": "system", "content": final_system_content})
+
+        for msg in messages:
+            if msg.type == 'system':
+                continue  # Already processed
+            elif msg.type == 'human':
+                api_messages.append({"role": "user", "content": msg.content})
+            elif msg.type == 'ai':
+                ai_msg_dict = {"role": "assistant", "content": msg.content or ""}
+                if msg.tool_calls:
+                    # Convert LangChain format to OpenAI API format
+                    ai_msg_dict["tool_calls"] = [
+                        {
+                            "id": tc.get("id", f"call_{i}"),
+                            "type": "function",
+                            "function": {
+                                "name": tc.get("name", ""),
+                                "arguments": json.dumps(tc.get("args", {})) if isinstance(tc.get("args"), dict) else str(tc.get("args", "{}"))
+                            }
+                        }
+                        for i, tc in enumerate(msg.tool_calls)
+                    ]
+                    # LMStudio requires content to be string, not null
+                    ai_msg_dict["content"] = ""
+                api_messages.append(ai_msg_dict)
+            elif msg.type == 'tool':
+                api_messages.append({
+                    "role": "tool",
+                    "content": msg.content,
+                    "tool_call_id": str(msg.tool_call_id)
+                })
+
+        return api_messages
+
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         """
         Invokes the model, dynamically using the 'response_format' parameter
@@ -197,10 +247,8 @@ class LMStudioAdapter(BaseAdapter):
                     pruned_messages[i] = HumanMessage(content=new_content)
                     break
 
-        api_messages = adapters_helpers.format_openai_messages(
-            messages=pruned_messages,
-            static_system_prompt=self.system_prompt
-        )
+        # Issue #89: Use LMStudio-specific formatting (not shared OpenAI helper)
+        api_messages = self._format_lmstudio_messages(pruned_messages)
 
         # Dynamically build arguments to avoid sending null values,
         # which can cause issues with some servers.
