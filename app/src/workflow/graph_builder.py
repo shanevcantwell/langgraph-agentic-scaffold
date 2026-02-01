@@ -596,7 +596,9 @@ class GraphBuilder:
         for subgraph in self.subgraphs:
             subgraph_exclusions.extend(subgraph.get_router_excluded_specialists())
 
-        excluded_from_router = SpecialistCategories.get_router_exclusions(subgraph_exclusions)
+        # Issue #90: Config-driven exclusions for router (same pattern as triage)
+        config_exclusions = list(self.exclusion_index.get(CoreSpecialist.ROUTER.value, set()))
+        excluded_from_router = SpecialistCategories.get_router_exclusions(subgraph_exclusions, config_exclusions)
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded_from_router}
         router_instance.set_specialist_map(available_specialists)
         standup_report = "\n\n--- AVAILABLE SPECIALISTS ---\n" + "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])

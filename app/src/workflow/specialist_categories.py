@@ -50,7 +50,11 @@ class SpecialistCategories:
     ])
 
     @classmethod
-    def get_router_exclusions(cls, subgraph_exclusions: List[str] = None) -> Set[str]:
+    def get_router_exclusions(
+        cls,
+        subgraph_exclusions: List[str] = None,
+        config_exclusions: List[str] = None
+    ) -> Set[str]:
         """
         Returns specialists that should NOT appear in router's tool schema.
 
@@ -58,11 +62,14 @@ class SpecialistCategories:
         - MCP-only specialists (not graph nodes)
         - Service layer specialists (internal services)
         - Subgraph-managed specialists (from subgraph.get_router_excluded_specialists())
+        - Config-driven exclusions (from specialist.excluded_from lists) - Issue #90
         - Router itself (cannot route to itself)
         """
         exclusions = set(cls.MCP_ONLY) | set(cls.SERVICE_LAYER) | {CoreSpecialist.ROUTER.value}
         if subgraph_exclusions:
             exclusions.update(subgraph_exclusions)
+        if config_exclusions:
+            exclusions.update(config_exclusions)
         return exclusions
 
     @classmethod
