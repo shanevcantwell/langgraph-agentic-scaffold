@@ -158,9 +158,21 @@ response = mcp_client.call_safe(
 - `./workspace/` is the Docker container's mounted root for LAS-scoped file operations
 - It contains user data and runtime artifacts - NOT application source code
 - Application code lives in `app/src/`, `app/tests/`, `docs/`, etc.
-- ADRs are stored in `./docs/ADRs/` which is a symlink to `../../design-docs/agentic-scaffold/03_ADRS/`
-- When creating new ADRs, check ALL subdirectories (completed/, implemented/, deferred/, PLANS/) for the highest sequence number
-- Also check GitHub Issues (`gh issue list`) for ADR numbers reserved in issue descriptions (e.g., "pending ADR-040")
+
+### ADR Symlink Structure (Private Docs)
+`./docs/ADRs/` is a **symlink** to `../../design-docs/agentic-scaffold/03_ADRS/` (a separate private repo).
+
+**Implications:**
+- ADR files live in design-docs, NOT in this repo's git history
+- **Never `git add` ADR files directly** - git will error on "beyond a symbolic link"
+- ADR commits happen in design-docs repo separately
+- When referencing ADRs in code comments, the symlink makes paths work locally
+
+**When creating new ADRs:**
+1. Check ALL subdirectories (completed/, implemented/, deferred/, PLANS/) for the highest sequence number
+2. Check GitHub Issues (`gh issue list`) for ADR numbers reserved in issue descriptions (e.g., "pending ADR-040")
+3. Create the file via the symlink path (`docs/ADRs/proposed/ADR-CORE-NNN.md`)
+4. Commit in design-docs repo: `cd ~/github/shanevcantwell/design-docs && git add . && git commit`
 
 ### Statistical Anomalies
 **NEVER dismiss statistical anomalies as coincidence.**
