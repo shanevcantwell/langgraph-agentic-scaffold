@@ -631,12 +631,13 @@ def test_facilitator_fresh_context_when_no_existing(facilitator):
     assert separator_count == 0, f"Fresh context should not have separators, found {separator_count}"
 
 
-def test_facilitator_prior_work_summary_included_in_context(facilitator):
+def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
     """
-    ADR-ROADMAP-001: Facilitator summarizes research_trace artifacts for continuity.
+    ADR-CORE-059: Facilitator assembles resume_trace from prior research traces.
 
-    When research_trace_N artifacts exist, Facilitator appends a summary so
-    downstream specialists know what was already done.
+    Instead of summarizing prior work in gathered_context (prompt engineering),
+    we give the specialist its actual trace to resume from (context engineering).
+    The model sees its own tool conversation and continues naturally.
     """
     plan = ContextPlan(
         reasoning="Continue task after partial completion",
@@ -665,16 +666,20 @@ def test_facilitator_prior_work_summary_included_in_context(facilitator):
         mock_list.return_value = ["3.txt", "[DIR] animals"]
         result = facilitator.execute(state)
 
+    # ADR-CORE-059: Prior work is now provided as resume_trace, NOT in gathered_context
+    assert "resume_trace" in result["artifacts"]
+    resume_trace = result["artifacts"]["resume_trace"]
+
+    # All 3 trace entries should be assembled
+    assert len(resume_trace) == 3
+
+    # Verify trace entries are passed through correctly
+    assert resume_trace[0]["tool"] == "create_directory"
+    assert resume_trace[1]["tool"] == "move_file"
+    assert resume_trace[2]["tool"] == "move_file"
+    assert resume_trace[2]["success"] is False  # Failed operation preserved
+
+    # gathered_context should NOT contain the old summary format
     gathered = result["artifacts"]["gathered_context"]
-
-    # Prior work summary should be included
-    assert "### Previous Work" in gathered
-    assert "do not repeat these operations" in gathered
-
-    # Tool signatures should be summarized
-    assert "create_directory ✓" in gathered
-    assert "move_file ✓" in gathered
-    assert "move_file ✗" in gathered  # Failed operation
-
-    # Next step guidance should be present
-    assert "Proceed to the next phase" in gathered
+    assert "### Previous Work" not in gathered
+    assert "do not repeat these operations" not in gathered
