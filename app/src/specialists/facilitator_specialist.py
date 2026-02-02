@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional, List
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan, ContextActionType
 from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
+from ..utils.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +106,20 @@ class FacilitatorSpecialist(BaseSpecialist):
         logger.info(f"Facilitator: Assembled {len(all_traces)} trace entries for resumption")
         return all_traces
 
+    def _format_exit_interview_feedback(self, result: dict) -> str:
+        """
+        Format Exit Interview feedback using prompt template (#100).
+
+        When Exit Interview marks a task INCOMPLETE, this surfaces what's left to do
+        so Router and the destination specialist understand the continuation context.
+        """
+        template = load_prompt("exit_interview_feedback.md")
+        return template.format(
+            reasoning=result.get("reasoning", "Task needs additional work"),
+            missing_elements=result.get("missing_elements", "Remaining work not specified"),
+            recommended_specialists=", ".join(result.get("recommended_specialists", ["project_director"]))
+        )
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
         # Issue #96: Preserve existing gathered_context for accumulation on Exit Interview retry
@@ -123,7 +138,14 @@ class FacilitatorSpecialist(BaseSpecialist):
             
         gathered_context = []
         logger.info(f"Facilitator: Executing plan with {len(context_plan.actions)} actions.")
-        
+
+        # Issue #100: Surface Exit Interview feedback for better routing decisions
+        exit_interview_result = artifacts.get("exit_interview_result")
+        if exit_interview_result and not exit_interview_result.get("is_complete"):
+            feedback = self._format_exit_interview_feedback(exit_interview_result)
+            gathered_context.append(feedback)
+            logger.info("Facilitator: Added Exit Interview feedback to gathered_context")
+
         if not self.mcp_client:
             logger.error("Facilitator: MCP Client not initialized.")
             return {"error": "MCP Client not initialized."}

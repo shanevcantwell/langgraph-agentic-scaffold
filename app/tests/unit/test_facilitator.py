@@ -683,3 +683,85 @@ def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
     gathered = result["artifacts"]["gathered_context"]
     assert "### Previous Work" not in gathered
     assert "do not repeat these operations" not in gathered
+
+
+def test_facilitator_surfaces_exit_interview_feedback(facilitator):
+    """
+    Issue #100: Facilitator surfaces Exit Interview feedback in gathered_context.
+
+    When exit_interview_result exists with is_complete=False, the feedback should
+    appear at the start of gathered_context so Router and destination specialists
+    see what's still needed.
+    """
+    plan = ContextPlan(
+        reasoning="Continue task after Exit Interview flagged incomplete",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            # Exit Interview marked task incomplete
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "Only 3 of 6 files were categorized",
+                "missing_elements": "Files 4.txt, 5.txt, 6.txt need categorization",
+                "recommended_specialists": ["project_director"]
+            }
+        }
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["animals/", "plants/", "4.txt", "5.txt", "6.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Exit Interview feedback should be present
+    assert "### Next Steps (from Exit Interview)" in gathered
+    assert "Only 3 of 6 files were categorized" in gathered
+    assert "Files 4.txt, 5.txt, 6.txt need categorization" in gathered
+    assert "project_director" in gathered
+    assert "Continue where the previous work left off" in gathered
+
+
+def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
+    """
+    Issue #100: Facilitator should NOT add feedback when task was marked complete.
+    """
+    plan = ContextPlan(
+        reasoning="Normal execution",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            # Exit Interview marked task COMPLETE
+            "exit_interview_result": {
+                "is_complete": True,
+                "reasoning": "All files categorized successfully"
+            }
+        }
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["animals/", "plants/"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Should NOT have Exit Interview feedback since task was complete
+    assert "### Next Steps (from Exit Interview)" not in gathered
