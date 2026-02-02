@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan, ContextActionType
 from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
@@ -71,8 +71,44 @@ class FacilitatorSpecialist(BaseSpecialist):
             logger.error(f"Facilitator: Filesystem MCP list_directory failed: {e}")
             raise
 
+    def _assemble_resume_trace(self, artifacts: dict) -> Optional[List[dict]]:
+        """
+        Assemble trace for ReAct loop resumption (ADR-CORE-059: Memento fix).
+
+        Instead of summarizing prior work in gathered_context (which creates conflicting
+        sources of truth), we give the ReAct loop its actual prior trace. The model
+        sees its own tool conversation and continues naturally.
+
+        This replaces _summarize_prior_work() which used prompt engineering ("don't repeat
+        these operations") instead of context engineering (give the model back its experience).
+
+        Returns:
+            List of trace entries (dicts) if traces exist, None otherwise.
+            The specialist will deserialize these into ReActIteration objects.
+        """
+        all_traces: List[dict] = []
+
+        # Collect all research_trace_N artifacts, sorted by index
+        trace_keys = sorted(
+            [k for k in artifacts.keys() if k.startswith("research_trace")],
+            key=lambda x: int(x.split("_")[-1]) if x.split("_")[-1].isdigit() else 0
+        )
+
+        for trace_key in trace_keys:
+            trace_data = artifacts.get(trace_key)
+            if isinstance(trace_data, list):
+                all_traces.extend(trace_data)
+
+        if not all_traces:
+            return None
+
+        logger.info(f"Facilitator: Assembled {len(all_traces)} trace entries for resumption")
+        return all_traces
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
+        # Issue #96: Preserve existing gathered_context for accumulation on Exit Interview retry
+        existing_context = artifacts.get("gathered_context", "")
         context_plan_data = artifacts.get("context_plan")
         
         if not context_plan_data:
@@ -212,11 +248,22 @@ class FacilitatorSpecialist(BaseSpecialist):
             except Exception as e:
                 logger.error(f"Failed to execute action {action}: {e}")
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")
-                
-        # Assemble final payload
-        final_context = "\n\n".join(gathered_context)
-        
-        return {
+
+        # ADR-CORE-059: Assemble resume trace for ReAct loop continuation (Memento fix)
+        # Instead of summarizing prior work in gathered_context (prompt engineering),
+        # we give the specialist its actual trace to resume from (context engineering).
+        resume_trace = self._assemble_resume_trace(artifacts)
+
+        # Assemble final payload - Issue #96: ACCUMULATE existing + new context
+        new_context = "\n\n".join(gathered_context)
+        if existing_context:
+            # Preserve previous context, append new with separator
+            final_context = f"{existing_context}\n\n---\n\n{new_context}"
+            logger.info(f"Facilitator: Accumulated context (existing: {len(existing_context)} chars + new: {len(new_context)} chars)")
+        else:
+            final_context = new_context
+
+        result = {
             "artifacts": {
                 "gathered_context": final_context
             },
@@ -224,3 +271,10 @@ class FacilitatorSpecialist(BaseSpecialist):
                 "facilitator_complete": True
             }
         }
+
+        # Add resume_trace if we have prior work to continue from
+        if resume_trace:
+            result["artifacts"]["resume_trace"] = resume_trace
+            logger.info(f"Facilitator: Added resume_trace with {len(resume_trace)} entries")
+
+        return result

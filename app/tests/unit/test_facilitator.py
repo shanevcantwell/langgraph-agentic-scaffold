@@ -525,3 +525,156 @@ def test_facilitator_continues_after_action_error(facilitator):
 
     # Completion flag still set
     assert result["scratchpad"]["facilitator_complete"] is True
+
+
+# =============================================================================
+# Issue #96: Context Accumulation on Exit Interview Retry
+# =============================================================================
+
+def test_facilitator_accumulates_existing_context_on_retry(facilitator):
+    """
+    Issue #96: Facilitator should ACCUMULATE context, not OVERWRITE.
+
+    When Exit Interview routes back through Facilitator for retry, the existing
+    gathered_context must be preserved and new context appended. Without this,
+    specialists see stale/incomplete context and create hedged duplicates
+    (e.g., "Plant_new" instead of continuing with "Plant").
+
+    The fix is += not = for gathered_context.
+    """
+    plan = ContextPlan(
+        reasoning="Re-check directory state on retry",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace/test",
+                description="List directory"
+            )
+        ]
+    )
+
+    # Simulate RETRY state: gathered_context already exists from first pass
+    existing_context = """### Directory: /workspace/test
+- [FILE] /workspace/test/1.txt
+- [FILE] /workspace/test/2.txt
+
+### Previous Work (do not repeat these operations)
+**research_trace_0:**
+- create_directory ✓: {'path': '/workspace/test/animals'}
+- move_file ✓: {'source': '/workspace/test/1.txt', 'destination':"""
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "gathered_context": existing_context  # PRE-EXISTING from first pass
+        }
+    }
+
+    # Second pass: directory listing returns updated state
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["2.txt", "[DIR] animals"]  # 1.txt already moved
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # CRITICAL: Existing context MUST be preserved (not overwritten)
+    assert "### Directory: /workspace/test" in gathered  # From existing
+    assert "- [FILE] /workspace/test/1.txt" in gathered  # From existing (original state)
+    assert "### Previous Work" in gathered  # From existing
+
+    # Separator should be present (indicates accumulation, not overwrite)
+    assert "---" in gathered
+
+    # New context should be appended
+    assert "- /workspace/test/2.txt" in gathered  # From new listing
+    assert "animals" in gathered  # From new listing
+
+
+def test_facilitator_fresh_context_when_no_existing(facilitator):
+    """
+    Issue #96: First pass (no existing gathered_context) should work normally.
+
+    This is the baseline case - just like before the fix.
+    """
+    plan = ContextPlan(
+        reasoning="First pass context gathering",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace/test",
+                description="List directory"
+            )
+        ]
+    )
+
+    # Fresh state: NO pre-existing gathered_context
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump()
+            # No gathered_context key
+        }
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["1.txt", "2.txt", "3.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Should have directory listing but NO separator (no accumulation needed)
+    assert "### Directory: /workspace/test" in gathered
+    assert "- /workspace/test/1.txt" in gathered
+
+    # Should NOT have separator (indicates fresh, not accumulated)
+    # Count how many times '---' appears - should be 0 for fresh context
+    separator_count = gathered.count("\n---\n")
+    assert separator_count == 0, f"Fresh context should not have separators, found {separator_count}"
+
+
+def test_facilitator_prior_work_summary_included_in_context(facilitator):
+    """
+    ADR-ROADMAP-001: Facilitator summarizes research_trace artifacts for continuity.
+
+    When research_trace_N artifacts exist, Facilitator appends a summary so
+    downstream specialists know what was already done.
+    """
+    plan = ContextPlan(
+        reasoning="Continue task after partial completion",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            # Simulate previous work recorded in research_trace
+            "research_trace_0": [
+                {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
+                {"tool": "move_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
+                {"tool": "move_file", "args": {"source": "/workspace/2.txt", "destination": "/workspace/animals/2.txt"}, "success": False, "error": "Hit iteration limit"},
+            ]
+        }
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["3.txt", "[DIR] animals"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Prior work summary should be included
+    assert "### Previous Work" in gathered
+    assert "do not repeat these operations" in gathered
+
+    # Tool signatures should be summarized
+    assert "create_directory ✓" in gathered
+    assert "move_file ✓" in gathered
+    assert "move_file ✗" in gathered  # Failed operation
+
+    # Next step guidance should be present
+    assert "Proceed to the next phase" in gathered

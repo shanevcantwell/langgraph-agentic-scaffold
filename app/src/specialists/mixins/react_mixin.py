@@ -323,6 +323,7 @@ class ReActMixin:
         tools: Dict[str, ToolDef],
         max_iterations: int = 10,
         stop_on_error: bool = False,
+        initial_trace: Optional[List[ReActIteration]] = None,
     ) -> Tuple[str, List[ReActIteration]]:
         """
         Execute a ReAct loop with the given tools.
@@ -332,11 +333,17 @@ class ReActMixin:
         the LLM sees both its decisions (AIMessage with tool_calls) and their results
         (ToolMessage).
 
+        ADR-CORE-059: Supports resumption via initial_trace parameter. When provided,
+        the loop continues from where it left off - the model sees its prior tool
+        conversation and continues naturally. This is the "Memento fix" - give the
+        model back its experience rather than telling it about its past.
+
         Args:
             task_prompt: The task description (built from state/artifacts by caller)
             tools: Dict mapping tool names to ToolDef objects
             max_iterations: Maximum iterations before raising MaxIterationsExceeded
             stop_on_error: If True, raise on first tool error. If False, report error to LLM.
+            initial_trace: Optional prior trace to resume from (ADR-CORE-059)
 
         Returns:
             Tuple of (final_response: str, trace: List[ReActIteration])
@@ -354,7 +361,11 @@ class ReActMixin:
         tool_schemas = self._build_tool_schemas(tools)
 
         # ADR-CORE-055: Trace is the canonical record, messages rebuilt each iteration
-        trace: List[ReActIteration] = []
+        # ADR-CORE-059: Initialize from prior trace if resuming (Memento fix)
+        trace: List[ReActIteration] = list(initial_trace) if initial_trace else []
+
+        if initial_trace:
+            logger.info(f"ReAct: Resuming from prior trace with {len(initial_trace)} iterations")
 
         # Error enrichment: track successful filesystem paths for recovery hints
         successful_paths: List[str] = []

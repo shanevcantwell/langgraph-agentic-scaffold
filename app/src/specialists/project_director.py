@@ -94,14 +94,19 @@ class ProjectDirector(BaseSpecialist):
         # ADR-CORE-055: Pass task_prompt string directly (not HumanMessage)
         task_prompt = self._build_research_prompt(project_context, state)
 
+        # ADR-CORE-059: Check for resume_trace (Memento fix)
+        # Facilitator assembles prior traces; we just use what's there
+        initial_trace = self._deserialize_resume_trace(state.get("artifacts", {}))
+
         try:
             # ADR-CORE-055: ReAct loop with trace-based serialization
-            # LLM decides tool calls until it returns text-only response
+            # ADR-CORE-059: Resume from prior trace if available
             final_response, trace = self.execute_with_tools(
                 task_prompt=task_prompt,
                 tools=tools,
                 max_iterations=self._get_max_iterations(),
-                stop_on_error=False  # Report errors to LLM for adaptive recovery
+                stop_on_error=False,  # Report errors to LLM for adaptive recovery
+                initial_trace=initial_trace,
             )
 
             # Research complete - update context
@@ -202,6 +207,59 @@ class ProjectDirector(BaseSpecialist):
         artifacts = state.get("artifacts", {})
         existing_traces = [k for k in artifacts.keys() if k.startswith("research_trace")]
         return f"research_trace_{len(existing_traces)}"
+
+    def _deserialize_resume_trace(self, artifacts: dict) -> Optional[List[ReActIteration]]:
+        """
+        Deserialize resume_trace artifact into ReActIteration objects (ADR-CORE-059).
+
+        Facilitator assembles prior traces into resume_trace artifact. We deserialize
+        those dicts back into ReActIteration objects so execute_with_tools() can
+        continue the model's conversation naturally.
+
+        The specialist remains context-agnostic - it just uses what Facilitator provides.
+        """
+        resume_trace = artifacts.get("resume_trace")
+        if not resume_trace:
+            return None
+
+        if not isinstance(resume_trace, list):
+            logger.warning(f"ProjectDirector: resume_trace is not a list: {type(resume_trace)}")
+            return None
+
+        deserialized = []
+        for entry in resume_trace:
+            if not isinstance(entry, dict):
+                logger.warning(f"ProjectDirector: Skipping non-dict trace entry: {type(entry)}")
+                continue
+
+            try:
+                # Reconstruct ReActIteration from serialized dict
+                # Handle both full format and truncated format (observation_preview)
+                from .mixins import ToolCall
+
+                tool_call = ToolCall(
+                    id=entry.get("id", f"resume_{len(deserialized)}"),
+                    name=entry.get("tool", "unknown"),
+                    args=entry.get("args", {})
+                )
+
+                observation = entry.get("observation_preview") or entry.get("observation", "")
+
+                deserialized.append(ReActIteration(
+                    iteration=entry.get("iteration", len(deserialized)),
+                    tool_call=tool_call,
+                    observation=observation,
+                    success=entry.get("success", True),
+                    thought=entry.get("thought"),
+                ))
+            except Exception as e:
+                logger.warning(f"ProjectDirector: Failed to deserialize trace entry: {e}")
+                continue
+
+        if deserialized:
+            logger.info(f"ProjectDirector: Deserialized {len(deserialized)} trace entries for resumption")
+
+        return deserialized if deserialized else None
 
     def _build_research_prompt(self, context: ProjectContext, state: dict) -> str:
         """
