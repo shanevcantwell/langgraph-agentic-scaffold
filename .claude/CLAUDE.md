@@ -76,6 +76,17 @@ State-mediated communication between specialists. Each handoff includes:
 - Full content payload
 - Never rely on implicit shared state
 
+### Facilitator Pattern (ISO-9000 Context Management)
+**Specialists don't fetch context — they receive it.** Facilitator is the single point of context assembly.
+
+- **Specialist's job:** Do work with whatever context appears in `gathered_context`
+- **Facilitator's job:** Assemble that context from wherever it lives (filesystem, artifacts, prior work traces)
+- **Separation:** Specialists are context-agnostic. They don't parse artifacts or understand state structure.
+
+This means context-related fixes (e.g., "specialist needs to see prior work") belong in **Facilitator**, not the specialist. The specialist just sees one unified context window.
+
+See ADR-ROADMAP-001 for the evolution roadmap (completion checking, structured retry, smart curation).
+
 ### GraphState with Annotated Merge
 ```python
 # Artifacts use dict merge (operator.ior)

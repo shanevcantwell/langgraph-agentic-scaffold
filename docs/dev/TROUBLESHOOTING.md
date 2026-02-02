@@ -120,7 +120,31 @@ unzip -p <archive.zip> llm_traces.jsonl | jq -r 'select(.specialist=="triage_arc
 2. Check Router's llm_trace for its final decision
 3. Check Router's prompt (includes specialist descriptions and recommendations)
 
-### 5. ReactEnabledSpecialist missing attribute error
+### 5. Exit Interview retry creates duplicate folders (context starvation)
+
+**Symptom:** Task like "categorize files" creates "Plant", "Plant_new", "AnotherPlant" instead of clean folders
+
+**Cause:** Facilitator was overwriting `gathered_context` on Exit Interview retry instead of accumulating. Specialist saw fresh/confused context, hedged with new folder names.
+
+**The Bug (Issue #96):**
+```
+project_director (partial work)
+    → Exit Interview (INCOMPLETE)
+    → Facilitator (OVERWRITES gathered_context)  ← was the bug
+    → Router
+    → project_director (confused - sees fresh context)
+```
+
+**The Fix:** Facilitator now accumulates context (`+=` not `=`). See [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) lines 113, 260-268.
+
+**If this recurs (Phase 2 needed):**
+- `gathered_context` accumulation may not be enough for complex tasks
+- ReAct loop's internal reasoning isn't preserved between invocations
+- May need `reasoning_trace` artifact from react_mixin
+
+**Related:** Issue #96, ADR-ROADMAP-001 Phase 1
+
+### 6. ReactEnabledSpecialist missing attribute error
 
 **Symptom:** `AttributeError: 'MySpecialist' object has no attribute '_serialize_for_provider'` (or `_check_stagnation`, `_trace_to_tool_result`, etc.)
 

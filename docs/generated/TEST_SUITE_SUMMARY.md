@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 70 | 594 |
-| Integration | 28 | 195 |
-| Other | 7 | 90 |
-| **Total** | **105** | **879** |
+| Unit | 69 | 598 |
+| Integration | 28 | 193 |
+| Other | 7 | 91 |
+| **Total** | **104** | **882** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -156,11 +156,11 @@
 - **`test_artifact_required_validation_missing_artifact`**
   - *Tests that specialists with required_artifacts fail gracefully when artifacts are missing.*
 - **`test_artifact_passing_simple_producer_consumer`**
-  - *Tests simple artifact passing: file_specialist → data_extractor_specialist*
+  - *Tests simple artifact passing: systems_architect → web_builder*
 - **`test_artifact_chain_three_specialists`**
   - *Tests artifact chain: systems_architect → web_builder → critic_specialist*
 - **`test_conditional_artifacts_any_of`**
-  - *Tests conditional artifact requirements (any-of pattern).*
+  - *Tests conditional artifact requirements (all-of pattern within a list).*
 - **`test_artifact_cleanup_not_leaked`**
   - *Tests that artifacts don't leak between workflow runs.*
 
@@ -200,8 +200,8 @@
   - *Prompt: "Count the files in folder X"*
 - **`test_triage_recommends_chat_for_counting`**
   - *Triage should recommend chat_specialist for counting tasks (reasoning verb).*
-- **`test_triage_recommends_file_ops_for_listing`**
-  - *Triage should recommend file_operations_specialist for listing tasks (CRUD verb).*
+- **`test_triage_recommends_project_director_for_listing`**
+  - *Triage should recommend project_director for file listing tasks.*
 
 ## `app/tests/integration/test_filesystem_mcp.py`
 
@@ -466,10 +466,6 @@
   - *Verify WebBuilder creates HTML artifact.*
 - **`test_chat_specialist_produces_response`**
   - *Verify ChatSpecialist produces conversational response.*
-- **`test_sentiment_classifier_classifies_positive`**
-  - *Verify SentimentClassifier identifies positive sentiment.*
-- **`test_sentiment_classifier_classifies_negative`**
-  - *Verify SentimentClassifier identifies negative sentiment.*
 - **`test_text_analysis_summarizes_content`**
   - *Verify TextAnalysisSpecialist summarizes text content.*
 - **`test_batch_processor_initializes`**
@@ -506,7 +502,7 @@
 - **`test_router_routes_to_expected_specialist`**
   - *Verify router routes to expected specialist(s) for given prompt.*
 - **`test_triage_architect_is_entry_point`**
-  - *Verify triage_architect is the entry point for complex requests.*
+  - *Verify triage_architect is the entry point for requests.*
 - **`test_tiered_chat_pattern_triggers_progenitors`**
   - *Verify chat_specialist triggers the tiered chat pattern with progenitors.*
 - **`test_workflow_completes_at_end_specialist`**
@@ -610,20 +606,22 @@
 
 ## `app/tests/specialists/test_batch_processor_specialist.py`
 
-- **`test_successful_batch_sort`**
-  - *Test successful batch sorting of all files.*
+- **`test_successful_batch_operations`**
+  - *Test successful batch file operations.*
 - **`test_partial_failure`**
   - *Test handling of partial failures in batch operation.*
-- **`test_missing_mcp_client`**
-  - *Test error handling when MCP client is not available.*
+- **`test_missing_external_mcp_client`**
+  - *Test error handling when external MCP client is not available.*
 - **`test_empty_messages`**
   - *Test error handling when no messages provided.*
-- **`test_llm_parse_failure`**
-  - *Test error handling when LLM cannot parse request.*
-- **`test_batch_sort_with_content_reading`**
-  - *Test batch sorting with content reading enabled.*
+- **`test_llm_returns_no_operations`**
+  - *Test error handling when LLM returns empty operation list.*
+- **`test_move_operation`**
+  - *Test move file operation.*
 - **`test_mcp_error_during_execution`**
-  - *Test graceful handling of MCP errors during file operations.*
+  - *Test graceful handling of errors during file operations.*
+- **`test_dispatcher_exception_handled`**
+  - *Test that dispatcher exceptions are caught and reported.*
 
 ## `app/tests/specialists/test_image_specialist.py`
 
@@ -909,7 +907,7 @@
 - **`test_data_extractor_handles_llm_invocation_error`**
   - *Tests that the specialist propagates LLM invocation errors.*
 - **`test_data_extractor_no_text_to_process_on_empty_string`**
-  - *Tests that the specialist self-corrects if the input text is empty or just whitespace.*
+  - *Tests that the specialist returns an error message when input text is empty or whitespace.*
 
 ## `app/tests/unit/test_data_processor_specialist.py`
 
@@ -981,6 +979,12 @@
   - *Per FACILITATOR.md: Invalid ContextPlan data returns an error.*
 - **`test_facilitator_continues_after_action_error`**
   - *Per FACILITATOR.md: Individual action failures don't halt the entire plan.*
+- **`test_facilitator_accumulates_existing_context_on_retry`**
+  - *Issue #96: Facilitator should ACCUMULATE context, not OVERWRITE.*
+- **`test_facilitator_fresh_context_when_no_existing`**
+  - *Issue #96: First pass (no existing gathered_context) should work normally.*
+- **`test_facilitator_prior_work_summary_included_in_context`**
+  - *ADR-ROADMAP-001: Facilitator summarizes research_trace artifacts for continuity.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1031,13 +1035,13 @@
 - **`test_route_to_next_specialist_normal_route`**
   - *Tests that the function returns the correct specialist name from the state.*
 - **`test_route_to_next_specialist_detects_loop`**
-  - *Tests that the function routes to END when a repeating loop is detected.*
+  - *Tests that the function routes to exit_interview when a repeating loop is detected.*
 - **`test_route_to_next_specialist_loop_not_long_enough`**
   - *Tests that a repeating pattern shorter than min_loop_len is not flagged as a loop.*
 - **`test_route_to_next_specialist_allows_non_loop`**
   - *Tests that the function does not halt for a non-looping history.*
 - **`test_route_to_next_specialist_handles_no_route`**
-  - *Tests that the function routes to END if the router fails to provide a next step.*
+  - *Tests that the function routes to exit_interview if the router fails to provide a next step.*
 - **`test_route_validation_blocks_invalid_destination`**
   - *Tests that route_to_next_specialist raises WorkflowError when router*
 - **`test_route_validation_allows_valid_destination`**
@@ -1577,8 +1581,10 @@
   - *Test that workflow terminates (END) if parallel tasks are still pending.*
 - **`test_check_task_completion_barrier_cleared`**
   - *Test that workflow proceeds to ROUTER if parallel tasks are empty.*
-- **`test_check_task_completion_explicit_complete`**
-  - *Test that explicit task completion overrides barrier (edge case).*
+- **`test_check_task_completion_explicit_complete_routes_to_exit_interview`**
+  - *Test that task_is_complete routes to exit_interview for validation (ADR-ROADMAP-001).*
+- **`test_check_task_completion_validated_by_exit_interview`**
+  - *Test that task_is_complete goes to END after exit_interview validation.*
 
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 
@@ -1629,7 +1635,7 @@
 - **`test_project_director_defines_tools`**
   - *Test that ProjectDirector defines search and browse tools.*
 - **`test_project_context_initialization`**
-  - *Test that ProjectContext is initialized from user message.*
+  - *Test that ProjectContext is initialized from user_request artifact.*
 - **`test_project_context_restoration`**
   - *Test that existing ProjectContext is restored from artifacts.*
 - **`test_research_prompt_building`**
@@ -1685,6 +1691,10 @@
   - *Test successful tool result.*
 - **`test_error_result`**
   - *Test error tool result.*
+- **`test_successful_iteration`**
+  - *Test creating a successful iteration record.*
+- **`test_failed_iteration`**
+  - *Test creating a failed iteration record.*
 - **`test_immediate_final_response_no_tools`**
   - *Test that LLM returning text (no tools) completes immediately.*
 - **`test_single_tool_call_then_final_response`**
@@ -1703,10 +1713,18 @@
   - *Test that missing llm_adapter raises ValueError.*
 - **`test_missing_mcp_client_returns_error`**
   - *Test that missing mcp_client returns error result.*
-- **`test_tool_result_appended_as_tool_message`**
-  - *Test that tool results are formatted as ToolMessage.*
+- **`test_ai_message_with_tool_calls_included_in_chain`**
+  - *ADR-CORE-055: Verify AIMessage with tool_calls is included in message chain.*
+- **`test_message_chain_order_preserved`**
+  - *ADR-CORE-055: Verify message chain maintains correct order:*
 - **`test_error_result_formatted_correctly`**
   - *Test that error results are formatted with 'Error:' prefix.*
+- **`test_empty_trace_produces_human_message_only`**
+  - *Empty trace should produce just the goal as HumanMessage.*
+- **`test_single_iteration_produces_three_messages`**
+  - *One iteration should produce: Human, AI, Tool.*
+- **`test_multiple_iterations_preserve_order`**
+  - *Multiple iterations maintain: Human, [AI, Tool]* pattern.*
 
 ## `app/tests/unit/test_research_flow.py`
 
@@ -1845,20 +1863,6 @@
   - *add_strategy can insert at specific index.*
 - **`test_duckduckgo_to_brave_fallback`**
   - *DuckDuckGo rate limit triggers Brave fallback.*
-
-## `app/tests/unit/test_sentiment_classifier_specialist.py`
-
-- **`test_sentiment_classifier_specialist_execute_success`**
-- **`test_sentiment_classifier_handles_invalid_sentiment_value`**
-  - *Tests that the specialist self-corrects if the LLM returns an invalid sentiment value.*
-- **`test_sentiment_classifier_handles_malformed_llm_response`**
-  - *Tests that the specialist self-corrects if the LLM response is malformed.*
-- **`test_sentiment_classifier_handles_llm_invocation_error`**
-  - *Tests that an LLMInvocationError is propagated.*
-- **`test_sentiment_classifier_no_human_message_to_analyze`**
-  - *Tests that the specialist does not run if no HumanMessage is available.*
-- **`test_sentiment_classifier_uses_last_human_message`**
-  - *Tests that the specialist specifically analyzes the last HumanMessage.*
 
 ## `app/tests/unit/test_smoke.py`
 

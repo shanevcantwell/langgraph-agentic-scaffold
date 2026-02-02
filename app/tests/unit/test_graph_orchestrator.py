@@ -43,7 +43,11 @@ def test_route_to_next_specialist_normal_route(orchestrator_instance):
     assert result == "file_specialist"
 
 def test_route_to_next_specialist_detects_loop(orchestrator_instance):
-    """Tests that the function routes to END when a repeating loop is detected."""
+    """Tests that the function routes to exit_interview when a repeating loop is detected.
+
+    ADR-ROADMAP-001 Phase 1: Loop detection now routes through exit_interview
+    for completion validation before terminating.
+    """
     # Configure the instance for the test
     orchestrator_instance.max_loop_cycles = 3
     orchestrator_instance.min_loop_len = 2
@@ -54,7 +58,8 @@ def test_route_to_next_specialist_detects_loop(orchestrator_instance):
         "next_specialist": "some_specialist"
     }
     result = orchestrator_instance.route_to_next_specialist(state)
-    assert result == CoreSpecialist.END.value
+    # ADR-ROADMAP-001: Routes to exit_interview for completion check before END
+    assert result == CoreSpecialist.EXIT_INTERVIEW.value
 
 def test_route_to_next_specialist_loop_not_long_enough(orchestrator_instance):
     """Tests that a repeating pattern shorter than min_loop_len is not flagged as a loop."""
@@ -82,10 +87,15 @@ def test_route_to_next_specialist_allows_non_loop(orchestrator_instance):
     assert result == "some_specialist"
 
 def test_route_to_next_specialist_handles_no_route(orchestrator_instance):
-    """Tests that the function routes to END if the router fails to provide a next step."""
+    """Tests that the function routes to exit_interview if the router fails to provide a next step.
+
+    ADR-ROADMAP-001 Phase 1: No-route cases now route through exit_interview
+    for completion validation before terminating.
+    """
     state = create_test_state(next_specialist=None, turn_count=1)
     result = orchestrator_instance.route_to_next_specialist(state)
-    assert result == CoreSpecialist.END.value
+    # ADR-ROADMAP-001: Routes to exit_interview for completion check before END
+    assert result == CoreSpecialist.EXIT_INTERVIEW.value
 
 # --- TASK 1.2: Route Validation Tests (Fail-Fast on Invalid Routes) ---
 

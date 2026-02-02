@@ -245,16 +245,26 @@ Specialists using the ReAct pattern (like `project_director`) iteratively call t
 
 ### 6.1 Max Iterations
 
-Control how many tool calls a ReAct specialist can make before being forced to synthesize:
+The global default for ReAct iterations is set in `config.yaml`:
 
 ```yaml
 # config.yaml
+react:
+  defaults:
+    max_iterations: 50  # Global default for all ReAct specialists
+```
+
+**Design rationale:** Stagnation detection (Section 6.2) is the primary safety valve, not arbitrary iteration limits. Low limits cause artificial boundaries that force complex cross-invocation continuity reconstruction. The 50-iteration default allows complex tasks to complete naturally while stagnation detection catches actual loops.
+
+Per-specialist overrides are possible but discouraged:
+
+```yaml
+# config.yaml - avoid unless truly necessary
 specialists:
-  project_director:
-    type: "llm"
+  some_specialist:
     react:
       enabled: true
-      max_iterations: 15  # Default: 15
+      max_iterations: 25  # Overrides global default
 ```
 
 If the limit is reached, the specialist produces a partial synthesis with whatever progress was made.

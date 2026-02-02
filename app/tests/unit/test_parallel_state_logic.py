@@ -62,12 +62,25 @@ def test_check_task_completion_barrier_cleared(orchestrator):
     result = orchestrator.check_task_completion(state)
     assert result == CoreSpecialist.ROUTER.value
 
-def test_check_task_completion_explicit_complete(orchestrator):
-    """Test that explicit task completion overrides barrier (edge case)."""
+def test_check_task_completion_explicit_complete_routes_to_exit_interview(orchestrator):
+    """Test that task_is_complete routes to exit_interview for validation (ADR-ROADMAP-001)."""
     state = {
         "task_is_complete": True,
         "parallel_tasks": ["task_b"],
-        "routing_history": []
+        "routing_history": ["some_specialist"]  # Not exit_interview
     }
     result = orchestrator.check_task_completion(state)
+    # ADR-ROADMAP-001: Must validate via exit_interview before END
+    assert result == CoreSpecialist.EXIT_INTERVIEW.value
+
+
+def test_check_task_completion_validated_by_exit_interview(orchestrator):
+    """Test that task_is_complete goes to END after exit_interview validation."""
+    state = {
+        "task_is_complete": True,
+        "parallel_tasks": ["task_b"],
+        "routing_history": ["some_specialist", CoreSpecialist.EXIT_INTERVIEW.value]
+    }
+    result = orchestrator.check_task_completion(state)
+    # Exit interview just ran and validated - proceed to END
     assert result == CoreSpecialist.END.value
