@@ -29,11 +29,13 @@ class SpecialistCategories:
     ])
 
     # Core infrastructure: Special graph roles
+    # ADR-ROADMAP-001: EXIT_INTERVIEW added - has special edge wiring (after_exit_interview)
     CORE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
         CoreSpecialist.CRITIC.value,
+        CoreSpecialist.EXIT_INTERVIEW.value,
     ])
 
     # Service layer: MCP-only internal services
@@ -42,11 +44,13 @@ class SpecialistCategories:
 
     # ADR-CORE-053: Triage infrastructure - always excluded from triage menus
     # These are core infrastructure specialists that should never appear in triage's recommendations
+    # ADR-ROADMAP-001: EXIT_INTERVIEW added - internal gate, not user-routable
     TRIAGE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
         CoreSpecialist.CRITIC.value,
+        CoreSpecialist.EXIT_INTERVIEW.value,
     ])
 
     @classmethod

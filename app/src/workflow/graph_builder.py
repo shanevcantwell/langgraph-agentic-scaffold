@@ -724,11 +724,38 @@ class GraphBuilder:
 
         excluded_specialists = SpecialistCategories.get_hub_spoke_exclusions(subgraph_exclusions)
 
+        # ADR-ROADMAP-001: Build destinations dict for check_task_completion
+        # Include exit_interview_specialist if it exists (routes through validation gate)
+        check_completion_destinations = {
+            CoreSpecialist.END.value: CoreSpecialist.END.value,
+            router_name: router_name
+        }
+        if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+            check_completion_destinations[CoreSpecialist.EXIT_INTERVIEW.value] = CoreSpecialist.EXIT_INTERVIEW.value
+
         for name in self.specialists:
             if name in excluded_specialists:
                 continue
 
-            workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, {CoreSpecialist.END.value: CoreSpecialist.END.value, router_name: router_name})
+            workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, check_completion_destinations)
+
+        # ADR-ROADMAP-001 Phase 1: Exit Interview gates the END node
+        # ExitInterviewSpecialist validates task completion before allowing termination
+        if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+            exit_interview_name = CoreSpecialist.EXIT_INTERVIEW.value
+            # Build destinations dict - include facilitator if present for context refresh on retry
+            exit_interview_destinations = {
+                CoreSpecialist.END.value: CoreSpecialist.END.value,
+                router_name: router_name
+            }
+            if "facilitator_specialist" in self.specialists:
+                exit_interview_destinations["facilitator_specialist"] = "facilitator_specialist"
+            workflow.add_conditional_edges(
+                exit_interview_name,
+                self.orchestrator.after_exit_interview,
+                exit_interview_destinations
+            )
+            logger.info(f"Graph Edge: Added Exit Interview conditional edges (→ END, → Router, or → Facilitator)")
 
         if CoreSpecialist.END.value in self.specialists:
             workflow.add_edge(CoreSpecialist.END.value, END)

@@ -125,11 +125,22 @@ class GraphOrchestrator:
 
     def check_task_completion(self, state: GraphState) -> str:
         if state.get("task_is_complete"):
-            logger.info(f"--- GraphOrchestrator: Task completion signal received. Routing to {CoreSpecialist.END.value}. ---")
-            return CoreSpecialist.END.value
+            # ADR-ROADMAP-001: Gate task_is_complete through exit_interview
+            # Only allow direct END if exit_interview just validated it
+            routing_history = state.get("routing_history", [])
+            if routing_history and routing_history[-1] == CoreSpecialist.EXIT_INTERVIEW.value:
+                # Exit interview validated - proceed to END
+                logger.info(f"--- GraphOrchestrator: Task validated by exit_interview. Routing to {CoreSpecialist.END.value}. ---")
+                return CoreSpecialist.END.value
+            else:
+                # Specialist claimed complete - validate via exit_interview first
+                logger.info(f"--- GraphOrchestrator: task_is_complete set by specialist. Routing to exit_interview for validation. ---")
+                return CoreSpecialist.EXIT_INTERVIEW.value
 
         if self._is_unproductive_loop(state):
-            return CoreSpecialist.END.value
+            # ADR-ROADMAP-001: Route loops through exit_interview for validation
+            logger.info("Unproductive loop in check_task_completion - routing to exit_interview")
+            return CoreSpecialist.EXIT_INTERVIEW.value
 
         # TASK 3.3: Result Aggregation (Barrier Logic)
         # Check if there are still active parallel tasks.
@@ -188,13 +199,24 @@ class GraphOrchestrator:
         turn_count = state.get("turn_count", 0)
         logger.info(f"--- GraphOrchestrator: Routing from Router (Turn: {turn_count}) ---")
 
+        # ADR-ROADMAP-001 Phase 1: Route through exit_interview for completion validation
+        # instead of going directly to END on safety triggers
         if self._is_unproductive_loop(state):
-            return CoreSpecialist.END.value
+            logger.info("Unproductive loop detected - routing to exit_interview for validation")
+            return CoreSpecialist.EXIT_INTERVIEW.value
 
         next_specialist = state.get("next_specialist")
         if not next_specialist:
-            logger.error("Routing Error: Router failed to select a next step. Halting.")
-            return CoreSpecialist.END.value
+            logger.error("Routing Error: Router failed to select a next step.")
+            logger.info("Routing to exit_interview for completion check before END")
+            return CoreSpecialist.EXIT_INTERVIEW.value
+
+        # ADR-ROADMAP-001 Phase 1: Intercept explicit END decisions
+        # Gate through exit_interview to validate task completion
+        from langgraph.graph import END as LANGGRAPH_END
+        if next_specialist == LANGGRAPH_END or next_specialist == CoreSpecialist.END.value:
+            logger.info("Router requested END - routing through exit_interview for validation")
+            return CoreSpecialist.EXIT_INTERVIEW.value
 
         # TASK 1.2: Validate route before execution (fail-fast on invalid routes)
         # TASK 3.1: Support parallel routing (list of specialists)
@@ -342,5 +364,34 @@ class GraphOrchestrator:
         artifacts = state.get("artifacts", {})
         if artifacts.get("project_context"):
             return "project_director"
-        
+
+        return CoreSpecialist.ROUTER.value
+
+    def after_exit_interview(self, state: GraphState) -> str:
+        """
+        ADR-ROADMAP-001 Phase 1: Decides next step after ExitInterviewSpecialist.
+
+        ExitInterviewSpecialist validates if the task is truly complete:
+        - If complete: Sets task_is_complete=True → route to END
+        - If incomplete: Route through Facilitator to refresh gathered_context
+
+        This gates premature termination by validating accumulated state
+        satisfies the original user request.
+
+        When incomplete, we route through Facilitator (not directly to Router) so that
+        gathered_context is refreshed with current filesystem state. This prevents
+        thrashing where specialists see stale context and repeat their work.
+        """
+        if state.get("task_is_complete"):
+            logger.info("--- Exit Interview: Task validated as COMPLETE. Routing to END. ---")
+            return CoreSpecialist.END.value
+
+        # Task incomplete - route through Facilitator to refresh context before retry
+        # Facilitator re-executes context_plan, updating gathered_context with current state
+        if "facilitator_specialist" in self.specialists:
+            logger.info("--- Exit Interview: Task INCOMPLETE. Routing to Facilitator to refresh context. ---")
+            return "facilitator_specialist"
+
+        # Fallback if no facilitator (shouldn't happen in normal config)
+        logger.info("--- Exit Interview: Task INCOMPLETE. Routing back to Router. ---")
         return CoreSpecialist.ROUTER.value

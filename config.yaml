@@ -50,7 +50,10 @@ workflow:
 # ==============================================================================
 react:
   defaults:
-    max_iterations: 10
+    # ADR-ROADMAP-001: Raised from 10 to 50. Stagnation detection (cycle detection)
+    # is the primary safety valve - arbitrary iteration limits cause artificial
+    # boundaries that require cross-invocation continuity reconstruction.
+    max_iterations: 50
     stop_on_error: false
 
 # ==============================================================================
@@ -416,6 +419,17 @@ specialists:
   # - File operations: filesystem MCP container
   # - Code execution: specific MCP services as needed
   # BENEFIT: Removes litellm and 45+ transitive dependencies
+
+  # --- Termination & Completion (ADR-ROADMAP-001) ---
+  exit_interview_specialist:
+    type: "llm"
+    prompt_file: "exit_interview_prompt.md"
+    description: "Gates the END node by validating task completion. Evaluates whether accumulated state satisfies the user's original request before allowing termination."
+    # ADR-ROADMAP-001 Phase 1: LLM-backed completion check
+    # Not user-routable - invoked automatically when Router decides END
+    excluded_from:
+      - triage_architect
+      - router_specialist
 
   end_specialist:
     type: "hybrid"

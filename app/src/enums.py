@@ -21,3 +21,4 @@ class CoreSpecialist(str, Enum):
     DIALOGUE = "dialogue_specialist"  # ADR-CORE-018: HitL clarification
     WEB = "web_specialist" # Deep Research Primitive
     TRIBE_CONDUCTOR = "tribe_conductor" # ADR-CORE-023: Convening Orchestrator
+    EXIT_INTERVIEW = "exit_interview_specialist"  # ADR-ROADMAP-001: Phase 1 completion gate
