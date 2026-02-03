@@ -54,10 +54,135 @@ def generate_report(report_data: ErrorReport) -> str:
     ]
     return "\n\n".join(report_parts)
 
+def _format_research_trace(trace: list, trace_name: str) -> str:
+    """Format a research_trace_N artifact as a readable tool call log."""
+    if not trace or not isinstance(trace, list):
+        return f"```\n{trace}\n```"
+
+    lines = [f"**{len(trace)} tool calls:**\n"]
+    for i, entry in enumerate(trace):
+        if not isinstance(entry, dict):
+            lines.append(f"{i+1}. `{entry}`")
+            continue
+
+        iteration = entry.get("iteration", "?")
+        tool = entry.get("tool", "unknown")
+        args = entry.get("args", {})
+        result = entry.get("result", "")
+
+        # Summarize args (show key info only)
+        if isinstance(args, dict):
+            args_summary = ", ".join(f"{k}={repr(v)[:50]}" for k, v in list(args.items())[:3])
+            if len(args) > 3:
+                args_summary += ", ..."
+        else:
+            args_summary = str(args)[:80]
+
+        # Truncate result for display
+        result_preview = str(result)[:100].replace('\n', ' ')
+        if len(str(result)) > 100:
+            result_preview += "..."
+
+        lines.append(f"{i+1}. **[iter {iteration}]** `{tool}({args_summary})`")
+        if result_preview:
+            lines.append(f"   → {result_preview}")
+
+    return "\n".join(lines)
+
+
+def _format_exit_interview_result(result: dict) -> str:
+    """Format exit_interview_result as structured fields."""
+    if not isinstance(result, dict):
+        return f"```\n{result}\n```"
+
+    is_complete = result.get("is_complete", "?")
+    reasoning = result.get("reasoning", "")
+    missing = result.get("missing_elements", "")
+    recommended = result.get("recommended_specialists", [])
+    method = result.get("method", "")
+    return_control = result.get("return_control", "")
+
+    status = "✅ COMPLETE" if is_complete else "❌ INCOMPLETE"
+    lines = [f"**Status:** {status}"]
+    if method:
+        lines.append(f"**Method:** {method}")
+    if reasoning:
+        lines.append(f"**Reasoning:** {reasoning}")
+    if missing:
+        lines.append(f"**Missing:** {missing}")
+    if recommended:
+        lines.append(f"**Recommended specialists:** {', '.join(recommended)}")
+    if return_control:
+        lines.append(f"**Return control mode:** {return_control}")
+
+    return "\n".join(lines)
+
+
+def _format_project_context(ctx: dict) -> str:
+    """Format project_context artifact as structured fields."""
+    if not isinstance(ctx, dict):
+        return f"```\n{ctx}\n```"
+
+    state = ctx.get("state", "?")
+    summary = ctx.get("summary", "")
+    next_steps = ctx.get("next_steps", [])
+
+    lines = [f"**State:** `{state}`"]
+    if summary:
+        lines.append(f"**Summary:** {summary}")
+    if next_steps:
+        lines.append("**Next steps:**")
+        for step in next_steps[:5]:  # Limit to 5
+            lines.append(f"  - {step}")
+        if len(next_steps) > 5:
+            lines.append(f"  - ... and {len(next_steps) - 5} more")
+
+    return "\n".join(lines)
+
+
+def _format_artifact(key: str, value) -> str:
+    """
+    Intelligently format an artifact based on its type and key.
+    Returns formatted markdown string.
+    """
+    # research_trace_N - format as tool call log
+    if key.startswith("research_trace_") and isinstance(value, list):
+        return _format_research_trace(value, key)
+
+    # exit_interview_result - format as structured fields
+    if key == "exit_interview_result" and isinstance(value, dict):
+        return _format_exit_interview_result(value)
+
+    # project_context - format as structured fields
+    if key == "project_context" and isinstance(value, dict):
+        return _format_project_context(value)
+
+    # context_plan - pretty JSON
+    if key == "context_plan" and isinstance(value, dict):
+        return f"```json\n{json.dumps(value, indent=2, default=str)}\n```"
+
+    # system_plan - pretty JSON
+    if key == "system_plan" and isinstance(value, dict):
+        return f"```json\n{json.dumps(value, indent=2, default=str)}\n```"
+
+    # Other dicts/lists - pretty JSON with size limit
+    if isinstance(value, (dict, list)):
+        json_str = json.dumps(value, indent=2, default=str)
+        if len(json_str) > 2000:
+            json_str = json_str[:2000] + "\n... (truncated)"
+        return f"```json\n{json_str}\n```"
+
+    # Strings - as-is (with reasonable limit)
+    content_str = str(value)
+    if len(content_str) > 5000:
+        content_str = content_str[:5000] + "\n... (truncated)"
+    return f"```\n{content_str}\n```"
+
+
 def generate_success_report(report_data: SuccessReport) -> str:
     """
     Takes a SuccessReport Pydantic model and formats it into a shareable
-    Markdown string.
+    Markdown string with intelligently formatted artifacts.
     """
     # Create a formatted string for artifacts, handling different types.
     artifacts_str = ""
@@ -66,7 +191,7 @@ def generate_success_report(report_data: SuccessReport) -> str:
             # Skip the final response artifact as it's displayed prominently elsewhere.
             if key == "final_user_response.md":
                 continue
-            
+
             # Handle Images
             if key.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) or (isinstance(value, str) and value.startswith('data:image')):
                 # If it's a base64 string without the prefix, add it (assuming png for simplicity if unknown)
@@ -87,10 +212,10 @@ def generate_success_report(report_data: SuccessReport) -> str:
                 artifacts_str += f"### 📦 {key}\n\n[📥 Download Archive: {filename}]({download_url})\n\n"
                 continue
 
-            # Send full content - UI handles scrolling
-            # Note: No HTML escaping needed - markdown code fences handle content literally
-            content_str = str(value)
-            artifacts_str += f"### 📄 {key}\n\n```\n{content_str}\n```\n\n"
+            # Use intelligent formatting for all other artifacts
+            formatted = _format_artifact(key, value)
+            artifacts_str += f"### 📄 {key}\n\n{formatted}\n\n"
+
     if not artifacts_str:
         artifacts_str = "No additional artifacts were generated."
 
