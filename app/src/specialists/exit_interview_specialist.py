@@ -89,6 +89,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     "messages": [AIMessage(content=f"[Exit Interview] Task verified complete: {heuristic_result.reasoning}")],
                     "task_is_complete": True,
                     "artifacts": {
+                        "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
                         "exit_interview_result": {
                             "is_complete": True,
                             "reasoning": heuristic_result.reasoning,
@@ -109,6 +110,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     "messages": [AIMessage(content=guidance_msg)],
                     "task_is_complete": False,
                     "artifacts": {
+                        "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
                         "exit_interview_result": {
                             "is_complete": False,
                             "reasoning": heuristic_result.reasoning,
@@ -174,6 +176,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 "messages": [AIMessage(content=f"[Exit Interview] Task verified complete: {evaluation.reasoning}")],
                 "task_is_complete": True,
                 "artifacts": {
+                    "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
                     "exit_interview_result": {
                         "is_complete": True,
                         "reasoning": evaluation.reasoning
@@ -204,6 +207,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 # this would leave the stale True value from a prior specialist.
                 "task_is_complete": False,
                 "artifacts": {
+                    "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
                     "exit_interview_result": {
                         "is_complete": False,
                         "reasoning": evaluation.reasoning,
