@@ -211,12 +211,11 @@ class GraphOrchestrator:
             logger.info("Routing to exit_interview for completion check before END")
             return CoreSpecialist.EXIT_INTERVIEW.value
 
-        # ADR-ROADMAP-001 Phase 1: Intercept explicit END decisions
-        # Gate through exit_interview to validate task completion
-        from langgraph.graph import END as LANGGRAPH_END
-        if next_specialist == LANGGRAPH_END or next_specialist == CoreSpecialist.END.value:
-            logger.info("Router requested END - routing through exit_interview for validation")
-            return CoreSpecialist.EXIT_INTERVIEW.value
+        # ADR-CORE-061: Kludge REMOVED
+        # The old intercept (lines 214-219) that redirected END → Exit Interview
+        # has been replaced by classify_interrupt() wired into the graph.
+        # Non-terminal specialists now route through classify_interrupt which
+        # handles completion checking properly.
 
         # TASK 1.2: Validate route before execution (fail-fast on invalid routes)
         # TASK 3.1: Support parallel routing (list of specialists)

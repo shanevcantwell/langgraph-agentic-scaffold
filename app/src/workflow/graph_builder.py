@@ -618,8 +618,15 @@ class GraphBuilder:
 
         excluded_specialists = SpecialistCategories.get_hub_spoke_exclusions(subgraph_exclusions)
 
-        # ADR-ROADMAP-001: Build destinations dict for check_task_completion
-        # Include exit_interview_specialist if it exists (routes through validation gate)
+        # ADR-CORE-061: Terminal specialists that legitimately signal completion
+        # These use check_task_completion (keep existing behavior)
+        terminal_specialists = {
+            "chat_specialist",
+            "default_responder_specialist",
+            "tiered_synthesizer_specialist",
+        }
+
+        # ADR-CORE-061: Build destinations for check_task_completion (terminal specialists)
         check_completion_destinations = {
             CoreSpecialist.END.value: CoreSpecialist.END.value,
             router_name: router_name
@@ -627,11 +634,37 @@ class GraphBuilder:
         if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
             check_completion_destinations[CoreSpecialist.EXIT_INTERVIEW.value] = CoreSpecialist.EXIT_INTERVIEW.value
 
+        # ADR-CORE-061: Build destinations for classify_interrupt (non-terminal specialists)
+        # Interrupt Classifier routes to: Exit Interview, Router, Facilitator, or End
+        classify_interrupt_destinations = {
+            CoreSpecialist.EXIT_INTERVIEW.value: CoreSpecialist.EXIT_INTERVIEW.value,
+            CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
+            CoreSpecialist.END.value: CoreSpecialist.END.value,
+        }
+        if "facilitator_specialist" in self.specialists:
+            classify_interrupt_destinations["facilitator_specialist"] = "facilitator_specialist"
+        # Interrupt Evaluator destination (for pathological interrupts)
+        if "interrupt_evaluator_specialist" in self.specialists:
+            classify_interrupt_destinations["interrupt_evaluator_specialist"] = "interrupt_evaluator_specialist"
+
         for name in self.specialists:
             if name in excluded_specialists:
                 continue
 
-            workflow.add_conditional_edges(name, self.orchestrator.check_task_completion, check_completion_destinations)
+            # ADR-CORE-061: Terminal specialists use check_task_completion
+            # Non-terminal specialists use classify_interrupt
+            if name in terminal_specialists:
+                workflow.add_conditional_edges(
+                    name,
+                    self.orchestrator.check_task_completion,
+                    check_completion_destinations
+                )
+            else:
+                workflow.add_conditional_edges(
+                    name,
+                    self.orchestrator.classify_interrupt,
+                    classify_interrupt_destinations
+                )
 
         # ADR-ROADMAP-001 Phase 1: Exit Interview gates the END node
         # ExitInterviewSpecialist validates task completion before allowing termination
