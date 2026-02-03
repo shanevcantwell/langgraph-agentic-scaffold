@@ -16,6 +16,7 @@ from ._exit_interview import (
     EXIT_INTERVIEW_ARTIFACTS,
     ARTIFACT_FORMATTERS,
     get_presentable_artifact,
+    ReturnControlMode,
 )
 
 __all__ = [

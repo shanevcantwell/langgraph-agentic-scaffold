@@ -28,6 +28,14 @@ Mark as **INCOMPLETE** if:
 3. **Consider the routing history**: If no meaningful specialists have run, it's likely incomplete.
 4. **Don't require perfection**: A good-enough response is still complete.
 
+## Return Control (for INCOMPLETE tasks)
+
+When marking as **INCOMPLETE**, determine how the Facilitator should handle the retry:
+
+- `accumulate` (Default): Use for incremental progress. Requires keeping previous context (e.g., "created 3 of 5 files").
+- `delta`: Use when specific information is missing (e.g., "needs contents of file B"). Facilitator will generate a focused plan for just these items.
+- `reset`: Use ONLY if the context is polluted, confusing, or the agent is stuck in a loop due to bad context. Clears gathered context.
+
 ## Response Format
 
 Respond with a JSON object containing:
@@ -35,6 +43,7 @@ Respond with a JSON object containing:
 - `reasoning`: string - brief explanation of your evaluation (1-2 sentences)
 - `missing_elements`: string - what's still needed if incomplete (empty string if complete)
 - `recommended_specialists`: list of strings - which specialist(s) should handle the missing work (empty list if complete)
+- `return_control`: string - "accumulate", "delta", or "reset" (default "accumulate")
 
 ## Specialist Capabilities (for recommended_specialists)
 

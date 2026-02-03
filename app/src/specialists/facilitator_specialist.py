@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, Optional, List
 from .base import BaseSpecialist
+from .schemas import ReturnControlMode
 from ..interface.context_schema import ContextPlan, ContextActionType
 from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
 from ..utils.prompt_loader import load_prompt
@@ -122,14 +123,35 @@ class FacilitatorSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
-        # Issue #96: Preserve existing gathered_context for accumulation on Exit Interview retry
-        existing_context = artifacts.get("gathered_context", "")
-        context_plan_data = artifacts.get("context_plan")
         
+        # Determine Return Control Mode (Issue #96 / ADR-ROADMAP-001)
+        exit_interview_result = artifacts.get("exit_interview_result")
+        return_control = ReturnControlMode.ACCUMULATE # Default
+        
+        if exit_interview_result:
+             mode_str = exit_interview_result.get("return_control", "accumulate")
+             try:
+                 return_control = ReturnControlMode(mode_str)
+             except ValueError:
+                 logger.warning(f"Facilitator: Unknown return_control '{mode_str}', defaulting to ACCUMULATE")
+
+        logger.info(f"Facilitator: executing with mode {return_control.value}")
+
+        # Handle Context Cleanup (RESET mode)
+        existing_context = artifacts.get("gathered_context", "")
+        if return_control == ReturnControlMode.RESET:
+            logger.info("Facilitator: RESET mode - clearing gathered_context")
+            existing_context = ""
+
+        # DELTA mode not yet implemented (requires LLM capability) - fall back to ACCUMULATE
+        if return_control == ReturnControlMode.DELTA:
+            logger.warning("Facilitator: DELTA mode requested but not implemented, using ACCUMULATE")
+
+        # Load original plan
+        context_plan_data = artifacts.get("context_plan")
         if not context_plan_data:
             logger.warning("Facilitator: No 'context_plan' artifact found.")
             return {"error": "No context plan to execute."}
-            
         try:
             context_plan = ContextPlan(**context_plan_data)
         except Exception as e:
@@ -140,7 +162,6 @@ class FacilitatorSpecialist(BaseSpecialist):
         logger.info(f"Facilitator: Executing plan with {len(context_plan.actions)} actions.")
 
         # Issue #100: Surface Exit Interview feedback for better routing decisions
-        exit_interview_result = artifacts.get("exit_interview_result")
         if exit_interview_result and not exit_interview_result.get("is_complete"):
             feedback = self._format_exit_interview_feedback(exit_interview_result)
             gathered_context.append(feedback)
@@ -272,9 +293,22 @@ class FacilitatorSpecialist(BaseSpecialist):
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")
 
         # ADR-CORE-059: Assemble resume trace for ReAct loop continuation (Memento fix)
-        # Instead of summarizing prior work in gathered_context (prompt engineering),
-        # we give the specialist its actual trace to resume from (context engineering).
-        resume_trace = self._assemble_resume_trace(artifacts)
+        # However, we must generally AVOID this during Exit Interview retries (Issue #96/101),
+        # because "resuming" a state where the agent thought it was done just makes it think it's done again.
+        # Retry loops should be "fresh attempts with feedback", not "continuations of efficient failure".
+        resume_trace = None
+        
+        # Only use resume_trace if we are NOT driven by an Exit Interview rejection,
+        # OR if we are explicitly told to ACCUMULATE (and it wasn't a logic error).
+        # But for now, safe default: if missing elements identified, start fresh.
+        if not exit_interview_result:
+            resume_trace = self._assemble_resume_trace(artifacts)
+        elif return_control == ReturnControlMode.ACCUMULATE and artifacts.get("max_iterations_exceeded"):
+            # Exception: If we stopped because we ran out of steps (not logic error), DO resume
+            resume_trace = self._assemble_resume_trace(artifacts)
+            logger.info("Facilitator: Resuming trace because failure was due to iteration limit")
+        else:
+            logger.info("Facilitator: Skipping resume_trace assembly to force fresh attempt (Exit Interview retry)")
 
         # Assemble final payload - Issue #96: ACCUMULATE existing + new context
         new_context = "\n\n".join(gathered_context)

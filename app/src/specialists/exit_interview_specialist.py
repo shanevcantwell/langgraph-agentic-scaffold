@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
+from .schemas import ReturnControlMode
 from ..llm.adapter import StandardizedLLMRequest
 from ..utils.prompt_loader import load_prompt
 
@@ -35,6 +36,15 @@ class CompletionEvaluation(BaseModel):
     recommended_specialists: List[str] = Field(
         default_factory=list,
         description="Which specialist(s) should handle the missing work (e.g., ['project_director'] for file operations)"
+    )
+    return_control: ReturnControlMode = Field(
+        default=ReturnControlMode.ACCUMULATE,
+        description=(
+            "How the Facilitator should handle context on retry: "
+            "'accumulate' (default) to append new work to history, "
+            "'reset' to clear context and start over (if polluted), "
+            "'delta' to run a NEW plan for just the missing elements"
+        )
     )
 
 
@@ -102,7 +112,8 @@ class ExitInterviewSpecialist(BaseSpecialist):
                             "reasoning": heuristic_result.reasoning,
                             "missing_elements": heuristic_result.missing_elements,
                             "recommended_specialists": recommended,
-                            "method": "heuristic"
+                            "method": "heuristic",
+                            "return_control": heuristic_result.return_control.value
                         }
                     },
                     "scratchpad": {
@@ -195,7 +206,8 @@ class ExitInterviewSpecialist(BaseSpecialist):
                         "is_complete": False,
                         "reasoning": evaluation.reasoning,
                         "missing_elements": evaluation.missing_elements,
-                        "recommended_specialists": recommended
+                        "recommended_specialists": recommended,
+                        "return_control": evaluation.return_control.value
                     }
                 },
                 "scratchpad": {

@@ -9,7 +9,18 @@ This is a schema-driven approach that replaces hardcoded artifact checks.
 Specialists that produce user-facing output register their artifacts here.
 """
 from typing import Dict, Any, Callable, Optional, Literal
+from enum import Enum
 from pydantic import BaseModel, Field
+
+
+class ReturnControlMode(str, Enum):
+    """
+    Control modes for how the Facilitator handles context and planning when retrying.
+    (Added for ADR-ROADMAP-001 Exit Interview enhancements)
+    """
+    ACCUMULATE = "accumulate"  # Default: Keep old context, re-run old plan (good for transient errors)
+    RESET = "reset"            # Clear old context, re-run old plan (good for stale/polluted context)
+    DELTA = "delta"            # Keep old context, run NEW plan for missing items (good for "missing file B")
 
 
 class ExitInterviewArtifactConfig(BaseModel):
