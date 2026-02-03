@@ -289,3 +289,79 @@ class TestHeuristicsIntegration:
         assert result["task_is_complete"] is True
         # Method should NOT be "heuristic" since LLM was used
         assert result["artifacts"]["exit_interview_result"].get("method") != "heuristic"
+
+
+# =============================================================================
+# ADR-CORE-061: Exit Interview Purity (Post-Refactor)
+# =============================================================================
+
+class TestExitInterviewPurity:
+    """
+    Tests asserting Exit Interview is a PURE LLM semantic completion evaluator
+    after ADR-CORE-061 refactor.
+
+    These tests WILL FAIL until heuristics are extracted to Interrupt Classifier.
+
+    The principle: Exit Interview answers ONE question: "Is the task done?"
+    It should NOT contain infrastructure concerns like:
+    - max_iterations_exceeded (arbitrary limit, not semantic)
+    - trace stutter detection (health concern, not completion)
+    - unrecovered failure detection (infrastructure, not semantic)
+
+    All of those belong in Interrupt Classifier (procedural) or
+    Interrupt Evaluator (LLM judgment on recoverability).
+    """
+
+    def test_exit_interview_has_no_check_heuristics_method(self):
+        """
+        ADR-CORE-061: _check_heuristics() belongs in Interrupt Classifier.
+
+        Exit Interview should not have heuristic checking - it's a pure
+        LLM evaluator. Heuristics are infrastructure concerns that should
+        be handled before Exit Interview even sees the state.
+        """
+        assert not hasattr(ExitInterviewSpecialist, '_check_heuristics'), \
+            "Exit Interview should not have _check_heuristics after ADR-CORE-061 refactor"
+
+    def test_exit_interview_has_no_evaluate_trace_heuristics_method(self):
+        """
+        ADR-CORE-061: _evaluate_trace_heuristics() belongs in Interrupt Classifier.
+
+        Trace inspection for failures is an infrastructure concern, not
+        semantic completion evaluation.
+        """
+        assert not hasattr(ExitInterviewSpecialist, '_evaluate_trace_heuristics'), \
+            "Exit Interview should not have _evaluate_trace_heuristics after ADR-CORE-061 refactor"
+
+    def test_exit_interview_has_no_stutter_detection(self):
+        """
+        ADR-CORE-061: Stutter detection belongs in Interrupt Classifier.
+
+        Detecting trace drift/stutter (via semantic-chunker MCP) is a
+        health concern about whether the model is making progress, not
+        a semantic question about task completion.
+        """
+        assert not hasattr(ExitInterviewSpecialist, '_detect_trace_stutter'), \
+            "Stutter detection belongs in Interrupt Classifier, not Exit Interview"
+
+    def test_exit_interview_only_evaluates_completion(self, exit_interview):
+        """
+        ADR-CORE-061: Exit Interview should ONLY have _evaluate_completion.
+
+        After refactor, Exit Interview is a pure LLM semantic evaluator.
+        The only evaluation method should be _evaluate_completion().
+        """
+        # Should have the LLM evaluation method
+        assert hasattr(exit_interview, '_evaluate_completion'), \
+            "Exit Interview must have _evaluate_completion for LLM semantic evaluation"
+
+        # Should NOT have any heuristic methods
+        heuristic_methods = [
+            '_check_heuristics',
+            '_evaluate_trace_heuristics',
+            '_detect_trace_stutter',
+            '_detect_unrecovered_failures',
+        ]
+        for method in heuristic_methods:
+            assert not hasattr(exit_interview, method), \
+                f"Exit Interview should not have {method} - belongs in Interrupt Classifier"
