@@ -90,7 +90,9 @@ await external_client.disconnect_all()
 | Service | Container | Purpose |
 |---------|-----------|---------|
 | `navigator` | surf-mcp | Browser automation with Fara visual grounding |
-| `filesystem` | @modelcontextprotocol/server-filesystem | (Proposed) Official MCP filesystem |
+| `filesystem` | @modelcontextprotocol/server-filesystem | File operations (directory_tree, read_file, etc.) |
+| `terminal` | terminal-mcp | Sandboxed shell commands (allowlist-based) |
+| `semantic-chunker` | semantic-chunker-mcp | Embedding tools for semantic analysis (calculate_drift, etc.) |
 
 ---
 

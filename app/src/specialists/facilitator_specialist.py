@@ -303,12 +303,12 @@ class FacilitatorSpecialist(BaseSpecialist):
         # But for now, safe default: if missing elements identified, start fresh.
         if not exit_interview_result:
             resume_trace = self._assemble_resume_trace(artifacts)
-        elif return_control == ReturnControlMode.ACCUMULATE and artifacts.get("max_iterations_exceeded"):
-            # Exception: If we stopped because we ran out of steps (not logic error), DO resume
+        elif return_control == ReturnControlMode.ACCUMULATE:
+            # ACCUMULATE mode always passes trace (stutter detection, max_iterations, etc.)
             resume_trace = self._assemble_resume_trace(artifacts)
-            logger.info("Facilitator: Resuming trace because failure was due to iteration limit")
+            logger.info("Facilitator: Resuming trace (ACCUMULATE mode)")
         else:
-            logger.info("Facilitator: Skipping resume_trace assembly to force fresh attempt (Exit Interview retry)")
+            logger.info("Facilitator: Skipping resume_trace assembly (RESET mode or fresh attempt)")
 
         # Assemble final payload - Issue #96: ACCUMULATE existing + new context
         new_context = "\n\n".join(gathered_context)

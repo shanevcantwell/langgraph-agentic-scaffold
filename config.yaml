@@ -110,6 +110,17 @@ mcp:
         args: ["exec", "-i", "terminal-mcp", "python", "-u", "/app/terminal_mcp_server.py"]
         timeout_ms: 30000
 
+      # Semantic Chunker MCP - Embedding tools for semantic analysis
+      # Provides: calculate_drift, analyze_variants, embed_text
+      # Used by Exit Interview for trace stutter detection (ADR-ROADMAP-001)
+      # Infrastructure defined in docker-compose.yml (profile: semantic-chunker)
+      semantic-chunker:
+        enabled: true
+        required: false  # Graceful degradation - stutter detection becomes no-op
+        command: "docker"
+        args: ["exec", "-i", "semantic-chunker-mcp", "semantic-chunker-mcp"]
+        timeout_ms: 30000
+
 # ==============================================================================
 # SPECIALIST CONFIGURATION
 # ==============================================================================
@@ -430,6 +441,11 @@ specialists:
     excluded_from:
       - triage_architect
       - router_specialist
+    # ADR-ROADMAP-001: Semantic-chunker access for trace stutter detection
+    # Uses calculate_drift to compare consecutive traces and detect repeated operations
+    tools:
+      semantic-chunker:
+        - calculate_drift
 
   end_specialist:
     type: "hybrid"

@@ -143,3 +143,23 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  # semantic-chunker-mcp - Embedding tools for semantic analysis
+  # Provides: calculate_drift, analyze_variants, embed_text
+  # Used by Exit Interview for trace stutter detection
+  # Optional service - use: docker-compose --profile semantic-chunker up
+  semantic-chunker:
+    profiles: ["semantic-chunker"]  # Only starts with --profile semantic-chunker
+    container_name: semantic-chunker-mcp
+    build:
+      context: ../semantic-chunker  # Sibling project
+    stdin_open: true  # Required for MCP stdio transport
+    tty: true
+    environment:
+      # LMStudio embedding server (v0.1.1: EMBEDDING_BACKEND selects adapter)
+      - EMBEDDING_BACKEND=lmstudio
+      - EMBEDDING_SERVER_URL=${EMBEDDING_SERVER_URL}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

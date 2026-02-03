@@ -12,14 +12,16 @@ Flow:
 Uses InferenceService (via MCP or direct call) for LLM-backed completion evaluation.
 """
 
+import json
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
 from .schemas import ReturnControlMode
 from ..llm.adapter import StandardizedLLMRequest
+from ..mcp import sync_call_external_mcp
 from ..utils.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -285,9 +287,87 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     recommended_specialists=["project_director"]
                 )
 
+        # Check for trace stutter (repeated operations across invocations)
+        stutter_result = self._detect_trace_stutter(artifacts)
+        if stutter_result:
+            return stutter_result
+
         # No obvious failures detected, defer to LLM evaluation
         logger.debug("ExitInterview heuristic: trace looks clean, deferring to LLM")
         return None
+
+    def _detect_trace_stutter(self, artifacts: dict) -> Optional[CompletionEvaluation]:
+        """
+        Detect trace stutter using semantic similarity.
+
+        Compares the last two research_trace artifacts to identify when the agent
+        is repeating the same operations across invocations without making progress.
+        Uses semantic-chunker MCP's calculate_drift tool for comparison.
+
+        Returns:
+            CompletionEvaluation with ACCUMULATE mode if stutter detected, None otherwise.
+            Returns None (graceful degradation) if semantic-chunker unavailable.
+        """
+        # Find all research_trace artifacts (sorted by number)
+        trace_keys = sorted([k for k in artifacts if k.startswith("research_trace_")])
+
+        if len(trace_keys) < 2:
+            # Need at least 2 traces to compare
+            return None
+
+        # Check if external_mcp_client is available (injected by GraphBuilder if tools: configured)
+        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+            logger.debug("ExitInterview: No external_mcp_client - skipping stutter detection")
+            return None
+
+        # Get the last two traces
+        trace_n_key = trace_keys[-1]
+        trace_prev_key = trace_keys[-2]
+
+        trace_n = artifacts.get(trace_n_key, [])
+        trace_prev = artifacts.get(trace_prev_key, [])
+
+        # Serialize traces for comparison (sort keys for determinism)
+        try:
+            trace_n_str = json.dumps(trace_n, sort_keys=True)
+            trace_prev_str = json.dumps(trace_prev, sort_keys=True)
+        except (TypeError, ValueError) as e:
+            logger.warning(f"ExitInterview: Failed to serialize traces for stutter detection: {e}")
+            return None
+
+        # Call semantic-chunker's calculate_drift tool
+        try:
+            result = sync_call_external_mcp(
+                self.external_mcp_client,
+                "semantic-chunker",
+                "calculate_drift",
+                {"text_a": trace_prev_str, "text_b": trace_n_str}
+            )
+
+            drift = result.get("drift", 1.0)  # Default to high drift (different) if missing
+
+            # Low drift = high similarity = stutter
+            # Threshold 0.1: very similar traces indicate repeated work
+            if drift < 0.1:
+                logger.warning(
+                    f"ExitInterview: Trace stutter detected between {trace_prev_key} and {trace_n_key} "
+                    f"(drift={drift:.3f})"
+                )
+                return CompletionEvaluation(
+                    is_complete=False,
+                    reasoning=f"Trace stutter detected - consecutive traces ({trace_prev_key}, {trace_n_key}) are nearly identical",
+                    missing_elements="Agent is repeating the same operations without progress - review prior traces and try a different approach",
+                    recommended_specialists=["project_director"],
+                    return_control=ReturnControlMode.ACCUMULATE  # Keep traces so agent can see what was tried
+                )
+
+            logger.debug(f"ExitInterview: Trace drift between {trace_prev_key} and {trace_n_key}: {drift:.3f}")
+            return None
+
+        except Exception as e:
+            # Graceful degradation - semantic-chunker unavailable
+            logger.debug(f"ExitInterview: Stutter detection skipped (semantic-chunker unavailable): {e}")
+            return None
 
     def _evaluate_completion(
         self,
