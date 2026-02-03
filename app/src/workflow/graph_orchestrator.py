@@ -395,3 +395,176 @@ class GraphOrchestrator:
         # Fallback if no facilitator (shouldn't happen in normal config)
         logger.info("--- Exit Interview: Task INCOMPLETE. Routing back to Router. ---")
         return CoreSpecialist.ROUTER.value
+
+    # =========================================================================
+    # ADR-CORE-061: Tiered Interrupt Architecture
+    # =========================================================================
+
+    def classify_interrupt(self, state: GraphState) -> str:
+        """
+        ADR-CORE-061: Tier 1 - Procedural interrupt classification. No LLM needed.
+
+        This is the first line of defense for interrupt handling. It classifies
+        interrupts by type and routes appropriately:
+
+        - TERMINAL: user_abort → End (immediate termination)
+        - BENIGN: max_iterations_exceeded, context_overflow → Facilitator (seamless continue)
+        - PATHOLOGICAL: stagnation, tool_error, stutter → Interrupt Evaluator (needs LLM)
+        - NORMAL + artifacts → Exit Interview (semantic completion check)
+        - NORMAL + no artifacts → Router (continue workflow)
+
+        Key principle: The model never stopped. BENIGN interrupts are infrastructure
+        pauses that the model should be unaware of. Only PATHOLOGICAL interrupts need
+        semantic judgment about recoverability.
+        """
+        scratchpad = state.get("scratchpad", {})
+        artifacts = state.get("artifacts", {})
+
+        # === TERMINAL: Immediate end, no evaluation ===
+        if scratchpad.get("user_abort"):
+            logger.info("classify_interrupt: TERMINAL (user_abort) → End")
+            return CoreSpecialist.END.value
+
+        # === BENIGN: Seamless continue (model unaware of pause) ===
+        # max_iterations_exceeded: Arbitrary limit hit, trace is healthy
+        if artifacts.get("max_iterations_exceeded") or scratchpad.get("max_iterations_exceeded"):
+            logger.info("classify_interrupt: BENIGN (max_iterations) → Facilitator (seamless continue)")
+            return "facilitator_specialist"
+
+        # context_overflow: Context bloat - compress and continue
+        if scratchpad.get("context_overflow"):
+            logger.info("classify_interrupt: BENIGN (context_overflow) → Facilitator (compress and continue)")
+            return "facilitator_specialist"
+
+        # === PATHOLOGICAL: Needs LLM judgment on recoverability ===
+        # Explicit flags
+        if scratchpad.get("stagnation_detected"):
+            logger.info("classify_interrupt: PATHOLOGICAL (stagnation_detected) → Interrupt Evaluator")
+            return "interrupt_evaluator_specialist"
+
+        if scratchpad.get("tool_error"):
+            logger.info("classify_interrupt: PATHOLOGICAL (tool_error) → Interrupt Evaluator")
+            return "interrupt_evaluator_specialist"
+
+        # Heuristic detection (moved from Exit Interview per ADR-CORE-061)
+        if self._detect_unrecovered_failures(artifacts):
+            logger.info("classify_interrupt: PATHOLOGICAL (unrecovered failure) → Interrupt Evaluator")
+            return "interrupt_evaluator_specialist"
+
+        if self._detect_trace_stutter(artifacts):
+            logger.info("classify_interrupt: PATHOLOGICAL (trace stutter) → Interrupt Evaluator")
+            return "interrupt_evaluator_specialist"
+
+        # === NORMAL FLOW: No interrupt ===
+        # Produced artifacts? Exit Interview evaluates semantic completion
+        if artifacts:
+            logger.info("classify_interrupt: Normal flow, artifacts present → Exit Interview")
+            return CoreSpecialist.EXIT_INTERVIEW.value
+
+        # No artifacts, no interrupt → Router picks next specialist
+        logger.info("classify_interrupt: Normal flow, no artifacts → Router")
+        return CoreSpecialist.ROUTER.value
+
+    def _detect_unrecovered_failures(self, artifacts: dict) -> bool:
+        """
+        ADR-CORE-061: Detect unrecovered tool failures in research traces.
+
+        Scans all research_trace_N artifacts for failures at the END of traces
+        that were not followed by successful operations.
+
+        Returns True if any trace ends with an unrecovered failure.
+        """
+        # Find all research_trace artifacts
+        trace_keys = sorted([k for k in artifacts.keys() if k.startswith("research_trace_")])
+
+        for trace_key in trace_keys:
+            trace = artifacts.get(trace_key, [])
+            if not trace or not isinstance(trace, list):
+                continue
+
+            # Check if the LAST entry in the trace is a failure
+            for i in range(len(trace) - 1, -1, -1):
+                entry = trace[i]
+                if not isinstance(entry, dict):
+                    continue
+
+                # Found the last valid entry
+                success = entry.get("success", True)  # Default to True if not specified
+                if not success:
+                    # This trace ends with a failure - check if any success after it
+                    has_recovery = False
+                    for j in range(i + 1, len(trace)):
+                        later_entry = trace[j]
+                        if isinstance(later_entry, dict) and later_entry.get("success", True):
+                            has_recovery = True
+                            break
+
+                    if not has_recovery:
+                        tool_name = entry.get("tool", "unknown")
+                        error = entry.get("error", "unspecified error")
+                        logger.warning(f"Unrecovered failure detected in {trace_key}: {tool_name} - {error}")
+                        return True
+                break  # Only check the last valid entry
+
+        return False
+
+    def _detect_trace_stutter(self, artifacts: dict) -> bool:
+        """
+        ADR-CORE-061: Detect trace stutter (model cycling without progress).
+
+        Uses semantic-chunker MCP's calculate_drift tool to compare consecutive
+        traces. Low drift between iterations indicates the model is stuttering
+        (repeating similar operations without meaningful progress).
+
+        This was moved from Exit Interview to Interrupt Classifier because it's
+        an infrastructure health concern, not a semantic completion question.
+
+        Returns True if stutter is detected (consecutive traces are too similar).
+        """
+        # Find all research_trace artifacts
+        trace_keys = sorted([k for k in artifacts.keys() if k.startswith("research_trace_")])
+
+        if len(trace_keys) < 2:
+            # Need at least 2 traces to compare
+            return False
+
+        # Check for external_mcp_client (injected by GraphBuilder)
+        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
+            logger.debug("_detect_trace_stutter: No external_mcp_client available, skipping")
+            return False
+
+        try:
+            # Compare the last two traces for drift
+            trace_a = artifacts.get(trace_keys[-2], [])
+            trace_b = artifacts.get(trace_keys[-1], [])
+
+            # Serialize traces to strings for comparison
+            import json
+            text_a = json.dumps(trace_a, sort_keys=True, default=str)
+            text_b = json.dumps(trace_b, sort_keys=True, default=str)
+
+            # Call semantic-chunker's calculate_drift tool
+            result = self.external_mcp_client.call_tool(
+                server_name="semantic-chunker",
+                tool_name="calculate_drift",
+                arguments={"text_a": text_a, "text_b": text_b}
+            )
+
+            if result and "drift_score" in result:
+                drift_score = result["drift_score"]
+                # Low drift (< 0.1) indicates stutter
+                # Threshold tuned based on ADR-CORE-055 experiments
+                STUTTER_THRESHOLD = 0.1
+                if drift_score < STUTTER_THRESHOLD:
+                    logger.warning(
+                        f"Trace stutter detected: drift_score={drift_score:.4f} < {STUTTER_THRESHOLD} "
+                        f"between {trace_keys[-2]} and {trace_keys[-1]}"
+                    )
+                    return True
+
+        except Exception as e:
+            logger.debug(f"_detect_trace_stutter: Error calling semantic-chunker: {e}")
+            # Don't fail classification on MCP errors
+            pass
+
+        return False

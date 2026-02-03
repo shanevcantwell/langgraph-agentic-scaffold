@@ -12,16 +12,14 @@ Flow:
 Uses InferenceService (via MCP or direct call) for LLM-backed completion evaluation.
 """
 
-import json
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List
 from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage, HumanMessage
 
 from .base import BaseSpecialist
 from .schemas import ReturnControlMode
 from ..llm.adapter import StandardizedLLMRequest
-from ..mcp import sync_call_external_mcp
 from ..utils.prompt_loader import load_prompt
 
 logger = logging.getLogger(__name__)
@@ -65,66 +63,21 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         """
-        Evaluate if the task is complete before routing to END.
+        Evaluate if the task is semantically complete.
 
-        Checks (in order):
-        1. ADR-CORE-058 Phase 1: Mechanical heuristics (no LLM needed)
-           - max_iterations_exceeded artifact
-           - Failed operations in research_trace with no recovery
-        2. Original user_request (from artifacts)
-        3. Current context_plan (Triage's assessment)
-        4. Accumulated artifacts and recent messages
-        5. LLM judgment: "Can we give a satisfying response to the user?"
+        ADR-CORE-061: Exit Interview is now a PURE LLM semantic evaluator.
+        All infrastructure heuristics (max_iterations, trace stutter, failures)
+        have been moved to the Interrupt Classifier (graph_orchestrator.py).
+
+        Exit Interview answers ONE question: "Is the task done?"
+        It evaluates:
+        1. Original user_request (from artifacts)
+        2. Current context_plan (Triage's assessment)
+        3. Accumulated artifacts and recent messages
+        4. LLM judgment: "Can we give a satisfying response to the user?"
         """
         artifacts = state.get("artifacts", {})
         messages = state.get("messages", [])
-
-        # ADR-CORE-058 Phase 1: Mechanical heuristics first (no LLM call)
-        heuristic_result = self._evaluate_trace_heuristics(artifacts)
-        if heuristic_result:
-            # Obvious failure detected - return early without LLM call
-            if heuristic_result.is_complete:
-                # Heuristics said complete (shouldn't happen in Phase 1, but handle it)
-                return {
-                    "messages": [AIMessage(content=f"[Exit Interview] Task verified complete: {heuristic_result.reasoning}")],
-                    "task_is_complete": True,
-                    "artifacts": {
-                        "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
-                        "exit_interview_result": {
-                            "is_complete": True,
-                            "reasoning": heuristic_result.reasoning,
-                            "method": "heuristic"
-                        }
-                    }
-                }
-            else:
-                # Heuristics detected failure
-                recommended = heuristic_result.recommended_specialists or ["project_director"]
-                specialists_str = ", ".join(recommended)
-                guidance_msg = (
-                    f"[Exit Interview] Task not complete (heuristic): {heuristic_result.reasoning}\n\n"
-                    f"**Dependency Requirement:** The following work is still needed: {heuristic_result.missing_elements}. "
-                    f"Route to one of: `{specialists_str}` to complete this work."
-                )
-                return {
-                    "messages": [AIMessage(content=guidance_msg)],
-                    "task_is_complete": False,
-                    "artifacts": {
-                        "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
-                        "exit_interview_result": {
-                            "is_complete": False,
-                            "reasoning": heuristic_result.reasoning,
-                            "missing_elements": heuristic_result.missing_elements,
-                            "recommended_specialists": recommended,
-                            "method": "heuristic",
-                            "return_control": heuristic_result.return_control.value
-                        }
-                    },
-                    "scratchpad": {
-                        "recommended_specialists": recommended,
-                        "exit_interview_incomplete": True
-                    }
-                }
 
         # Get original user request
         user_request = artifacts.get("user_request", "")
@@ -223,155 +176,6 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     "exit_interview_incomplete": True
                 }
             }
-
-    def _evaluate_trace_heuristics(self, artifacts: dict) -> CompletionEvaluation | None:
-        """
-        ADR-CORE-058 Phase 1: Mechanical verification before LLM evaluation.
-
-        Inspects research_trace artifacts for obvious failure signals that don't
-        require LLM judgment to detect:
-        - max_iterations_exceeded artifact present
-        - Failed operations with no subsequent recovery
-
-        Returns:
-            CompletionEvaluation if obvious failure detected (early exit)
-            None if no obvious failures (defer to LLM evaluation)
-        """
-        # Check for iteration limit hit (immediate INCOMPLETE)
-        if artifacts.get("max_iterations_exceeded"):
-            logger.info("ExitInterview heuristic: max_iterations_exceeded detected")
-            return CompletionEvaluation(
-                is_complete=False,
-                reasoning="Task hit iteration limit before completion",
-                missing_elements="Incomplete due to iteration limit - work was cut short",
-                recommended_specialists=["project_director"]
-            )
-
-        # Find all research_trace artifacts
-        traces = []
-        for key, value in artifacts.items():
-            if key.startswith("research_trace") and isinstance(value, list):
-                traces.extend(value)
-
-        if not traces:
-            # No trace data, defer to LLM
-            logger.debug("ExitInterview heuristic: no research_trace artifacts found")
-            return None
-
-        # Check for failed operations
-        failed_ops = []
-        last_failure_idx = -1
-        for idx, entry in enumerate(traces):
-            if isinstance(entry, dict) and not entry.get("success", True):
-                failed_ops.append(entry)
-                last_failure_idx = idx
-
-        if failed_ops:
-            # Check if there was successful recovery after the last failure
-            successful_after = False
-            if last_failure_idx < len(traces) - 1:
-                for entry in traces[last_failure_idx + 1:]:
-                    if isinstance(entry, dict) and entry.get("success", False):
-                        successful_after = True
-                        break
-
-            if not successful_after:
-                # Task ended with unrecovered failure
-                last_failure = failed_ops[-1]
-                tool_name = last_failure.get("tool", "unknown")
-                error_msg = last_failure.get("error", "operation failed")
-                logger.info(
-                    f"ExitInterview heuristic: unrecovered failure detected - "
-                    f"{tool_name}: {error_msg}"
-                )
-                return CompletionEvaluation(
-                    is_complete=False,
-                    reasoning=f"Task ended with failed operation: {tool_name}",
-                    missing_elements=f"Failed: {error_msg}",
-                    recommended_specialists=["project_director"]
-                )
-
-        # Check for trace stutter (repeated operations across invocations)
-        stutter_result = self._detect_trace_stutter(artifacts)
-        if stutter_result:
-            return stutter_result
-
-        # No obvious failures detected, defer to LLM evaluation
-        logger.debug("ExitInterview heuristic: trace looks clean, deferring to LLM")
-        return None
-
-    def _detect_trace_stutter(self, artifacts: dict) -> Optional[CompletionEvaluation]:
-        """
-        Detect trace stutter using semantic similarity.
-
-        Compares the last two research_trace artifacts to identify when the agent
-        is repeating the same operations across invocations without making progress.
-        Uses semantic-chunker MCP's calculate_drift tool for comparison.
-
-        Returns:
-            CompletionEvaluation with ACCUMULATE mode if stutter detected, None otherwise.
-            Returns None (graceful degradation) if semantic-chunker unavailable.
-        """
-        # Find all research_trace artifacts (sorted by number)
-        trace_keys = sorted([k for k in artifacts if k.startswith("research_trace_")])
-
-        if len(trace_keys) < 2:
-            # Need at least 2 traces to compare
-            return None
-
-        # Check if external_mcp_client is available (injected by GraphBuilder if tools: configured)
-        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
-            logger.debug("ExitInterview: No external_mcp_client - skipping stutter detection")
-            return None
-
-        # Get the last two traces
-        trace_n_key = trace_keys[-1]
-        trace_prev_key = trace_keys[-2]
-
-        trace_n = artifacts.get(trace_n_key, [])
-        trace_prev = artifacts.get(trace_prev_key, [])
-
-        # Serialize traces for comparison (sort keys for determinism)
-        try:
-            trace_n_str = json.dumps(trace_n, sort_keys=True)
-            trace_prev_str = json.dumps(trace_prev, sort_keys=True)
-        except (TypeError, ValueError) as e:
-            logger.warning(f"ExitInterview: Failed to serialize traces for stutter detection: {e}")
-            return None
-
-        # Call semantic-chunker's calculate_drift tool
-        try:
-            result = sync_call_external_mcp(
-                self.external_mcp_client,
-                "semantic-chunker",
-                "calculate_drift",
-                {"text_a": trace_prev_str, "text_b": trace_n_str}
-            )
-
-            drift = result.get("drift", 1.0)  # Default to high drift (different) if missing
-
-            # Low drift = high similarity = stutter
-            # Threshold 0.1: very similar traces indicate repeated work
-            if drift < 0.1:
-                logger.warning(
-                    f"ExitInterview: Trace stutter detected between {trace_prev_key} and {trace_n_key} "
-                    f"(drift={drift:.3f})"
-                )
-                return CompletionEvaluation(
-                    is_complete=False,
-                    reasoning=f"Trace stutter detected - consecutive traces ({trace_prev_key}, {trace_n_key}) are nearly identical",
-                    missing_elements="Agent is repeating the same operations without progress - review prior traces and try a different approach",
-                    recommended_specialists=["project_director"],
-                    return_control=ReturnControlMode.ACCUMULATE  # Keep traces so agent can see what was tried
-                )
-
-            logger.debug(f"ExitInterview: Trace drift between {trace_prev_key} and {trace_n_key}: {drift:.3f}")
-            return None
-
-        except Exception as e:
-            # Graceful degradation - semantic-chunker unavailable
-            logger.debug(f"ExitInterview: Stutter detection skipped (semantic-chunker unavailable): {e}")
-            return None
 
     def _evaluate_completion(
         self,

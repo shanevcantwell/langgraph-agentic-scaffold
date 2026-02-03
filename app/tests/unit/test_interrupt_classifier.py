@@ -22,8 +22,10 @@ from app.src.enums import CoreSpecialist
 @pytest.fixture
 def orchestrator():
     """Create a GraphOrchestrator instance for testing."""
+    config = {"workflow": {"max_loop_cycles": 3}}
+    specialists = {}  # Empty specialists dict - not needed for classify_interrupt
+    orch = GraphOrchestrator(config, specialists)
     # Mock the external_mcp_client for stutter detection
-    orch = GraphOrchestrator()
     orch.external_mcp_client = MagicMock()
     return orch
 
