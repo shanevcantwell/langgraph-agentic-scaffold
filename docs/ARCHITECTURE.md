@@ -160,11 +160,12 @@ Violations trigger circuit breaker → stabilization action (HALT or ROUTE_TO_ER
 - **Startup:** Critical specialists must load or app fails
 - **Routing:** Unknown destinations raise `WorkflowError`
 
-### 5.3 Three-Stage Termination
+### 5.3 Four-Stage Termination
 Human control preserved:
-1. Specialist signals completion
-2. End specialist synthesizes
-3. Archiver records
+1. Specialist produces artifacts
+2. Exit Interview evaluates completion (ADR-CORE-036)
+3. End specialist synthesizes final response
+4. Archiver records to atomic package
 
 No specialist can unilaterally terminate.
 

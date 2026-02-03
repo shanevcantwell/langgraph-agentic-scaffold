@@ -22,7 +22,7 @@ This guide helps you diagnose issues by analyzing the Atomic Archival Packages (
 | `manifest.json` | Run metadata | `routing_history`, `termination_reason` |
 | `llm_traces.jsonl` | Per-LLM-call records | `step`, `specialist`, `from_source`, `tool_calls`, `scratchpad_signals` |
 | `final_state.json` | Complete GraphState at termination | `messages`, `artifacts`, `scratchpad`, `routing_history` |
-| `report.md` | Human summary | Routing history, artifacts, conversation |
+| `report.md` | Human summary | Routing history, **intelligently formatted** artifacts |
 | `final_user_response.md` | What user received | Plain text |
 
 ### Where Archives Are Produced
@@ -30,6 +30,19 @@ This guide helps you diagnose issues by analyzing the Atomic Archival Packages (
 Archives are created by the termination chain:
 1. **EndSpecialist** ([end_specialist.py](../../app/src/specialists/end_specialist.py)) synthesizes the final response
 2. **ArchiverSpecialist** ([archiver_specialist.py](../../app/src/specialists/archiver_specialist.py)) creates the `.zip` package
+
+### report.md Intelligent Formatting
+
+The `report.md` file uses smart formatting for key artifacts (see [state_pruner.py](../../app/src/utils/state_pruner.py)):
+
+| Artifact | Format |
+|----------|--------|
+| `research_trace_N` | Numbered tool call log with iteration, tool, args summary, result preview |
+| `exit_interview_result` | Structured fields: Status, Method, Reasoning, Missing, Recommended |
+| `project_context` | Structured fields: State, Summary, Next steps |
+| `context_plan`, `system_plan` | Pretty-printed JSON |
+| Other dicts/lists | JSON (truncated at 2000 chars) |
+| Strings | Code fence (truncated at 5000 chars) |
 
 ---
 
@@ -144,7 +157,34 @@ project_director (partial work)
 
 **Related:** Issue #96, ADR-ROADMAP-001 Phase 1
 
-### 6. ReactEnabledSpecialist missing attribute error
+### 6. No archive produced (crash/abort)
+
+**Symptom:** Workflow runs for a long time, shows `error_report` in routing, but no new `.zip` appears in `./logs/archive/`
+
+**Diagnosis:**
+```bash
+# Check timestamps - is there a new archive?
+ls -la ./logs/archive/*.zip | tail -5
+
+# Check server log for the actual error
+grep -i "error\|exception" ./logs/agentic_server.log | tail -20
+```
+
+**Common causes:**
+
+| Error | Log message | Root cause |
+|-------|-------------|------------|
+| Context overflow | `Context length exceeded` | Accumulated context exceeded model's context window |
+| Recursion limit | `GraphRecursionError: Recursion limit of 40` | Too many nodes before loop invariant triggered |
+| Crash in error_report | Various | Exception during error handling prevents archive |
+
+**Context overflow fix:** ADR-ROADMAP-001 Phase 3 (Smart Curation) will add context compression. For now, reduce `max_iterations` in config to limit accumulation.
+
+**Recursion limit vs loop invariant:** LangGraph's hard limit (40) may trigger before our soft loop detection (3 repeats). The hard limit causes a crash without archiving.
+
+**Known issue:** UI Abort does not trigger archiver - the workflow simply stops without preserving state.
+
+### 7. ReactEnabledSpecialist missing attribute error
 
 **Symptom:** `AttributeError: 'MySpecialist' object has no attribute '_serialize_for_provider'` (or `_check_stagnation`, `_trace_to_tool_result`, etc.)
 
@@ -181,6 +221,31 @@ attributes_to_inject = [
 ```
 
 **Related:** ADR-CORE-055 (trace-based ReAct serialization)
+
+---
+
+### 8. Specialist loops unexpectedly
+
+**Symptom:** Specialist runs, produces output, but workflow keeps looping instead of completing
+
+**This is NOT a bug.** Per ADR-CORE-036 (Exit Interview Pattern):
+- Specialists do NOT decide completion
+- Exit Interview evaluates whether the task is done
+- If looping continues, Exit Interview said INCOMPLETE
+
+**Diagnosis:**
+```bash
+unzip -p $ARCHIVE final_state.json | jq '.artifacts.exit_interview_result'
+```
+
+Check `is_complete`, `reasoning`, and `missing_elements` to understand why Exit Interview said INCOMPLETE.
+
+**Common causes:**
+- Exit Interview can't verify filesystem state (Issue #97) - it only sees artifact keys
+- Specialist produced artifact but Exit Interview thinks more work needed
+- Missing elements identified but no specialist can address them
+
+**Related:** ADR-CORE-036, ADR-CORE-058 (Phase 2 verification orchestrator)
 
 ---
 
@@ -274,6 +339,41 @@ unzip -p <archive.zip> final_state.json | jq '.artifacts | has("gathered_context
 ```
 
 **Deep dive:** See [FACILITATOR.md](../specialist_profiles/FACILITATOR.md) for complete details on context gathering.
+
+---
+
+## Exit Interview & Facilitator Roadmap (ADR-ROADMAP-001)
+
+The Exit Interview pattern validates task completion before allowing termination. See [ADR-ROADMAP-001](../ADRs/proposed/ADR-ROADMAP-001_Facilitator_Evolution.md) for the full design.
+
+### Implementation Status
+
+| Phase | Feature | Status | Notes |
+|-------|---------|--------|-------|
+| 1 | Exit Interview gates END | ✅ Done | LLM evaluates completion |
+| 1 | Heuristic early-exit | ✅ Done | `max_iterations_exceeded` triggers INCOMPLETE |
+| 1 | ReturnControlMode | ✅ Done | ACCUMULATE/RESET modes (#102) |
+| 1 | Feedback surfacing | ✅ Done | `exit_interview_result` in gathered_context (#100) |
+| 1 | max_iterations flag clearing | ✅ Done | Flag consumed after Exit Interview (#104) |
+| 2 | Structured retry output | Pending | CompletionResult for external agents |
+| 3 | Smart curation | Pending | Weight-based context compression |
+
+### Current Test: Categorize Files
+
+**Test task:** Read files in `categories_test/`, create category folders, copy files to appropriate folders.
+
+**Reading traces:** See [TRACE_READING_GUIDE.md](../tests/TRACE_READING_GUIDE.md) for how to analyze archive packages.
+
+**Quick trace check:**
+```bash
+ARCHIVE=$(ls -t ./logs/archive/*.zip | head -1)
+unzip -p $ARCHIVE report.md
+```
+
+**What to look for in `research_trace_0`:**
+- `read_file` / `list_directory` = gathering info
+- `copy_file` / `create_directory` = doing the work
+- If only reads and no copies → project_director stopped prematurely
 
 ---
 

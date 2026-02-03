@@ -119,8 +119,8 @@ class BatchProcessorSpecialist(BaseSpecialist):
                 "batch_sort_details": results["successful"] + results["failed"],
                 "batch_sort_report.md": self._generate_report(results)
             },
-            "messages": [AIMessage(content=self._format_summary(results))],
-            "task_is_complete": True
+            "messages": [AIMessage(content=self._format_summary(results))]
+            # NOTE: Do NOT set task_is_complete. Exit Interview decides completion (ADR-CORE-036).
         }
 ```
 
@@ -372,9 +372,8 @@ class OpenInterpreterSpecialist(BaseSpecialist):
 
         return {
             "messages": [ai_message],
-            # Add a user-facing summary of the action to the scratchpad.
-            "scratchpad": {"user_response_snippets": [f"Executed code and got the following result:\n\n{final_output}"]},
-            "task_is_complete": True # Signal that the task is done to prevent looping.
+            "scratchpad": {"user_response_snippets": [f"Executed code and got the following result:\n\n{final_output}"]}
+            # NOTE: Do NOT set task_is_complete. Exit Interview decides completion (ADR-CORE-036).
         }
 ```
 

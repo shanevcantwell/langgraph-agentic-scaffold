@@ -131,9 +131,8 @@ To ensure your specialist integrates smoothly and reliably into the system, plea
     *   **CRITICAL - For parallel execution specialists:** Do NOT return messages key.
         *   See "Special Case: Parallel Execution Specialists" section below for details.
 *   **Do Not Modify Global State Counters:** The `turn_count` is managed exclusively by the `RouterSpecialist`. Do not attempt to change this value from within your specialist, as it will break the workflow in unpredictable ways.
-*   **Use Agentic Robustness Patterns:** Leverage the built-in patterns for self-correction (scratchpad-based routing recommendations) and task completion (`task_is_complete: True`) to create more intelligent and resilient workflows.
-    *   **Note (Task 2.7):** `recommended_specialists` has moved to `scratchpad`. Use `return {"scratchpad": {"recommended_specialists": [...]}}` pattern.
-    *   See `ARCHITECTURE.md` Section 2.1 for state management migration details.
+*   **Completion is NOT Your Concern:** Per ADR-CORE-036, specialists do NOT decide task completion. Exit Interview evaluates whether the user's request is satisfied. Your specialist should focus on producing artifacts and returning. Do not set `task_is_complete`.
+*   **Routing Hints (Optional):** Use `return {"scratchpad": {"recommended_specialists": [...]}}` to suggest next steps, but Router makes the final decision.
 
 ### Special Case: Parallel Execution Specialists
 
