@@ -121,6 +121,102 @@ class FacilitatorSpecialist(BaseSpecialist):
             recommended_specialists=", ".join(result.get("recommended_specialists", ["project_director"]))
         )
 
+    def _summarize_work_in_progress(self, artifacts: dict, routing_history: list) -> Optional[str]:
+        """
+        Summarize work-in-progress for BENIGN interrupts (Issue #108).
+
+        When max_iterations_exceeded is set (BENIGN interrupt), the specialist was
+        mid-work. This surfaces what was happening so Router can make an informed
+        decision about continuation.
+
+        Without this context, Router sees "0 searches, 0 pages" (web-research framing)
+        and picks the wrong specialist. With this context, Router sees the actual
+        operations and continues with the correct specialist.
+
+        Returns:
+            Formatted work-in-progress summary, or None if not a BENIGN interrupt.
+        """
+        # Only for BENIGN interrupts (max_iterations without exit_interview_result)
+        if not artifacts.get("max_iterations_exceeded"):
+            return None
+
+        # Find last non-planning specialist from routing_history
+        planning_tags = {"planning", "context_engineering"}
+        last_working_specialist = None
+
+        # We need specialist configs to check tags, but we may not have them.
+        # Fall back to known planning specialists by name.
+        planning_specialists = {
+            "triage_architect", "facilitator_specialist", "router_specialist"
+        }
+
+        for spec in reversed(routing_history):
+            if spec not in planning_specialists:
+                last_working_specialist = spec
+                break
+
+        if not last_working_specialist:
+            return None
+
+        # Collect all research_trace_N artifacts
+        trace_keys = sorted(
+            [k for k in artifacts.keys() if k.startswith("research_trace")],
+            key=lambda x: int(x.split("_")[-1]) if x.split("_")[-1].isdigit() else 0
+        )
+
+        if not trace_keys:
+            return None
+
+        # Count operations by tool name across all traces
+        tool_counts: Dict[str, int] = {}
+        last_action = None
+        total_ops = 0
+
+        for trace_key in trace_keys:
+            trace_data = artifacts.get(trace_key, [])
+            if not isinstance(trace_data, list):
+                continue
+
+            for entry in trace_data:
+                if not isinstance(entry, dict):
+                    continue
+
+                tool_name = entry.get("tool", "unknown")
+                tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
+                total_ops += 1
+
+                # Track last action for context
+                if entry.get("success", True):
+                    args = entry.get("args", {})
+                    # Format last action based on tool type
+                    if tool_name in ("move_file", "copy_file"):
+                        source = args.get("source", "?")
+                        dest = args.get("destination", "?")
+                        last_action = f"{tool_name}({source} → {dest})"
+                    elif tool_name in ("read_file", "list_directory", "create_directory"):
+                        path = args.get("path", "?")
+                        last_action = f"{tool_name}({path})"
+                    else:
+                        last_action = f"{tool_name}(...)"
+
+        if total_ops == 0:
+            return None
+
+        # Format operations summary
+        ops_summary = ", ".join(f"{tool}: {count}" for tool, count in sorted(tool_counts.items()))
+
+        summary = f"""## Work In Progress
+
+**Specialist:** {last_working_specialist}
+**Operations completed:** {total_ops} ({ops_summary})
+**Last action:** {last_action or "unknown"}
+**Status:** Task interrupted mid-execution (max_iterations reached)
+
+**Recommendation:** Continue with `{last_working_specialist}` to complete the work.
+"""
+        logger.info(f"Facilitator: Generated work-in-progress summary for {last_working_specialist} ({total_ops} ops)")
+        return summary
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
         
@@ -166,6 +262,17 @@ class FacilitatorSpecialist(BaseSpecialist):
             feedback = self._format_exit_interview_feedback(exit_interview_result)
             gathered_context.append(feedback)
             logger.info("Facilitator: Added Exit Interview feedback to gathered_context")
+
+        # Issue #108: Surface work-in-progress for BENIGN interrupts
+        # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN
+        # interrupt (not an Exit Interview retry). Router needs to know what specialist
+        # was mid-work so it can continue correctly.
+        routing_history = state.get("routing_history", [])
+        if not exit_interview_result:
+            wip_summary = self._summarize_work_in_progress(artifacts, routing_history)
+            if wip_summary:
+                gathered_context.append(wip_summary)
+                logger.info("Facilitator: Added work-in-progress summary to gathered_context")
 
         if not self.mcp_client:
             logger.error("Facilitator: MCP Client not initialized.")

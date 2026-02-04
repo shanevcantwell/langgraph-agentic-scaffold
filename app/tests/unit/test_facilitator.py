@@ -765,3 +765,218 @@ def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
 
     # Should NOT have Exit Interview feedback since task was complete
     assert "### Next Steps (from Exit Interview)" not in gathered
+
+
+# =============================================================================
+# Issue #108: Work-in-Progress Summary for BENIGN Interrupts
+# =============================================================================
+
+def test_facilitator_summarizes_work_in_progress_for_benign_interrupt(facilitator):
+    """
+    Issue #108: Facilitator surfaces work-in-progress for BENIGN interrupts.
+
+    When max_iterations_exceeded is set (BENIGN interrupt via classify_interrupt),
+    Facilitator should summarize what the specialist was doing so Router can
+    make an informed decision about continuation.
+
+    Without this, Router sees "0 searches, 0 pages" (web-research framing)
+    and picks the wrong specialist.
+    """
+    plan = ContextPlan(
+        reasoning="Continue interrupted task",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            # BENIGN interrupt flag
+            "max_iterations_exceeded": True,
+            # Trace from the specialist's work
+            "research_trace_0": [
+                {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
+                {"tool": "read_file", "args": {"path": "/workspace/1.txt"}, "success": True},
+                {"tool": "read_file", "args": {"path": "/workspace/2.txt"}, "success": True},
+                {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
+                {"tool": "copy_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
+            ]
+        },
+        "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["animals/", "2.txt", "3.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Should have work-in-progress summary
+    assert "## Work In Progress" in gathered
+    assert "project_director" in gathered
+    assert "Operations completed:" in gathered
+    assert "list_directory: 1" in gathered
+    assert "read_file: 2" in gathered
+    assert "create_directory: 1" in gathered
+    assert "copy_file: 1" in gathered
+    assert "Continue with `project_director`" in gathered
+
+
+def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
+    """
+    Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).
+    """
+    plan = ContextPlan(
+        reasoning="Normal execution",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            # NO max_iterations_exceeded - normal flow
+            "research_trace_0": [
+                {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
+            ]
+        },
+        "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["file.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Should NOT have work-in-progress summary
+    assert "## Work In Progress" not in gathered
+
+
+def test_facilitator_no_wip_summary_when_exit_interview_result_present(facilitator):
+    """
+    Issue #108: No work-in-progress summary when exit_interview_result is present.
+
+    If exit_interview_result exists, this is an Exit Interview retry path,
+    not a BENIGN interrupt. Exit Interview feedback handles this case.
+    """
+    plan = ContextPlan(
+        reasoning="Retry after Exit Interview",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "max_iterations_exceeded": True,  # Would trigger WIP summary...
+            # ...but exit_interview_result takes precedence
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "Files not fully categorized"
+            },
+            "research_trace_0": [
+                {"tool": "copy_file", "args": {"source": "a", "destination": "b"}, "success": True},
+            ]
+        },
+        "routing_history": ["project_director"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["file.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Should have Exit Interview feedback, NOT work-in-progress summary
+    assert "### Next Steps (from Exit Interview)" in gathered
+    assert "## Work In Progress" not in gathered
+
+
+def test_facilitator_no_wip_summary_without_trace(facilitator):
+    """
+    Issue #108: No work-in-progress summary if no research trace exists.
+    """
+    plan = ContextPlan(
+        reasoning="Continue interrupted task",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "max_iterations_exceeded": True,
+            # NO research_trace
+        },
+        "routing_history": ["project_director"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["file.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Should NOT have work-in-progress summary (no trace to summarize)
+    assert "## Work In Progress" not in gathered
+
+
+def test_facilitator_wip_summary_shows_last_action(facilitator):
+    """
+    Issue #108: Work-in-progress summary should show the last action taken.
+    """
+    plan = ContextPlan(
+        reasoning="Continue interrupted task",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "max_iterations_exceeded": True,
+            "research_trace_0": [
+                {"tool": "read_file", "args": {"path": "/workspace/1.txt"}, "success": True},
+                {"tool": "copy_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
+            ]
+        },
+        "routing_history": ["project_director"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["file.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    # Last action should be shown
+    assert "Last action:" in gathered
+    assert "copy_file" in gathered
+    assert "/workspace/1.txt" in gathered
+    assert "/workspace/animals/1.txt" in gathered

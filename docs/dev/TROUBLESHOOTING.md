@@ -228,24 +228,51 @@ attributes_to_inject = [
 
 **Symptom:** Specialist runs, produces output, but workflow keeps looping instead of completing
 
-**This is NOT a bug.** Per ADR-CORE-036 (Exit Interview Pattern):
-- Specialists do NOT decide completion
-- Exit Interview evaluates whether the task is done
-- If looping continues, Exit Interview said INCOMPLETE
+**This is expected behavior.** Per ADR-CORE-036 (Exit Interview Pattern) and ADR-CORE-061 (Tiered Interrupt Architecture):
+- Non-terminal specialists do NOT decide completion
+- After each specialist, `classify_interrupt` routes to the appropriate handler
+- Exit Interview (pure LLM evaluator) judges semantic completion
+
+**ADR-CORE-061 Flow:**
+```
+Non-terminal specialist completes
+    ↓
+classify_interrupt (procedural, no LLM)
+    ├─ TERMINAL (user_abort) → End
+    ├─ BENIGN (max_iterations, context_overflow) → Facilitator (seamless continue)
+    ├─ PATHOLOGICAL (stagnation, tool_error, stutter) → Interrupt Evaluator*
+    └─ NORMAL (artifacts present) → Exit Interview (pure LLM semantic judge)
+                                        ├─ COMPLETE → End
+                                        └─ INCOMPLETE → Facilitator → Router → specialist
+```
+*Interrupt Evaluator not yet implemented - pathological routes will fail validation.
 
 **Diagnosis:**
 ```bash
+ARCHIVE=$(ls -t ./logs/archive/*.zip | head -1)
+
+# What did Exit Interview conclude?
 unzip -p $ARCHIVE final_state.json | jq '.artifacts.exit_interview_result'
+
+# Check scratchpad for interrupt signals
+unzip -p $ARCHIVE final_state.json | jq '.scratchpad | {max_iterations_exceeded, stagnation_detected, tool_error}'
 ```
 
 Check `is_complete`, `reasoning`, and `missing_elements` to understand why Exit Interview said INCOMPLETE.
 
 **Common causes:**
-- Exit Interview can't verify filesystem state (Issue #97) - it only sees artifact keys
-- Specialist produced artifact but Exit Interview thinks more work needed
+- Exit Interview can't verify filesystem state (Issue #97) - it only sees artifact keys, not trace content
+- Specialist produced artifacts but Exit Interview can't see work details in `research_trace_0`
 - Missing elements identified but no specialist can address them
 
-**Related:** ADR-CORE-036, ADR-CORE-058 (Phase 2 verification orchestrator)
+**BENIGN loop (tight Facilitator→Router→specialist cycle):**
+If you see max_iterations_exceeded but the loop continues, this is working correctly:
+1. `classify_interrupt` sees BENIGN (max_iterations) → routes to Facilitator
+2. Facilitator refreshes context, clears the flag
+3. Router picks specialist again
+4. Specialist continues work (model unaware of pause)
+
+**Related:** ADR-CORE-036, ADR-CORE-061, ADR-CORE-058 (Phase 2 verification orchestrator)
 
 ---
 
@@ -253,7 +280,10 @@ Check `is_complete`, `reasoning`, and `missing_elements` to understand why Exit 
 
 | Symptom | Start Here |
 |---------|------------|
-| Routing decisions | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) - decider functions |
+| Routing decisions | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) - `route_from_router()` |
+| Post-specialist routing | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) - `classify_interrupt()` (ADR-CORE-061) |
+| Interrupt detection | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) - `_detect_unrecovered_failures()`, `_detect_trace_stutter()` |
+| Completion judgment | [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) - `_evaluate_completion()` |
 | Which specialists loaded | [graph_builder.py](../../app/src/workflow/graph_builder.py) - `_load_and_configure_specialists()` |
 | Specialist preconditions | [node_executor.py](../../app/src/workflow/executors/node_executor.py) - `create_safe_executor()` |
 | Archive production | [archiver_specialist.py](../../app/src/specialists/archiver_specialist.py) - `_create_atomic_package()` |
@@ -293,6 +323,13 @@ unzip -p ./logs/archive/<archive.zip> final_state.json | jq '.artifacts | keys'
 
 # Show scratchpad signals (inter-specialist communication)
 unzip -p ./logs/archive/<archive.zip> final_state.json | jq '.scratchpad'
+
+# ADR-CORE-061: Check interrupt classification signals
+unzip -p ./logs/archive/<archive.zip> final_state.json | jq '{
+  max_iterations: .artifacts.max_iterations_exceeded,
+  exit_interview: .artifacts.exit_interview_result,
+  scratchpad_flags: (.scratchpad | {stagnation_detected, tool_error, context_overflow})
+}'
 ```
 
 ---
@@ -350,11 +387,12 @@ The Exit Interview pattern validates task completion before allowing termination
 
 | Phase | Feature | Status | Notes |
 |-------|---------|--------|-------|
-| 1 | Exit Interview gates END | ✅ Done | LLM evaluates completion |
-| 1 | Heuristic early-exit | ✅ Done | `max_iterations_exceeded` triggers INCOMPLETE |
+| 1 | Exit Interview gates END | ✅ Done | Pure LLM semantic evaluator (ADR-CORE-061) |
+| 1 | Tiered Interrupt Architecture | ✅ Done | `classify_interrupt` routes TERMINAL/BENIGN/PATHOLOGICAL/NORMAL |
+| 1 | BENIGN seamless continue | ✅ Done | `max_iterations_exceeded` → Facilitator (model unaware) |
 | 1 | ReturnControlMode | ✅ Done | ACCUMULATE/RESET modes (#102) |
 | 1 | Feedback surfacing | ✅ Done | `exit_interview_result` in gathered_context (#100) |
-| 1 | max_iterations flag clearing | ✅ Done | Flag consumed after Exit Interview (#104) |
+| 1.5 | Interrupt Evaluator | Pending | PATHOLOGICAL routes need LLM judgment |
 | 2 | Structured retry output | Pending | CompletionResult for external agents |
 | 3 | Smart curation | Pending | Weight-based context compression |
 
