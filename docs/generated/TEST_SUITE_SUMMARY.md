@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 69 | 598 |
+| Unit | 71 | 624 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **104** | **882** |
+| **Total** | **106** | **908** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -942,6 +942,21 @@
 - **`test_end_specialist_handles_termination_reason`**
   - *Tests that EndSpecialist uses explicit termination_reason when present*
 
+## `app/tests/unit/test_exit_interview_specialist.py`
+
+- **`test_llm_evaluates_completion`**
+  - *Exit Interview should always call LLM for semantic evaluation.*
+- **`test_llm_returns_incomplete`**
+  - *When LLM determines task is incomplete, result reflects that.*
+- **`test_exit_interview_has_no_check_heuristics_method`**
+  - *ADR-CORE-061: _check_heuristics() belongs in Interrupt Classifier.*
+- **`test_exit_interview_has_no_evaluate_trace_heuristics_method`**
+  - *ADR-CORE-061: _evaluate_trace_heuristics() belongs in Interrupt Classifier.*
+- **`test_exit_interview_has_no_stutter_detection`**
+  - *ADR-CORE-061: Stutter detection belongs in Interrupt Classifier.*
+- **`test_exit_interview_only_evaluates_completion`**
+  - *ADR-CORE-061: Exit Interview should ONLY have _evaluate_completion.*
+
 ## `app/tests/unit/test_external_mcp_config.py`
 
 
@@ -983,8 +998,22 @@
   - *Issue #96: Facilitator should ACCUMULATE context, not OVERWRITE.*
 - **`test_facilitator_fresh_context_when_no_existing`**
   - *Issue #96: First pass (no existing gathered_context) should work normally.*
-- **`test_facilitator_prior_work_summary_included_in_context`**
-  - *ADR-ROADMAP-001: Facilitator summarizes research_trace artifacts for continuity.*
+- **`test_facilitator_assembles_resume_trace_for_prior_work`**
+  - *ADR-CORE-059: Facilitator assembles resume_trace from prior research traces.*
+- **`test_facilitator_surfaces_exit_interview_feedback`**
+  - *Issue #100: Facilitator surfaces Exit Interview feedback in gathered_context.*
+- **`test_facilitator_skips_exit_interview_feedback_when_complete`**
+  - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
+- **`test_facilitator_summarizes_work_in_progress_for_benign_interrupt`**
+  - *Issue #108: Facilitator surfaces work-in-progress for BENIGN interrupts.*
+- **`test_facilitator_no_wip_summary_without_max_iterations`**
+  - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
+- **`test_facilitator_no_wip_summary_when_exit_interview_result_present`**
+  - *Issue #108: No work-in-progress summary when exit_interview_result is present.*
+- **`test_facilitator_no_wip_summary_without_trace`**
+  - *Issue #108: No work-in-progress summary if no research trace exists.*
+- **`test_facilitator_wip_summary_shows_last_action`**
+  - *Issue #108: Work-in-progress summary should show the last action taken.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1180,6 +1209,35 @@
 
 - **`test_install_script_creates_venv_and_installs_pytest`**
   - *Test that install.sh creates a virtual environment and installs pytest.*
+
+## `app/tests/unit/test_interrupt_classifier.py`
+
+- **`test_max_iterations_exceeded_in_scratchpad_routes_to_facilitator`**
+  - *BENIGN: max_iterations_exceeded flag → Facilitator for seamless continue.*
+- **`test_max_iterations_exceeded_in_artifacts_routes_to_facilitator`**
+  - *BENIGN: max_iterations_exceeded in artifacts → Facilitator.*
+- **`test_context_overflow_routes_to_facilitator`**
+  - *BENIGN: context_overflow → Facilitator (compress and continue).*
+- **`test_user_abort_routes_to_end`**
+  - *TERMINAL: user_abort → End (immediate termination).*
+- **`test_stagnation_detected_flag_routes_to_interrupt_evaluator`**
+  - *PATHOLOGICAL: stagnation_detected flag → Interrupt Evaluator.*
+- **`test_tool_error_routes_to_interrupt_evaluator`**
+  - *PATHOLOGICAL: tool_error flag → Interrupt Evaluator.*
+- **`test_trace_stutter_detected_routes_to_interrupt_evaluator`**
+  - *PATHOLOGICAL: trace stutter (via semantic-chunker drift) → Interrupt Evaluator.*
+- **`test_unrecovered_failure_routes_to_interrupt_evaluator`**
+  - *PATHOLOGICAL: unrecovered tool failure in trace → Interrupt Evaluator.*
+- **`test_artifacts_present_routes_to_exit_interview`**
+  - *NORMAL: artifacts present → Exit Interview for semantic completion.*
+- **`test_no_artifacts_no_flags_routes_to_router`**
+  - *NORMAL: no artifacts, no flags → Router (continue workflow).*
+- **`test_terminal_takes_priority_over_benign`**
+  - *TERMINAL should take priority over BENIGN flags.*
+- **`test_benign_takes_priority_over_pathological`**
+  - *BENIGN should take priority over PATHOLOGICAL detection.*
+- **`test_benign_takes_priority_over_artifacts`**
+  - *BENIGN interrupt should route to Facilitator even if artifacts present.*
 
 ## `app/tests/unit/test_invariants.py`
 
