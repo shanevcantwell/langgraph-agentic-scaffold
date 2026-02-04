@@ -172,11 +172,19 @@ class GraphOrchestrator:
                         is_loop = False
                         break
                 if is_loop:
-                    termination_reason = (f"The workflow is stuck in an unproductive loop and has been halted. "
-                                          f"The sequence '{list(last_block)}' was repeated {self.max_loop_cycles} times.")
-                    logger.error(termination_reason)
-                    # Add the reason to the scratchpad so the EndSpecialist can report it.
-                    state.setdefault("scratchpad", {})["termination_reason"] = termination_reason
+                    # Issue #111: Set loop_detected (informational) instead of termination_reason (abort)
+                    # Exit Interview will validate whether the task is truly stuck before we abort.
+                    # This prevents stale termination_reason when Exit Interview says COMPLETE.
+                    loop_info = {
+                        "detected": True,
+                        "sequence": list(last_block),
+                        "cycles": self.max_loop_cycles
+                    }
+                    state.setdefault("scratchpad", {})["loop_detected"] = loop_info
+                    logger.warning(
+                        f"Loop pattern detected: sequence '{list(last_block)}' repeated {self.max_loop_cycles} times. "
+                        "Routing to Exit Interview for validation."
+                    )
                     return True
         return False
 
@@ -377,15 +385,43 @@ class GraphOrchestrator:
         This gates premature termination by validating accumulated state
         satisfies the original user request.
 
+        Issue #111: Deferred termination_reason
+        - If loop_detected was set, we only set termination_reason AFTER Exit Interview
+          confirms the task is truly stuck (INCOMPLETE after loop detection)
+        - If Exit Interview says COMPLETE despite loop pattern, we don't abort
+
         When incomplete, we route through Facilitator (not directly to Router) so that
         gathered_context is refreshed with current filesystem state. This prevents
         thrashing where specialists see stale context and repeat their work.
         """
+        scratchpad = state.get("scratchpad", {})
+        loop_detected = scratchpad.get("loop_detected")
+
         if state.get("task_is_complete"):
+            # Issue #111: Task is done - clear loop_detected if present (consumed, not acted on)
+            if loop_detected:
+                logger.info("Exit Interview: COMPLETE despite loop pattern - clearing loop_detected")
+                scratchpad.pop("loop_detected", None)
             logger.info("--- Exit Interview: Task validated as COMPLETE. Routing to END. ---")
             return CoreSpecialist.END.value
 
-        # Task incomplete - route through Facilitator to refresh context before retry
+        # Task incomplete
+        # Issue #111: If loop was detected AND Exit Interview confirms stuck, NOW abort
+        if loop_detected:
+            sequence = loop_detected.get("sequence", [])
+            cycles = loop_detected.get("cycles", 3)
+            termination_reason = (
+                f"The workflow is stuck in an unproductive loop and has been halted. "
+                f"The sequence '{sequence}' was repeated {cycles} times, and Exit Interview "
+                f"confirmed the task is incomplete."
+            )
+            logger.error(termination_reason)
+            scratchpad["termination_reason"] = termination_reason
+            scratchpad.pop("loop_detected", None)  # Consumed
+            logger.info("--- Exit Interview: INCOMPLETE + loop confirmed. Aborting. ---")
+            return CoreSpecialist.END.value
+
+        # Normal incomplete - route through Facilitator to refresh context before retry
         # Facilitator re-executes context_plan, updating gathered_context with current state
         if "facilitator_specialist" in self.specialists:
             logger.info("--- Exit Interview: Task INCOMPLETE. Routing to Facilitator to refresh context. ---")

@@ -200,3 +200,150 @@ def test_route_validation_disabled_when_no_allowed_destinations():
 
     # Assert: Returns whatever was in state (no validation)
     assert result == "any_specialist"
+
+
+# =============================================================================
+# Issue #111: Deferred termination_reason (Loop Detector Refactor)
+# =============================================================================
+
+class TestDeferredTerminationReason:
+    """
+    Issue #111: Loop detector should defer termination_reason until after
+    Exit Interview validation.
+
+    The principle: termination_reason should be a true "abort with message"
+    signal, not a "suspicion pending validation" signal.
+
+    Flow:
+    1. Loop detector sets loop_detected: True (informational)
+    2. Routes to Exit Interview for validation
+    3. Exit Interview decides:
+       - COMPLETE → task is done, no abort needed (despite loop pattern)
+       - INCOMPLETE → task truly stuck, NOW set termination_reason and abort
+    """
+
+    def test_loop_detector_sets_loop_detected_not_termination_reason(self, orchestrator_instance):
+        """
+        Loop detector should set loop_detected (informational) instead of
+        termination_reason (abort signal).
+        """
+        orchestrator_instance.max_loop_cycles = 3
+        orchestrator_instance.min_loop_len = 2
+
+        state = {
+            "routing_history": ["C", "A", "B", "A", "B", "A", "B"],
+            "next_specialist": "some_specialist",
+            "scratchpad": {}
+        }
+
+        result = orchestrator_instance.route_to_next_specialist(state)
+
+        # Should route to Exit Interview for validation
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value
+
+        # Should set loop_detected (informational)
+        assert "loop_detected" in state["scratchpad"]
+        loop_info = state["scratchpad"]["loop_detected"]
+        assert loop_info["detected"] is True
+        assert loop_info["sequence"] == ["A", "B"]
+        assert loop_info["cycles"] == 3
+
+        # Should NOT set termination_reason yet
+        assert "termination_reason" not in state["scratchpad"]
+
+    def test_after_exit_interview_complete_clears_loop_detected(self, orchestrator_instance):
+        """
+        When Exit Interview says COMPLETE despite loop pattern, we should
+        clear loop_detected and NOT set termination_reason.
+        """
+        state = {
+            "task_is_complete": True,
+            "scratchpad": {
+                "loop_detected": {
+                    "detected": True,
+                    "sequence": ["A", "B"],
+                    "cycles": 3
+                }
+            }
+        }
+
+        result = orchestrator_instance.after_exit_interview(state)
+
+        # Should route to END (task is done)
+        assert result == CoreSpecialist.END.value
+
+        # loop_detected should be cleared (consumed, not acted on)
+        assert "loop_detected" not in state["scratchpad"]
+
+        # termination_reason should NOT be set (task succeeded)
+        assert "termination_reason" not in state["scratchpad"]
+
+    def test_after_exit_interview_incomplete_with_loop_sets_termination_reason(self, orchestrator_instance):
+        """
+        When Exit Interview says INCOMPLETE after loop detection, NOW we
+        should set termination_reason and abort.
+        """
+        state = {
+            "task_is_complete": False,
+            "scratchpad": {
+                "loop_detected": {
+                    "detected": True,
+                    "sequence": ["A", "B"],
+                    "cycles": 3
+                }
+            }
+        }
+
+        result = orchestrator_instance.after_exit_interview(state)
+
+        # Should route to END (abort)
+        assert result == CoreSpecialist.END.value
+
+        # termination_reason should NOW be set
+        assert "termination_reason" in state["scratchpad"]
+        reason = state["scratchpad"]["termination_reason"]
+        assert "stuck in an unproductive loop" in reason
+        assert "['A', 'B']" in reason
+        assert "Exit Interview confirmed" in reason
+
+        # loop_detected should be cleared (consumed)
+        assert "loop_detected" not in state["scratchpad"]
+
+    def test_after_exit_interview_incomplete_without_loop_routes_to_facilitator(self, orchestrator_instance):
+        """
+        Normal INCOMPLETE (no loop) should route to Facilitator for retry,
+        not set termination_reason.
+        """
+        # Add facilitator to specialists so it's available
+        orchestrator_instance.specialists = {"facilitator_specialist": MagicMock()}
+
+        state = {
+            "task_is_complete": False,
+            "scratchpad": {}  # No loop_detected
+        }
+
+        result = orchestrator_instance.after_exit_interview(state)
+
+        # Should route to Facilitator for retry
+        assert result == "facilitator_specialist"
+
+        # termination_reason should NOT be set
+        assert "termination_reason" not in state["scratchpad"]
+
+    def test_after_exit_interview_complete_without_loop_normal_end(self, orchestrator_instance):
+        """
+        Normal COMPLETE (no loop) should route to END without any special handling.
+        """
+        state = {
+            "task_is_complete": True,
+            "scratchpad": {}  # No loop_detected
+        }
+
+        result = orchestrator_instance.after_exit_interview(state)
+
+        # Should route to END
+        assert result == CoreSpecialist.END.value
+
+        # Scratchpad should remain clean
+        assert "termination_reason" not in state["scratchpad"]
+        assert "loop_detected" not in state["scratchpad"]

@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 71 | 624 |
+| Unit | 71 | 629 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **106** | **908** |
+| **Total** | **106** | **913** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -1081,6 +1081,16 @@
   - *Tests that fanout validation catches when hardcoded fanout destinations*
 - **`test_route_validation_disabled_when_no_allowed_destinations`**
   - *Tests that route validation is gracefully disabled when allowed_destinations*
+- **`test_loop_detector_sets_loop_detected_not_termination_reason`**
+  - *Loop detector should set loop_detected (informational) instead of*
+- **`test_after_exit_interview_complete_clears_loop_detected`**
+  - *When Exit Interview says COMPLETE despite loop pattern, we should*
+- **`test_after_exit_interview_incomplete_with_loop_sets_termination_reason`**
+  - *When Exit Interview says INCOMPLETE after loop detection, NOW we*
+- **`test_after_exit_interview_incomplete_without_loop_routes_to_facilitator`**
+  - *Normal INCOMPLETE (no loop) should route to Facilitator for retry,*
+- **`test_after_exit_interview_complete_without_loop_normal_end`**
+  - *Normal COMPLETE (no loop) should route to END without any special handling.*
 
 ## `app/tests/unit/test_heap_invariants.py`
 
