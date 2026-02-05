@@ -400,8 +400,8 @@ Open questions to investigate:
             "args": result.call.args,
             "success": result.success,
             "error": result.error,
-            # Truncate large results for storage
-            "result_preview": str(result.result)[:500] if result.result else None
+            # Full result for BENIGN continuation (Issue #96)
+            "result_preview": str(result.result) if result.result else None
         }
 
     def _serialize_react_iteration(self, step: ReActIteration) -> Dict[str, Any]:
@@ -417,8 +417,8 @@ Open questions to investigate:
             "args": step.tool_call.args,
             "success": step.success,
             "thought": step.thought,
-            # Truncate large observations for storage
-            "observation_preview": step.observation[:500] if step.observation else None
+            # Full observation for BENIGN continuation (Issue #96)
+            "observation_preview": step.observation if step.observation else None
         }
 
     def _update_context_from_trace(self, context: ProjectContext, trace: List[ReActIteration]) -> None:
@@ -458,8 +458,7 @@ Open questions to investigate:
             if h.success and h.result:
                 # Include first few successful results as context
                 if len(successful_results) < 5:
-                    result_preview = str(h.result)[:100]
-                    successful_results.append(f"- {h.call.name}: {result_preview}...")
+                    successful_results.append(f"- {h.call.name}: {h.result}")
 
         summary_parts = [
             f"Tool calls: {', '.join(f'{name}({count})' for name, count in tool_counts.items())}"
