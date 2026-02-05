@@ -291,17 +291,23 @@ class ArchiverSpecialist(BaseSpecialist):
             logger.error(f"Failed to save report to {filepath}: {e}")
 
     def _prune_archive(self):
-        """Prunes the archive directory based on the configured strategy."""
-        if self.pruning_strategy == "count":
-            # Only prune regular files (not directories from failed/incomplete archives)
-            all_entries = [os.path.join(self.archive_dir, f) for f in os.listdir(self.archive_dir)]
-            files = sorted([f for f in all_entries if os.path.isfile(f)], key=os.path.getmtime)
+        """Prunes the archive directory based on the configured strategy.
 
-            # Warn about any orphaned directories (failed archive cleanup)
-            orphaned_dirs = [f for f in all_entries if os.path.isdir(f)]
-            if orphaned_dirs:
-                logger.warning(f"Found {len(orphaned_dirs)} orphaned archive directories (likely from failed runs): {orphaned_dirs}")
+        Archives are training data - set pruning_max_count to 0 to disable pruning.
+        """
+        # 0 means no pruning (archives are training data)
+        if self.pruning_strategy != "count" or self.pruning_max_count == 0:
+            return
 
-            while len(files) > self.pruning_max_count:
-                os.remove(files.pop(0))
-                logger.info(f"Pruned old archive file.")
+        # Only prune regular files (not directories from failed/incomplete archives)
+        all_entries = [os.path.join(self.archive_dir, f) for f in os.listdir(self.archive_dir)]
+        files = sorted([f for f in all_entries if os.path.isfile(f)], key=os.path.getmtime)
+
+        # Warn about any orphaned directories (failed archive cleanup)
+        orphaned_dirs = [f for f in all_entries if os.path.isdir(f)]
+        if orphaned_dirs:
+            logger.warning(f"Found {len(orphaned_dirs)} orphaned archive directories (likely from failed runs): {orphaned_dirs}")
+
+        while len(files) > self.pruning_max_count:
+            os.remove(files.pop(0))
+            logger.info(f"Pruned old archive file.")
