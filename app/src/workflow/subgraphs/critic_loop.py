@@ -10,15 +10,21 @@ class CriticLoopSubgraph(BaseSubgraph):
         if CoreSpecialist.CRITIC.value in self.specialists:
             critic_config = self.config.get("specialists", {}).get(CoreSpecialist.CRITIC.value, {})
             revision_target = critic_config.get("revision_target", CoreSpecialist.ROUTER.value)
+            # Issue #128: Include exit_interview as destination for ACCEPT path
+            # after_critique_decider calls check_task_completion on ACCEPT,
+            # which routes to exit_interview for validation
+            destinations = {
+                revision_target: revision_target,
+                CoreSpecialist.END.value: CoreSpecialist.END.value,
+                CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
+                CoreSpecialist.CRITIC.value: CoreSpecialist.CRITIC.value  # Self to prevent default looping
+            }
+            if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+                destinations[CoreSpecialist.EXIT_INTERVIEW.value] = CoreSpecialist.EXIT_INTERVIEW.value
             workflow.add_conditional_edges(
                 CoreSpecialist.CRITIC.value,
                 self.orchestrator.after_critique_decider,
-                {
-                    revision_target: revision_target,
-                    CoreSpecialist.END.value: CoreSpecialist.END.value,
-                    CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
-                    CoreSpecialist.CRITIC.value: CoreSpecialist.CRITIC.value # Add self to prevent default looping
-                }
+                destinations
             )
 
             # ADR-CORE-012: WEB_BUILDER ↔ CRITIC SUBGRAPH
