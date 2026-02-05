@@ -165,12 +165,11 @@ specialists:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
     description: "Builds or modifies web UIs (HTML/CSS/JS or Gradio Python). Can work from a 'system_plan' artifact OR from attached code files. Use this for creating new UIs, rewriting UI themes, or modifying existing web applications."
-    # Requires system_plan - creates emergent redirect to systems_architect first.
-    # Will use text_to_process if available, but doesn't require it.
-    requires_artifacts: ["system_plan"]
-    artifact_providers:
-      system_plan: "systems_architect"
     tags: ["vision_capable"]
+    # SA MCP integration: calls create_plan() directly instead of requiring artifact redirect
+    tools:
+      systems_architect:
+        - create_plan
 
   # REMOVED: file_specialist - superseded by external filesystem MCP container (ADR-CORE-035)
   # File operations now handled via:
