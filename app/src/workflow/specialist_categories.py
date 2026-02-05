@@ -24,8 +24,10 @@ class SpecialistCategories:
     """
 
     # MCP-only: Not added as graph nodes, accessed only via MCP
+    # Issue #129: systems_architect is now MCP-only (called by web_builder, exit_interview)
     MCP_ONLY: frozenset = frozenset([
         "summarizer_specialist",
+        "systems_architect",
     ])
 
     # Core infrastructure: Special graph roles
