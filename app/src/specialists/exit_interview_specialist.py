@@ -151,7 +151,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 "task_is_complete": True,
                 "artifacts": {
                     "exit_plan": exit_plan,  # Issue #115: Persist for archive/observability
-                    "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
+                    # Issue #114: Don't clear max_iterations_exceeded - Facilitator consumes it
                     "exit_interview_result": {
                         "is_complete": True,
                         "reasoning": evaluation.reasoning
@@ -183,7 +183,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 "task_is_complete": False,
                 "artifacts": {
                     "exit_plan": exit_plan,  # Issue #115: Persist for next iteration
-                    "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
+                    # Issue #114: Don't clear max_iterations_exceeded - Facilitator consumes it
                     "exit_interview_result": {
                         "is_complete": False,
                         "reasoning": evaluation.reasoning,

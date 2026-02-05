@@ -243,6 +243,36 @@ class FacilitatorSpecialist(BaseSpecialist):
         if return_control == ReturnControlMode.DELTA:
             logger.warning("Facilitator: DELTA mode requested but not implemented, using ACCUMULATE")
 
+        # Issue #114: BENIGN continuation - pass trace when model was working but ran out of runway
+        # Key signal: max_iterations_exceeded must be True (model hit runway limit)
+        # Two scenarios:
+        # 1. Pure BENIGN: max_exceeded + no EI result (interrupted before EI ran)
+        # 2. BENIGN after EI: max_exceeded + EI said INCOMPLETE (EI judged but model was working)
+        # In both cases, the model was doing the right thing, just needs more iterations.
+        max_exceeded = artifacts.get("max_iterations_exceeded", False)
+        ei_incomplete = exit_interview_result and not exit_interview_result.get("is_complete", True)
+
+        # max_exceeded is REQUIRED - it's the signal that this is continuation, not correction
+        is_benign_continuation = max_exceeded and (not exit_interview_result or ei_incomplete)
+
+        if is_benign_continuation:
+            resume_trace = self._assemble_resume_trace(artifacts)
+            if resume_trace:
+                logger.info(
+                    f"Facilitator: BENIGN continuation - passing {len(resume_trace)} trace entries "
+                    f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
+                )
+                return {
+                    "artifacts": {
+                        "resume_trace": resume_trace,
+                        "max_iterations_exceeded": False,  # Consumer clears the flag
+                        # Don't touch gathered_context - keep original value
+                    },
+                    "scratchpad": {
+                        "facilitator_complete": True
+                    }
+                }
+
         # Load original plan
         context_plan_data = artifacts.get("context_plan")
         if not context_plan_data:

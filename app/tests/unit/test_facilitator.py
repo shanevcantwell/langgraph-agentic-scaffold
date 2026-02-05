@@ -768,19 +768,20 @@ def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
 
 
 # =============================================================================
-# Issue #108: Work-in-Progress Summary for BENIGN Interrupts
+# Issue #108/114: BENIGN Interrupts - Trace Passthrough
+# =============================================================================
+# Issue #108 originally added WIP summaries. Issue #114 supersedes this with
+# trace passthrough - model sees its actual conversation history instead of
+# a summary. WIP summaries are no longer generated when early return triggers.
 # =============================================================================
 
-def test_facilitator_summarizes_work_in_progress_for_benign_interrupt(facilitator):
+def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
     """
-    Issue #108: Facilitator surfaces work-in-progress for BENIGN interrupts.
+    Issue #114 supersedes Issue #108: BENIGN interrupt passes trace, not WIP summary.
 
-    When max_iterations_exceeded is set (BENIGN interrupt via classify_interrupt),
-    Facilitator should summarize what the specialist was doing so Router can
-    make an informed decision about continuation.
-
-    Without this, Router sees "0 searches, 0 pages" (web-research framing)
-    and picks the wrong specialist.
+    When max_iterations_exceeded is set (BENIGN interrupt), Facilitator should
+    early return with the resume_trace so the model can continue its conversation.
+    The model doesn't need a summary - it sees its actual tool call history.
     """
     plan = ContextPlan(
         reasoning="Continue interrupted task",
@@ -793,19 +794,21 @@ def test_facilitator_summarizes_work_in_progress_for_benign_interrupt(facilitato
         ]
     )
 
+    original_trace = [
+        {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
+        {"tool": "read_file", "args": {"path": "/workspace/1.txt"}, "success": True},
+        {"tool": "read_file", "args": {"path": "/workspace/2.txt"}, "success": True},
+        {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
+        {"tool": "copy_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
+    ]
+
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
             # BENIGN interrupt flag
             "max_iterations_exceeded": True,
             # Trace from the specialist's work
-            "research_trace_0": [
-                {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
-                {"tool": "read_file", "args": {"path": "/workspace/1.txt"}, "success": True},
-                {"tool": "read_file", "args": {"path": "/workspace/2.txt"}, "success": True},
-                {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
-                {"tool": "copy_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
-            ]
+            "research_trace_0": original_trace
         },
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
@@ -814,17 +817,16 @@ def test_facilitator_summarizes_work_in_progress_for_benign_interrupt(facilitato
         mock_list.return_value = ["animals/", "2.txt", "3.txt"]
         result = facilitator.execute(state)
 
-    gathered = result["artifacts"]["gathered_context"]
+        # CRITICAL: Should NOT call filesystem (early return)
+        mock_list.assert_not_called()
 
-    # Should have work-in-progress summary
-    assert "## Work In Progress" in gathered
-    assert "project_director" in gathered
-    assert "Operations completed:" in gathered
-    assert "list_directory: 1" in gathered
-    assert "read_file: 2" in gathered
-    assert "create_directory: 1" in gathered
-    assert "copy_file: 1" in gathered
-    assert "Continue with `project_director`" in gathered
+    # Should have resume_trace, NOT gathered_context
+    assert "resume_trace" in result["artifacts"]
+    assert result["artifacts"]["resume_trace"] == original_trace
+    assert "gathered_context" not in result["artifacts"]
+
+    # Consumer clears the flag
+    assert result["artifacts"]["max_iterations_exceeded"] is False
 
 
 def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
@@ -863,12 +865,15 @@ def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
     assert "## Work In Progress" not in gathered
 
 
-def test_facilitator_no_wip_summary_when_exit_interview_result_present(facilitator):
+def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
     """
-    Issue #108: No work-in-progress summary when exit_interview_result is present.
+    Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.
 
-    If exit_interview_result exists, this is an Exit Interview retry path,
-    not a BENIGN interrupt. Exit Interview feedback handles this case.
+    When max_iterations_exceeded=True AND exit_interview_result.is_complete=False,
+    this is BENIGN continuation (model was working, ran out of runway), not correction.
+    Facilitator should early return with resume_trace.
+
+    The model doesn't need EI feedback - it continues its conversation naturally.
     """
     plan = ContextPlan(
         reasoning="Retry after Exit Interview",
@@ -881,18 +886,19 @@ def test_facilitator_no_wip_summary_when_exit_interview_result_present(facilitat
         ]
     )
 
+    original_trace = [
+        {"tool": "copy_file", "args": {"source": "a", "destination": "b"}, "success": True},
+    ]
+
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "max_iterations_exceeded": True,  # Would trigger WIP summary...
-            # ...but exit_interview_result takes precedence
+            "max_iterations_exceeded": True,  # Model was working
             "exit_interview_result": {
-                "is_complete": False,
+                "is_complete": False,  # EI judged incomplete
                 "reasoning": "Files not fully categorized"
             },
-            "research_trace_0": [
-                {"tool": "copy_file", "args": {"source": "a", "destination": "b"}, "success": True},
-            ]
+            "research_trace_0": original_trace
         },
         "routing_history": ["project_director"]
     }
@@ -901,11 +907,14 @@ def test_facilitator_no_wip_summary_when_exit_interview_result_present(facilitat
         mock_list.return_value = ["file.txt"]
         result = facilitator.execute(state)
 
-    gathered = result["artifacts"]["gathered_context"]
+        # CRITICAL: Should NOT call filesystem (early return)
+        mock_list.assert_not_called()
 
-    # Should have Exit Interview feedback, NOT work-in-progress summary
-    assert "### Next Steps (from Exit Interview)" in gathered
-    assert "## Work In Progress" not in gathered
+    # BENIGN continuation - resume_trace, not gathered_context
+    assert "resume_trace" in result["artifacts"]
+    assert result["artifacts"]["resume_trace"] == original_trace
+    assert "gathered_context" not in result["artifacts"]
+    assert result["artifacts"]["max_iterations_exceeded"] is False
 
 
 def test_facilitator_no_wip_summary_without_trace(facilitator):
@@ -942,9 +951,12 @@ def test_facilitator_no_wip_summary_without_trace(facilitator):
     assert "## Work In Progress" not in gathered
 
 
-def test_facilitator_wip_summary_shows_last_action(facilitator):
+def test_facilitator_benign_passes_full_trace(facilitator):
     """
-    Issue #108: Work-in-progress summary should show the last action taken.
+    Issue #114: BENIGN continuation passes full trace, not a summary.
+
+    The model sees its complete conversation history, including the last action.
+    No need for a "last action" summary - it's in the trace.
     """
     plan = ContextPlan(
         reasoning="Continue interrupted task",
@@ -957,14 +969,16 @@ def test_facilitator_wip_summary_shows_last_action(facilitator):
         ]
     )
 
+    original_trace = [
+        {"tool": "read_file", "args": {"path": "/workspace/1.txt"}, "success": True},
+        {"tool": "copy_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
+    ]
+
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
-            "research_trace_0": [
-                {"tool": "read_file", "args": {"path": "/workspace/1.txt"}, "success": True},
-                {"tool": "copy_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
-            ]
+            "research_trace_0": original_trace
         },
         "routing_history": ["project_director"]
     }
@@ -973,10 +987,288 @@ def test_facilitator_wip_summary_shows_last_action(facilitator):
         mock_list.return_value = ["file.txt"]
         result = facilitator.execute(state)
 
-    gathered = result["artifacts"]["gathered_context"]
+        # CRITICAL: Should NOT call filesystem (early return)
+        mock_list.assert_not_called()
 
-    # Last action should be shown
-    assert "Last action:" in gathered
-    assert "copy_file" in gathered
-    assert "/workspace/1.txt" in gathered
-    assert "/workspace/animals/1.txt" in gathered
+    # Full trace passed through - model sees its actual conversation
+    assert "resume_trace" in result["artifacts"]
+    assert result["artifacts"]["resume_trace"] == original_trace
+    assert len(result["artifacts"]["resume_trace"]) == 2
+
+    # Last action is in the trace (model sees it naturally)
+    last_action = result["artifacts"]["resume_trace"][-1]
+    assert last_action["tool"] == "copy_file"
+    assert last_action["args"]["source"] == "/workspace/1.txt"
+    assert last_action["args"]["destination"] == "/workspace/animals/1.txt"
+
+
+# =============================================================================
+# Issue #114: BENIGN Resume Early Return
+# =============================================================================
+
+def test_facilitator_benign_resume_passes_trace_without_context_accumulation(facilitator):
+    """
+    Issue #114: BENIGN resume should pass trace through without context pollution.
+
+    When max_iterations fires (no exit_interview_result) and prior work exists,
+    Facilitator should return early with just the resume_trace - no re-gathering
+    context, no accumulation to gathered_context.
+
+    Without this, gathered_context accumulates duplicate directory listings and
+    stale EI feedback, polluting the task_prompt that becomes the HumanMessage.
+    The model sees garbage in its "goal" and makes different decisions (creates
+    "weather" instead of continuing with animals/fruits/colors).
+
+    The fix: early return when resume_trace exists and no exit_interview_result.
+    """
+    plan = ContextPlan(
+        reasoning="Task interrupted mid-work",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace/test",
+                description="List directory"
+            )
+        ]
+    )
+
+    # BENIGN state: trace exists, NO exit_interview_result
+    original_gathered_context = """### Directory: /workspace/test
+- [FILE] /workspace/test/1.txt
+- [FILE] /workspace/test/2.txt
+- [FILE] /workspace/test/3.txt"""
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "gathered_context": original_gathered_context,
+            "max_iterations_exceeded": True,  # BENIGN interrupt flag
+            # Prior work trace - this is what should be passed through
+            "research_trace_0": [
+                {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
+                {"tool": "read_file", "args": {"path": "/workspace/test/1.txt"}, "success": True},
+                {"tool": "create_directory", "args": {"path": "/workspace/test/animals"}, "success": True},
+                {"tool": "move_file", "args": {"source": "/workspace/test/1.txt", "destination": "/workspace/test/animals/1.txt"}, "success": True},
+            ]
+        },
+        "scratchpad": {
+            # NO exit_interview_result - this is the BENIGN path
+        },
+        "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
+    }
+
+    # Mock _list_directory_via_filesystem_mcp to verify it's NOT called
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["2.txt", "3.txt", "[DIR] animals"]
+        result = facilitator.execute(state)
+
+        # CRITICAL: _list_directory should NOT be called (early return)
+        mock_list.assert_not_called()
+
+    # =========================================================================
+    # CRITICAL PATTERN: Trace passthrough must be UNMODIFIED
+    # The exact data in artifacts["research_trace_0"] must come out in
+    # artifacts["resume_trace"] - no transformation, no appending, no filtering.
+    # =========================================================================
+    assert "resume_trace" in result["artifacts"]
+    resume_trace = result["artifacts"]["resume_trace"]
+
+    # Must match the input EXACTLY - same count, same order, same data
+    original_trace = state["artifacts"]["research_trace_0"]
+    assert resume_trace == original_trace, (
+        f"resume_trace was modified during passthrough!\n"
+        f"Input: {original_trace}\n"
+        f"Output: {resume_trace}"
+    )
+
+    # =========================================================================
+    # CRITICAL PATTERN: Early return should NOT touch gathered_context
+    # The result["artifacts"] should only contain resume_trace.
+    # =========================================================================
+    assert "gathered_context" not in result["artifacts"], (
+        "Early return should NOT include gathered_context - it would pollute "
+        "the task_prompt. Leave it alone and let LangGraph's dict merge preserve "
+        "the original value."
+    )
+
+    # =========================================================================
+    # PATTERN: Minimal return structure
+    # resume_trace + max_iterations_exceeded (consumer clears the flag)
+    # =========================================================================
+    assert set(result["artifacts"].keys()) == {"resume_trace", "max_iterations_exceeded"}, (
+        f"Unexpected artifacts in early return: {result['artifacts'].keys()}"
+    )
+    # Consumer clears the flag
+    assert result["artifacts"]["max_iterations_exceeded"] is False
+    assert result["scratchpad"] == {"facilitator_complete": True}, (
+        f"Unexpected scratchpad in early return: {result['scratchpad']}"
+    )
+
+
+def test_facilitator_benign_resume_no_early_return_without_trace(facilitator):
+    """
+    Issue #114: Without prior trace, BENIGN path should NOT early return.
+
+    If max_iterations fired but no trace exists, Facilitator must still gather
+    context normally. The early return only applies when resume_trace can be
+    assembled (i.e., research_trace_N artifacts exist).
+    """
+    plan = ContextPlan(
+        reasoning="First run, no prior trace",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace/test",
+                description="List directory"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "max_iterations_exceeded": True,  # BENIGN flag
+            # NO research_trace_0 - no prior work exists
+        },
+        "scratchpad": {},  # NO exit_interview_result
+        "routing_history": []
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["1.txt", "2.txt", "3.txt"]
+        result = facilitator.execute(state)
+
+        # _list_directory SHOULD be called (no early return)
+        mock_list.assert_called_once()
+
+    # Result should have gathered_context (normal execution)
+    assert "gathered_context" in result["artifacts"]
+    assert "### Directory: /workspace/test" in result["artifacts"]["gathered_context"]
+
+    # resume_trace should NOT be in result (no trace to assemble)
+    # Check both possible locations
+    assert "resume_trace" not in result.get("artifacts", {}) or result["artifacts"].get("resume_trace") is None
+
+
+def test_facilitator_no_early_return_when_exit_interview_result_present(facilitator):
+    """
+    Issue #114: When exit_interview_result is present, NO early return.
+
+    Exit Interview retry path should NOT early return - it needs to potentially
+    re-gather context and add EI feedback. The early return is specifically for
+    BENIGN (max_iterations, no EI result) continuation.
+    """
+    plan = ContextPlan(
+        reasoning="Exit Interview retry",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace/test",
+                description="List directory"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "research_trace_0": [
+                {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
+            ],
+            # Exit Interview result IS present - this is EI retry, not BENIGN
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "Files not all categorized",
+                "missing_elements": "3.txt not moved",
+                "recommended_specialists": ["project_director"]
+            }
+        },
+        "scratchpad": {},
+        "routing_history": ["exit_interview_specialist"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["1.txt", "2.txt", "3.txt"]
+        result = facilitator.execute(state)
+
+        # _list_directory SHOULD be called (not early return)
+        mock_list.assert_called_once()
+
+    # Result should have gathered_context with EI feedback
+    assert "gathered_context" in result["artifacts"]
+    # EI feedback should be present in gathered_context
+    assert "### Next Steps (from Exit Interview)" in result["artifacts"]["gathered_context"]
+    assert "Files not all categorized" in result["artifacts"]["gathered_context"]
+
+
+def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
+    """
+    Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations was the cause.
+
+    When:
+    - max_iterations_exceeded: True (model was working, ran out of runway)
+    - exit_interview_result.is_complete: False (EI correctly judged work incomplete)
+
+    This is CONTINUATION, not CORRECTION. The model was doing the right thing,
+    it just needs more iterations. Pass the resume_trace through.
+
+    Before fix: EI cleared max_iterations_exceeded, Facilitator saw EI result,
+    treated it as correction cycle, PD started from zero.
+
+    After fix: Facilitator checks max_iterations_exceeded BEFORE deciding.
+    If True + INCOMPLETE, it's BENIGN continuation.
+    """
+    plan = ContextPlan(
+        reasoning="Task interrupted mid-work",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace/test",
+                description="List directory"
+            )
+        ]
+    )
+
+    original_trace = [
+        {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
+        {"tool": "read_file", "args": {"path": "/workspace/test/1.txt"}, "success": True},
+        {"tool": "create_directory", "args": {"path": "/workspace/test/animals"}, "success": True},
+    ]
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "research_trace_0": original_trace,
+            # KEY: Both flags present - this is BENIGN+INCOMPLETE
+            "max_iterations_exceeded": True,  # Model was working
+            "exit_interview_result": {
+                "is_complete": False,  # EI correctly judged incomplete
+                "reasoning": "Only 1 of 6 files categorized",
+                "missing_elements": "5 files still need categorization",
+                "recommended_specialists": ["project_director"],
+                "return_control": "accumulate"
+            }
+        },
+        "scratchpad": {},
+        "routing_history": ["project_director", "exit_interview_specialist"]
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["1.txt", "2.txt", "3.txt"]
+        result = facilitator.execute(state)
+
+        # CRITICAL: Early return - should NOT re-gather context
+        mock_list.assert_not_called()
+
+    # Should return resume_trace for continuation
+    assert "resume_trace" in result["artifacts"]
+    assert result["artifacts"]["resume_trace"] == original_trace
+
+    # Should NOT include gathered_context (early return)
+    assert "gathered_context" not in result["artifacts"]
+
+    # Should clear max_iterations_exceeded (consumer clears flag)
+    assert result["artifacts"]["max_iterations_exceeded"] is False
+
+    # Should mark facilitator complete
+    assert result["scratchpad"] == {"facilitator_complete": True}

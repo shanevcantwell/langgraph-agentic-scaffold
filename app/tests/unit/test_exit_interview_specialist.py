@@ -346,3 +346,86 @@ class TestExitInterviewSAIntegration:
         # exit_plan should be persisted even on incomplete
         assert "exit_plan" in result["artifacts"]
         assert result["artifacts"]["exit_plan"]["plan_summary"] == "Sort plan"
+
+
+# =============================================================================
+# Issue #114: EI should NOT clear max_iterations_exceeded
+# =============================================================================
+
+class TestExitInterviewSignalPreservation:
+    """
+    Issue #114: EI should not clear max_iterations_exceeded.
+
+    The consumer (Facilitator) clears the flag, not a bystander (EI).
+    EI destroyed the signal before its real consumer could read it.
+    """
+
+    def test_ei_does_not_clear_max_iterations_on_complete(self, exit_interview):
+        """
+        When EI says COMPLETE, it should NOT include max_iterations_exceeded in artifacts.
+        """
+        state = {
+            "artifacts": {
+                "user_request": "Sort files",
+                "max_iterations_exceeded": True  # Flag was set by PD
+            },
+            "messages": [],
+            "routing_history": ["project_director"]
+        }
+
+        exit_interview.mcp_client = MagicMock()
+        exit_interview.mcp_client.call.return_value = {"artifacts": {"exit_plan": {}}}
+
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": True,
+                "reasoning": "All done",
+                "missing_elements": "",
+                "recommended_specialists": []
+            }
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        # EI should NOT set max_iterations_exceeded (doesn't touch the flag)
+        assert "max_iterations_exceeded" not in result["artifacts"], (
+            "EI should not touch max_iterations_exceeded - consumer (Facilitator) clears it"
+        )
+
+    def test_ei_does_not_clear_max_iterations_on_incomplete(self, exit_interview):
+        """
+        When EI says INCOMPLETE, it should NOT include max_iterations_exceeded in artifacts.
+
+        This is the critical case: if max_iterations_exceeded is True and EI says INCOMPLETE,
+        Facilitator needs to see the flag to know this is BENIGN continuation, not correction.
+        """
+        state = {
+            "artifacts": {
+                "user_request": "Sort files",
+                "max_iterations_exceeded": True  # Flag was set by PD
+            },
+            "messages": [],
+            "routing_history": ["project_director"]
+        }
+
+        exit_interview.mcp_client = MagicMock()
+        exit_interview.mcp_client.call.return_value = {"artifacts": {"exit_plan": {}}}
+
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": False,
+                "reasoning": "Only half done",
+                "missing_elements": "More work needed",
+                "recommended_specialists": ["project_director"]
+            }
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        # EI should NOT set max_iterations_exceeded (doesn't touch the flag)
+        assert "max_iterations_exceeded" not in result["artifacts"], (
+            "EI should not touch max_iterations_exceeded - Facilitator needs to see it "
+            "to distinguish BENIGN continuation from correction cycle"
+        )
