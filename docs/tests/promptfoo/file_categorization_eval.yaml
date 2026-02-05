@@ -1,0 +1,232 @@
+# Issue #88 Model Evaluation - Semantic File Categorization
+#
+# Purpose: Test which models can categorize files by semantic content
+# and move them to appropriate folders.
+#
+# This is the REALISTIC version of the file sorting test:
+# - Neutral filenames (no confounding signal)
+# - Human-meaningful categories (not abstract letter ranges)
+# - Semantic understanding required (not character-level tricks)
+
+description: "Issue #88: Semantic file categorization"
+
+prompts:
+  - id: categorize_by_content
+    label: "Categorize files by content"
+    raw: |
+      You are a file organization assistant. Your task is to categorize files by reading their contents and moving them to the appropriate folder.
+
+      ## Instructions
+
+      1. Read the contents of each file
+      2. Determine which category the content belongs to
+      3. Move the file to the matching folder
+      4. Include the filename in the destination path
+
+      ## Output Format
+
+      Return a JSON object:
+      ```json
+      {
+        "operations": [
+          {"type": "move", "path": "source.txt", "destination": "category/source.txt"}
+        ],
+        "rationale": "Brief explanation of categorization decisions"
+      }
+      ```
+
+      CRITICAL: Destination must include the filename, not just the folder.
+      - CORRECT: "animals/1.txt"
+      - WRONG: "animals/" or "animals"
+
+      ---
+
+      USER REQUEST:
+      {{user_request}}
+
+      CONTEXT:
+      {{gathered_context}}
+
+      Respond with ONLY valid JSON.
+
+tests:
+  # ---------------------------------------------------------------------------
+  # Test 1: Basic semantic categorization (animals, fruits, colors)
+  # ---------------------------------------------------------------------------
+  - description: "Categorize files into animals/fruits/colors folders"
+    vars:
+      user_request: |
+        Read each file and move it to the appropriate category folder based on its contents.
+      gathered_context: |
+        ### Files to categorize:
+        - [FILE] 1.txt (contents: "The zebra is a striped animal native to Africa. It belongs to the horse family.")
+        - [FILE] 2.txt (contents: "An apple is a delicious fruit that grows on trees. Popular varieties include Fuji and Gala.")
+        - [FILE] 3.txt (contents: "The sky appears blue due to Rayleigh scattering of sunlight in the atmosphere.")
+
+        ### Target folders:
+        - [DIR] animals/
+        - [DIR] fruits/
+        - [DIR] colors/
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const moveOps = data.operations.filter(op => op.type === 'move');
+          return moveOps.length === 3;
+      # 1.txt (zebra) should go to animals/
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const move = data.operations.find(op => op.path.includes('1.txt'));
+          return move && move.destination.includes('animals');
+      # 2.txt (apple) should go to fruits/
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const move = data.operations.find(op => op.path.includes('2.txt'));
+          return move && move.destination.includes('fruits');
+      # 3.txt (blue sky) should go to colors/
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const move = data.operations.find(op => op.path.includes('3.txt'));
+          return move && move.destination.includes('colors');
+
+  # ---------------------------------------------------------------------------
+  # Test 2: Extended categorization (6 files)
+  # ---------------------------------------------------------------------------
+  - description: "Categorize 6 files into animals/fruits/colors"
+    vars:
+      user_request: |
+        Categorize each file by its content and move to the matching folder.
+      gathered_context: |
+        ### Files to categorize:
+        - [FILE] 1.txt (contents: "The zebra is a striped animal native to Africa.")
+        - [FILE] 2.txt (contents: "An apple is a delicious fruit that grows on trees.")
+        - [FILE] 3.txt (contents: "The sky appears blue due to Rayleigh scattering.")
+        - [FILE] 4.txt (contents: "Elephants are the largest land mammals with excellent memory.")
+        - [FILE] 5.txt (contents: "Bananas are tropical fruits rich in potassium.")
+        - [FILE] 6.txt (contents: "Red is a primary color associated with passion and energy.")
+
+        ### Target folders:
+        - [DIR] animals/   (for content about animals)
+        - [DIR] fruits/    (for content about fruits)
+        - [DIR] colors/    (for content about colors)
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.operations.filter(op => op.type === 'move').length === 6;
+      # Animals: 1.txt (zebra), 4.txt (elephant)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m1 = data.operations.find(op => op.path.includes('1.txt'));
+          const m4 = data.operations.find(op => op.path.includes('4.txt'));
+          return m1?.destination?.includes('animals') && m4?.destination?.includes('animals');
+      # Fruits: 2.txt (apple), 5.txt (banana)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m2 = data.operations.find(op => op.path.includes('2.txt'));
+          const m5 = data.operations.find(op => op.path.includes('5.txt'));
+          return m2?.destination?.includes('fruits') && m5?.destination?.includes('fruits');
+      # Colors: 3.txt (blue), 6.txt (red)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m3 = data.operations.find(op => op.path.includes('3.txt'));
+          const m6 = data.operations.find(op => op.path.includes('6.txt'));
+          return m3?.destination?.includes('colors') && m6?.destination?.includes('colors');
+
+  # ---------------------------------------------------------------------------
+  # Test 3: Document type categorization (ADR-style use case)
+  # ---------------------------------------------------------------------------
+  - description: "Categorize documents by type (ADRs, specs, notes)"
+    vars:
+      user_request: |
+        Organize these documents into the appropriate folders based on their content type.
+      gathered_context: |
+        ### Files to categorize:
+        - [FILE] doc1.md (contents: "# ADR-001: Use PostgreSQL for persistence\n\n## Status\nAccepted\n\n## Context\nWe need a database...")
+        - [FILE] doc2.md (contents: "# API Specification v2.0\n\n## Endpoints\n\nGET /users - Returns list of users...")
+        - [FILE] doc3.md (contents: "Meeting notes 2024-01-15\n\nAttendees: Alice, Bob\n\nDiscussed timeline for Q1...")
+        - [FILE] doc4.md (contents: "# ADR-002: Adopt TypeScript\n\n## Status\nProposed\n\n## Decision\nMigrate to TypeScript...")
+
+        ### Target folders:
+        - [DIR] adrs/       (Architecture Decision Records)
+        - [DIR] specs/      (Technical specifications)
+        - [DIR] notes/      (Meeting notes and misc)
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.operations.filter(op => op.type === 'move').length === 4;
+      # ADRs: doc1.md, doc4.md
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m1 = data.operations.find(op => op.path.includes('doc1.md'));
+          const m4 = data.operations.find(op => op.path.includes('doc4.md'));
+          return m1?.destination?.includes('adrs') && m4?.destination?.includes('adrs');
+      # Specs: doc2.md
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m2 = data.operations.find(op => op.path.includes('doc2.md'));
+          return m2?.destination?.includes('specs');
+      # Notes: doc3.md
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m3 = data.operations.find(op => op.path.includes('doc3.md'));
+          return m3?.destination?.includes('notes');
+
+  # ---------------------------------------------------------------------------
+  # Test 4: Ambiguous content (tests semantic understanding)
+  # ---------------------------------------------------------------------------
+  - description: "Handle content that could fit multiple categories"
+    vars:
+      user_request: |
+        Categorize these files. Use your best judgment for ambiguous content.
+      gathered_context: |
+        ### Files to categorize:
+        - [FILE] a.txt (contents: "The flamingo is a pink bird found in tropical regions.")
+        - [FILE] b.txt (contents: "Orange juice is made from oranges and is rich in vitamin C.")
+        - [FILE] c.txt (contents: "The golden retriever has a beautiful golden coat.")
+
+        ### Target folders:
+        - [DIR] animals/
+        - [DIR] fruits/
+        - [DIR] colors/
+
+        Note: Some content may reference multiple categories. Categorize by the PRIMARY subject.
+    assert:
+      - type: is-json
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.operations.filter(op => op.type === 'move').length === 3;
+      # flamingo = animal (despite "pink" color mention)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m = data.operations.find(op => op.path.includes('a.txt'));
+          return m?.destination?.includes('animals');
+      # orange juice = fruit (despite "orange" color)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m = data.operations.find(op => op.path.includes('b.txt'));
+          return m?.destination?.includes('fruits');
+      # golden retriever = animal (despite "golden" color)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const m = data.operations.find(op => op.path.includes('c.txt'));
+          return m?.destination?.includes('animals');
+
+outputPath: docs/tests/promptfoo/results/file_categorization_eval_results.json

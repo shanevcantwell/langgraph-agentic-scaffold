@@ -1,0 +1,334 @@
+# Issue #88 Model Evaluation - File Sorting with Content-Based Routing
+#
+# Purpose: Test which small models correctly produce file operations
+# for content-based sorting tasks.
+#
+# Run with: promptfoo eval -c tests/promptfoo/file_sorting_eval.yaml
+#
+# Models to compare (configure in providers section):
+# - qwen3-30b-a3b-instruct-2507 (current)
+# - gpt-oss-20b (current router)
+# - Candidates to try: qwen2.5-coder, llama3.2, phi-4, etc.
+
+description: "Issue #88: File sorting with content-based destination inference"
+
+# =============================================================================
+# PROMPTS
+# =============================================================================
+
+prompts:
+  # BatchProcessor prompt - structured output (FileOperationList JSON)
+  - id: batch_processor_prompt
+    label: "BatchProcessor - Structured Output"
+    raw: |
+      # BatchProcessorSpecialist System Prompt
+
+      You are the **BatchProcessorSpecialist**, responsible for organizing and sorting multiple files based on user requests.
+
+      ## Your Role
+
+      You process collections of files using emergent, intelligent decision-making to determine where each file should go. You operate atomically - handling all files in a single operation rather than requiring multiple routing cycles.
+
+      ## Capabilities
+
+      - **Parse batch requests**: Extract file lists and destination folders from user prompts
+      - **Emergent sorting**: Decide file destinations based on names, content, or patterns (not hardcoded rules)
+      - **Atomic execution**: Process entire batch in one operation
+      - **Error resilience**: Track success/failure per file with detailed reporting
+
+      ## CRITICAL: Move Operation Paths
+
+      For MOVE operations, the destination must be the **complete path including the filename**, not just a directory:
+      - CORRECT: `destination="a-m/e.txt"` (full path with filename)
+      - WRONG: `destination="a-m/"` or `destination="a-m"` (directory only - will fail with EISDIR error)
+
+      The underlying filesystem operation is a rename, not a shell-style `mv` command.
+
+      ## Output Format
+
+      Return a JSON object with this structure:
+      ```json
+      {
+        "operations": [
+          {"type": "move", "path": "source/file.txt", "destination": "target/file.txt"},
+          ...
+        ],
+        "rationale": "Explanation of sorting decisions"
+      }
+      ```
+
+      Operation types: read, write, move, delete, mkdir, list
+
+      ---
+
+      USER REQUEST:
+      {{user_request}}
+
+      CONTEXT:
+      {{gathered_context}}
+
+      Respond with ONLY valid JSON matching the FileOperationList schema.
+
+  # ProjectDirector prompt - function calling (ReAct)
+  - id: project_director_prompt
+    label: "ProjectDirector - Function Calling"
+    raw: |
+      # Project Director Prompt
+
+      You are the **Project Director**, an autonomous agent that manages complex, multi-step projects.
+      Your goal is to iteratively investigate, gather information, and execute actions until the user's goal is met.
+
+      ## How You Work
+
+      You have access to tools that will be provided in the tool schema. Use them by calling the appropriate tool function.
+
+      **Available tool categories:**
+      - **Filesystem**: `list_directory`, `read_file`, `create_directory`, `move_file`
+
+      ## Your Process
+
+      1. **Analyze** the goal and what information you need
+      2. **Call tools** to gather information or perform actions
+      3. **Iterate** - each tool result informs your next decision
+      4. **Complete** - when you have enough information, provide your final synthesis as plain text (no tool call)
+
+      ## Critical: Tool Calling vs Final Response
+
+      - **To take action**: Call a tool function (read_file, move_file, etc.)
+      - **To finish**: Return plain text WITHOUT calling any tools
+
+      ## Example Flow - Filesystem task ("sort files by contents"):
+      1. Call `list_directory` to see files
+      2. Call `read_file` on each file to understand contents
+      3. Based on contents, call `move_file` for each file
+      4. Return summary of what was done as text
+
+      ## CRITICAL: Filesystem Tasks Require Execution
+
+      For tasks involving file operations (sort, move, organize):
+
+      **Reading is NOT completing.** Reading files is investigation. Moving/creating files is the actual work. You MUST:
+
+      1. Read/investigate to understand what to do
+      2. **Execute the operation** (move_file, create_directory, write_file)
+      3. THEN synthesize what you accomplished
+
+      **WRONG:** Read 3 files -> synthesize "I found apple, zebra, banana"
+      **RIGHT:** Read 3 files -> move_file for each -> synthesize "Moved 3 files"
+
+      Do NOT return a text response until you have executed the requested operations.
+
+      ---
+
+      **Goal:** {{user_request}}
+
+      **System Context (gathered before your invocation):**
+      {{gathered_context}}
+
+      What is your next action?
+
+# =============================================================================
+# PROVIDERS
+# =============================================================================
+
+providers:
+  # LM Studio providers - configure your endpoints
+  - id: openai:chat:qwen3-30b
+    label: "Qwen3-30B (RTX 8000)"
+    config:
+      apiHost: "${LMSTUDIO_RTX8000_URL:-http://localhost:1235}"
+      apiKey: "lm-studio"
+      model: "qwen3-30b-a3b-instruct-2507"
+      temperature: 0.7
+      top_p: 0.8
+
+  - id: openai:chat:gpt-oss-20b
+    label: "GPT-OSS-20B (RTX 3090)"
+    config:
+      apiHost: "${LMSTUDIO_RTX3090_URL:-http://localhost:1234}"
+      apiKey: "lm-studio"
+      model: "openai/gpt-oss-20b-gguf/gpt-oss-20b-mxfp4.gguf"
+      temperature: 0.7
+      top_p: 0.8
+
+  # Add more providers here for comparison:
+  # - id: openai:chat:qwen2.5-coder
+  #   label: "Qwen2.5-Coder"
+  #   config:
+  #     apiHost: "http://localhost:1234"
+  #     apiKey: "lm-studio"
+  #     model: "qwen2.5-coder-32b"
+
+# =============================================================================
+# TEST CASES
+# =============================================================================
+
+tests:
+  # ---------------------------------------------------------------------------
+  # Test 1: Content-based sorting - BatchProcessor (structured output)
+  # ---------------------------------------------------------------------------
+  - description: "BatchProcessor: Sort files by content into a-m/n-z folders"
+    vars:
+      user_request: |
+        For each file in folder `sort_by_contents`, read the file contents and move the file into the appropriate existing subfolder based on the file's contents. Afterward, verify the files have been correctly placed by listing the contents of the subfolders.
+      gathered_context: |
+        ### Directory: sort_by_contents
+        - [DIR] sort_by_contents/a-m
+        - [FILE] sort_by_contents/animal.txt (contents: "zebra")
+        - [FILE] sort_by_contents/fruit.txt (contents: "apple")
+        - [DIR] sort_by_contents/n-z
+        - [FILE] sort_by_contents/yellow.txt (contents: "banana")
+    assert:
+      # Must return valid JSON
+      - type: is-json
+      # Must have operations array
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return Array.isArray(data.operations);
+      # Must produce MOVE operations (not just list/read)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const moveOps = data.operations.filter(op => op.type === 'move');
+          return moveOps.length >= 3;  // Should move all 3 files
+      # fruit.txt (apple) should go to a-m
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const fruitMove = data.operations.find(op =>
+            op.type === 'move' && op.path.includes('fruit.txt')
+          );
+          return fruitMove && fruitMove.destination.includes('a-m');
+      # animal.txt (zebra) should go to n-z
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const animalMove = data.operations.find(op =>
+            op.type === 'move' && op.path.includes('animal.txt')
+          );
+          return animalMove && animalMove.destination.includes('n-z');
+      # yellow.txt (banana) should go to a-m
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const yellowMove = data.operations.find(op =>
+            op.type === 'move' && op.path.includes('yellow.txt')
+          );
+          return yellowMove && yellowMove.destination.includes('a-m');
+      # Destination must include filename (not just directory)
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const moveOps = data.operations.filter(op => op.type === 'move');
+          return moveOps.every(op => op.destination && op.destination.includes('.txt'));
+
+  # ---------------------------------------------------------------------------
+  # Test 2: Alphabetic filename sorting - BatchProcessor (structured output)
+  # ---------------------------------------------------------------------------
+  - description: "BatchProcessor: Sort files alphabetically by filename"
+    vars:
+      user_request: |
+        Sort these files into a-m/ and n-z/ folders based on their filename: e.txt, l.txt, n.txt, q.txt, s.txt
+      gathered_context: |
+        ### Directory: .
+        - [DIR] a-m
+        - [DIR] n-z
+        - [FILE] e.txt
+        - [FILE] l.txt
+        - [FILE] n.txt
+        - [FILE] q.txt
+        - [FILE] s.txt
+    assert:
+      - type: is-json
+      # Must produce exactly 5 move operations
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const moveOps = data.operations.filter(op => op.type === 'move');
+          return moveOps.length === 5;
+      # e.txt and l.txt should go to a-m
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const eMove = data.operations.find(op => op.path === 'e.txt' || op.path === './e.txt');
+          const lMove = data.operations.find(op => op.path === 'l.txt' || op.path === './l.txt');
+          return eMove?.destination?.includes('a-m') && lMove?.destination?.includes('a-m');
+      # n.txt, q.txt, s.txt should go to n-z
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const ops = data.operations.filter(op =>
+            ['n.txt', 'q.txt', 's.txt'].some(f => op.path.includes(f))
+          );
+          return ops.length === 3 && ops.every(op => op.destination?.includes('n-z'));
+
+  # ---------------------------------------------------------------------------
+  # Test 3: Edge case - files with content that needs reading
+  # ---------------------------------------------------------------------------
+  - description: "BatchProcessor: Handle mixed content types"
+    vars:
+      user_request: |
+        Organize these documents by their content category. Move to reports/, data/, or misc/ based on what the file contains.
+      gathered_context: |
+        ### Files to sort:
+        - [FILE] doc1.txt (contents: "Q3 Revenue Report - Sales increased 15%")
+        - [FILE] doc2.txt (contents: "user_id,email,signup_date\n1,test@example.com,2024-01-01")
+        - [FILE] doc3.txt (contents: "Random notes from meeting")
+
+        ### Target directories:
+        - [DIR] reports/
+        - [DIR] data/
+        - [DIR] misc/
+    assert:
+      - type: is-json
+      # Should produce 3 move operations
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return data.operations.filter(op => op.type === 'move').length === 3;
+      # doc1.txt (report) should go to reports/
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const reportMove = data.operations.find(op => op.path.includes('doc1.txt'));
+          return reportMove?.destination?.includes('reports');
+      # doc2.txt (CSV data) should go to data/
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          const dataMove = data.operations.find(op => op.path.includes('doc2.txt'));
+          return dataMove?.destination?.includes('data');
+
+  # ---------------------------------------------------------------------------
+  # Test 4: Malformed request handling
+  # ---------------------------------------------------------------------------
+  - description: "BatchProcessor: Handle ambiguous request gracefully"
+    vars:
+      user_request: |
+        Sort the files
+      gathered_context: |
+        ### Directory: .
+        - [FILE] a.txt
+        - [FILE] b.txt
+        No destination folders specified.
+    assert:
+      - type: is-json
+      # Should either produce operations with reasonable defaults
+      # OR produce empty operations with a rationale
+      - type: javascript
+        value: |
+          const data = JSON.parse(output);
+          return Array.isArray(data.operations);
+
+# =============================================================================
+# OUTPUT CONFIGURATION
+# =============================================================================
+
+outputPath: tests/promptfoo/results/file_sorting_eval_results.json
+
+# Scoring weights
+defaultTest:
+  options:
+    # Fail fast on JSON parse errors
+    transformVars: false
