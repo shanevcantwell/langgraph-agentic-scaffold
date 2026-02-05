@@ -96,14 +96,28 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
         # Issue #115: Lazy initialization of exit_plan via SA MCP tool
         # EI is graph-wired, can't use requires_artifacts. Call SA on-demand.
+        # Issue #129: Request a VERIFICATION plan, not an implementation plan
         exit_plan = artifacts.get("exit_plan", {})
         if not exit_plan and self.mcp_client:
             logger.info("ExitInterviewSpecialist: No exit_plan found, calling SA via MCP")
+            # Build verification-focused context for SA
+            verification_context = f"""User request: {user_request}
+
+Generate a VERIFICATION PLAN with steps to CHECK that this work was completed correctly.
+Each step should be a verification action (list directory, count files, check file contents, verify artifact exists).
+These are steps to VERIFY completion, NOT steps to implement the task.
+
+Example verification steps:
+- "List source directory to confirm it is empty (all files moved)"
+- "Count files in each category folder"
+- "Verify total file count matches expected count"
+- "Check that artifact X exists in state"
+"""
             try:
                 result = self.mcp_client.call(
                     "systems_architect",
                     "create_plan",
-                    context=user_request,
+                    context=verification_context,
                     artifact_key="exit_plan"
                 )
                 exit_plan = result.get("artifacts", {}).get("exit_plan", {})

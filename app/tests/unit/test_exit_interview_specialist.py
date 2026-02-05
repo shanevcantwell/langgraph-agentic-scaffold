@@ -235,13 +235,12 @@ class TestExitInterviewSAIntegration:
 
         result = exit_interview._execute_logic(state)
 
-        # SA should have been called via MCP
-        exit_interview.mcp_client.call.assert_called_once_with(
-            "systems_architect",
-            "create_plan",
-            context="Sort files into categories",
-            artifact_key="exit_plan"
-        )
+        # SA should have been called via MCP with verification-focused context
+        exit_interview.mcp_client.call.assert_called_once()
+        call_kwargs = exit_interview.mcp_client.call.call_args.kwargs
+        assert call_kwargs["artifact_key"] == "exit_plan"
+        assert "Sort files into categories" in call_kwargs["context"]
+        assert "VERIFICATION PLAN" in call_kwargs["context"]  # Issue #129: verification focus
 
         # exit_plan should be persisted in artifacts
         assert "exit_plan" in result["artifacts"]
