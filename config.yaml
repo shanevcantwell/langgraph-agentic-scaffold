@@ -441,6 +441,11 @@ specialists:
     excluded_from:
       - triage_architect
       - router_specialist
+    # Issue #117: ReAct enabled for filesystem verification
+    # EI must verify file operations actually happened before marking COMPLETE
+    react:
+      enabled: true
+      max_iterations: 5  # Verification shouldn't need many iterations
     # Issue #115: EI calls SA via MCP on-demand to produce exit_plan
     # (removed dead requires_artifacts/artifact_providers - never enforced for graph-wired specialists)
     tools:
@@ -450,6 +455,7 @@ specialists:
         - calculate_drift
       filesystem:
         - list_directory
+        - read_file
 
   end_specialist:
     type: "hybrid"
@@ -458,8 +464,10 @@ specialists:
     archiver_config:
       type: "procedural"
       archive_path: "./logs/archive"
+      # Archive pruning: "count" limits to max_count, "none" disables pruning
+      # Set max_count to 0 to disable pruning (archives are training data)
       pruning_strategy: "count"
-      pruning_max_count: 50
+      pruning_max_count: 0
 
   prompt_triage_specialist:
     type: "llm"
