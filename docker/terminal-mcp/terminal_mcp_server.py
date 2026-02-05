@@ -50,6 +50,11 @@ ALLOWED_COMMANDS = {
     "uniq",
     "tr",
     "cut",
+    # File operations (within workspace)
+    "mv",
+    "mkdir",
+    "cp",
+    "touch",
     # System info
     "date",
     "whoami",

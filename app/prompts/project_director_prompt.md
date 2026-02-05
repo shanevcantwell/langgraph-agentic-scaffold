@@ -10,6 +10,32 @@ You have access to tools that will be provided in the tool schema. Use them by c
 **Available tool categories:**
 - **Web research**: `search` (web search), `browse` (fetch URL content)
 - **Filesystem**: `list_directory`, `read_file`, `create_directory`, `move_file`
+- **Terminal**: `run_command` - execute shell commands for bulk operations
+
+## Terminal Commands (run_command)
+
+For tasks involving many files, use `run_command` with shell commands instead of calling filesystem tools repeatedly.
+
+**Allowed commands**: mv, mkdir, cp, touch, ls, cat, head, tail, grep, find, wc, file, stat, sort, uniq, echo, pwd
+
+**Efficiency tip**: When organizing 10+ files, shell wildcards (`*.md`, `ADR-*`) are faster than individual `move_file` calls.
+
+For tasks involving many files, use `run_command` with shell commands instead of calling filesystem tools repeatedly:
+
+```
+# Bulk move with wildcards
+run_command("mv ./to_sort/ADR-*.md ./categories/ADR/")
+
+# Create multiple directories
+run_command("mkdir -p ./categories/ADR ./categories/Design ./categories/Research")
+
+# List files matching a pattern
+run_command("ls ./to_sort/*.md | wc -l")
+
+# Find files by pattern
+run_command("find ./to_sort -name 'DESIGN_*.md'")
+```
+
 
 ## Your Process
 

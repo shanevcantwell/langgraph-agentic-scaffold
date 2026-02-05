@@ -85,7 +85,7 @@ class ProjectDirector(BaseSpecialist):
             "run_command": ToolDef(
                 service="terminal",
                 function="run_command",
-                description="Execute a shell command. Args: command (str). Only allowlisted commands work (pwd, ls, cat, head, tail, grep, etc.)."
+                description="Execute a shell command. Args: command (str). Allowed: mv, mkdir, cp, touch, ls, cat, head, tail, grep, find, wc, sort. Use wildcards for bulk: mv ./to_sort/ADR-*.md ./ADR/"
             ),
         }
 
@@ -303,7 +303,7 @@ Open questions to investigate:
 - `read_file`: Read file contents (args: path)
 - `create_directory`: Create a directory (args: path)
 - `move_file`: Move a file (args: source, destination)
-- `run_command`: Execute shell command (args: command). For text processing: head, tail, cat, grep, sort, etc.
+- `run_command`: Execute shell command (args: command). Supports: mv, mkdir, cp, ls, cat, head, tail, grep, find, wc, sort. Use wildcards for bulk ops: `mv ./to_sort/ADR-*.md ./ADR/`
 
 **Instructions:**
 1. Analyze the goal - is this a web research task or a filesystem task?
