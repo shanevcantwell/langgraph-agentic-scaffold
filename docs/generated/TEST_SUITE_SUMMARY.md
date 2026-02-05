@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 71 | 629 |
+| Unit | 71 | 637 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **106** | **913** |
+| **Total** | **106** | **921** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -956,6 +956,14 @@
   - *ADR-CORE-061: Stutter detection belongs in Interrupt Classifier.*
 - **`test_exit_interview_only_evaluates_completion`**
   - *ADR-CORE-061: Exit Interview should ONLY have _evaluate_completion.*
+- **`test_calls_sa_when_exit_plan_missing`**
+  - *When exit_plan is not in artifacts, EI should call SA via MCP.*
+- **`test_skips_sa_call_when_exit_plan_exists`**
+  - *When exit_plan already exists, EI should NOT call SA.*
+- **`test_handles_sa_mcp_call_failure_gracefully`**
+  - *If SA MCP call fails, EI should proceed without exit_plan.*
+- **`test_persists_exit_plan_on_incomplete`**
+  - *When task is incomplete, exit_plan should still be persisted for next iteration.*
 
 ## `app/tests/unit/test_external_mcp_config.py`
 
@@ -2005,6 +2013,14 @@
   - *Tests that the specialist raises an error if LLM returns no JSON response.*
 - **`test_systems_architect_handles_malformed_json_response`**
   - *Tests that the specialist raises an error if LLM returns malformed JSON.*
+- **`test_create_plan_returns_artifact_with_specified_key`**
+  - *create_plan() should return artifacts with the caller-specified key.*
+- **`test_create_plan_uses_context_as_human_message`**
+  - *create_plan() should pass context as a HumanMessage to the LLM.*
+- **`test_create_plan_raises_on_no_json_response`**
+  - *create_plan() should raise ValueError if LLM returns no JSON response.*
+- **`test_register_mcp_services_exposes_create_plan`**
+  - *register_mcp_services() should register create_plan with the MCP registry.*
 
 ## `app/tests/unit/test_text_analysis_specialist.py`
 

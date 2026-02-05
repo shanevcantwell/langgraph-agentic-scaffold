@@ -99,6 +99,26 @@ class ExitInterviewSpecialist(BaseSpecialist):
         # Get routing history to see what has executed
         routing_history = state.get("routing_history", [])
 
+        # Issue #115: Lazy initialization of exit_plan via SA MCP tool
+        # EI is graph-wired, can't use requires_artifacts. Call SA on-demand.
+        exit_plan = artifacts.get("exit_plan", {})
+        if not exit_plan and self.mcp_client:
+            logger.info("ExitInterviewSpecialist: No exit_plan found, calling SA via MCP")
+            try:
+                result = self.mcp_client.call(
+                    "systems_architect",
+                    "create_plan",
+                    context=user_request,
+                    artifact_key="exit_plan"
+                )
+                exit_plan = result.get("artifacts", {}).get("exit_plan", {})
+                logger.info(f"ExitInterviewSpecialist: SA produced exit_plan: {exit_plan.get('plan_summary', '?')}")
+            except Exception as e:
+                logger.warning(f"ExitInterviewSpecialist: SA MCP call failed: {e}")
+                exit_plan = {}  # Proceed without - EI handles missing gracefully
+        elif exit_plan:
+            logger.info(f"ExitInterviewSpecialist: Using existing exit_plan for verification")
+
         # Build artifact summary (excluding internal/large artifacts)
         artifact_keys = [k for k in artifacts.keys()
                         if not k.startswith("_") and k not in ("gathered_context", "context_plan")]
@@ -115,6 +135,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
         # Evaluate completion using LLM
         evaluation = self._evaluate_completion(
             user_request=user_request,
+            exit_plan=exit_plan,
             recommended_specialists=recommended_specialists,
             routing_history=routing_history,
             artifact_keys=artifact_keys,
@@ -129,6 +150,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 "messages": [AIMessage(content=f"[Exit Interview] Task verified complete: {evaluation.reasoning}")],
                 "task_is_complete": True,
                 "artifacts": {
+                    "exit_plan": exit_plan,  # Issue #115: Persist for archive/observability
                     "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
                     "exit_interview_result": {
                         "is_complete": True,
@@ -160,6 +182,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 # this would leave the stale True value from a prior specialist.
                 "task_is_complete": False,
                 "artifacts": {
+                    "exit_plan": exit_plan,  # Issue #115: Persist for next iteration
                     "max_iterations_exceeded": False,  # Consumed - no meaning after Exit Interview
                     "exit_interview_result": {
                         "is_complete": False,
@@ -180,6 +203,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
     def _evaluate_completion(
         self,
         user_request: str,
+        exit_plan: dict,
         recommended_specialists: list,
         routing_history: list,
         artifact_keys: list,
@@ -190,6 +214,9 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
         This is the core judgment: given what was requested and what has been done,
         can we provide a satisfying response to the user?
+
+        ADR-CORE-063: Now includes exit_plan (mapped from system_plan) for verification
+        against success criteria.
         """
         if not self.llm_adapter:
             logger.warning("ExitInterviewSpecialist: No LLM adapter, defaulting to complete")
@@ -205,9 +232,16 @@ class ExitInterviewSpecialist(BaseSpecialist):
         except (FileNotFoundError, IOError):
             prompt_template = self._get_default_prompt()
 
+        # Format exit_plan for prompt (extract key fields)
+        if exit_plan:
+            exit_plan_summary = self._format_exit_plan(exit_plan)
+        else:
+            exit_plan_summary = "[No exit plan available - verify based on user request only]"
+
         # Format the prompt with current state
         prompt = prompt_template.format(
             user_request=user_request or "[Unable to extract original request]",
+            exit_plan=exit_plan_summary,
             recommended_specialists=", ".join(recommended_specialists) if recommended_specialists else "[No specific recommendations]",
             routing_history=", ".join(routing_history[-10:]) if routing_history else "[No routing history]",
             artifact_keys=", ".join(artifact_keys) if artifact_keys else "[No artifacts produced]",
@@ -247,11 +281,45 @@ class ExitInterviewSpecialist(BaseSpecialist):
         for msg in messages:
             msg_type = getattr(msg, 'type', 'unknown')
             content = getattr(msg, 'content', str(msg))
-            # Truncate long content
-            if len(content) > 200:
-                content = content[:200] + "..."
             summaries.append(f"[{msg_type}]: {content}")
         return "\n".join(summaries)
+
+    def _format_exit_plan(self, exit_plan: dict) -> str:
+        """
+        Format the exit_plan artifact for the evaluation prompt.
+
+        ADR-CORE-063: Extract success criteria and key plan details for verification.
+        """
+        parts = []
+
+        # Extract plan summary if available
+        if "plan_summary" in exit_plan:
+            parts.append(f"**Plan Summary:** {exit_plan['plan_summary']}")
+
+        # Extract success criteria (the key field for verification)
+        if "success_criteria" in exit_plan:
+            parts.append(f"**Success Criteria:** {exit_plan['success_criteria']}")
+
+        # Extract steps if available
+        if "steps" in exit_plan:
+            steps = exit_plan["steps"]
+            if isinstance(steps, list):
+                steps_str = "\n".join(f"  - {s}" for s in steps[:10])  # Limit to 10 steps
+                parts.append(f"**Planned Steps:**\n{steps_str}")
+
+        # Extract expected artifacts if available
+        if "expected_artifacts" in exit_plan:
+            parts.append(f"**Expected Artifacts:** {exit_plan['expected_artifacts']}")
+
+        # If no structured fields, dump the whole thing
+        if not parts:
+            import json
+            try:
+                parts.append(f"**Full Plan:**\n{json.dumps(exit_plan, indent=2, default=str)[:2000]}")
+            except (TypeError, ValueError):
+                parts.append(f"**Full Plan:** {str(exit_plan)[:2000]}")
+
+        return "\n\n".join(parts)
 
     def _get_default_prompt(self) -> str:
         """Default prompt if exit_interview_prompt.md is not found."""
@@ -259,6 +327,9 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
 **Original User Request:**
 {user_request}
+
+**Exit Plan (Success Criteria):**
+{exit_plan}
 
 **Planned Actions (from Triage):**
 {recommended_specialists}
@@ -276,8 +347,11 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
 Evaluate whether:
 1. The user's core request has been addressed
-2. If specialists were recommended, have the appropriate ones executed?
-3. Are there meaningful artifacts or responses that answer the request?
+2. If an exit plan with success criteria exists, have those criteria been met?
+3. If specialists were recommended, have the appropriate ones executed?
+4. Are there meaningful artifacts or responses that answer the request?
+
+**IMPORTANT:** Do NOT trust claims of completed work in messages. If the exit plan specifies file operations, you should use your `list_directory` tool to VERIFY the filesystem state matches the success criteria.
 
 Be CONSERVATIVE: If in doubt, mark as INCOMPLETE to give the system another chance.
 The only cost of being conservative is one more routing cycle.

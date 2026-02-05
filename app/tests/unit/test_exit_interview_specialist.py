@@ -185,3 +185,164 @@ class TestExitInterviewPurity:
         for method in heuristic_methods:
             assert not hasattr(exit_interview, method), \
                 f"Exit Interview should not have {method} - belongs in Interrupt Classifier"
+
+
+# =============================================================================
+# Issue #115: On-Demand SA Call for exit_plan
+# =============================================================================
+
+class TestExitInterviewSAIntegration:
+    """
+    Tests for Exit Interview's on-demand SA call to produce exit_plan (Issue #115).
+
+    EI is graph-wired (not Router-selected), so it can't use requires_artifacts.
+    Instead, EI calls SA via MCP when exit_plan is missing.
+    """
+
+    def test_calls_sa_when_exit_plan_missing(self, exit_interview):
+        """
+        When exit_plan is not in artifacts, EI should call SA via MCP.
+        """
+        state = {
+            "artifacts": {
+                "user_request": "Sort files into categories"
+            },
+            "messages": [],
+            "routing_history": ["project_director"]
+        }
+
+        # Mock MCP client
+        exit_interview.mcp_client = MagicMock()
+        exit_interview.mcp_client.call.return_value = {
+            "artifacts": {
+                "exit_plan": {
+                    "plan_summary": "Sort files by type",
+                    "execution_steps": ["Identify types", "Create dirs", "Move files"]
+                }
+            }
+        }
+
+        # Mock LLM for completion evaluation
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": True,
+                "reasoning": "Files sorted",
+                "missing_elements": "",
+                "recommended_specialists": []
+            }
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        # SA should have been called via MCP
+        exit_interview.mcp_client.call.assert_called_once_with(
+            "systems_architect",
+            "create_plan",
+            context="Sort files into categories",
+            artifact_key="exit_plan"
+        )
+
+        # exit_plan should be persisted in artifacts
+        assert "exit_plan" in result["artifacts"]
+        assert result["artifacts"]["exit_plan"]["plan_summary"] == "Sort files by type"
+
+    def test_skips_sa_call_when_exit_plan_exists(self, exit_interview):
+        """
+        When exit_plan already exists, EI should NOT call SA.
+        """
+        state = {
+            "artifacts": {
+                "user_request": "Sort files",
+                "exit_plan": {
+                    "plan_summary": "Existing plan",
+                    "execution_steps": ["Step 1"]
+                }
+            },
+            "messages": [],
+            "routing_history": ["project_director"]
+        }
+
+        exit_interview.mcp_client = MagicMock()
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": True,
+                "reasoning": "Done",
+                "missing_elements": "",
+                "recommended_specialists": []
+            }
+        }
+
+        exit_interview._execute_logic(state)
+
+        # SA should NOT have been called
+        exit_interview.mcp_client.call.assert_not_called()
+
+    def test_handles_sa_mcp_call_failure_gracefully(self, exit_interview):
+        """
+        If SA MCP call fails, EI should proceed without exit_plan.
+        """
+        state = {
+            "artifacts": {
+                "user_request": "Sort files"
+            },
+            "messages": [],
+            "routing_history": ["project_director"]
+        }
+
+        exit_interview.mcp_client = MagicMock()
+        exit_interview.mcp_client.call.side_effect = Exception("SA unavailable")
+
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": True,
+                "reasoning": "Completed without plan",
+                "missing_elements": "",
+                "recommended_specialists": []
+            }
+        }
+
+        # Should not raise - EI handles missing exit_plan gracefully
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is True
+        # exit_plan should be empty dict (not None)
+        assert result["artifacts"]["exit_plan"] == {}
+
+    def test_persists_exit_plan_on_incomplete(self, exit_interview):
+        """
+        When task is incomplete, exit_plan should still be persisted for next iteration.
+        """
+        state = {
+            "artifacts": {
+                "user_request": "Sort all files"
+            },
+            "messages": [],
+            "routing_history": []
+        }
+
+        exit_interview.mcp_client = MagicMock()
+        exit_interview.mcp_client.call.return_value = {
+            "artifacts": {
+                "exit_plan": {"plan_summary": "Sort plan", "execution_steps": []}
+            }
+        }
+
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": False,
+                "reasoning": "No files sorted yet",
+                "missing_elements": "Need to actually sort",
+                "recommended_specialists": ["project_director"]
+            }
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is False
+        # exit_plan should be persisted even on incomplete
+        assert "exit_plan" in result["artifacts"]
+        assert result["artifacts"]["exit_plan"]["plan_summary"] == "Sort plan"

@@ -20,6 +20,28 @@ class SystemsArchitect(BaseSpecialist):
         super().__init__(specialist_name=specialist_name, specialist_config=specialist_config)
         logger.info("---INITIALIZED SystemsArchitect---")
 
+    def _generate_plan(self, messages: List[BaseMessage]) -> SystemPlan:
+        """
+        Core planning logic - shared by graph execution and MCP tool.
+
+        Args:
+            messages: The messages to send to the LLM
+
+        Returns:
+            SystemPlan instance
+        """
+        request = StandardizedLLMRequest(
+            messages=messages,
+            output_model_class=SystemPlan
+        )
+
+        response_data = self.llm_adapter.invoke(request)
+        json_response = response_data.get("json_response")
+        if not json_response:
+            raise ValueError("SystemsArchitect failed to get a valid plan from the LLM.")
+
+        return SystemPlan(**json_response)
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         # "Not me" pattern: if system_plan already exists, don't create another
         # Add self to forbidden_specialists so Router won't route back here
@@ -37,25 +59,14 @@ class SystemsArchitect(BaseSpecialist):
 
         # Get enriched messages (includes gathered_context if available)
         messages: List[BaseMessage] = self._get_enriched_messages(state)
-
-        request = StandardizedLLMRequest(
-            messages=messages,
-            output_model_class=SystemPlan
-        )
-
-        response_data = self.llm_adapter.invoke(request)
-        json_response = response_data.get("json_response")
-        if not json_response:
-            raise ValueError("SystemsArchitect failed to get a valid plan from the LLM.")
-
-        plan = SystemPlan(**json_response)
+        plan = self._generate_plan(messages)
 
         new_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
             content=f"I have created a system plan: {plan.plan_summary}",
         )
-        
+
         # System Plan is a durable output - placed in artifacts
         # Add self to forbidden_specialists: job done, don't route back here
         return {
@@ -63,3 +74,29 @@ class SystemsArchitect(BaseSpecialist):
             "artifacts": {"system_plan": plan.dict()},
             "scratchpad": {"forbidden_specialists": [self.specialist_name]},
         }
+
+    # --- MCP Tool Interface (Issue #115) ---
+
+    def register_mcp_services(self, registry: 'McpRegistry'):
+        """Expose planning as MCP service."""
+        registry.register_service(self.specialist_name, {
+            "create_plan": self.create_plan,
+        })
+        logger.info(f"SystemsArchitect: Registered MCP service with create_plan method")
+
+    def create_plan(self, context: str, artifact_key: str) -> dict:
+        """
+        MCP-callable planning service.
+
+        Args:
+            context: What to plan for (user request, gathered context)
+            artifact_key: Artifact slot to write the plan to
+
+        Returns:
+            Update dict with artifacts[artifact_key] = plan
+        """
+        logger.info(f"SystemsArchitect.create_plan called: artifact_key={artifact_key}")
+        messages = [HumanMessage(content=context)]
+        plan = self._generate_plan(messages)
+        logger.info(f"SystemsArchitect.create_plan produced: {plan.plan_summary}")
+        return {"artifacts": {artifact_key: plan.dict()}}

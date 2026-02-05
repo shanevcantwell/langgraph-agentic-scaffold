@@ -21,13 +21,6 @@ Mark as **INCOMPLETE** if:
 - Specialists that should have run haven't been invoked yet
 - The workflow appears stuck or cycling without progress
 
-## Evaluation Guidelines
-
-1. **Be conservative**: If uncertain, mark INCOMPLETE. The cost is one more routing cycle; the cost of premature completion is an unsatisfied user.
-2. **Check the artifacts**: If file operations were requested, verify relevant artifacts exist.
-3. **Consider the routing history**: If no meaningful specialists have run, it's likely incomplete.
-4. **Don't require perfection**: A good-enough response is still complete.
-
 ## Return Control (for INCOMPLETE tasks)
 
 When marking as **INCOMPLETE**, determine how the Facilitator should handle the retry:
@@ -63,6 +56,9 @@ Default to `project_director` for file operations or when uncertain.
 **Original User Request:**
 {user_request}
 
+**Success Criteria:**
+{exit_plan}
+
 **Planned Specialists (from Triage):**
 {recommended_specialists}
 
@@ -74,3 +70,11 @@ Default to `project_director` for file operations or when uncertain.
 
 **Recent Messages:**
 {recent_summary}
+
+---
+
+## Verification Instructions
+
+If the exit plan specifies file operations (create, move, delete files or directories), you MUST use your `list_directory` tool to verify the filesystem state before marking as COMPLETE.
+
+Example: If success criteria says "files should be in categories/animals/", call `list_directory("categories/animals")` to verify the files actually exist there.
