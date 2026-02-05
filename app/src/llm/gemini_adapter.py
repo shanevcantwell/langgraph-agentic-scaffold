@@ -215,9 +215,21 @@ class GeminiAdapter(BaseAdapter):
                 if json_response:
                     return {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
                 else:
-                    logger.error("Failed to parse or extract JSON from the Gemini model's response.")
-                    return {"text_response": content, "json_response": {}}
+                    # Structured output was requested but model failed to produce valid JSON.
+                    # This is a contract violation - raise instead of silently returning empty.
+                    schema_name = request.output_model_class.__name__ if request.output_model_class else "unknown"
+                    error_msg = (
+                        f"Model failed to produce valid {schema_name} structured output. "
+                        f"Raw content: {content[:300]}..."
+                    )
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
 
-        # Fallback to text response
+        # Fallback to text response - try to extract JSON if present
+        content = response.text or ""
+        json_data = self._robustly_parse_json_from_text(content)
+        if json_data:
+            logger.info("GeminiAdapter extracted JSON from text response.")
+            return {"json_response": json_data, "text_response": content}
         logger.info("GeminiAdapter returned text response.")
-        return {"text_response": response.text}
+        return {"text_response": content}

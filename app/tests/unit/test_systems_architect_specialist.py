@@ -56,7 +56,7 @@ def test_systems_architect_handles_no_json_response(systems_architect_specialist
     initial_state = {"messages": [HumanMessage(content="Plan something.")]}
 
     # Act & Assert
-    with pytest.raises(ValueError, match="failed to get a valid plan from the LLM."):
+    with pytest.raises(ValueError):
         systems_architect_specialist._execute_logic(initial_state)
 
 def test_systems_architect_handles_malformed_json_response(systems_architect_specialist):
@@ -135,7 +135,7 @@ class TestSystemsArchitectMCPTool:
         """
         systems_architect_specialist.llm_adapter.invoke.return_value = {"json_response": None}
 
-        with pytest.raises(ValueError, match="failed to get a valid plan from the LLM"):
+        with pytest.raises(ValueError):
             systems_architect_specialist.create_plan(context="Plan something", artifact_key="plan")
 
     def test_register_mcp_services_exposes_create_plan(self, systems_architect_specialist):

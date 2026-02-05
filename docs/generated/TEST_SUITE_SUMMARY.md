@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 71 | 637 |
+| Unit | 71 | 649 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **106** | **921** |
+| **Total** | **106** | **933** |
 
 
 ## `app/tests/interface/test_context_schema.py`
@@ -964,6 +964,10 @@
   - *If SA MCP call fails, EI should proceed without exit_plan.*
 - **`test_persists_exit_plan_on_incomplete`**
   - *When task is incomplete, exit_plan should still be persisted for next iteration.*
+- **`test_ei_does_not_clear_max_iterations_on_complete`**
+  - *When EI says COMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
+- **`test_ei_does_not_clear_max_iterations_on_incomplete`**
+  - *When EI says INCOMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
 
 ## `app/tests/unit/test_external_mcp_config.py`
 
@@ -1012,16 +1016,24 @@
   - *Issue #100: Facilitator surfaces Exit Interview feedback in gathered_context.*
 - **`test_facilitator_skips_exit_interview_feedback_when_complete`**
   - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
-- **`test_facilitator_summarizes_work_in_progress_for_benign_interrupt`**
-  - *Issue #108: Facilitator surfaces work-in-progress for BENIGN interrupts.*
+- **`test_facilitator_passes_trace_on_benign_interrupt`**
+  - *Issue #114 supersedes Issue #108: BENIGN interrupt passes trace, not WIP summary.*
 - **`test_facilitator_no_wip_summary_without_max_iterations`**
   - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
-- **`test_facilitator_no_wip_summary_when_exit_interview_result_present`**
-  - *Issue #108: No work-in-progress summary when exit_interview_result is present.*
+- **`test_facilitator_benign_continuation_with_ei_incomplete`**
+  - *Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
 - **`test_facilitator_no_wip_summary_without_trace`**
   - *Issue #108: No work-in-progress summary if no research trace exists.*
-- **`test_facilitator_wip_summary_shows_last_action`**
-  - *Issue #108: Work-in-progress summary should show the last action taken.*
+- **`test_facilitator_benign_passes_full_trace`**
+  - *Issue #114: BENIGN continuation passes full trace, not a summary.*
+- **`test_facilitator_benign_resume_passes_trace_without_context_accumulation`**
+  - *Issue #114: BENIGN resume should pass trace through without context pollution.*
+- **`test_facilitator_benign_resume_no_early_return_without_trace`**
+  - *Issue #114: Without prior trace, BENIGN path should NOT early return.*
+- **`test_facilitator_no_early_return_when_exit_interview_result_present`**
+  - *Issue #114: When exit_interview_result is present, NO early return.*
+- **`test_facilitator_benign_continuation_after_ei_incomplete`**
+  - *Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations was the cause.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1040,6 +1052,12 @@
 
 - **`test_invoke_raises_proxy_error_on_connection_issues`**
   - *Tests that the Gemini adapter correctly catches various connection-related*
+- **`test_structured_output_raises_on_invalid_json`**
+  - *Issue #123: When output_model_class is set, adapter should raise error*
+- **`test_text_response_extracts_json_when_present`**
+  - *Issue #123: When NO output_model_class is set (text mode), adapter should*
+- **`test_text_response_no_json_returns_text_only`**
+  - *Issue #123: When NO output_model_class is set and response has no JSON,*
 
 ## `app/tests/unit/test_gradio_app.py`
 
@@ -1337,6 +1355,12 @@
   - *Tests that valid-sized image data passes size check and proceeds to injection.*
 - **`test_image_injection_rejects_empty_message_content`**
   - *Tests that empty message content raises ValueError when injecting image.*
+- **`test_structured_output_raises_on_invalid_json`**
+  - *Issue #123: When output_model_class is set, adapter should raise error*
+- **`test_text_response_extracts_json_when_present`**
+  - *Issue #123: When NO output_model_class is set (text mode), adapter should*
+- **`test_text_response_no_json_returns_text_only`**
+  - *Issue #123: When NO output_model_class is set and response has no JSON,*
 
 ## `app/tests/unit/test_mcp_client.py`
 

@@ -35,8 +35,10 @@ class SystemsArchitect(BaseSpecialist):
             output_model_class=SystemPlan
         )
 
+        # Adapter raises ValueError if structured output parsing fails
         response_data = self.llm_adapter.invoke(request)
         json_response = response_data.get("json_response")
+
         if not json_response:
             raise ValueError("SystemsArchitect failed to get a valid plan from the LLM.")
 
@@ -71,7 +73,7 @@ class SystemsArchitect(BaseSpecialist):
         # Add self to forbidden_specialists: job done, don't route back here
         return {
             "messages": [new_message],
-            "artifacts": {"system_plan": plan.dict()},
+            "artifacts": {"system_plan": plan.model_dump()},
             "scratchpad": {"forbidden_specialists": [self.specialist_name]},
         }
 
@@ -99,4 +101,4 @@ class SystemsArchitect(BaseSpecialist):
         messages = [HumanMessage(content=context)]
         plan = self._generate_plan(messages)
         logger.info(f"SystemsArchitect.create_plan produced: {plan.plan_summary}")
-        return {"artifacts": {artifact_key: plan.dict()}}
+        return {"artifacts": {artifact_key: plan.model_dump()}}

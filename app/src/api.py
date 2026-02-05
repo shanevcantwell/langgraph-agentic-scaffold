@@ -312,7 +312,7 @@ async def get_run_trace(run_id: str):
     try:
         # Fetch all runs associated with this trace ID (run_id is used as trace_id in runner)
         runs = list(langsmith_client.list_runs(trace_id=run_id))
-        return {"runs": [r.dict() for r in runs]}
+        return {"runs": [r.model_dump() for r in runs]}
     except Exception as e:
         logger.error(f"Failed to fetch traces for run {run_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

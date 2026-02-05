@@ -37,14 +37,9 @@ class CompletionEvaluation(BaseModel):
         default_factory=list,
         description="Which specialist(s) should handle the missing work (e.g., ['project_director'] for file operations)"
     )
-    return_control: ReturnControlMode = Field(
-        default=ReturnControlMode.ACCUMULATE,
-        description=(
-            "How the Facilitator should handle context on retry: "
-            "'accumulate' (default) to append new work to history, "
-            "'reset' to clear context and start over (if polluted), "
-            "'delta' to run a NEW plan for just the missing elements"
-        )
+    return_control: str = Field(
+        default="accumulate",
+        description="How Facilitator handles retry: 'accumulate', 'reset', or 'delta'"
     )
 
 
@@ -189,7 +184,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                         "reasoning": evaluation.reasoning,
                         "missing_elements": evaluation.missing_elements,
                         "recommended_specialists": recommended,
-                        "return_control": evaluation.return_control.value
+                        "return_control": evaluation.return_control
                     }
                 },
                 "scratchpad": {
@@ -248,26 +243,30 @@ class ExitInterviewSpecialist(BaseSpecialist):
             recent_summary=recent_summary or "[No recent activity]"
         )
 
+        # Don't use output_model_class - not all models support structured output.
+        # Instead, ask for JSON in the prompt and parse from text response.
         request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=prompt)],
-            output_model_class=CompletionEvaluation
+            messages=[HumanMessage(content=prompt)]
         )
 
         try:
             response = self.llm_adapter.invoke(request)
-            json_response = response.get("json_response", {})
 
-            if json_response:
-                return CompletionEvaluation(**json_response)
-            else:
-                # Parse from content if structured output failed
-                logger.warning("ExitInterviewSpecialist: Structured output failed, defaulting to complete")
-                return CompletionEvaluation(
-                    is_complete=True,
-                    reasoning="Could not parse LLM response - defaulting to complete to avoid loops",
-                    missing_elements=""
-                )
+            # Adapter handles JSON parsing - check json_response first
+            json_data = response.get("json_response")
+            if json_data:
+                return CompletionEvaluation(**json_data)
+
+            # If no JSON found, default to complete
+            text_response = response.get("text_response", "")
+            logger.warning(f"ExitInterviewSpecialist: No JSON in response: {text_response[:200]}")
+            return CompletionEvaluation(
+                is_complete=True,
+                reasoning="Could not parse LLM response - defaulting to complete to avoid loops",
+                missing_elements=""
+            )
         except Exception as e:
+            # Graceful degradation: default to COMPLETE to avoid infinite loops
             logger.error(f"ExitInterviewSpecialist: LLM evaluation failed: {e}")
             return CompletionEvaluation(
                 is_complete=True,

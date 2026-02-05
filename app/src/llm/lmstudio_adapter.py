@@ -361,17 +361,26 @@ class LMStudioAdapter(BaseAdapter):
                 if json_response:
                     result = {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
                 else:
-                    # If extraction also fails, log the failure and return as text.
-                    logger.error(
-                        f"Failed to parse or extract JSON from the model's response."
+                    # Structured output was requested but model failed to produce valid JSON.
+                    # This is a contract violation - raise instead of silently returning empty.
+                    schema_name = request.output_model_class.__name__ if request.output_model_class else "unknown"
+                    error_msg = (
+                        f"Model failed to produce valid {schema_name} structured output. "
+                        f"Raw content: {content[:300]}..."
                     )
-                    result = {"text_response": content, "json_response": {}}
+                    logger.error(error_msg)
+                    raise ValueError(error_msg)
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
                 capture_trace(request, result, latency_ms, self.model_name)
                 return result
             else:
-                # Standard text response.
-                result = {"text_response": message.content or ""}
+                # Standard text response - try to extract JSON if present
+                content = message.content or ""
+                json_data = self._robustly_parse_json_from_text(content)
+                if json_data:
+                    result = {"json_response": json_data, "text_response": content}
+                else:
+                    result = {"text_response": content}
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
                 capture_trace(request, result, latency_ms, self.model_name)
                 return result

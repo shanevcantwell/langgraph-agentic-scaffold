@@ -38,6 +38,17 @@ Respond with a JSON object containing:
 - `recommended_specialists`: list of strings - which specialist(s) should handle the missing work (empty list if complete)
 - `return_control`: string - "accumulate", "delta", or "reset" (default "accumulate")
 
+Example JSON Output:
+```json
+{{
+  "is_complete": false,
+  "reasoning": "Files were listed but not moved to category folders.",
+  "missing_elements": "Need to create category directories and move files.",
+  "recommended_specialists": ["project_director"],
+  "return_control": "accumulate"
+}}
+```
+
 ## Specialist Capabilities (for recommended_specialists)
 
 When marking INCOMPLETE, suggest which specialist(s) can address the missing work:

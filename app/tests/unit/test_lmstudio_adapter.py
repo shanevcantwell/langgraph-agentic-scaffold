@@ -224,3 +224,80 @@ def test_image_injection_rejects_empty_message_content(mock_openai_client, mock_
 
     with pytest.raises(ValueError, match="Cannot inject image into message with empty content"):
         adapter.invoke(request)
+
+
+# =============================================================================
+# Issue #123: Structured Output Validation and JSON Extraction
+# =============================================================================
+
+class StructuredOutputSchema(BaseModel):
+    """Schema for testing structured output (named to avoid pytest collection)."""
+    name: str
+    value: int
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_structured_output_raises_on_invalid_json(mock_openai_client, mock_model_config):
+    """
+    Issue #123: When output_model_class is set, adapter should raise error
+    if model fails to produce valid JSON (not silently return empty).
+    """
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    mock_create = mock_openai_client.return_value.chat.completions.create
+    mock_create.return_value.choices[0].message.tool_calls = None
+    mock_create.return_value.choices[0].message.content = "I cannot generate valid JSON for this request."
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Generate structured output")],
+        output_model_class=StructuredOutputSchema
+    )
+
+    # Adapter wraps internal ValueError in LLMInvocationError
+    with pytest.raises(LLMInvocationError, match="failed to produce valid.*structured output"):
+        adapter.invoke(request)
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_text_response_extracts_json_when_present(mock_openai_client, mock_model_config):
+    """
+    Issue #123: When NO output_model_class is set (text mode), adapter should
+    still try to extract JSON from the response if present.
+    """
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    mock_create = mock_openai_client.return_value.chat.completions.create
+    mock_create.return_value.choices[0].message.tool_calls = None
+    # Model returns text that happens to contain JSON
+    mock_create.return_value.choices[0].message.content = 'Here is the result:\n```json\n{"status": "complete", "count": 5}\n```'
+
+    # NO output_model_class - plain text request
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Evaluate the task")]
+    )
+
+    result = adapter.invoke(request)
+
+    # Should have BOTH json_response (extracted) and text_response (original)
+    assert result.get("json_response") == {"status": "complete", "count": 5}
+    assert "Here is the result" in result.get("text_response", "")
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_text_response_no_json_returns_text_only(mock_openai_client, mock_model_config):
+    """
+    Issue #123: When NO output_model_class is set and response has no JSON,
+    adapter should return text_response only (no empty json_response).
+    """
+    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    mock_create = mock_openai_client.return_value.chat.completions.create
+    mock_create.return_value.choices[0].message.tool_calls = None
+    mock_create.return_value.choices[0].message.content = "This is a plain text response with no JSON."
+
+    request = StandardizedLLMRequest(
+        messages=[HumanMessage(content="Just chat")]
+    )
+
+    result = adapter.invoke(request)
+
+    # Should have text_response only
+    assert result.get("text_response") == "This is a plain text response with no JSON."
+    assert result.get("json_response") is None
