@@ -346,7 +346,16 @@ class LMStudioAdapter(BaseAdapter):
 
             # If we requested a JSON schema, parse the content as JSON.
             if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":
-                content = message.content or "{}"
+                # Issue #127: Some models (e.g., nemotron) put structured output in
+                # reasoning_content instead of content. Check both fields.
+                content = message.content
+                if not content:
+                    reasoning_content = getattr(message, 'reasoning_content', None)
+                    if reasoning_content:
+                        logger.info("LMStudioAdapter: Found structured output in reasoning_content (model-specific behavior)")
+                        content = reasoning_content
+                    else:
+                        content = "{}"
                 json_response = None
                 try:
                     # First, try to parse directly
@@ -375,7 +384,15 @@ class LMStudioAdapter(BaseAdapter):
                 return result
             else:
                 # Standard text response - try to extract JSON if present
-                content = message.content or ""
+                # Issue #127: Check reasoning_content for models that use it
+                content = message.content
+                if not content:
+                    reasoning_content = getattr(message, 'reasoning_content', None)
+                    if reasoning_content:
+                        logger.info("LMStudioAdapter: Found response in reasoning_content (model-specific behavior)")
+                        content = reasoning_content
+                    else:
+                        content = ""
                 json_data = self._robustly_parse_json_from_text(content)
                 if json_data:
                     result = {"json_response": json_data, "text_response": content}
