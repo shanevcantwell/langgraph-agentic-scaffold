@@ -42,4 +42,11 @@ The loop continues as long as you call tools. It ends when you respond with text
 
 - Be efficient. Don't loop indefinitely.
 - If a tool fails, try a different approach.
-- When you have enough information to satisfy the goal, STOP and return your synthesis.
+
+## When to Stop
+
+**For information-gathering tasks** (research, analysis): Stop when you have the answer. Return your synthesis.
+
+**For action tasks** (create, move, modify files): Stop ONLY after you have PERFORMED all the actions. Do not describe what you would do - actually do it with tool calls, then summarize what you did.
+
+If the goal says "create folders" and "move files", you must call `create_directory` and `move_file` before returning. A description of planned actions is NOT completion.
