@@ -441,11 +441,15 @@ specialists:
     excluded_from:
       - triage_architect
       - router_specialist
-    # ADR-ROADMAP-001: Semantic-chunker access for trace stutter detection
-    # Uses calculate_drift to compare consecutive traces and detect repeated operations
+    # Issue #115: EI calls SA via MCP on-demand to produce exit_plan
+    # (removed dead requires_artifacts/artifact_providers - never enforced for graph-wired specialists)
     tools:
+      systems_architect:
+        - create_plan
       semantic-chunker:
         - calculate_drift
+      filesystem:
+        - list_directory
 
   end_specialist:
     type: "hybrid"
