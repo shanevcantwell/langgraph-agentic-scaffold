@@ -287,17 +287,18 @@ class FacilitatorSpecialist(BaseSpecialist):
         gathered_context = []
         logger.info(f"Facilitator: Executing plan with {len(context_plan.actions)} actions.")
 
-        # Issue #100: Surface Exit Interview feedback for better routing decisions
-        if exit_interview_result and not exit_interview_result.get("is_complete"):
-            feedback = self._format_exit_interview_feedback(exit_interview_result)
-            gathered_context.append(feedback)
-            logger.info("Facilitator: Added Exit Interview feedback to gathered_context")
+        # Read routing_history early - needed for both EI feedback and WIP summary
+        routing_history = state.get("routing_history", [])
+
+        # Issue #121: EI feedback (reasoning, missing_elements) is NOT used for inference
+        # Router uses recommended_specialists for routing; specialists use gathered_context
+        # and resume_trace. The formatted EI feedback was polluting gathered_context but
+        # no consumer actually reads it. Removing entirely.
 
         # Issue #108: Surface work-in-progress for BENIGN interrupts
         # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN
         # interrupt (not an Exit Interview retry). Router needs to know what specialist
         # was mid-work so it can continue correctly.
-        routing_history = state.get("routing_history", [])
         if not exit_interview_result:
             wip_summary = self._summarize_work_in_progress(artifacts, routing_history)
             if wip_summary:

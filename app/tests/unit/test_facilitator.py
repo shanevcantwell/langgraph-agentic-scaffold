@@ -687,11 +687,12 @@ def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
 
 def test_facilitator_surfaces_exit_interview_feedback(facilitator):
     """
-    Issue #100: Facilitator surfaces Exit Interview feedback in gathered_context.
+    Issue #121: EI feedback (reasoning, missing_elements) is NOT surfaced in gathered_context.
 
-    When exit_interview_result exists with is_complete=False, the feedback should
-    appear at the start of gathered_context so Router and destination specialists
-    see what's still needed.
+    The exit_interview_result.recommended_specialists is used by Router for routing decisions.
+    The formatted "Next Steps" feedback was polluting gathered_context but no consumer
+    actually reads it - specialists use gathered_context for file listings and resume_trace
+    for continuation context. Removed entirely per #121.
     """
     plan = ContextPlan(
         reasoning="Continue task after Exit Interview flagged incomplete",
@@ -723,12 +724,11 @@ def test_facilitator_surfaces_exit_interview_feedback(facilitator):
 
     gathered = result["artifacts"]["gathered_context"]
 
-    # Exit Interview feedback should be present
-    assert "### Next Steps (from Exit Interview)" in gathered
-    assert "Only 3 of 6 files were categorized" in gathered
-    assert "Files 4.txt, 5.txt, 6.txt need categorization" in gathered
-    assert "project_director" in gathered
-    assert "Continue where the previous work left off" in gathered
+    # Issue #121: EI feedback should NOT be present in gathered_context
+    assert "### Next Steps (from Exit Interview)" not in gathered
+    # Directory listing should still be present
+    assert "Directory:" in gathered
+    assert "4.txt" in gathered
 
 
 def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
@@ -1153,10 +1153,10 @@ def test_facilitator_benign_resume_no_early_return_without_trace(facilitator):
 def test_facilitator_no_early_return_when_exit_interview_result_present(facilitator):
     """
     Issue #114: When exit_interview_result is present, NO early return.
+    Issue #121: EI feedback NOT added to gathered_context (Router uses recommended_specialists).
 
-    Exit Interview retry path should NOT early return - it needs to potentially
-    re-gather context and add EI feedback. The early return is specifically for
-    BENIGN (max_iterations, no EI result) continuation.
+    Exit Interview retry path should NOT early return - it needs to re-gather context.
+    The early return is specifically for BENIGN (max_iterations, no EI result) continuation.
     """
     plan = ContextPlan(
         reasoning="Exit Interview retry",
@@ -1194,11 +1194,12 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
         # _list_directory SHOULD be called (not early return)
         mock_list.assert_called_once()
 
-    # Result should have gathered_context with EI feedback
+    # Result should have gathered_context
     assert "gathered_context" in result["artifacts"]
-    # EI feedback should be present in gathered_context
-    assert "### Next Steps (from Exit Interview)" in result["artifacts"]["gathered_context"]
-    assert "Files not all categorized" in result["artifacts"]["gathered_context"]
+    # Issue #121: EI feedback should NOT be present (Router uses recommended_specialists)
+    assert "### Next Steps (from Exit Interview)" not in result["artifacts"]["gathered_context"]
+    # But directory listing should be present
+    assert "1.txt" in result["artifacts"]["gathered_context"]
 
 
 def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
