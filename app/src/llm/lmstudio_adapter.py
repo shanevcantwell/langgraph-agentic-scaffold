@@ -419,8 +419,17 @@ class LMStudioAdapter(BaseAdapter):
                 if content.strip():
                     try:
                         json_resp = json.loads(content)
+
+                        # Try nested format first: {"action": {"tool_name": "...", ...}}
                         action = json_resp.get("action", {})
                         tool_name = action.get("tool_name")
+
+                        # Fallback: flat format {"tool_name": "...", ...} (some models ignore nesting)
+                        if not tool_name:
+                            tool_name = json_resp.get("tool_name")
+                            if tool_name:
+                                logger.info(f"LMStudioAdapter: Using flat format tool_name: {tool_name}")
+                                action = json_resp  # Use root as action
 
                         if tool_name == "DONE":
                             # Task complete - return final response as text
@@ -442,6 +451,9 @@ class LMStudioAdapter(BaseAdapter):
                             latency_ms = int((time.perf_counter() - start_time) * 1000)
                             capture_trace(request, result, latency_ms, self.model_name)
                             return result
+                        else:
+                            # JSON parsed but no tool_name found - log what we got
+                            logger.warning(f"LMStudioAdapter: JSON parsed but no tool_name. Keys: {list(json_resp.keys())}, action keys: {list(action.keys()) if action else 'N/A'}")
                     except json.JSONDecodeError:
                         logger.warning(f"LMStudioAdapter: Failed to parse JSON response: {content[:200]}")
 
@@ -449,7 +461,7 @@ class LMStudioAdapter(BaseAdapter):
                 # content was empty, JSON parse failed, or tool_name was missing.
                 # Return empty tool_calls to signal failure - do NOT fall through
                 # to output_model_class path which would raise ValueError.
-                logger.warning("LMStudioAdapter: Tools mode but no valid tool call found in response")
+                logger.warning(f"LMStudioAdapter: Tools mode fallthrough - content length: {len(content)}, first 100 chars: {content[:100]}")
                 result = {"tool_calls": []}
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
                 capture_trace(request, result, latency_ms, self.model_name)
