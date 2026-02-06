@@ -5,11 +5,16 @@ These tests define the EXPECTED behavior of classify_interrupt() BEFORE implemen
 They will FAIL until the implementation is complete - this is intentional (test-first).
 
 The Interrupt Classifier is Tier 1 of the interrupt architecture:
-- BENIGN interrupts → Facilitator (seamless continue, model unaware)
+- BENIGN interrupts:
+  - max_iterations_exceeded → Exit Interview (for feedback, then facilitator via after_exit_interview)
+  - context_overflow → Facilitator (compress and continue)
 - TERMINAL interrupts → End (immediate termination)
 - PATHOLOGICAL interrupts → Interrupt Evaluator (needs LLM judgment)
 - Normal flow + artifacts → Exit Interview (semantic completion)
 - Normal flow, no artifacts → Router (continue workflow)
+
+Note: max_iterations routes through EI to provide "INCOMPLETE" feedback that router
+needs to continue the loop (see #139 BENIGN continuation fix).
 """
 
 import pytest
@@ -31,10 +36,14 @@ def orchestrator():
 
 
 class TestClassifyInterruptBenign:
-    """Tests for BENIGN interrupt classification (seamless continue)."""
+    """Tests for BENIGN interrupt classification."""
 
-    def test_max_iterations_exceeded_in_scratchpad_routes_to_facilitator(self, orchestrator):
-        """BENIGN: max_iterations_exceeded flag → Facilitator for seamless continue."""
+    def test_max_iterations_exceeded_in_scratchpad_routes_to_exit_interview(self, orchestrator):
+        """BENIGN: max_iterations_exceeded flag → Exit Interview for feedback.
+
+        EI provides the "INCOMPLETE" signal that router needs to continue the loop.
+        Flow: EI → after_exit_interview → facilitator → router → back to specialist
+        """
         state = {
             "scratchpad": {"max_iterations_exceeded": True},
             "artifacts": {},
@@ -43,11 +52,11 @@ class TestClassifyInterruptBenign:
 
         result = orchestrator.classify_interrupt(state)
 
-        assert result == "facilitator_specialist", \
-            "max_iterations_exceeded should route to Facilitator (BENIGN - seamless continue)"
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value, \
+            "max_iterations_exceeded should route to Exit Interview for feedback"
 
-    def test_max_iterations_exceeded_in_artifacts_routes_to_facilitator(self, orchestrator):
-        """BENIGN: max_iterations_exceeded in artifacts → Facilitator."""
+    def test_max_iterations_exceeded_in_artifacts_routes_to_exit_interview(self, orchestrator):
+        """BENIGN: max_iterations_exceeded in artifacts → Exit Interview."""
         state = {
             "scratchpad": {},
             "artifacts": {"max_iterations_exceeded": True},
@@ -56,8 +65,8 @@ class TestClassifyInterruptBenign:
 
         result = orchestrator.classify_interrupt(state)
 
-        assert result == "facilitator_specialist", \
-            "max_iterations_exceeded in artifacts should also route to Facilitator"
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value, \
+            "max_iterations_exceeded in artifacts should route to Exit Interview"
 
     def test_context_overflow_routes_to_facilitator(self, orchestrator):
         """BENIGN: context_overflow → Facilitator (compress and continue)."""
@@ -213,10 +222,10 @@ class TestClassifyInterruptPriorityOrder:
             "TERMINAL (user_abort) should take priority over BENIGN (max_iterations)"
 
     def test_benign_takes_priority_over_pathological(self, orchestrator):
-        """BENIGN should take priority over PATHOLOGICAL detection."""
+        """BENIGN (max_iterations) should take priority over PATHOLOGICAL detection."""
         state = {
             "scratchpad": {
-                "max_iterations_exceeded": True,  # BENIGN
+                "max_iterations_exceeded": True,  # BENIGN → EI
                 "stagnation_detected": True,  # Would be PATHOLOGICAL
             },
             "artifacts": {},
@@ -225,11 +234,11 @@ class TestClassifyInterruptPriorityOrder:
 
         result = orchestrator.classify_interrupt(state)
 
-        assert result == "facilitator_specialist", \
-            "BENIGN should take priority over PATHOLOGICAL"
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value, \
+            "BENIGN (max_iterations) should take priority over PATHOLOGICAL"
 
     def test_benign_takes_priority_over_artifacts(self, orchestrator):
-        """BENIGN interrupt should route to Facilitator even if artifacts present."""
+        """BENIGN interrupt (max_iterations) should route to EI even if artifacts present."""
         state = {
             "scratchpad": {"max_iterations_exceeded": True},
             "artifacts": {"some_work": "partial results"},
@@ -238,5 +247,5 @@ class TestClassifyInterruptPriorityOrder:
 
         result = orchestrator.classify_interrupt(state)
 
-        assert result == "facilitator_specialist", \
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value, \
             "BENIGN interrupt should take priority over normal artifact flow"

@@ -467,11 +467,13 @@ class GraphOrchestrator:
             logger.info("classify_interrupt: TERMINAL (user_abort) → End")
             return CoreSpecialist.END.value
 
-        # === BENIGN: Seamless continue (model unaware of pause) ===
+        # === BENIGN: Route through Exit Interview for feedback ===
         # max_iterations_exceeded: Arbitrary limit hit, trace is healthy
+        # EI provides "INCOMPLETE" feedback that router needs to continue the loop
+        # Flow: EI → after_exit_interview → facilitator → router → back to specialist
         if artifacts.get("max_iterations_exceeded") or scratchpad.get("max_iterations_exceeded"):
-            logger.info("classify_interrupt: BENIGN (max_iterations) → Facilitator (seamless continue)")
-            return "facilitator_specialist"
+            logger.info("classify_interrupt: BENIGN (max_iterations) → Exit Interview for feedback")
+            return CoreSpecialist.EXIT_INTERVIEW.value
 
         # context_overflow: Context bloat - compress and continue
         if scratchpad.get("context_overflow"):
