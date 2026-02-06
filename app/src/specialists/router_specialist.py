@@ -24,6 +24,7 @@ class Route(BaseModel):
     # engine, which can be sensitive to complex schemas with enum constraints.
     next_specialist: List[str] = Field(
         ...,
+        min_length=1,  # Prevent empty arrays (Issue #136)
         description="The specialist(s) to route to next. Can be a single specialist or multiple for parallel execution. Must be from the AVAILABLE SPECIALISTS listed in the prompt."
     )
 
