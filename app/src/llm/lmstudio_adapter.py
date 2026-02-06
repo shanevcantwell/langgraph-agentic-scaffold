@@ -4,6 +4,7 @@ import json
 import os
 import time
 import tiktoken
+from uuid import uuid4
 from typing import Dict, Any, List, Optional, Type
 from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
 import httpx
@@ -21,8 +22,8 @@ REQUEST_TIMEOUT = 120
 class LMStudioAdapter(BaseAdapter):
     """
     An adapter for OpenAI-compatible APIs, such as LM Studio.
-    It supports full JSON schema enforcement via the 'tools' API, making it
-    robust for specialists that require structured output.
+    Uses JSON schema enforcement via 'response_format' for tool-calling instead
+    of native Harmony format, which degrades after ~10 calls with some models.
     """
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
         super().__init__(model_config)
@@ -92,6 +93,63 @@ class LMStudioAdapter(BaseAdapter):
                    base_url=provider_config["base_url"],
                    system_prompt=system_prompt)
 
+    def _build_tool_call_schema(self, tools: List[Type[BaseModel]]) -> Dict[str, Any]:
+        """
+        Build a draft-07 JSON schema for structured tool calling (#135).
+
+        This schema is used instead of native tool-calling (Harmony) because
+        models like gpt-oss-20b degrade after ~10 tool calls, emitting garbled
+        Harmony tokens. JSON schema enforcement via response_format provides
+        logit masking that keeps the model on-schema throughout the ReAct loop.
+
+        Args:
+            tools: List of Pydantic model classes representing available tools
+
+        Returns:
+            JSON Schema dict with $schema declaration (required by LMStudio)
+        """
+        tool_names = [t.__name__ for t in tools] + ["DONE"]
+
+        # Collect all parameter names from all tools for the action properties
+        all_params = {}
+        for tool in tools:
+            schema = tool.model_json_schema()
+            for prop_name, prop_def in schema.get("properties", {}).items():
+                if prop_name not in all_params:
+                    all_params[prop_name] = {
+                        "type": prop_def.get("type", "string"),
+                        "description": prop_def.get("description", f"Parameter for tool calls")
+                    }
+
+        return {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": "ToolCallResponse",
+            "type": "object",
+            "required": ["reasoning", "action"],
+            "properties": {
+                "reasoning": {
+                    "type": "string",
+                    "description": "Your thought process before taking action"
+                },
+                "action": {
+                    "type": "object",
+                    "required": ["tool_name"],
+                    "properties": {
+                        "tool_name": {
+                            "type": "string",
+                            "enum": tool_names,
+                            "description": "The tool to call, or DONE if task is complete"
+                        },
+                        **all_params
+                    }
+                },
+                "final_response": {
+                    "type": "string",
+                    "description": "Only when action.tool_name is DONE - the final summary"
+                }
+            }
+        }
+
     def _prune_messages(self, messages: List[BaseMessage]) -> List[BaseMessage]:
         """
         Proactively prunes the message history to fit within the model's context window.
@@ -153,7 +211,11 @@ class LMStudioAdapter(BaseAdapter):
         )
         return pruned_messages
 
-    def _format_lmstudio_messages(self, messages: List[BaseMessage]) -> List[Dict[str, Any]]:
+    def _format_lmstudio_messages(
+        self,
+        messages: List[BaseMessage],
+        use_json_tool_format: bool = False
+    ) -> List[Dict[str, Any]]:
         """
         Format LangChain messages for LMStudio API.
 
@@ -161,11 +223,31 @@ class LMStudioAdapter(BaseAdapter):
         - Combines static and runtime system prompts into single system message
         - Converts tool_calls to OpenAI format: {id, type, function: {name, arguments}}
         - Uses content: "" (not null) when tool_calls present (LMStudio requirement)
+
+        Args:
+            messages: LangChain messages to format
+            use_json_tool_format: If True, append instruction to output JSON instead of Harmony
         """
         # Collect all system instructions
         all_system_contents = [self.system_prompt] if self.system_prompt else []
         runtime_system_contents = [msg.content for msg in messages if msg.type == 'system']
         all_system_contents.extend(runtime_system_contents)
+
+        # Issue #135: When using JSON schema fallback, instruct model to output JSON
+        if use_json_tool_format:
+            json_instruction = (
+                "\n\n## CRITICAL: Output Format\n"
+                "You MUST output your response as a single valid JSON object. "
+                "Do NOT use <|channel|>, <|constrain|>, <|message|>, or any other special tokens. "
+                "Do NOT use function calling syntax like 'to=functions.X'. "
+                "Your ENTIRE response must be exactly this format:\n"
+                '```json\n'
+                '{"reasoning": "your thought process", "action": {"tool_name": "tool_name_here", ...params}}\n'
+                '```\n'
+                "Start your response with '{' and end with '}'."
+            )
+            all_system_contents.append(json_instruction)
+
         final_system_content = "\n\n".join(filter(None, all_system_contents))
 
         api_messages = []
@@ -248,7 +330,9 @@ class LMStudioAdapter(BaseAdapter):
                     break
 
         # Issue #89: Use LMStudio-specific formatting (not shared OpenAI helper)
-        api_messages = self._format_lmstudio_messages(pruned_messages)
+        # Issue #135: If tools present, add JSON format instruction to discourage Harmony
+        use_json_tool_format = bool(request.tools)
+        api_messages = self._format_lmstudio_messages(pruned_messages, use_json_tool_format)
 
         # Dynamically build arguments to avoid sending null values,
         # which can cause issues with some servers.
@@ -260,47 +344,36 @@ class LMStudioAdapter(BaseAdapter):
             **self.extra_params,  # top_p, top_k, etc. from config
         }
 
-        # --- Intent Detection: Prioritize native tool-calling ---
-        # If the request includes tools, use the native tool-calling API.
-        # This is the modern, preferred method for routing and actions.
+        # --- Intent Detection: JSON schema enforcement for tools (#135) ---
+        # Instead of native tool-calling (Harmony), use response_format with JSON schema.
+        # This is more reliable for models like gpt-oss that degrade after ~10 tool calls.
         if request.tools:
-            logger.info("LMStudioAdapter: Invoking in native Tool-calling mode.")
-            tool_names = []
-            tools_to_pass = []
-            for tool in request.tools:
-                if issubclass(tool, BaseModel):
-                    tool_name = tool.__name__
-                    tool_names.append(tool_name)
-                    tools_to_pass.append({
-                        "type": "function",
-                        "function": {
-                            "name": tool_name,
-                            "description": tool.__doc__ or f"Schema for {tool.__name__}",
-                            "parameters": tool.model_json_schema()
-                        }
-                    })
-            if tools_to_pass:
-                api_kwargs["tools"] = tools_to_pass
-                # If the request explicitly asks to force a tool call (e.g., for the router),
-                # set the tool_choice to 'required'. This is a more robust and compatible
-                # way to ensure a tool call than specifying a function name.
-                if request.force_tool_call:
-                    logger.info("Request has 'force_tool_call=True'. Setting tool_choice to 'required'.")
-                    api_kwargs["tool_choice"] = "required"
-                else:
-                    api_kwargs["tool_choice"] = "auto"
+            logger.info("LMStudioAdapter: Using JSON schema enforcement for tools (not native tool-calling).")
+            tool_call_schema = self._build_tool_call_schema(request.tools)
+            api_kwargs["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "ToolCallResponse",
+                    "strict": True,
+                    "schema": tool_call_schema,
+                }
+            }
+            # NOTE: We intentionally do NOT pass api_kwargs["tools"] - schema enforcement only
 
         # If no tools are present, but a specific output model is requested,
         # use the JSON schema enforcement mode.
         elif request.output_model_class and issubclass(request.output_model_class, BaseModel):
             schema_source = request.output_model_class
             logger.info(f"LMStudioAdapter: Invoking in JSON Schema enforcement mode with schema {schema_source.__name__}.")
+            # Issue #135: Add $schema declaration required by LMStudio
+            schema = schema_source.model_json_schema()
+            schema["$schema"] = "http://json-schema.org/draft-07/schema#"
             api_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
                     "name": schema_source.__name__,
                     "strict": True,
-                    "schema": schema_source.model_json_schema(),
+                    "schema": schema,
                 }
             }
         # Otherwise, invoke in standard text generation mode.
@@ -333,6 +406,40 @@ class LMStudioAdapter(BaseAdapter):
                 latency_ms = int((time.perf_counter() - start_time) * 1000)
                 capture_trace(request, result, latency_ms, self.model_name)
                 return result
+
+            # Issue #135: Parse tool call from JSON schema-enforced response.
+            # This is the primary path when request.tools is set - we use response_format
+            # with JSON schema instead of native tool-calling (Harmony) for reliability.
+            if request.tools and "response_format" in api_kwargs:
+                content = message.content or ""
+                if content.strip():
+                    try:
+                        json_resp = json.loads(content)
+                        action = json_resp.get("action", {})
+                        tool_name = action.get("tool_name")
+
+                        if tool_name == "DONE":
+                            # Task complete - return final response as text
+                            logger.info("LMStudioAdapter: JSON response indicates task DONE.")
+                            result = {"text_response": json_resp.get("final_response", "")}
+                            latency_ms = int((time.perf_counter() - start_time) * 1000)
+                            capture_trace(request, result, latency_ms, self.model_name)
+                            return result
+                        elif tool_name:
+                            # Convert JSON action to tool_calls format
+                            logger.info(f"LMStudioAdapter: Parsed tool call from JSON: {tool_name}")
+                            # Extract args from action (everything except tool_name)
+                            args = {k: v for k, v in action.items() if k != "tool_name" and v is not None}
+                            result = {"tool_calls": [{
+                                "name": tool_name,
+                                "args": args,
+                                "id": f"json_{uuid4().hex[:8]}"
+                            }]}
+                            latency_ms = int((time.perf_counter() - start_time) * 1000)
+                            capture_trace(request, result, latency_ms, self.model_name)
+                            return result
+                    except json.JSONDecodeError:
+                        logger.warning(f"LMStudioAdapter: Failed to parse JSON response: {content[:200]}")
 
             # If a tool call was forced (either by 'required' or by name) but not provided,
             # it's a failure. Return an empty list to signal this to the caller (e.g., the Router).
