@@ -108,7 +108,11 @@ class LMStudioAdapter(BaseAdapter):
         Returns:
             JSON Schema dict with $schema declaration (required by LMStudio)
         """
-        tool_names = [t.__name__ for t in tools] + ["DONE"]
+        # Issue #138: Only add DONE for multi-tool (ReAct) scenarios.
+        # Single-tool callers like Router have no use for DONE - there's only one valid choice.
+        tool_names = [t.__name__ for t in tools]
+        if len(tools) > 1:
+            tool_names.append("DONE")
 
         # Collect all parameter definitions from all tools for the action properties
         # IMPORTANT: Preserve full property definition (type, items, properties, etc.)
@@ -152,7 +156,7 @@ class LMStudioAdapter(BaseAdapter):
                         "tool_name": {
                             "type": "string",
                             "enum": tool_names,
-                            "description": "The tool to call, or DONE if task is complete"
+                            "description": "The tool to call" + (", or DONE if task is complete" if len(tools) > 1 else "")
                         },
                         **all_params
                     }
