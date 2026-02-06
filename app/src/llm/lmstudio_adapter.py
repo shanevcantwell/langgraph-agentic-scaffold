@@ -110,16 +110,20 @@ class LMStudioAdapter(BaseAdapter):
         """
         tool_names = [t.__name__ for t in tools] + ["DONE"]
 
-        # Collect all parameter names from all tools for the action properties
+        # Collect all parameter definitions from all tools for the action properties
+        # IMPORTANT: Preserve full property definition (type, items, properties, etc.)
+        # to handle complex types like arrays and nested objects correctly
         all_params = {}
         for tool in tools:
             schema = tool.model_json_schema()
             for prop_name, prop_def in schema.get("properties", {}).items():
                 if prop_name not in all_params:
-                    all_params[prop_name] = {
-                        "type": prop_def.get("type", "string"),
-                        "description": prop_def.get("description", f"Parameter for tool calls")
-                    }
+                    # Copy the full property definition, not just type
+                    param_def = dict(prop_def)
+                    # Ensure description exists
+                    if "description" not in param_def:
+                        param_def["description"] = f"Parameter for {tool.__name__}"
+                    all_params[prop_name] = param_def
 
         return {
             "$schema": "http://json-schema.org/draft-07/schema#",
