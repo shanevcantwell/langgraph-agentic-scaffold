@@ -18,10 +18,14 @@ from ..llm.tracing import (
 
 logger = logging.getLogger(__name__)
 
-class Route(BaseModel):
-    # By changing from a dynamic Enum to a simple string, we generate a much simpler
-    # JSON schema. This helps bypass potential bugs in the LLM server's grammar
-    # engine, which can be sensitive to complex schemas with enum constraints.
+class RouteResponse(BaseModel):
+    """
+    Simplified routing response schema.
+
+    Uses output_model_class for JSON schema enforcement instead of tool-calling.
+    This avoids the complexity of the "decoy tool" pattern that accumulated from
+    Aug 2025 workarounds (d151d09) for markdown wrapping issues.
+    """
     next_specialist: List[str] = Field(
         ...,
         min_length=1,  # Prevent empty arrays (Issue #136)
@@ -105,7 +109,7 @@ class RouterSpecialist(BaseSpecialist):
 
     def _handle_llm_failure(self) -> Dict[str, Any]:
         """Provides a robust fallback mechanism if the LLM fails to make a decision."""
-        logger.error("Router LLM failed to produce a valid tool call. Attempting to fall back to a default handler.")
+        logger.error("Router LLM failed to produce a valid routing response. Attempting to fall back to a default handler.")
         if CoreSpecialist.DEFAULT_RESPONDER.value in self.specialist_map:
             next_specialist = CoreSpecialist.DEFAULT_RESPONDER.value
             content = "Router failed to select a valid next specialist. Routing to DefaultResponderSpecialist."
@@ -115,7 +119,7 @@ class RouterSpecialist(BaseSpecialist):
         else:
             next_specialist = END
             content = "Router failed to select a valid next specialist and no fallback handlers are available. Routing to EndSpecialist."
-        return {"next_specialist": next_specialist, "tool_calls": [], "content": content}
+        return {"next_specialist": next_specialist, "content": content}
 
     def _validate_llm_choice(self, llm_choice: str | List[str], valid_options: List[str]) -> str | List[str]:
         """Ensures the LLM's choice is a valid, available specialist."""
@@ -231,7 +235,6 @@ class RouterSpecialist(BaseSpecialist):
                         logger.info(f"Deterministic dependency routing: '{recommending_specialist}' requires '{target}' - bypassing LLM")
                         return {
                             "next_specialist": target,
-                            "tool_calls": [],
                             "content": f"Routing to '{target}' to satisfy dependency from '{recommending_specialist}'",
                             "router_diagnostics": {
                                 "llm_choice": None,
@@ -279,11 +282,13 @@ class RouterSpecialist(BaseSpecialist):
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
-        request = StandardizedLLMRequest(messages=final_messages, tools=[Route], force_tool_call=True)
+        # Use output_model_class for JSON schema enforcement (simpler than tool-calling)
+        request = StandardizedLLMRequest(messages=final_messages, output_model_class=RouteResponse)
         response_data = self.llm_adapter.invoke(request)
-        tool_calls = response_data.get("tool_calls", [])
 
-        next_specialist_from_llm = tool_calls[0]['args'].get('next_specialist') if tool_calls and tool_calls[0].get('args') else None
+        # Parse JSON response directly (no tool_call wrapper)
+        json_resp = response_data.get("json_response", {})
+        next_specialist_from_llm = json_resp.get('next_specialist') if json_resp else None
         if not next_specialist_from_llm:
             return self._handle_llm_failure()
 
@@ -297,7 +302,6 @@ class RouterSpecialist(BaseSpecialist):
         content = f"Routing to specialist: {validated_choice}"
         return {
             "next_specialist": validated_choice,
-            "tool_calls": tool_calls,
             "content": content,
             "router_diagnostics": {
                 "llm_choice": next_specialist_from_llm,
@@ -323,13 +327,11 @@ class RouterSpecialist(BaseSpecialist):
             next_specialist_name = END
             routing_type = "deterministic_end"
             content = "Workflow complete. Archive report generated."
-            tool_calls = []
         else:
             llm_decision = self._get_llm_choice(state)
             next_specialist_name = llm_decision["next_specialist"]
             routing_type = "llm_decision"
             content = llm_decision["content"]
-            tool_calls = llm_decision.get("tool_calls", [])
             router_diagnostics = llm_decision.get("router_diagnostics", {})
 
         ai_message = create_llm_message(
@@ -339,7 +341,6 @@ class RouterSpecialist(BaseSpecialist):
             additional_kwargs={
                 "routing_decision": next_specialist_name,
                 "routing_type": routing_type,
-                "tool_calls": tool_calls,
             },
         )
 

@@ -29,7 +29,7 @@ class TestRouterObservability:
             "file_specialist": {"description": "File operations"}
         })
         router_specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_1"}]
+            "json_response": {"next_specialist": ["file_specialist"]}
         }
 
         initial_state = create_test_state(
@@ -51,7 +51,7 @@ class TestRouterObservability:
             "file_specialist": {"description": "File operations"}
         })
         router_specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_1"}]
+            "json_response": {"next_specialist": ["file_specialist"]}
         }
 
         initial_state = create_test_state(
@@ -125,7 +125,7 @@ class TestRouterObservability:
         })
         # LLM returns list for parallel execution
         router_specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": ["alpha_specialist", "bravo_specialist"]}, "id": "call_1"}]
+            "json_response": {"next_specialist": ["alpha_specialist", "bravo_specialist"]}
         }
 
         initial_state = create_test_state(
@@ -148,7 +148,7 @@ class TestRouterObservability:
             "file_specialist": {"description": "File operations"}
         })
         router_specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_1"}]
+            "json_response": {"next_specialist": ["file_specialist"]}
         }
 
         # State already has routing history
@@ -177,7 +177,7 @@ class TestRouterTracingIntegration:
             "file_specialist": {"description": "File operations"}
         })
         router_specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_1"}]
+            "json_response": {"next_specialist": ["file_specialist"]}
         }
 
         initial_state = create_test_state(
@@ -206,7 +206,7 @@ class TestRouterTracingIntegration:
             "file_specialist": {"description": "File operations"}
         })
         router_specialist.llm_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_1"}]
+            "json_response": {"next_specialist": ["file_specialist"]}
         }
 
         initial_state = create_test_state(

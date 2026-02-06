@@ -59,7 +59,7 @@ class TestRouterContextVisibility:
 
         mock_adapter = router.llm_adapter
         mock_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "chat_specialist"}, "id": "call_123"}]
+            "json_response": {"next_specialist": ["chat_specialist"]}
         }
 
         # Act
@@ -100,7 +100,7 @@ class TestRouterContextVisibility:
 
         mock_adapter = router.llm_adapter
         mock_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "web_specialist"}, "id": "call_123"}]
+            "json_response": {"next_specialist": ["web_specialist"]}
         }
 
         # Act
@@ -158,7 +158,7 @@ class TestSearchFailureRecognition:
 
         mock_adapter = router.llm_adapter
         mock_adapter.invoke.return_value = {
-            "tool_calls": [{"args": {"next_specialist": "chat_specialist"}, "id": "call_123"}]
+            "json_response": {"next_specialist": ["chat_specialist"]}
         }
 
         # Act

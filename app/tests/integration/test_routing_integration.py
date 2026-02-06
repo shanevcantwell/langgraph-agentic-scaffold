@@ -183,7 +183,7 @@ def test_router_removes_declining_specialist_from_routing_decision(initialized_s
 
     # Mock the LLM to capture what the Router sends to it
     mock_response = {
-        "tool_calls": [{"name": "Route", "args": {"next_specialist": ["chat_specialist"]}}]
+        "json_response": {"next_specialist": ["chat_specialist"]}
     }
 
     with patch.object(router, 'llm_adapter') as mock_adapter:
@@ -337,7 +337,7 @@ def test_decline_signal_is_consumed_after_routing(initialized_specialist_factory
     }
 
     mock_response = {
-        "tool_calls": [{"name": "Route", "args": {"next_specialist": ["chat_specialist"]}}]
+        "json_response": {"next_specialist": ["chat_specialist"]}
     }
 
     with patch.object(router, 'llm_adapter') as mock_adapter:

@@ -141,8 +141,9 @@ def test_router_normal_llm_routing(router_specialist):
     router_specialist.set_specialist_map({"file_specialist": {"description": "File ops"}})
 
     mock_adapter = router_specialist.llm_adapter
+    # Router now uses output_model_class (json_response) instead of tool_calls
     mock_adapter.invoke.return_value = {
-        "tool_calls": [{"args": {"next_specialist": "file_specialist"}, "id": "call_123"}]
+        "json_response": {"next_specialist": ["file_specialist"]}
     }
 
     initial_state = create_test_state(
@@ -187,8 +188,9 @@ def test_router_handles_invalid_llm_response(router_specialist):
     router_specialist.set_specialist_map({"file_specialist": {"description": "File ops"}})
 
     mock_adapter = router_specialist.llm_adapter
+    # Router now uses output_model_class (json_response) instead of tool_calls
     mock_adapter.invoke.return_value = {
-        "tool_calls": [{"args": {"next_specialist": "non_existent_specialist"}, "id": "call_123"}]
+        "json_response": {"next_specialist": ["non_existent_specialist"]}
     }
 
     initial_state = {"messages": [HumanMessage(content="Do something weird")]}
@@ -255,13 +257,14 @@ def test_get_llm_choice_vision_logic_with_tags(router_specialist):
     }
     
     mock_adapter = router_specialist.llm_adapter
+    # Router now uses output_model_class (json_response) instead of tool_calls
     mock_adapter.invoke.return_value = {
-        "tool_calls": [{"args": {"next_specialist": "vision_spec"}, "id": "call_123"}]
+        "json_response": {"next_specialist": ["vision_spec"]}
     }
-    
+
     # Act
     router_specialist._get_llm_choice(state)
-    
+
     # Assert
     # Check that the system message contains the recommendation for vision specialists
     call_args = mock_adapter.invoke.call_args
@@ -301,13 +304,14 @@ def test_get_llm_choice_dependency_logic_with_tags(router_specialist):
     }
     
     mock_adapter = router_specialist.llm_adapter
+    # Router now uses output_model_class (json_response) instead of tool_calls
     mock_adapter.invoke.return_value = {
-        "tool_calls": [{"args": {"next_specialist": "dependency_target"}, "id": "call_123"}]
+        "json_response": {"next_specialist": ["dependency_target"]}
     }
-    
+
     # Act
     router_specialist._get_llm_choice(state)
-    
+
     # Assert
     call_args = mock_adapter.invoke.call_args
     request = call_args[0][0]

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from app.src.specialists.router_specialist import RouterSpecialist, Route
+from app.src.specialists.router_specialist import RouterSpecialist, RouteResponse
 from app.src.workflow.graph_orchestrator import GraphOrchestrator
 from app.src.enums import CoreSpecialist
 from app.src.utils.errors import WorkflowError
