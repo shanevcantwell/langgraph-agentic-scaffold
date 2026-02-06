@@ -445,6 +445,16 @@ class LMStudioAdapter(BaseAdapter):
                     except json.JSONDecodeError:
                         logger.warning(f"LMStudioAdapter: Failed to parse JSON response: {content[:200]}")
 
+                # Issue #136: FALLTHROUGH GUARD - if we reach here in tools mode,
+                # content was empty, JSON parse failed, or tool_name was missing.
+                # Return empty tool_calls to signal failure - do NOT fall through
+                # to output_model_class path which would raise ValueError.
+                logger.warning("LMStudioAdapter: Tools mode but no valid tool call found in response")
+                result = {"tool_calls": []}
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, result, latency_ms, self.model_name)
+                return result
+
             # If a tool call was forced (either by 'required' or by name) but not provided,
             # it's a failure. Return an empty list to signal this to the caller (e.g., the Router).
             tool_choice = api_kwargs.get("tool_choice")
