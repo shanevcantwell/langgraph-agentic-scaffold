@@ -619,12 +619,9 @@ class GraphBuilder:
         excluded_specialists = SpecialistCategories.get_hub_spoke_exclusions(subgraph_exclusions)
 
         # ADR-CORE-061: Terminal specialists that legitimately signal completion
-        # These use check_task_completion (keep existing behavior)
-        terminal_specialists = {
-            "chat_specialist",
-            "default_responder_specialist",
-            "tiered_synthesizer_specialist",
-        }
+        # These use check_task_completion and skip Exit Interview validation
+        # (conversational specialists with no success criteria to evaluate)
+        terminal_specialists = SpecialistCategories.SKIP_EXIT_INTERVIEW
 
         # ADR-CORE-061: Build destinations for check_task_completion (terminal specialists)
         check_completion_destinations = {

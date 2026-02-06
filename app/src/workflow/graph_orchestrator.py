@@ -13,6 +13,7 @@ from ..enums import CoreSpecialist
 from ..utils.errors import WorkflowError
 
 from ..interface.context_schema import ContextPlan
+from .specialist_categories import SpecialistCategories
 
 logger = logging.getLogger(__name__)
 
@@ -132,10 +133,16 @@ class GraphOrchestrator:
                 # Exit interview validated - proceed to END
                 logger.info(f"--- GraphOrchestrator: Task validated by exit_interview. Routing to {CoreSpecialist.END.value}. ---")
                 return CoreSpecialist.END.value
-            else:
-                # Specialist claimed complete - validate via exit_interview first
-                logger.info(f"--- GraphOrchestrator: task_is_complete set by specialist. Routing to exit_interview for validation. ---")
-                return CoreSpecialist.EXIT_INTERVIEW.value
+
+            # Skip EI for conversational specialists with no success criteria
+            last_specialist = routing_history[-1] if routing_history else None
+            if last_specialist in SpecialistCategories.SKIP_EXIT_INTERVIEW:
+                logger.info(f"--- GraphOrchestrator: {last_specialist} complete, skipping exit_interview (no criteria). ---")
+                return CoreSpecialist.END.value
+
+            # Specialist claimed complete - validate via exit_interview first
+            logger.info(f"--- GraphOrchestrator: task_is_complete set by specialist. Routing to exit_interview for validation. ---")
+            return CoreSpecialist.EXIT_INTERVIEW.value
 
         if self._is_unproductive_loop(state):
             # ADR-ROADMAP-001: Route loops through exit_interview for validation

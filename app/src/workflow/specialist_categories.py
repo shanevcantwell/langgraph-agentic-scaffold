@@ -55,6 +55,16 @@ class SpecialistCategories:
         CoreSpecialist.EXIT_INTERVIEW.value,
     ])
 
+    # Specialists that skip Exit Interview validation on completion
+    # These are conversational/informational specialists with no success criteria to evaluate.
+    # Sending them through EI is wasteful and can cause false "incomplete" judgments.
+    # NOTE: Must match terminal_specialists in graph_builder.py
+    SKIP_EXIT_INTERVIEW: frozenset = frozenset([
+        "default_responder_specialist",
+        "chat_specialist",
+        "tiered_synthesizer_specialist",
+    ])
+
     @classmethod
     def get_router_exclusions(
         cls,
