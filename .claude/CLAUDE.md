@@ -2,6 +2,8 @@
 
 **Purpose:** Python orchestration framework for multi-model agentic workflows with structural safety constraints.
 
+**Archive Debugging:** See [TRACE_READING_GUIDE.md](docs/tests/TRACE_READING_GUIDE.md) for detailed archive analysis patterns. Archives are the ground truth for what executed.
+
 ---
 
 ## Architectural Vision

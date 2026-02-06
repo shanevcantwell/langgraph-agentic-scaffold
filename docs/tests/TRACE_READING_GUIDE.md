@@ -9,6 +9,34 @@ ARCHIVE="./logs/archive/run_YYYYMMDD_HHMMSS_XXXXXXXX.zip"
 
 HH is in GMT from LAS. User is in Mountain.
 
+## Preferred: Python Script
+
+**Use `scripts/analyze_archive.py` instead of manual unzip/jq commands.**
+
+```bash
+# Summary (routing, artifacts, tool counts)
+python scripts/analyze_archive.py ./logs/archive/run_*.zip
+
+# Show LLM traces with tool calls
+python scripts/analyze_archive.py $ARCHIVE traces
+
+# Count tool calls by type (catches missing move_file/create_directory)
+python scripts/analyze_archive.py $ARCHIVE tools
+
+# Show full prompt for a specific step (e.g., Router = step 1)
+python scripts/analyze_archive.py $ARCHIVE prompt 1
+
+# Compare two archives
+python scripts/analyze_archive.py $ARCHIVE compare ./logs/archive/other_run.zip
+
+# Show Exit Interview details
+python scripts/analyze_archive.py $ARCHIVE ei
+```
+
+The script handles glob patterns (`run_*.zip` → uses most recent match) and presents data cleanly without jq gymnastics.
+
+---
+
 ## Step 0: Read report.md First
 
 **Start here.** The `report.md` file is a human-readable summary with everything you need:
