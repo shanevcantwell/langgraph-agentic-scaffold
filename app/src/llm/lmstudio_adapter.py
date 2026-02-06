@@ -114,8 +114,18 @@ class LMStudioAdapter(BaseAdapter):
         # IMPORTANT: Preserve full property definition (type, items, properties, etc.)
         # to handle complex types like arrays and nested objects correctly
         all_params = {}
+        all_required = []  # Collect required fields from all tools
+
         for tool in tools:
             schema = tool.model_json_schema()
+
+            # Collect required fields from this tool's schema
+            # This ensures model MUST output these fields (e.g., next_specialist for Route)
+            tool_required = schema.get("required", [])
+            for req_field in tool_required:
+                if req_field not in all_required:
+                    all_required.append(req_field)
+
             for prop_name, prop_def in schema.get("properties", {}).items():
                 if prop_name not in all_params:
                     # Copy the full property definition, not just type
@@ -137,7 +147,7 @@ class LMStudioAdapter(BaseAdapter):
                 },
                 "action": {
                     "type": "object",
-                    "required": ["tool_name"],
+                    "required": ["tool_name"] + all_required,  # Include tool's required fields
                     "properties": {
                         "tool_name": {
                             "type": "string",
