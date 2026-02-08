@@ -163,3 +163,22 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
+
+  # prompt-prix-mcp - Evaluation harness for model comparison and battery testing
+  # Provides: complete, judge, list_models, react_step, calculate_drift,
+  #           analyze_variants, generate_variants, analyze_trajectory, compare_trajectories
+  # Optional service - use: docker-compose --profile prompt-prix up
+  prompt-prix:
+    profiles: ["prompt-prix"]
+    container_name: prompt-prix-mcp
+    build:
+      context: ../prompt-prix  # Sibling project
+    stdin_open: true  # Required for MCP stdio transport
+    tty: true
+    environment:
+      - LM_STUDIO_SERVER_1=${LM_STUDIO_SERVER_1}
+      - LM_STUDIO_SERVER_2=${LM_STUDIO_SERVER_2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    command: ["tail", "-f", "/dev/null"]  # Keep alive; LAS starts via docker exec

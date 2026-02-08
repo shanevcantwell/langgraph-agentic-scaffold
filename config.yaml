@@ -121,6 +121,19 @@ mcp:
         args: ["exec", "-i", "semantic-chunker-mcp", "semantic-chunker-mcp"]
         timeout_ms: 30000
 
+      # prompt-prix MCP - Evaluation harness for model battery testing (ADR-CORE-064)
+      # Provides: complete, judge, list_models, react_step, calculate_drift,
+      #           analyze_variants, generate_variants, analyze_trajectory, compare_trajectories
+      # Infrastructure defined in docker-compose.yml (profile: prompt-prix)
+      # Timeout: 600s covers worst case (300s queue wait + 300s inference).
+      # See prompt-prix ARCHITECTURE.md "Timeout Contract" for per-tool breakdown.
+      prompt-prix:
+        enabled: true
+        required: false  # Graceful degradation if container not running
+        command: "docker"
+        args: ["exec", "-i", "prompt-prix-mcp", "prompt-prix-mcp"]
+        timeout_ms: 600000
+
 # ==============================================================================
 # SPECIALIST CONFIGURATION
 # ==============================================================================
