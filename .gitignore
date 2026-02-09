@@ -69,3 +69,4 @@ logs/*
 
 # docker workspace
 workspace/
+tests
