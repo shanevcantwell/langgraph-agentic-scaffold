@@ -4,90 +4,11 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 71 | 649 |
+| Unit | 72 | 685 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **106** | **933** |
+| **Total** | **107** | **969** |
 
-
-## `app/tests/interface/test_context_schema.py`
-
-- **`test_context_plan_with_recommended_specialists`**
-  - *Test ContextPlan with recommended_specialists field populated.*
-- **`test_context_plan_default_empty_recommendations`**
-  - *Test ContextPlan defaults to empty list for recommended_specialists.*
-- **`test_context_plan_validates_required_fields`**
-  - *Test ContextPlan requires reasoning field.*
-- **`test_context_plan_single_recommendation`**
-  - *Test ContextPlan with single specialist recommendation.*
-- **`test_context_plan_serialization`**
-  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
-- **`test_context_plan_empty_actions_with_recommendations`**
-  - *Test ContextPlan with no actions but with recommendations.*
-- **`test_context_plan_multiple_actions_with_recommendations`**
-  - *Test ContextPlan with multiple actions and recommendations.*
-
-## `app/tests/resilience/test_menu_filter_pattern.py`
-
-- **`test_immediate_repetition_loop_activates_menu_filter`**
-  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
-- **`test_two_step_cycle_loop_forbids_both_specialists`**
-  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
-- **`test_below_threshold_does_not_trigger_menu_filter`**
-  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
-- **`test_no_loop_returns_none`**
-  - *REQUIREMENT: No loop detected should return None.*
-- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
-  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
-- **`test_menu_filter_already_active_escalates_to_tier3`**
-  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
-- **`test_extract_from_immediate_loop_error`**
-  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
-- **`test_extract_from_two_step_cycle_error`**
-  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
-- **`test_invalid_error_format_returns_empty_list`**
-  - *REQUIREMENT: If error message format is invalid, return empty list.*
-- **`test_extraction_failure_triggers_circuit_breaker`**
-  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
-- **`test_no_forbidden_list_returns_full_menu`**
-  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
-- **`test_forbidden_list_filters_specialists`**
-  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
-- **`test_multiple_forbidden_specialists_all_removed`**
-  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
-- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
-  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
-- **`test_forbidden_list_cleared_after_non_router_execution`**
-  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
-- **`test_router_execution_does_not_clear_forbidden_list`**
-  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
-- **`test_full_loop_recovery_flow`**
-  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
-- **`test_oscillation_recovery_web_builder_critic`**
-  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
-- **`test_exactly_threshold_repetitions`**
-  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
-- **`test_threshold_plus_one_triggers`**
-  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
-- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
-  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
-- **`test_structural_integrity_violation_triggers_immediate_halt`**
-  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
-- **`test_forbidden_specialists_in_scratchpad_not_root`**
-  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
-- **`test_scratchpad_merge_semantics`**
-  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
-- **`test_menu_filter_activation_logged_at_warning_level`**
-  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
-- **`test_tier3_escalation_logged_at_error_level`**
-  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
-
-## `app/tests/resilience/test_strategy_pattern.py`
-
-- **`test_context_action_supports_strategy`**
-  - *Verify that ContextAction accepts a strategy field.*
-- **`test_context_action_strategy_defaults_to_none`**
-  - *Verify that strategy is optional.*
 
 ## `app/tests/integration/test_api_streaming_integration.py`
 
@@ -604,6 +525,68 @@
 - **`test_restart_application_failure`**
   - *Test application restart handles failures gracefully.*
 
+## `app/tests/resilience/test_menu_filter_pattern.py`
+
+- **`test_immediate_repetition_loop_activates_menu_filter`**
+  - *REQUIREMENT: Immediate repetition (A→A→A) triggers menu filter.*
+- **`test_two_step_cycle_loop_forbids_both_specialists`**
+  - *REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.*
+- **`test_below_threshold_does_not_trigger_menu_filter`**
+  - *REQUIREMENT: Below threshold repetitions should not trigger menu filter.*
+- **`test_no_loop_returns_none`**
+  - *REQUIREMENT: No loop detected should return None.*
+- **`test_disabled_menu_filter_triggers_immediate_circuit_breaker`**
+  - *REQUIREMENT: When menu filter disabled, loop detection raises CircuitBreakerTriggered immediately.*
+- **`test_menu_filter_already_active_escalates_to_tier3`**
+  - *REQUIREMENT: If loop detected while forbidden_specialists already populated, escalate to Tier 3.*
+- **`test_extract_from_immediate_loop_error`**
+  - *REQUIREMENT: Extract specialist name from immediate repetition error message.*
+- **`test_extract_from_two_step_cycle_error`**
+  - *REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.*
+- **`test_invalid_error_format_returns_empty_list`**
+  - *REQUIREMENT: If error message format is invalid, return empty list.*
+- **`test_extraction_failure_triggers_circuit_breaker`**
+  - *REQUIREMENT: If specialist extraction fails (empty list), fall through to circuit breaker.*
+- **`test_no_forbidden_list_returns_full_menu`**
+  - *REQUIREMENT: When no forbidden_specialists in scratchpad, return full specialist map.*
+- **`test_forbidden_list_filters_specialists`**
+  - *REQUIREMENT: When forbidden_specialists populated, remove them from returned menu.*
+- **`test_multiple_forbidden_specialists_all_removed`**
+  - *REQUIREMENT: When multiple specialists forbidden, remove ALL of them.*
+- **`test_all_specialists_forbidden_returns_end_specialist_fallback`**
+  - *REQUIREMENT: If ALL specialists forbidden, return only end_specialist as fallback.*
+- **`test_forbidden_list_cleared_after_non_router_execution`**
+  - *REQUIREMENT: Forbidden list cleared after ANY successful specialist execution (non-router).*
+- **`test_router_execution_does_not_clear_forbidden_list`**
+  - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
+- **`test_full_loop_recovery_flow`**
+  - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
+- **`test_oscillation_recovery_web_builder_critic`**
+  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
+- **`test_exactly_threshold_repetitions`**
+  - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
+- **`test_threshold_plus_one_triggers`**
+  - *REQUIREMENT: Threshold + 1 repetitions SHOULD trigger menu filter.*
+- **`test_max_turn_count_exceeded_triggers_immediate_halt`**
+  - *REQUIREMENT: Max turn count violation should trigger circuit breaker immediately (no menu filter).*
+- **`test_structural_integrity_violation_triggers_immediate_halt`**
+  - *REQUIREMENT: Structural integrity violations should trigger circuit breaker immediately.*
+- **`test_forbidden_specialists_in_scratchpad_not_root`**
+  - *REQUIREMENT: forbidden_specialists must be in scratchpad, NOT root state (ADR-CORE-004).*
+- **`test_scratchpad_merge_semantics`**
+  - *REQUIREMENT: Scratchpad uses operator.ior reducer (merge semantics).*
+- **`test_menu_filter_activation_logged_at_warning_level`**
+  - *REQUIREMENT: Menu filter activation should be logged at WARNING level.*
+- **`test_tier3_escalation_logged_at_error_level`**
+  - *REQUIREMENT: Tier 3 escalation should be logged at ERROR level.*
+
+## `app/tests/resilience/test_strategy_pattern.py`
+
+- **`test_context_action_supports_strategy`**
+  - *Verify that ContextAction accepts a strategy field.*
+- **`test_context_action_strategy_defaults_to_none`**
+  - *Verify that strategy is optional.*
+
 ## `app/tests/specialists/test_batch_processor_specialist.py`
 
 - **`test_successful_batch_operations`**
@@ -680,6 +663,23 @@
   - *Test that triage recommendations are properly included in router prompt.*
 - **`test_researcher_specialist_recommended_for_web_search`**
   - *Test the specific case from user's trace: web search should route to researcher.*
+
+## `app/tests/interface/test_context_schema.py`
+
+- **`test_context_plan_with_recommended_specialists`**
+  - *Test ContextPlan with recommended_specialists field populated.*
+- **`test_context_plan_default_empty_recommendations`**
+  - *Test ContextPlan defaults to empty list for recommended_specialists.*
+- **`test_context_plan_validates_required_fields`**
+  - *Test ContextPlan requires reasoning field.*
+- **`test_context_plan_single_recommendation`**
+  - *Test ContextPlan with single specialist recommendation.*
+- **`test_context_plan_serialization`**
+  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
+- **`test_context_plan_empty_actions_with_recommendations`**
+  - *Test ContextPlan with no actions but with recommendations.*
+- **`test_context_plan_multiple_actions_with_recommendations`**
+  - *Test ContextPlan with multiple actions and recommendations.*
 
 ## `app/tests/unit/test_adapter_contracts.py`
 
@@ -1013,7 +1013,7 @@
 - **`test_facilitator_assembles_resume_trace_for_prior_work`**
   - *ADR-CORE-059: Facilitator assembles resume_trace from prior research traces.*
 - **`test_facilitator_surfaces_exit_interview_feedback`**
-  - *Issue #100: Facilitator surfaces Exit Interview feedback in gathered_context.*
+  - *Issue #121: EI feedback (reasoning, missing_elements) is NOT surfaced in gathered_context.*
 - **`test_facilitator_skips_exit_interview_feedback_when_complete`**
   - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
 - **`test_facilitator_passes_trace_on_benign_interrupt`**
@@ -1248,10 +1248,10 @@
 
 ## `app/tests/unit/test_interrupt_classifier.py`
 
-- **`test_max_iterations_exceeded_in_scratchpad_routes_to_facilitator`**
-  - *BENIGN: max_iterations_exceeded flag → Facilitator for seamless continue.*
-- **`test_max_iterations_exceeded_in_artifacts_routes_to_facilitator`**
-  - *BENIGN: max_iterations_exceeded in artifacts → Facilitator.*
+- **`test_max_iterations_exceeded_in_scratchpad_routes_to_exit_interview`**
+  - *BENIGN: max_iterations_exceeded flag → Exit Interview for feedback.*
+- **`test_max_iterations_exceeded_in_artifacts_routes_to_exit_interview`**
+  - *BENIGN: max_iterations_exceeded in artifacts → Exit Interview.*
 - **`test_context_overflow_routes_to_facilitator`**
   - *BENIGN: context_overflow → Facilitator (compress and continue).*
 - **`test_user_abort_routes_to_end`**
@@ -1271,9 +1271,9 @@
 - **`test_terminal_takes_priority_over_benign`**
   - *TERMINAL should take priority over BENIGN flags.*
 - **`test_benign_takes_priority_over_pathological`**
-  - *BENIGN should take priority over PATHOLOGICAL detection.*
+  - *BENIGN (max_iterations) should take priority over PATHOLOGICAL detection.*
 - **`test_benign_takes_priority_over_artifacts`**
-  - *BENIGN interrupt should route to Facilitator even if artifacts present.*
+  - *BENIGN interrupt (max_iterations) should route to EI even if artifacts present.*
 
 ## `app/tests/unit/test_invariants.py`
 
@@ -1361,6 +1361,20 @@
   - *Issue #123: When NO output_model_class is set (text mode), adapter should*
 - **`test_text_response_no_json_returns_text_only`**
   - *Issue #123: When NO output_model_class is set and response has no JSON,*
+- **`test_no_refs_unchanged`**
+  - *Schema without $ref passes through unchanged.*
+- **`test_direct_ref_resolved`**
+  - *A bare $ref node is replaced with the definition.*
+- **`test_ref_in_items_resolved`**
+  - *$ref inside array items is resolved (the ParallelCall pattern).*
+- **`test_nested_refs_resolved_recursively`**
+  - *Refs within refs are resolved recursively.*
+- **`test_list_elements_resolved`**
+  - *$ref inside a list (e.g., anyOf) is resolved.*
+- **`test_missing_def_left_as_is`**
+  - *$ref pointing to a missing definition is left unchanged.*
+- **`test_nested_model_schema_has_no_refs`**
+  - *_build_tool_call_schema must produce $ref/$defs-free output for nested Pydantic models.*
 
 ## `app/tests/unit/test_mcp_client.py`
 
@@ -1686,6 +1700,35 @@
 - **`test_check_task_completion_validated_by_exit_interview`**
   - *Test that task_is_complete goes to END after exit_interview validation.*
 
+## `app/tests/unit/test_pooled_adapter.py`
+
+- **`test_inherits_from_lmstudio_adapter`**
+  - *PooledLMStudioAdapter inherits all formatting/schema methods from LMStudioAdapter.*
+- **`test_from_config_raises`**
+  - *from_config() is not the construction path — raises NotImplementedError.*
+- **`test_client_is_none`**
+  - *Parent's self.client is set to None — we create per-request clients.*
+- **`test_model_name_preserved`**
+  - *Model name from config is preserved for pool routing.*
+- **`test_acquires_and_releases_server`**
+  - *invoke() acquires a server slot and releases it in finally.*
+- **`test_releases_server_on_error`**
+  - *Server slot is released even when the HTTP call fails.*
+- **`test_creates_client_with_acquired_url`**
+  - *OpenAI client is created with the URL returned by the pool.*
+- **`test_timeout_waiting_for_slot`**
+  - *LLMInvocationError raised when pool can't provide a slot in time.*
+- **`test_uses_request_model_id_when_provided`**
+  - *model_id from request is passed to dispatcher.submit().*
+- **`test_falls_back_to_model_name_when_no_model_id`**
+  - *Falls back to adapter's model_name when request.model_id is None.*
+- **`test_factory_creates_pool_for_lmstudio_pool_providers`**
+  - *AdapterFactory initializes pool when lmstudio_pool providers exist.*
+- **`test_factory_no_pool_for_lmstudio_only_providers`**
+  - *AdapterFactory does NOT create pool when only 'lmstudio' providers exist.*
+- **`test_factory_strips_v1_from_urls`**
+  - *Pool server URLs have /v1 stripped (pool manages base URLs).*
+
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 
 - **`test_progenitor_alpha_initialization`**
@@ -1825,6 +1868,18 @@
   - *One iteration should produce: Human, AI, Tool.*
 - **`test_multiple_iterations_preserve_order`**
   - *Multiple iterations maintain: Human, [AI, Tool]* pattern.*
+- **`test_single_tool_call_dispatched_sequentially`**
+  - *Single tool call should not use ThreadPoolExecutor.*
+- **`test_multiple_tool_calls_dispatched_concurrently`**
+  - *Multiple tool calls in one response should dispatch concurrently.*
+- **`test_concurrent_dispatch_preserves_all_results`**
+  - *All results from concurrent batch should appear in trace.*
+- **`test_concurrent_dispatch_partial_failure`**
+  - *Partial failures in concurrent batch are reported, not raised.*
+- **`test_concurrent_batch_shares_thought`**
+  - *All trace entries in a concurrent batch share the same thought.*
+- **`test_concurrent_then_sequential_iterations`**
+  - *Mix of concurrent and sequential calls across iterations.*
 
 ## `app/tests/unit/test_research_flow.py`
 
@@ -1867,13 +1922,13 @@
 ## `app/tests/unit/test_router_parallel.py`
 
 - **`test_validate_llm_choice_single`**
-  - *Test validation of a single specialist choice.*
+  - *Test validation of a single specialist choice returns (choice, True).*
 - **`test_validate_llm_choice_list`**
-  - *Test validation of a list of specialist choices.*
+  - *Test validation of a list of specialist choices returns (list, True).*
 - **`test_validate_llm_choice_list_partial_invalid`**
-  - *Test validation filters out invalid choices from a list.*
+  - *Test validation rejects entire list when any entry is invalid.*
 - **`test_validate_llm_choice_list_all_invalid`**
-  - *Test fallback when all choices in list are invalid.*
+  - *Test rejection when all choices in list are invalid.*
 - **`test_route_to_next_specialist_list`**
   - *Test routing to a list of specialists.*
 - **`test_route_to_next_specialist_list_invalid`**
@@ -1887,24 +1942,44 @@
   - *Tests that the specialist list is NOT filtered by recommendations (advisory mode).*
 - **`test_handle_llm_failure_fallback_priority`**
   - *Tests the fallback logic when the LLM fails to make a decision.*
-- **`test_validate_llm_choice`**
-  - *Tests the validation of the LLM's routing choice.*
-- **`test_validate_llm_choice_list`**
-  - *Tests validation when LLM returns a list of specialists (Scatter-Gather).*
+- **`test_validate_llm_choice_accept`**
+  - *Valid string choice returns (choice, True).*
+- **`test_validate_llm_choice_reject_string`**
+  - *Invalid string choice returns (None, False) — no silent fallback.*
+- **`test_validate_llm_choice_list_all_valid`**
+  - *All-valid list passes through unchanged (no unwrapping).*
+- **`test_validate_llm_choice_list_preserves_single_item`**
+  - *Single-item list is preserved as a list — no unwrapping to string.*
+- **`test_validate_llm_choice_list_rejects_entirely_on_any_invalid`**
+  - *Mixed valid/invalid list is rejected entirely — no partial filtering.*
+- **`test_validate_llm_choice_list_all_invalid`**
+  - *All-invalid list returns (None, False).*
 - **`test_router_stage_3_termination_logic`**
   - *Tests Stage 3 of termination: when an archive report is present, the router*
 - **`test_router_normal_llm_routing`**
   - *Tests the primary path where the router uses the LLM to decide the next specialist.*
 - **`test_router_handles_llm_invocation_error`**
   - *Tests that the router propagates an LLMInvocationError if the adapter fails.*
-- **`test_router_handles_invalid_llm_response`**
-  - *Tests that the router self-corrects if the LLM returns an invalid specialist name.*
+- **`test_router_handles_invalid_llm_response_with_retry`**
+  - *Router retries once on invalid choice, then falls back to default_responder.*
 - **`test_get_available_specialists_context_aware_filtering_with_tags`**
   - *Tests that context_engineering specialists are filtered out after context gathering.*
 - **`test_get_llm_choice_vision_logic_with_tags`**
   - *Tests that vision-capable specialists are identified via tags when an image is present.*
 - **`test_get_llm_choice_dependency_logic_with_tags`**
   - *Tests that dependency logic correctly excludes planning specialists based on tags.*
+- **`test_build_route_response_model_produces_enum_schema`**
+  - *Dynamic RouteResponse schema includes an enum array of valid specialist names.*
+- **`test_build_route_response_model_rejects_invalid_on_parse`**
+  - *Dynamic RouteResponse rejects names not in the enum during Pydantic validation.*
+- **`test_build_route_response_model_single_name`**
+  - *Works correctly with a single specialist (edge case).*
+- **`test_retry_fires_on_invalid_then_succeeds`**
+  - *Adapter is called twice: invalid first, valid on retry.*
+- **`test_retry_disabled_when_max_retries_zero`**
+  - *With max_routing_retries=0, invalid choice immediately falls through.*
+- **`test_max_routing_retries_read_from_config`**
+  - *max_routing_retries is read from specialist_config, defaulting to 1.*
 
 ## `app/tests/unit/test_router_specialist_discovery.py`
 

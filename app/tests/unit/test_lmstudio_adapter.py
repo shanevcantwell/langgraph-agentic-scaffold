@@ -381,33 +381,27 @@ class TestBuildToolCallSchemaRefFree:
     """Verify _build_tool_call_schema produces $ref-free output for LM Studio."""
 
     @patch('app.src.llm.lmstudio_adapter.OpenAI')
-    def test_parallel_tool_schema_has_no_refs(self, mock_openai_client, mock_model_config):
-        """The full ToolCallResponse schema must be $ref/$defs-free when parallel is included."""
-        from app.src.specialists.mixins.react_mixin import ReActMixin
-
+    def test_nested_model_schema_has_no_refs(self, mock_openai_client, mock_model_config):
+        """_build_tool_call_schema must produce $ref/$defs-free output for nested Pydantic models."""
         adapter = LMStudioAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
         )
 
-        # Build tool schemas the same way the ReAct loop does
-        tools = {
-            "read_file": MagicMock(service="filesystem", function="read_file", description="Read"),
-            "parallel": MagicMock(service="system", function="parallel", description="Parallel"),
-        }
-        tool_schemas = ReActMixin._build_tool_schemas(ReActMixin(), tools)
+        # Create a tool schema with nested Pydantic model (generates $ref/$defs)
+        from pydantic import BaseModel, Field
 
-        # Build the ToolCallResponse schema the adapter sends to LM Studio
-        schema = adapter._build_tool_call_schema(tool_schemas)
+        class InnerItem(BaseModel):
+            name: str = Field(description="Item name")
+            value: int = Field(description="Item value")
+
+        class tool_with_nested(BaseModel):
+            """A tool with nested model parameters."""
+            items: list[InnerItem] = Field(description="List of items")
+
+        schema = adapter._build_tool_call_schema([tool_with_nested])
         schema_json = json.dumps(schema)
 
         assert "$ref" not in schema_json, f"$ref found in schema: {schema_json}"
         assert "$defs" not in schema_json, f"$defs found in schema: {schema_json}"
-
-        # Verify 'calls' property is present and fully inlined
-        calls_prop = schema["properties"]["action"]["properties"].get("calls")
-        assert calls_prop is not None, "Missing 'calls' property"
-        assert calls_prop["type"] == "array"
-        assert calls_prop["items"]["type"] == "object"
-        assert "tool" in calls_prop["items"]["properties"]
