@@ -89,3 +89,5 @@ When you have multiple independent operations, return them all as separate tool 
 **For action tasks** (create, move, modify files): Stop ONLY after you have PERFORMED all the actions. Do not describe what you would do - actually do it with tool calls, then summarize what you did.
 
 If the goal says "create folders" and "move files", you must call `create_directory` and `move_file` before returning. A description of planned actions is NOT completion.
+
+**If you cannot make progress** (a tool keeps failing after you've tried alternatives, or you don't have enough information to proceed): Stop and report what you accomplished, what you attempted that failed, and what remains. An honest partial report is always preferred over pretending you succeeded.
