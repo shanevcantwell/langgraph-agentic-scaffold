@@ -304,11 +304,14 @@ class LMStudioAdapter(BaseAdapter):
 
         return api_messages
 
-    def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
+    def _build_request_kwargs(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         """
-        Invokes the model, dynamically using the 'response_format' parameter
-        to enforce a JSON schema if a Pydantic model is provided in the request,
-        as per LM Studio's documentation.
+        Build the OpenAI-compatible API request kwargs from a StandardizedLLMRequest.
+
+        Handles message pruning, image injection, LMStudio-specific formatting,
+        and response_format setup (JSON schema enforcement for tools and structured output).
+
+        Returns a dict ready for client.chat.completions.create(**kwargs).
         """
         pruned_messages = self._prune_messages(request.messages)
 
@@ -398,162 +401,192 @@ class LMStudioAdapter(BaseAdapter):
         else:
             logger.info("LMStudioAdapter: Invoking in Text mode.")
 
-        # Start timing for trace capture
+        # Pass non-standard params (like top_k) via extra_body for LM Studio
+        if self.extra_body:
+            api_kwargs["extra_body"] = self.extra_body
+
+        return api_kwargs
+
+    def _parse_completion(self, completion, request: StandardizedLLMRequest, api_kwargs: Dict[str, Any], start_time: float) -> Dict[str, Any]:
+        """
+        Parse an OpenAI-compatible completion into the standardized response dict.
+
+        Handles native tool calls, JSON schema-enforced tool calls, structured JSON output,
+        and plain text responses. Captures trace with latency measurement.
+
+        Args:
+            completion: The OpenAI completion response object
+            request: The original request (for checking tools, output_model_class)
+            api_kwargs: The kwargs used for the request (for checking response_format, tool_choice)
+            start_time: perf_counter timestamp from before the HTTP call (for latency)
+        """
+        if not completion.choices:
+            raise LLMInvocationError(
+                f"LMStudio returned empty choices (model={api_kwargs.get('model', 'unknown')}). "
+                "This usually means the server endpoint is wrong (missing /v1 prefix) "
+                "or the model is not loaded."
+            )
+        message = completion.choices[0].message
+
+        # --- Response Parsing ---
+        # If the model responded with tool calls, parse them.
+        if message.tool_calls:
+            logger.info(f"LMStudioAdapter received native tool calls: {message.tool_calls}")
+            formatted_tool_calls = []
+            for tool_call in message.tool_calls:
+                try:
+                    # The 'arguments' field from the API is a JSON string that needs to be parsed.
+                    args = json.loads(tool_call.function.arguments)
+                    formatted_tool_calls.append({"name": tool_call.function.name, "args": args, "id": tool_call.id})
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to decode tool call arguments: {tool_call.function.arguments}", exc_info=True)
+            result = {"tool_calls": formatted_tool_calls}
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, result, latency_ms, self.model_name)
+            return result
+
+        # Issue #135: Parse tool call from JSON schema-enforced response.
+        # This is the primary path when request.tools is set - we use response_format
+        # with JSON schema instead of native tool-calling (Harmony) for reliability.
+        if request.tools and "response_format" in api_kwargs:
+            content = message.content or ""
+            if content.strip():
+                try:
+                    json_resp = json.loads(content)
+
+                    # Try nested format first: {"action": {"tool_name": "...", ...}}
+                    action = json_resp.get("action", {})
+                    tool_name = action.get("tool_name")
+
+                    # Fallback: flat format {"tool_name": "...", ...} (some models ignore nesting)
+                    if not tool_name:
+                        tool_name = json_resp.get("tool_name")
+                        if tool_name:
+                            logger.info(f"LMStudioAdapter: Using flat format tool_name: {tool_name}")
+                            action = json_resp  # Use root as action
+
+                    if tool_name == "DONE":
+                        # Task complete - return final response as text
+                        logger.info("LMStudioAdapter: JSON response indicates task DONE.")
+                        result = {"text_response": json_resp.get("final_response", "")}
+                        latency_ms = int((time.perf_counter() - start_time) * 1000)
+                        capture_trace(request, result, latency_ms, self.model_name)
+                        return result
+                    elif tool_name:
+                        # Convert JSON action to tool_calls format
+                        logger.info(f"LMStudioAdapter: Parsed tool call from JSON: {tool_name}")
+                        # Extract args from action (everything except tool_name)
+                        args = {k: v for k, v in action.items() if k != "tool_name" and v is not None}
+                        result = {"tool_calls": [{
+                            "name": tool_name,
+                            "args": args,
+                            "id": f"json_{uuid4().hex[:8]}"
+                        }]}
+                        latency_ms = int((time.perf_counter() - start_time) * 1000)
+                        capture_trace(request, result, latency_ms, self.model_name)
+                        return result
+                    else:
+                        # JSON parsed but no tool_name found - log what we got
+                        logger.warning(f"LMStudioAdapter: JSON parsed but no tool_name. Keys: {list(json_resp.keys())}, action keys: {list(action.keys()) if action else 'N/A'}")
+                except json.JSONDecodeError:
+                    logger.warning(f"LMStudioAdapter: Failed to parse JSON response: {content[:200]}")
+
+            # Issue #136: FALLTHROUGH GUARD - if we reach here in tools mode,
+            # content was empty, JSON parse failed, or tool_name was missing.
+            # Return empty tool_calls to signal failure - do NOT fall through
+            # to output_model_class path which would raise ValueError.
+            logger.warning(f"LMStudioAdapter: Tools mode fallthrough - content length: {len(content)}, first 100 chars: {content[:100]}")
+            result = {"tool_calls": []}
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, result, latency_ms, self.model_name)
+            return result
+
+        # If a tool call was forced (either by 'required' or by name) but not provided,
+        # it's a failure. Return an empty list to signal this to the caller (e.g., the Router).
+        tool_choice = api_kwargs.get("tool_choice")
+        if tool_choice and tool_choice != "auto":
+            logger.warning(f"LMStudioAdapter had tool_choice='{tool_choice}' but the model returned a text response instead of a tool call.")
+            result = {"tool_calls": []}
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, result, latency_ms, self.model_name)
+            return result
+
+        # If we requested a JSON schema, parse the content as JSON.
+        if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":
+            # Issue #127: Some models (e.g., nemotron) put structured output in
+            # reasoning_content instead of content. Check both fields.
+            content = message.content
+            if not content:
+                reasoning_content = getattr(message, 'reasoning_content', None)
+                if reasoning_content:
+                    logger.info("LMStudioAdapter: Found structured output in reasoning_content (model-specific behavior)")
+                    content = reasoning_content
+                else:
+                    content = "{}"
+            json_response = None
+            try:
+                # First, try to parse directly
+                json_response = json.loads(content)
+            except json.JSONDecodeError:
+                # If direct parsing fails, try to extract from a potentially messy string
+                logger.warning(
+                    f"LMStudioAdapter received non-JSON text when JSON was expected. Attempting to extract JSON. Content: {content[:500]}..."
+                )
+                json_response = self._robustly_parse_json_from_text(content)
+
+            if json_response:
+                result = {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
+            else:
+                # Structured output was requested but model failed to produce valid JSON.
+                # This is a contract violation - raise instead of silently returning empty.
+                schema_name = request.output_model_class.__name__ if request.output_model_class else "unknown"
+                error_msg = (
+                    f"Model failed to produce valid {schema_name} structured output. "
+                    f"Raw content: {content[:300]}..."
+                )
+                logger.error(error_msg)
+                raise ValueError(error_msg)
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, result, latency_ms, self.model_name)
+            return result
+        else:
+            # Standard text response - try to extract JSON if present
+            # Issue #127: Check reasoning_content for models that use it
+            content = message.content
+            if not content:
+                reasoning_content = getattr(message, 'reasoning_content', None)
+                if reasoning_content:
+                    logger.info("LMStudioAdapter: Found response in reasoning_content (model-specific behavior)")
+                    content = reasoning_content
+                else:
+                    content = ""
+            json_data = self._robustly_parse_json_from_text(content)
+            if json_data:
+                result = {"json_response": json_data, "text_response": content}
+            else:
+                result = {"text_response": content}
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, result, latency_ms, self.model_name)
+            return result
+
+    def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
+        """
+        Invokes the model, dynamically using the 'response_format' parameter
+        to enforce a JSON schema if a Pydantic model is provided in the request,
+        as per LM Studio's documentation.
+        """
+        api_kwargs = self._build_request_kwargs(request)
         start_time = time.perf_counter()
 
         try:
-            # Pass non-standard params (like top_k) via extra_body for LM Studio
-            if self.extra_body:
-                api_kwargs["extra_body"] = self.extra_body
             completion = self.client.chat.completions.create(**api_kwargs, timeout=self.timeout)
-            message = completion.choices[0].message
+            return self._parse_completion(completion, request, api_kwargs, start_time)
 
-            # --- Response Parsing ---
-            # If the model responded with tool calls, parse them.
-            if message.tool_calls:
-                logger.info(f"LMStudioAdapter received native tool calls: {message.tool_calls}")
-                formatted_tool_calls = []
-                for tool_call in message.tool_calls:
-                    try:
-                        # The 'arguments' field from the API is a JSON string that needs to be parsed.
-                        args = json.loads(tool_call.function.arguments)
-                        formatted_tool_calls.append({"name": tool_call.function.name, "args": args, "id": tool_call.id})
-                    except json.JSONDecodeError:
-                        logger.error(f"Failed to decode tool call arguments: {tool_call.function.arguments}", exc_info=True)
-                result = {"tool_calls": formatted_tool_calls}
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, result, latency_ms, self.model_name)
-                return result
-
-            # Issue #135: Parse tool call from JSON schema-enforced response.
-            # This is the primary path when request.tools is set - we use response_format
-            # with JSON schema instead of native tool-calling (Harmony) for reliability.
-            if request.tools and "response_format" in api_kwargs:
-                content = message.content or ""
-                if content.strip():
-                    try:
-                        json_resp = json.loads(content)
-
-                        # Try nested format first: {"action": {"tool_name": "...", ...}}
-                        action = json_resp.get("action", {})
-                        tool_name = action.get("tool_name")
-
-                        # Fallback: flat format {"tool_name": "...", ...} (some models ignore nesting)
-                        if not tool_name:
-                            tool_name = json_resp.get("tool_name")
-                            if tool_name:
-                                logger.info(f"LMStudioAdapter: Using flat format tool_name: {tool_name}")
-                                action = json_resp  # Use root as action
-
-                        if tool_name == "DONE":
-                            # Task complete - return final response as text
-                            logger.info("LMStudioAdapter: JSON response indicates task DONE.")
-                            result = {"text_response": json_resp.get("final_response", "")}
-                            latency_ms = int((time.perf_counter() - start_time) * 1000)
-                            capture_trace(request, result, latency_ms, self.model_name)
-                            return result
-                        elif tool_name:
-                            # Convert JSON action to tool_calls format
-                            logger.info(f"LMStudioAdapter: Parsed tool call from JSON: {tool_name}")
-                            # Extract args from action (everything except tool_name)
-                            args = {k: v for k, v in action.items() if k != "tool_name" and v is not None}
-                            result = {"tool_calls": [{
-                                "name": tool_name,
-                                "args": args,
-                                "id": f"json_{uuid4().hex[:8]}"
-                            }]}
-                            latency_ms = int((time.perf_counter() - start_time) * 1000)
-                            capture_trace(request, result, latency_ms, self.model_name)
-                            return result
-                        else:
-                            # JSON parsed but no tool_name found - log what we got
-                            logger.warning(f"LMStudioAdapter: JSON parsed but no tool_name. Keys: {list(json_resp.keys())}, action keys: {list(action.keys()) if action else 'N/A'}")
-                    except json.JSONDecodeError:
-                        logger.warning(f"LMStudioAdapter: Failed to parse JSON response: {content[:200]}")
-
-                # Issue #136: FALLTHROUGH GUARD - if we reach here in tools mode,
-                # content was empty, JSON parse failed, or tool_name was missing.
-                # Return empty tool_calls to signal failure - do NOT fall through
-                # to output_model_class path which would raise ValueError.
-                logger.warning(f"LMStudioAdapter: Tools mode fallthrough - content length: {len(content)}, first 100 chars: {content[:100]}")
-                result = {"tool_calls": []}
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, result, latency_ms, self.model_name)
-                return result
-
-            # If a tool call was forced (either by 'required' or by name) but not provided,
-            # it's a failure. Return an empty list to signal this to the caller (e.g., the Router).
-            tool_choice = api_kwargs.get("tool_choice")
-            if tool_choice and tool_choice != "auto":
-                logger.warning(f"LMStudioAdapter had tool_choice='{tool_choice}' but the model returned a text response instead of a tool call.")
-                result = {"tool_calls": []}
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, result, latency_ms, self.model_name)
-                return result
-
-            # If we requested a JSON schema, parse the content as JSON.
-            if "response_format" in api_kwargs and api_kwargs["response_format"]["type"] == "json_schema":
-                # Issue #127: Some models (e.g., nemotron) put structured output in
-                # reasoning_content instead of content. Check both fields.
-                content = message.content
-                if not content:
-                    reasoning_content = getattr(message, 'reasoning_content', None)
-                    if reasoning_content:
-                        logger.info("LMStudioAdapter: Found structured output in reasoning_content (model-specific behavior)")
-                        content = reasoning_content
-                    else:
-                        content = "{}"
-                json_response = None
-                try:
-                    # First, try to parse directly
-                    json_response = json.loads(content)
-                except json.JSONDecodeError:
-                    # If direct parsing fails, try to extract from a potentially messy string
-                    logger.warning(
-                        f"LMStudioAdapter received non-JSON text when JSON was expected. Attempting to extract JSON. Content: {content[:500]}..."
-                    )
-                    json_response = self._robustly_parse_json_from_text(content)
-
-                if json_response:
-                    result = {"json_response": self._post_process_json_response(json_response, request.output_model_class)}
-                else:
-                    # Structured output was requested but model failed to produce valid JSON.
-                    # This is a contract violation - raise instead of silently returning empty.
-                    schema_name = request.output_model_class.__name__ if request.output_model_class else "unknown"
-                    error_msg = (
-                        f"Model failed to produce valid {schema_name} structured output. "
-                        f"Raw content: {content[:300]}..."
-                    )
-                    logger.error(error_msg)
-                    raise ValueError(error_msg)
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, result, latency_ms, self.model_name)
-                return result
-            else:
-                # Standard text response - try to extract JSON if present
-                # Issue #127: Check reasoning_content for models that use it
-                content = message.content
-                if not content:
-                    reasoning_content = getattr(message, 'reasoning_content', None)
-                    if reasoning_content:
-                        logger.info("LMStudioAdapter: Found response in reasoning_content (model-specific behavior)")
-                        content = reasoning_content
-                    else:
-                        content = ""
-                json_data = self._robustly_parse_json_from_text(content)
-                if json_data:
-                    result = {"json_response": json_data, "text_response": content}
-                else:
-                    result = {"text_response": content}
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, result, latency_ms, self.model_name)
-                return result
-        
         except OpenAIRateLimitError as e:
             error_message = f"LMStudio API rate limit exceeded: {e}"
             logger.error(error_message, exc_info=True)
             raise RateLimitError(error_message) from e
-        
+
         # Consolidated proxy/network error handling. These exceptions all indicate a failure
         # to communicate with the server, often due to a proxy block or network issue.
         except (APIConnectionError, PermissionDeniedError, httpx.ProxyError) as e:

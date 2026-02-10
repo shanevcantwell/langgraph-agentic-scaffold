@@ -6,6 +6,7 @@
 
 from .gemini_adapter import GeminiAdapter
 from .lmstudio_adapter import LMStudioAdapter
+from .pooled_adapter import PooledLMStudioAdapter
 
 # By importing them here, other parts of the application can do:
 # from app.src.llm.adapters import GeminiAdapter

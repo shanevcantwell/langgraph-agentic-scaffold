@@ -18,6 +18,7 @@ ARG EXECUTION_MODE=supervised
 # Docker CLI for external MCP container spawning (ADR-MCP-003)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
+    git \
     build-essential \
     curl \
     ca-certificates \

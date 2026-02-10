@@ -143,7 +143,7 @@ class WorkflowRunner:
                     f"Pre-flight check failed: Provider '{binding_key}' is type 'gemini' but "
                     "the GOOGLE_API_KEY environment variable is not set."
                 )
-            elif provider_type == "lmstudio" and not provider_config.get("base_url"):
+            elif provider_type in ("lmstudio", "lmstudio_pool") and not provider_config.get("base_url"):
                 raise ConfigError(
                     f"Pre-flight check failed: Provider '{binding_key}' is type 'lmstudio' but "
                     "the LMSTUDIO_BASE_URL environment variable is not set."
@@ -180,6 +180,12 @@ class WorkflowRunner:
 
         if failed_providers:
             logger.warning(f"Pre-flight: {len(failed_providers)} provider(s) failed connectivity check: {failed_providers}")
+
+        # ADR-CORE-068: Refresh pool manifests after connectivity validation.
+        # This populates available_models on each server so the pool knows what can be loaded.
+        # Must happen after ping validation to avoid refreshing against unreachable servers.
+        if hasattr(self.builder, 'adapter_factory'):
+            self.builder.adapter_factory.refresh_pool_manifests()
 
         logger.info("All pre-flight checks passed successfully.")
 

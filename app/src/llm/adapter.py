@@ -12,6 +12,7 @@ MAX_TOOL_CALLS = 10 # A reasonable upper limit for a single turn
 class StandardizedLLMRequest(BaseModel):
     """A provider-agnostic request object that captures the specialist's runtime intent."""
     messages: List[BaseMessage]
+    model_id: Optional[str] = Field(default=None, description="Override model for this request. Pool resolves to server with this model loaded.")
     output_model_class: Optional[Type[BaseModel]] = Field(default=None)
     tools: Optional[List[Any]] = Field(default=None)
     force_tool_call: bool = Field(default=False, description="If True, forces the LLM to use a tool. Critical for routing.")

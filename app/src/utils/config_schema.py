@@ -8,7 +8,7 @@ class LLMProviderConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")  # Allow provider-specific fields (e.g., session_cookies, rate_limit_delay)
 
-    type: Literal["gemini", "lmstudio", "ollama", "gemini_webui"] = Field( # The adapter type
+    type: Literal["gemini", "lmstudio", "lmstudio_pool", "ollama", "gemini_webui"] = Field( # The adapter type
         ..., description="The type of the LLM provider implementation to use."
     )
     api_identifier: Optional[str] = Field(

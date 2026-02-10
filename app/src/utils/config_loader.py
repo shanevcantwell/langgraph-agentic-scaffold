@@ -179,10 +179,11 @@ class ConfigLoader:
                 if not api_key:
                     logger.warning(f"GOOGLE_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
                 provider_config["api_key"] = api_key
-            elif provider_type == "lmstudio":
+            elif provider_type in ("lmstudio", "lmstudio_pool"):
                 # Distributed inference: Check for named server reference
                 # .env: LMSTUDIO_SERVERS="rtx3090=http://...,rtx8000=http://..."
                 # user_settings.yaml: server: "rtx3090"
+                # For lmstudio_pool: base_url is used for pool server discovery and ping validation
                 server_name = provider_config.get("server")
                 if server_name:
                     server_map = self._parse_lmstudio_servers()

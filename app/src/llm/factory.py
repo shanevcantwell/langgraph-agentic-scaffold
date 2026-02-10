@@ -1,10 +1,12 @@
 # app/src/llm/factory.py
+import asyncio
 import logging
+import threading
 import time
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage
 from .adapter import BaseAdapter, StandardizedLLMRequest
-from .adapters import GeminiAdapter, LMStudioAdapter # Import all possible adapters
+from .adapters import GeminiAdapter, LMStudioAdapter, PooledLMStudioAdapter  # Import all possible adapters
 from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
 
 logger = logging.getLogger(__name__)
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 ADAPTER_REGISTRY = {
     "gemini": GeminiAdapter,
     "lmstudio": LMStudioAdapter,
+    "lmstudio_pool": PooledLMStudioAdapter,  # Shared GPU pool (ADR-CORE-068)
     "gemini_webui": GeminiWebUIAdapter,  # Web UI adapter for distillation (ADR-DISTILL-006)
     # "ollama": OllamaAdapter, # Example for future extension
 }
@@ -45,9 +48,92 @@ def _check_playwright_available() -> bool:
         # Playwright installed but browsers not installed
         return False
 
+def _run_pool_event_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Target function for the pool's dedicated event loop thread."""
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
+
+
 class AdapterFactory:
     def __init__(self, full_config: Dict[str, Any]):
         self.full_config = full_config
+        self._pool: Optional[Any] = None  # ServerPool, typed as Any to avoid import at module level if pool not installed
+        self._dispatcher: Optional[Any] = None  # ConcurrentDispatcher
+        self._pool_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._pool_thread: Optional[threading.Thread] = None
+
+        # Initialize shared pool if any lmstudio_pool providers exist
+        if self._has_pool_providers():
+            self._init_pool()
+
+    def _has_pool_providers(self) -> bool:
+        """Check if any llm_providers use the 'lmstudio_pool' type."""
+        for provider_config in self.full_config.get("llm_providers", {}).values():
+            if provider_config.get("type") == "lmstudio_pool":
+                return True
+        return False
+
+    def _init_pool(self) -> None:
+        """Initialize the shared ServerPool, ConcurrentDispatcher, and event loop thread.
+
+        Collects all unique LMStudio server URLs from both 'lmstudio' and 'lmstudio_pool'
+        providers, so the pool knows about all available servers regardless of which
+        specialists use the pooled adapter.
+        """
+        from local_inference_pool import ServerPool, ConcurrentDispatcher
+
+        # Collect all unique server URLs from LMStudio-type providers
+        server_urls = set()
+        for provider_config in self.full_config.get("llm_providers", {}).values():
+            if provider_config.get("type") in ("lmstudio", "lmstudio_pool"):
+                url = provider_config.get("base_url")
+                if url:
+                    # Strip /v1 suffix — pool manages base URLs, adapter appends /v1
+                    clean_url = url.rstrip("/")
+                    if clean_url.endswith("/v1"):
+                        clean_url = clean_url[:-3]
+                    server_urls.add(clean_url)
+
+        if not server_urls:
+            logger.warning("AdapterFactory: lmstudio_pool providers found but no server URLs resolved. "
+                           "Check LMSTUDIO_SERVERS env var.")
+            return
+
+        # Create pool and dispatcher
+        self._pool = ServerPool(list(server_urls))
+        self._dispatcher = ConcurrentDispatcher(self._pool)
+
+        # Start dedicated event loop thread for async pool operations
+        self._pool_loop = asyncio.new_event_loop()
+        self._pool_thread = threading.Thread(
+            target=_run_pool_event_loop,
+            args=(self._pool_loop,),
+            daemon=True,
+            name="pool-event-loop"
+        )
+        self._pool_thread.start()
+
+        logger.info(f"AdapterFactory: Initialized shared ServerPool with {len(server_urls)} servers: {sorted(server_urls)}")
+
+    def refresh_pool_manifests(self) -> None:
+        """Refresh model manifests from all servers in the pool.
+
+        Call this during startup (e.g., in runner pre-flight checks) to populate
+        available_models on each server. Requires the pool event loop to be running.
+        """
+        if not self._pool or not self._pool_loop:
+            return
+
+        future = asyncio.run_coroutine_threadsafe(
+            self._pool.refresh_all_manifests(),
+            self._pool_loop
+        )
+        try:
+            future.result(timeout=30)
+            models = self._pool.get_all_available_models()
+            logger.info(f"AdapterFactory: Pool manifest refresh complete. {len(models)} models available: {sorted(models)}")
+        except Exception as e:
+            logger.warning(f"AdapterFactory: Pool manifest refresh failed: {e}")
 
     def validate_provider_dependencies(self) -> List[Tuple[str, str, str]]:
         """
@@ -132,6 +218,32 @@ class AdapterFactory:
             logger.error(f"AdapterFactory: Unknown base provider type '{base_provider_type}' specified in '{binding_key}'. Supported types are: {list(ADAPTER_REGISTRY.keys())}")
             return None
 
+        # ADR-CORE-068: Pooled adapters get pool/dispatcher/loop injected by factory
+        if base_provider_type == "lmstudio_pool":
+            if not self._pool or not self._dispatcher or not self._pool_loop:
+                logger.error(
+                    f"AdapterFactory: Provider '{binding_key}' uses 'lmstudio_pool' but shared pool "
+                    "is not initialized. Check that server URLs are configured."
+                )
+                return None
+
+            model_config = {
+                "api_identifier": provider_config.get("api_identifier"),
+                "parameters": provider_config.get("parameters", {}),
+                "context_window": provider_config.get("context_window"),
+            }
+            if "max_image_size_mb" in provider_config:
+                model_config["max_image_size_mb"] = provider_config["max_image_size_mb"]
+
+            adapter = PooledLMStudioAdapter(
+                model_config=model_config,
+                system_prompt=system_prompt,
+                pool=self._pool,
+                dispatcher=self._dispatcher,
+                loop=self._pool_loop,
+            )
+            return adapter
+
         # Use the adapter's own factory method to create the instance.
         adapter = AdapterClass.from_config(provider_config, system_prompt)
         if not adapter:
@@ -170,6 +282,10 @@ def ping_provider(provider_key: str, provider_config: Dict[str, Any]) -> Dict[st
     }
 
     provider_type = provider_config.get("type")
+    # ADR-CORE-068: For pinging, lmstudio_pool uses the same connectivity as lmstudio.
+    # The pool manages slot routing at runtime; ping just validates the server is reachable.
+    if provider_type == "lmstudio_pool":
+        provider_type = "lmstudio"
     AdapterClass = ADAPTER_REGISTRY.get(provider_type)
 
     if not AdapterClass:
