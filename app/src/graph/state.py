@@ -121,7 +121,9 @@ class GraphState(TypedDict):
     messages: Annotated[List[BaseMessage], operator.add]
     routing_history: Annotated[List[str], operator.add]
     turn_count: int
-    task_is_complete: bool
+    # operator.or_ reducer: if ANY parallel branch signals complete, task is complete.
+    # Required because parallel fan-out (e.g., tiered chat progenitors) may both write this key.
+    task_is_complete: Annotated[bool, operator.or_]
     next_specialist: Optional[str]
 
     # --- LLM Trace Capture (Training Data) ---
