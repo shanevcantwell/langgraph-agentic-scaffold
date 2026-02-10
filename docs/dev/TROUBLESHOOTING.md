@@ -188,15 +188,15 @@ grep -i "error\|exception" ./logs/agentic_server.log | tail -20
 
 **Symptom:** `AttributeError: 'MySpecialist' object has no attribute '_serialize_for_provider'` (or `_check_stagnation`, `_trace_to_tool_result`, etc.)
 
-**Cause:** When ReAct is enabled via config (`react: enabled: true`), GraphBuilder's `ReactEnabledSpecialist` wrapper injects ReActMixin methods onto the specialist at runtime. If new methods are added to ReActMixin (e.g., for ADR-CORE-055), the injection list must also be updated.
+**Cause:** When ReAct is enabled via config (`react: enabled: true`), `ReactEnabledSpecialist` ([react_wrapper.py](../../app/src/workflow/react_wrapper.py)) injects ReActMixin methods onto the specialist at runtime. If new methods are added to ReActMixin, the injection list must also be updated.
 
 **Diagnosis:**
 ```bash
-# Check the injection list in graph_builder.py
-grep -A 15 "methods_to_inject" app/src/workflow/graph_builder.py
+# Check the injection list in react_wrapper.py
+grep -A 15 "methods_to_inject" app/src/workflow/react_wrapper.py
 ```
 
-**Fix:** Ensure `methods_to_inject` in [graph_builder.py](../../app/src/workflow/graph_builder.py) (line ~93) includes all methods called by `execute_with_tools()`:
+**Fix:** Ensure `methods_to_inject` in [react_wrapper.py](../../app/src/workflow/react_wrapper.py) includes all methods called by `execute_with_tools()`:
 
 ```python
 methods_to_inject = [
@@ -211,7 +211,7 @@ methods_to_inject = [
 ]
 ```
 
-Also check class attributes are injected (line ~109):
+Also check class attributes are injected:
 ```python
 attributes_to_inject = [
     'CYCLE_MIN_REPETITIONS',  # Stagnation threshold
@@ -219,6 +219,8 @@ attributes_to_inject = [
     'EXTERNAL_MCP_SERVICES',  # External MCP service list
 ]
 ```
+
+**Current ReAct consumers:** ProjectDirector (filesystem/terminal), TextAnalysisSpecialist (data ops). TextAnalysisSpecialist absorbed DataExtractorSpecialist and DataProcessorSpecialist (commit `0c121ce`).
 
 **Related:** ADR-CORE-055 (trace-based ReAct serialization)
 
@@ -273,6 +275,42 @@ If you see max_iterations_exceeded but the loop continues, this is working corre
 4. Specialist continues work (model unaware of pause)
 
 **Related:** ADR-CORE-036, ADR-CORE-061, ADR-CORE-058 (Phase 2 verification orchestrator)
+
+### 9. Prompt/schema coherence failure (infinite tool call loop)
+
+**Symptom:** Model says "Stop. Output final." or similar termination language, but keeps calling tools (e.g., `list_directory` in a loop). StagnationDetected eventually kills it.
+
+**Cause:** Prompt/schema mismatch. When using JSON schema with logit masking (LM Studio grammar enforcement), the schema's `oneOf` forces an `action`/`actions` field on every response. If the prompt says "respond without tools" or "return plain text" to terminate, the grammar physically won't let the model comply — it must always produce a tool call, so it picks the least harmful one and loops.
+
+**Diagnosis:**
+```bash
+# Check if the model is trying to stop but can't
+ARCHIVE=$(ls -t ./logs/archive/*.zip | head -1)
+unzip -p $ARCHIVE llm_traces.jsonl | jq -r 'select(.specialist=="project_director") | .tool_calls[-1]'
+# Look for: reasoning says "done" but action is still a tool call
+```
+
+**Fix:** ALL termination instructions in the prompt must reference the `DONE` action variant — never "respond without tools" or "return plain text." The prompt must match what the grammar allows.
+
+**Example fix (PD prompt):**
+```
+WRONG: "When finished, respond with your final answer without calling any tools"
+RIGHT: "When finished, choose the DONE action with your final_response"
+```
+
+**Related:** Phase 0.8 fix (commits `8867369`, `8c61b9e`). Validated with gpt-oss-20b in LM Studio.
+
+### 10. Specialist consolidation: deprecated specialists still referenced
+
+**Symptom:** Routing to `data_extractor_specialist` or `data_processor_specialist` fails or produces unexpected behavior.
+
+**Cause:** These specialists were deprecated and absorbed by `text_analysis_specialist` (Phase 1b, commit `0c121ce`). Source files kept with deprecation notices but removed from config.yaml routing.
+
+**Fix:** Update any code referencing the deprecated specialist names. TextAnalysisSpecialist handles both analysis and data operations, with two execution modes:
+- **Single-pass** (fast path): text in → `TextAnalysis(summary, main_points)` JSON out
+- **ReAct** (tool use): when `execute_with_tools` is injected and task requires iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP)
+
+**Related:** Phase 1b, issue #151 (PD identity cleanup)
 
 ---
 

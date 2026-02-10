@@ -127,22 +127,30 @@ Critic ──→ Reviews, returns ACCEPT or REVISE
 
 **Purpose:** Self-improvement loop with explicit termination.
 
-### 4.4 Deep Research (ReActMixin)
+### 4.4 ReAct Tool Use (ReActMixin)
 ```
-ResearchOrchestrator (controller)
+Specialist with react: enabled: true
     ↓
 ┌─────────────────────────────┐
 │ Loop until done:            │
-│   1. Decide action (LLM)    │
-│   2. Execute tool (MCP)     │
-│   3. Observe result         │
-│   4. Update knowledge base  │
+│   1. Decide action(s) (LLM) │
+│   2. Execute tools (MCP)    │
+│   3. Observe results        │
+│   4. Check stagnation       │
 └─────────────────────────────┘
     ↓
-Synthesizer ──→ Compiles report
+Specialist writes artifacts + signals task_is_complete
 ```
 
 **Purpose:** Iterative tool use with LLM-in-the-loop control.
+
+**Current consumers:** ProjectDirector (filesystem/terminal), TextAnalysisSpecialist (data ops).
+
+**Config-driven injection:** `ReactEnabledSpecialist` (react_wrapper.py) wraps any specialist with `react: enabled: true` in config.yaml. No base class change needed — methods injected via `types.MethodType`.
+
+**Concurrent dispatch:** Models can return multiple tool calls per response (Phase 0.9). `actions` array in JSON schema, dispatched via ThreadPoolExecutor.
+
+**Deprecation direction:** ReActMixin (~500 lines) is marked for migration to prompt-prix MCP's `react_step()` primitive. Tool-forwarding pattern: prompt-prix handles inference/parsing, LAS handles tool execution locally. See `docs/proposals/PROPOSAL_Eval-Architecture-And-Sleeptime-Subgraph.md`.
 
 ---
 
@@ -189,17 +197,30 @@ No specialist can unilaterally terminate.
 
 ### 7.1 LLM Adapters
 Factory pattern with provider abstraction:
+- `PooledLMStudioAdapter` (local models via GPU pool — primary, ADR-068)
+- `LMStudioAdapter` (local models, single server — base class for pooled)
 - `GeminiAdapter` (Google)
-- `LMStudioAdapter` (local models)
 - `AnthropicAdapter` (Claude)
 - `OpenAIAdapter` (GPT)
-- `GeminiWebUIAdapter` (browser automation - deprecated)
+
+`PooledLMStudioAdapter` extends `LMStudioAdapter` with `local-inference-pool` for multi-GPU routing (rtx8000 + rtx3090), JIT-swap guard, and least-loaded balancing.
 
 ### 7.2 External MCP Containers
+- **filesystem:** File read/write/list operations
+- **terminal:** Shell command execution (run_command, get_cwd)
 - **surf-mcp:** Browser automation with Fara visual grounding
-- **filesystem:** Official MCP server (proposed migration target)
+- **semantic-chunker:** NV-Embed-v2 embeddings (calculate_drift, classify_document, analyze_variants)
+- **it-tools-mcp:** 119 IT utility tools (format_json, convert_json_to_csv, etc.)
+- **prompt-prix-mcp:** Eval primitives (react_step, complete, list_models) — Phase 2b, not yet implemented
 
-### 7.3 Search Strategies
+### 7.3 prompt-prix Integration (Eval)
+Two containers from the same image, different purposes:
+- **prompt-prix-mcp:** Thin MCP server for iteration primitives. LAS calls via `sync_call_external_mcp()`.
+- **prompt-prix (app):** Full application for battery evaluation. LAS calls via internal MCP tool wrapping `docker exec prompt-prix prompt-prix-cli run-battery ...`.
+
+Battery runs go through the CLI (full app), not MCP. Model/adapter routing is prompt-prix's responsibility — LAS is model-agnostic at the eval boundary.
+
+### 7.4 Search Strategies
 Fallback chain: Brave → DuckDuckGo → (future: more)
 
 ---
@@ -286,12 +307,12 @@ See CONFIGURATION_GUIDE.md § 5.0 for details.
 - `SynthesizerSpecialist` - Report generation
 - `ProjectDirector` - Emergent state machine
 
-### Analysis (5)
-- `TextAnalysisSpecialist`
-- `DataExtractorSpecialist`
-- `DataProcessorSpecialist`
+### Analysis (3)
+- `TextAnalysisSpecialist` — ReAct-enabled: single-pass analysis or iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP). Absorbed DataExtractor and DataProcessor (Phase 1b, commit `0c121ce`).
 - `StructuredDataExtractor`
 - `SentimentClassifier`
+- ~~`DataExtractorSpecialist`~~ — Deprecated, absorbed by TextAnalysisSpecialist
+- ~~`DataProcessorSpecialist`~~ — Deprecated, absorbed by TextAnalysisSpecialist
 
 ### Generation (3)
 - `WebBuilder` - HTML generation
@@ -309,7 +330,7 @@ See CONFIGURATION_GUIDE.md § 5.0 for details.
 - `ImageSpecialist` - Image analysis
 - `TribeConductor` - Convening orchestration
 
-**Total: 37 specialists** (too many - consolidation needed)
+**Active in config.yaml: 24 specialists.** Source files exist for additional deprecated/unused specialists (DataExtractor, DataProcessor, FileSpecialist, DistillationCoordinator, etc.) — consolidation ongoing per Phase 1b.
 
 ---
 
