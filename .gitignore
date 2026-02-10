@@ -69,4 +69,6 @@ logs/*
 
 # docker workspace
 workspace/
+
+# integration test docs and temp files
 tests/
