@@ -165,6 +165,21 @@ services:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
 
+  # it-tools-mcp - 121+ data format, encoding, and utility tools
+  # Source: wrenchpilot/it-tools-mcp (MCP reimplementation inspired by CorentinTh/it-tools)
+  # Provides: format_json, convert_json_to_csv, convert_toml_to_json, format_yaml,
+  #           format_xml, base64 encode/decode, hash, regex, uuid, and 100+ more
+  # Optional service - use: docker-compose --profile it-tools up
+  it-tools:
+    profiles: ["it-tools"]
+    container_name: it-tools-mcp
+    image: wrenchpilot/it-tools-mcp:v5.10.2
+    stdin_open: true  # Required for MCP stdio transport
+    tty: true
+    # Override entrypoint to keep container alive; LAS starts MCP server via docker exec
+    entrypoint: ["tail", "-f", "/dev/null"]
+    restart: unless-stopped
+
   # prompt-prix-mcp - Evaluation harness for model comparison and battery testing
   # Provides: complete, judge, list_models, react_step, calculate_drift,
   #           analyze_variants, generate_variants, analyze_trajectory, compare_trajectories

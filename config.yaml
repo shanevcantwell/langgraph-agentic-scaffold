@@ -121,6 +121,19 @@ mcp:
         args: ["exec", "-i", "semantic-chunker-mcp", "semantic-chunker-mcp"]
         timeout_ms: 30000
 
+      # IT Tools MCP - 121+ data format, encoding, and utility tools
+      # Source: wrenchpilot/it-tools-mcp (inspired by CorentinTh/it-tools, 37k stars)
+      # Provides: format_json, minify_json, compare_json, convert_json_to_csv,
+      #           convert_toml_to_json, format_yaml, format_xml, format_sql,
+      #           convert_html_to_markdown, base64 encode/decode, hash, regex, uuid, etc.
+      # No specialist wired yet — available for text_analysis_specialist redesign
+      it-tools:
+        enabled: true
+        required: false  # Graceful degradation if container not running
+        command: "docker"
+        args: ["exec", "-i", "it-tools-mcp", "node", "build/index.js"]
+        timeout_ms: 30000
+
       # prompt-prix MCP - Evaluation harness for model battery testing (ADR-CORE-064)
       # Provides: complete, judge, list_models, react_step, calculate_drift,
       #           analyze_variants, generate_variants, analyze_trajectory, compare_trajectories
