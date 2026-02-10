@@ -121,9 +121,29 @@ class LMStudioAdapter(BaseAdapter):
 
         return node
 
+    @staticmethod
+    def _get_known_params_for_tool(
+        tool_name: str, tools: List[Type[BaseModel]]
+    ) -> Optional[set]:
+        """Look up valid parameter names for a tool from its Pydantic model.
+
+        Used by _parse_completion to strip irrelevant params that the model
+        may fill when JSON schema enforcement doesn't fully isolate per-tool fields.
+
+        Returns None if tool not found (permissive fallback for unknown tools).
+        """
+        for tool in tools:
+            if tool.__name__ == tool_name:
+                return set(tool.model_fields.keys())
+        return None
+
     def _build_tool_call_schema(self, tools: List[Type[BaseModel]]) -> Dict[str, Any]:
         """
         Build a draft-07 JSON schema for structured tool calling (#135).
+
+        Uses oneOf to create per-tool action variants, each with only its own
+        parameters. This prevents models from filling irrelevant fields (e.g.,
+        putting a `command` arg on a `create_directory` call).
 
         This schema is used instead of native tool-calling (Harmony) because
         models like gpt-oss-20b degrade after ~10 tool calls, emitting garbled
@@ -136,38 +156,40 @@ class LMStudioAdapter(BaseAdapter):
         Returns:
             JSON Schema dict with $schema declaration (required by LMStudio)
         """
-        # Issue #138: Only add DONE for multi-tool (ReAct) scenarios.
-        # Single-tool callers like Router have no use for DONE - there's only one valid choice.
-        tool_names = [t.__name__ for t in tools]
-        if len(tools) > 1:
-            tool_names.append("DONE")
-
-        # Collect all parameter definitions from all tools for the action properties
-        # IMPORTANT: Preserve full property definition (type, items, properties, etc.)
-        # to handle complex types like arrays and nested objects correctly
-        all_params = {}
-        all_required = []  # Collect required fields from all tools
+        variants = []
 
         for tool in tools:
             schema = tool.model_json_schema()
             defs = schema.get("$defs", {})
-
-            # Collect required fields from this tool's schema
-            # This ensures model MUST output these fields (e.g., next_specialist for Route)
             tool_required = schema.get("required", [])
-            for req_field in tool_required:
-                if req_field not in all_required:
-                    all_required.append(req_field)
 
+            # Per-tool properties: tool_name (const) + only this tool's params
+            tool_properties = {
+                "tool_name": {"type": "string", "const": tool.__name__}
+            }
             for prop_name, prop_def in schema.get("properties", {}).items():
-                if prop_name not in all_params:
-                    # Copy the full property definition, not just type
-                    # Resolve any $ref pointers — LM Studio doesn't support $defs
-                    param_def = self._resolve_schema_refs(dict(prop_def), defs)
-                    # Ensure description exists
-                    if "description" not in param_def:
-                        param_def["description"] = f"Parameter for {tool.__name__}"
-                    all_params[prop_name] = param_def
+                resolved = self._resolve_schema_refs(dict(prop_def), defs)
+                if "description" not in resolved:
+                    resolved["description"] = f"Parameter for {tool.__name__}"
+                tool_properties[prop_name] = resolved
+
+            variants.append({
+                "type": "object",
+                "required": ["tool_name"] + tool_required,
+                "properties": tool_properties,
+                "additionalProperties": False,
+            })
+
+        # Issue #138: Only add DONE for multi-tool (ReAct) scenarios.
+        if len(tools) > 1:
+            variants.append({
+                "type": "object",
+                "required": ["tool_name"],
+                "properties": {
+                    "tool_name": {"type": "string", "const": "DONE"}
+                },
+                "additionalProperties": False,
+            })
 
         return {
             "$schema": "http://json-schema.org/draft-07/schema#",
@@ -180,16 +202,7 @@ class LMStudioAdapter(BaseAdapter):
                     "description": "Your thought process before taking action"
                 },
                 "action": {
-                    "type": "object",
-                    "required": ["tool_name"] + all_required,  # Include tool's required fields
-                    "properties": {
-                        "tool_name": {
-                            "type": "string",
-                            "enum": tool_names,
-                            "description": "The tool to call" + (", or DONE if task is complete" if len(tools) > 1 else "")
-                        },
-                        **all_params
-                    }
+                    "oneOf": variants
                 },
                 "final_response": {
                     "type": "string",
@@ -507,6 +520,16 @@ class LMStudioAdapter(BaseAdapter):
                         logger.info(f"LMStudioAdapter: Parsed tool call from JSON: {tool_name}")
                         # Extract args from action (everything except tool_name)
                         args = {k: v for k, v in action.items() if k != "tool_name" and v is not None}
+                        # Defense-in-depth: strip params not belonging to this tool.
+                        # Even with oneOf schema enforcement, some backends may not
+                        # fully isolate per-tool fields.
+                        if request.tools:
+                            known = self._get_known_params_for_tool(tool_name, request.tools)
+                            if known is not None:
+                                stripped = {k for k in args if k not in known}
+                                if stripped:
+                                    logger.debug(f"LMStudioAdapter: Stripped irrelevant params from {tool_name}: {stripped}")
+                                args = {k: v for k, v in args.items() if k in known}
                         result = {"tool_calls": [{
                             "name": tool_name,
                             "args": args,

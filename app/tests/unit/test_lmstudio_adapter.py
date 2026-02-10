@@ -405,3 +405,156 @@ class TestBuildToolCallSchemaRefFree:
 
         assert "$ref" not in schema_json, f"$ref found in schema: {schema_json}"
         assert "$defs" not in schema_json, f"$defs found in schema: {schema_json}"
+
+
+# =============================================================================
+# Per-Tool Schema Isolation (oneOf)
+# =============================================================================
+
+class TestBuildToolCallSchemaOneOf:
+    """Verify _build_tool_call_schema produces per-tool oneOf variants."""
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_multi_tool_schema_uses_oneOf(self, mock_openai_client, mock_model_config):
+        """Multi-tool schema should use oneOf for the action property."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+        from pydantic import Field
+
+        class create_directory(BaseModel):
+            path: str = Field(description="Directory path")
+
+        class run_command(BaseModel):
+            command: str = Field(description="Shell command")
+
+        schema = adapter._build_tool_call_schema([create_directory, run_command])
+        action = schema["properties"]["action"]
+
+        assert "oneOf" in action, f"Expected oneOf in action, got: {action.keys()}"
+        # 2 tools + DONE = 3 variants
+        assert len(action["oneOf"]) == 3
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_each_variant_has_only_own_params(self, mock_openai_client, mock_model_config):
+        """create_directory variant should have path but NOT command."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+        from pydantic import Field
+
+        class create_directory(BaseModel):
+            path: str = Field(description="Directory path")
+
+        class run_command(BaseModel):
+            command: str = Field(description="Shell command")
+
+        schema = adapter._build_tool_call_schema([create_directory, run_command])
+        variants = schema["properties"]["action"]["oneOf"]
+
+        # Find create_directory variant
+        cd_variant = next(v for v in variants if v["properties"]["tool_name"].get("const") == "create_directory")
+        rc_variant = next(v for v in variants if v["properties"]["tool_name"].get("const") == "run_command")
+
+        assert "path" in cd_variant["properties"]
+        assert "command" not in cd_variant["properties"]
+        assert "command" in rc_variant["properties"]
+        assert "path" not in rc_variant["properties"]
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_variants_have_additionalProperties_false(self, mock_openai_client, mock_model_config):
+        """Each variant should block extra fields."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+        from pydantic import Field
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        schema = adapter._build_tool_call_schema([read_file, read_file])
+        for variant in schema["properties"]["action"]["oneOf"]:
+            assert variant.get("additionalProperties") is False
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_single_tool_has_no_DONE_variant(self, mock_openai_client, mock_model_config):
+        """Single-tool schema should not include DONE."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+        from pydantic import Field
+
+        class Route(BaseModel):
+            next_specialist: str = Field(description="Next specialist")
+
+        schema = adapter._build_tool_call_schema([Route])
+        variants = schema["properties"]["action"]["oneOf"]
+
+        assert len(variants) == 1
+        assert variants[0]["properties"]["tool_name"]["const"] == "Route"
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_DONE_variant_has_only_tool_name(self, mock_openai_client, mock_model_config):
+        """DONE variant should have tool_name and nothing else."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+        from pydantic import Field
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        schema = adapter._build_tool_call_schema([read_file, move_file])
+        done_variant = next(v for v in schema["properties"]["action"]["oneOf"]
+                          if v["properties"]["tool_name"].get("const") == "DONE")
+
+        assert set(done_variant["properties"].keys()) == {"tool_name"}
+        assert done_variant["required"] == ["tool_name"]
+
+
+# =============================================================================
+# Parser Param Filtering
+# =============================================================================
+
+class TestParserParamFiltering:
+    """Verify _parse_completion strips irrelevant params from tool calls."""
+
+    def test_get_known_params_for_tool_found(self):
+        """Should return field names for matching tool."""
+        from pydantic import Field
+
+        class create_directory(BaseModel):
+            path: str = Field(description="Dir path")
+
+        result = LMStudioAdapter._get_known_params_for_tool("create_directory", [create_directory])
+        assert result == {"path"}
+
+    def test_get_known_params_for_tool_not_found(self):
+        """Should return None for unknown tool (permissive fallback)."""
+        result = LMStudioAdapter._get_known_params_for_tool("unknown_tool", [])
+        assert result is None
+
+    def test_get_known_params_multi_field_tool(self):
+        """Should return all field names for a multi-field tool."""
+        from pydantic import Field
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        result = LMStudioAdapter._get_known_params_for_tool("move_file", [move_file])
+        assert result == {"source", "destination"}
