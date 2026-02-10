@@ -377,8 +377,6 @@ def get_graph_topology():
         "tiered_synthesizer_specialist": "chat",
         "default_responder_specialist": "chat",
         # Data & Analysis
-        "data_extractor_specialist": "data",
-        "data_processor_specialist": "data",
         "text_analysis_specialist": "data",
         # File Operations
         "navigator_specialist": "files",

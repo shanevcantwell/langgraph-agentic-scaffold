@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 72 | 685 |
+| Unit | 72 | 705 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **107** | **969** |
+| **Total** | **107** | **989** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -948,6 +948,8 @@
   - *Exit Interview should always call LLM for semantic evaluation.*
 - **`test_llm_returns_incomplete`**
   - *When LLM determines task is incomplete, result reflects that.*
+- **`test_stray_json_without_is_complete_defaults_to_complete`**
+  - *Issue #150: LLM sometimes returns stray JSON (e.g. prior specialist's tool*
 - **`test_exit_interview_has_no_check_heuristics_method`**
   - *ADR-CORE-061: _check_heuristics() belongs in Interrupt Classifier.*
 - **`test_exit_interview_has_no_evaluate_trace_heuristics_method`**
@@ -1375,6 +1377,38 @@
   - *$ref pointing to a missing definition is left unchanged.*
 - **`test_nested_model_schema_has_no_refs`**
   - *_build_tool_call_schema must produce $ref/$defs-free output for nested Pydantic models.*
+- **`test_multi_tool_schema_uses_oneOf`**
+  - *Multi-tool schema should use oneOf inside actions array items.*
+- **`test_each_variant_has_only_own_params`**
+  - *create_directory variant should have path but NOT command.*
+- **`test_variants_have_additionalProperties_false`**
+  - *Each variant should block extra fields.*
+- **`test_single_tool_has_no_DONE_variant`**
+  - *Single-tool schema should not include DONE.*
+- **`test_DONE_variant_has_only_tool_name`**
+  - *DONE variant should have tool_name and nothing else.*
+- **`test_schema_required_has_actions_not_action`**
+  - *Schema should require 'actions' (array), not 'action' (singular).*
+- **`test_single_action_in_array`**
+  - *Single action in array produces one tool_call.*
+- **`test_multiple_actions_in_array`**
+  - *Multiple actions produce multiple tool_calls for concurrent dispatch.*
+- **`test_done_in_array`**
+  - *DONE action in array returns text_response.*
+- **`test_mixed_done_and_tools_done_wins`**
+  - *DONE takes priority over concurrent tool calls in mixed array.*
+- **`test_fallback_to_singular_action`**
+  - *Old singular 'action' format still works as backward compat fallback.*
+- **`test_reasoning_threaded_as_text_response`**
+  - *Reasoning field should be passed through as text_response for thought capture.*
+- **`test_param_stripping_per_action`**
+  - *Param stripping is applied independently to each action in the array.*
+- **`test_get_known_params_for_tool_found`**
+  - *Should return field names for matching tool.*
+- **`test_get_known_params_for_tool_not_found`**
+  - *Should return None for unknown tool (permissive fallback).*
+- **`test_get_known_params_multi_field_tool`**
+  - *Should return all field names for a multi-field tool.*
 
 ## `app/tests/unit/test_mcp_client.py`
 
@@ -1868,6 +1902,12 @@
   - *One iteration should produce: Human, AI, Tool.*
 - **`test_multiple_iterations_preserve_order`**
   - *Multiple iterations maintain: Human, [AI, Tool]* pattern.*
+- **`test_concurrent_batch_groups_into_single_ai_message`**
+  - *Concurrent calls (same iteration) should produce one AIMessage with multiple tool_calls.*
+- **`test_mixed_single_and_concurrent_iterations`**
+  - *Mix of single-call and concurrent-call iterations serializes correctly.*
+- **`test_concurrent_batch_shared_thought_uses_first`**
+  - *All entries in a batch share the same thought; serializer uses first entry's thought.*
 - **`test_single_tool_call_dispatched_sequentially`**
   - *Single tool call should not use ThreadPoolExecutor.*
 - **`test_multiple_tool_calls_dispatched_concurrently`**
@@ -2126,9 +2166,9 @@
 - **`test_text_analysis_with_text`**
   - *Tests the normal execution path where text is provided and successfully analyzed.*
 - **`test_text_analysis_without_text_self_correction`**
-  - *Tests the self-correction mechanism where no text is provided (is None).*
+  - *Tests graceful failure when no text is provided and no ReAct tools available.*
 - **`test_text_analysis_with_empty_text_input`**
-  - *Tests self-correction when text_to_process is an empty or whitespace string.*
+  - *Tests graceful failure when text_to_process is empty/whitespace and no ReAct tools.*
 - **`test_text_analysis_handles_llm_invocation_error`**
   - *Tests that an LLMInvocationError is propagated correctly.*
 - **`test_text_analysis_handles_malformed_llm_response`**
@@ -2136,7 +2176,7 @@
 - **`test_text_analysis_sets_task_is_complete`**
   - *Test that successful analysis sets task_is_complete at root level.*
 - **`test_text_analysis_no_task_complete_on_missing_text`**
-  - *Test that task_is_complete is NOT set when text is missing (self-correction path).*
+  - *Test that task_is_complete is NOT set when text is missing.*
 - **`test_text_analysis_treats_content_as_context`**
   - *Test that the specialist treats uploaded content as context, not target.*
 - **`test_text_analysis_preserves_user_message`**

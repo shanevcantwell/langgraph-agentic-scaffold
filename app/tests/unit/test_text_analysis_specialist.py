@@ -41,7 +41,8 @@ def test_text_analysis_with_text(text_analysis_specialist):
 
 def test_text_analysis_without_text_self_correction(text_analysis_specialist):
     """
-    Tests the self-correction mechanism where no text is provided (is None).
+    Tests graceful failure when no text is provided and no ReAct tools available.
+    (Specialist has no execute_with_tools — not wrapped by ReactEnabledSpecialist in unit tests.)
     """
     # Arrange
     initial_state = {"messages": [HumanMessage(content="Analyze this.")], "artifacts": {"text_to_process": None}}
@@ -50,16 +51,15 @@ def test_text_analysis_without_text_self_correction(text_analysis_specialist):
     result_state = text_analysis_specialist._execute_logic(initial_state)
 
     # Assert
-    text_analysis_specialist.llm_adapter.invoke.assert_not_called()  # LLM should not be called
-    # Task 2.7: recommended_specialists moved to scratchpad
-    assert "scratchpad" in result_state and "recommended_specialists" in result_state["scratchpad"]
-    assert result_state["scratchpad"]["recommended_specialists"] == ["file_specialist"]
+    text_analysis_specialist.llm_adapter.invoke.assert_not_called()
     assert isinstance(result_state["messages"][0], AIMessage)
-    assert "I cannot run because there is no text to process" in result_state["messages"][0].content
+    assert "no text to process" in result_state["messages"][0].content
+    # Should NOT signal completion — task wasn't done
+    assert result_state.get("task_is_complete") is not True
 
 @pytest.mark.parametrize("text_input", ["", "   "], ids=["empty_string", "whitespace_only"])
 def test_text_analysis_with_empty_text_input(text_analysis_specialist, text_input):
-    """Tests self-correction when text_to_process is an empty or whitespace string."""
+    """Tests graceful failure when text_to_process is empty/whitespace and no ReAct tools."""
     # Arrange
     initial_state = {"messages": [], "artifacts": {"text_to_process": text_input}}
 
@@ -68,9 +68,8 @@ def test_text_analysis_with_empty_text_input(text_analysis_specialist, text_inpu
 
     # Assert
     text_analysis_specialist.llm_adapter.invoke.assert_not_called()
-    # Task 2.7: recommended_specialists moved to scratchpad
-    assert "scratchpad" in result_state and "recommended_specialists" in result_state["scratchpad"]
-    assert result_state["scratchpad"]["recommended_specialists"] == ["file_specialist"]
+    assert isinstance(result_state["messages"][0], AIMessage)
+    assert "no text to process" in result_state["messages"][0].content
 
 def test_text_analysis_handles_llm_invocation_error(text_analysis_specialist):
     """Tests that an LLMInvocationError is propagated correctly."""
@@ -124,10 +123,10 @@ def test_text_analysis_sets_task_is_complete(text_analysis_specialist):
 
 def test_text_analysis_no_task_complete_on_missing_text(text_analysis_specialist):
     """
-    Test that task_is_complete is NOT set when text is missing (self-correction path).
+    Test that task_is_complete is NOT set when text is missing.
 
-    When text is missing, the specialist recommends file_specialist and should
-    NOT signal completion since the actual task hasn't been done yet.
+    When text is missing and no ReAct tools are available, the specialist
+    should NOT signal completion since the actual task hasn't been done yet.
     """
     # Arrange
     initial_state = {

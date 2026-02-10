@@ -1,4 +1,10 @@
 # app/src/specialists/data_extractor_specialist.py
+#
+# DEPRECATED: Absorbed by text_analysis_specialist (Phase 1b).
+# text_analysis_specialist now handles data extraction via ReAct tools.
+# Removed from config.yaml routing. File kept for reference until
+# confirmed no active routing paths remain.
+#
 import logging
 from typing import Dict, Any
 
@@ -13,7 +19,10 @@ logger = logging.getLogger(__name__)
 
 class DataExtractorSpecialist(BaseSpecialist):
     """
-    A specialist that extracts structured data from a given text using an LLM.
+    DEPRECATED: Absorbed by TextAnalysisSpecialist.
+
+    Was: Extract structured data from text using an LLM.
+    Now: text_analysis_specialist handles this via ReAct tools.
     """
 
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:

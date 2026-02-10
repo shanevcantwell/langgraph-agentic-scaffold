@@ -1,3 +1,11 @@
+# app/src/specialists/data_processor_specialist.py
+#
+# DEPRECATED: Absorbed by text_analysis_specialist (Phase 1b).
+# The "add processed_by stamp" behavior was trivial and doesn't
+# warrant a separate specialist. text_analysis handles data
+# transformation via ReAct tools (it-tools MCP, terminal).
+# Removed from config.yaml routing.
+#
 import logging
 import json
 from typing import Dict, Any
@@ -9,8 +17,10 @@ logger = logging.getLogger(__name__)
 
 class DataProcessorSpecialist(BaseSpecialist):
     """
-    A procedural (LLM-optional) specialist that processes a JSON artifact
-    found in the state.
+    DEPRECATED: Absorbed by TextAnalysisSpecialist.
+
+    Was: Procedural specialist that adds 'processed_by' stamp to JSON.
+    Now: text_analysis_specialist handles data operations via ReAct tools.
     """
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)

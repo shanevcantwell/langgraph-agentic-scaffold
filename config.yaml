@@ -246,27 +246,38 @@ specialists:
       - router_specialist
       
   # --- Data & Analysis ---
-  data_extractor_specialist:
-    type: "llm"
-    prompt_file: "data_extractor_prompt.md" # Use a prompt designed for Pydantic/JSON schema output.
-    description: "Extracts structured data from unstructured text based on a Pydantic schema. Can use 'text_to_process' artifact or inline message content."
-    # NOTE: requires_artifacts removed - specialist now falls back to message content
-    # Proper solution pending ADR-CORE-040 (Context State Model). See Issue #8.
-
-  data_processor_specialist:
-    type: "procedural"
-    description: "A specialist that performs deterministic data processing tasks, like formatting or cleaning, without calling an LLM."
-    requires_artifacts: ["json_artifact"]
-    artifact_providers:
-      json_artifact: "data_extractor_specialist"
+  # NOTE: data_extractor_specialist and data_processor_specialist removed.
+  # text_analysis_specialist absorbs both roles as a ReAct-enabled specialist
+  # with tools for structured data operations. See Phase 1b of absorption plan.
 
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
-    description: "Analyzes, summarizes, or extracts specific information from documents or text blocks. Use this for analytical tasks on text content (e.g., 'summarize this document', 'extract key points', 'analyze this code structure'). For conversational questions about text, use chat_specialist instead."
-    requires_artifacts: ["text_to_process"]
-    # NOTE: artifact_providers.text_to_process removed - file_specialist superseded by filesystem MCP (ADR-CORE-035)
-    # text_to_process now comes from facilitator_specialist gathering via external filesystem MCP
+    description: "Analyzes, summarizes, extracts, or transforms text and structured data. Handles analytical tasks (summarize, extract key points, analyze structure) and data operations (extract JSON, format/convert data). For conversational questions, use chat_specialist instead."
+    # ReAct capability for iterative data operations (ADR-CORE-051)
+    react:
+      enabled: true
+      max_iterations: 10
+    # Tool permissions — optional use; simple analysis doesn't require tools
+    tools:
+      filesystem:
+        - read_file
+        - list_directory
+      terminal:
+        - run_command
+        - get_cwd
+      semantic-chunker:
+        - calculate_drift
+        - analyze_variants
+      it-tools:
+        - format_json
+        - minify_json
+        - compare_json
+        - convert_json_to_csv
+        - convert_json_to_yaml
+        - format_yaml
+        - format_xml
+        - convert_html_to_markdown
 
   # --- Conversational & Chat ---
 
