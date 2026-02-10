@@ -110,6 +110,28 @@ class TestExitInterviewLLMEvaluation:
         assert result["task_is_complete"] is False
         assert "project_director" in result["scratchpad"]["recommended_specialists"]
 
+    def test_stray_json_without_is_complete_defaults_to_complete(self, exit_interview):
+        """
+        Issue #150: LLM sometimes returns stray JSON (e.g. prior specialist's tool
+        args like {'path': 'categories_test'}) instead of CompletionEvaluation.
+        Should default to complete with a clean warning, not a pydantic crash.
+        """
+        state = {
+            "artifacts": {"user_request": "Sort files"},
+            "messages": [],
+            "routing_history": ["project_director"]
+        }
+
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {"path": "categories_test"}  # stray tool args
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is True
+        assert "unrelated JSON" in result["artifacts"]["exit_interview_result"]["reasoning"]
+
 
 # =============================================================================
 # ADR-CORE-061: Exit Interview Purity (Post-Refactor)

@@ -269,6 +269,19 @@ Example verification steps:
             # Adapter handles JSON parsing - check json_response first
             json_data = response.get("json_response")
             if json_data:
+                # Guard: LLM sometimes returns stray JSON (e.g. tool args from prior
+                # specialist) instead of CompletionEvaluation. Check for the required
+                # field before attempting construction to avoid noisy pydantic errors.
+                if "is_complete" not in json_data:
+                    logger.warning(
+                        f"ExitInterviewSpecialist: JSON response missing 'is_complete' "
+                        f"(got keys: {list(json_data.keys())}), defaulting to complete"
+                    )
+                    return CompletionEvaluation(
+                        is_complete=True,
+                        reasoning="LLM returned unrelated JSON - defaulting to complete",
+                        missing_elements=""
+                    )
                 return CompletionEvaluation(**json_data)
 
             # If no JSON found, default to complete
