@@ -1,9 +1,9 @@
 # app/src/specialists/router_specialist.py
 
 import logging
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Literal, Optional, Tuple, Type
 from langgraph.graph import END
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from .base import BaseSpecialist
 from .helpers import create_llm_message
@@ -32,11 +32,41 @@ class RouteResponse(BaseModel):
         description="The specialist(s) to route to next. Can be a single specialist or multiple for parallel execution. Must be from the AVAILABLE SPECIALISTS listed in the prompt."
     )
 
+def _build_route_response_model(valid_names: List[str]) -> Type[BaseModel]:
+    """Build a dynamic RouteResponse with enum-constrained specialist names.
+
+    The JSON schema produced by this model includes an "enum" array, which
+    LMStudio (and other structured-output engines) enforce at the token level.
+    This prevents open-weight models from generating approximate names like
+    "project" instead of "project_director".
+    """
+    specialist_literal = Literal[tuple(valid_names)]  # type: ignore[valid-type]
+    return create_model(
+        "RouteResponse",
+        next_specialist=(
+            List[specialist_literal],
+            Field(
+                ...,
+                min_length=1,
+                description=(
+                    "The specialist(s) to route to next. Can be a single specialist "
+                    "or multiple for parallel execution. Must be from the AVAILABLE "
+                    "SPECIALISTS listed in the prompt."
+                ),
+            ),
+        ),
+    )
+
+
 class RouterSpecialist(BaseSpecialist):
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
         self.specialist_map: Dict[str, Dict] = {}
-        logger.info("Initialized RouterSpecialist (awaiting contextual configuration from GraphBuilder).")
+        self.max_routing_retries: int = specialist_config.get("max_routing_retries", 1)
+        logger.info(
+            f"Initialized RouterSpecialist (max_routing_retries={self.max_routing_retries}, "
+            f"awaiting contextual configuration from GraphBuilder)."
+        )
 
     def set_specialist_map(self, specialist_configs: Dict[str, Dict]):
         """Receives the full map of specialist configurations from the orchestrator."""
@@ -121,28 +151,33 @@ class RouterSpecialist(BaseSpecialist):
             content = "Router failed to select a valid next specialist and no fallback handlers are available. Routing to EndSpecialist."
         return {"next_specialist": next_specialist, "content": content}
 
-    def _validate_llm_choice(self, llm_choice: str | List[str], valid_options: List[str]) -> str | List[str]:
-        """Ensures the LLM's choice is a valid, available specialist."""
+    def _validate_llm_choice(
+        self, llm_choice: str | List[str], valid_options: List[str]
+    ) -> Tuple[str | List[str] | None, bool]:
+        """Validate the LLM's specialist choice — reject-or-accept, never mutate.
+
+        Returns (validated_choice, is_valid).  When any entry is invalid the
+        *entire* response is rejected so the caller can retry with a correction
+        message.  This prevents silent partial filtering that destroys parallel
+        fan-out intent (e.g. ["project", "systems_architect"] → ["systems_architect"]).
+        """
         if isinstance(llm_choice, list):
-            validated_list = []
-            for choice in llm_choice:
-                if choice in valid_options:
-                    validated_list.append(choice)
-                else:
-                    logger.warning(f"Router LLM returned an invalid specialist in list: '{choice}'. Valid options are {valid_options}.")
-            
-            if not validated_list:
-                logger.warning("All choices in the list were invalid. Falling back to DefaultResponder.")
-                return CoreSpecialist.DEFAULT_RESPONDER.value
-            
-            if len(validated_list) == 1:
-                return validated_list[0]
-            return validated_list
+            invalid = [c for c in llm_choice if c not in valid_options]
+            if invalid:
+                logger.error(
+                    f"Router: Invalid specialist(s) in list: {invalid}. "
+                    f"Valid: {valid_options}"
+                )
+                return None, False
+            return llm_choice, True
 
         if llm_choice not in valid_options:
-            logger.warning(f"Router LLM returned an invalid specialist: '{llm_choice}'. Valid options are {valid_options}. Falling back to DefaultResponder.")
-            return CoreSpecialist.DEFAULT_RESPONDER.value
-        return llm_choice
+            logger.error(
+                f"Router: Invalid specialist '{llm_choice}'. "
+                f"Valid: {valid_options}"
+            )
+            return None, False
+        return llm_choice, True
 
     def _get_llm_choice(self, state: Dict[str, Any]) -> Dict[str, Any]:
         """Invokes the LLM to get the next specialist and returns the validated decision."""
@@ -282,17 +317,65 @@ class RouterSpecialist(BaseSpecialist):
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
-        # Use output_model_class for JSON schema enforcement (simpler than tool-calling)
-        request = StandardizedLLMRequest(messages=final_messages, output_model_class=RouteResponse)
-        response_data = self.llm_adapter.invoke(request)
+        # Build enum-constrained RouteResponse so JSON schema includes valid names
+        valid_names = list(current_specialists.keys())
+        dynamic_route_model = _build_route_response_model(valid_names)
 
-        # Parse JSON response directly (no tool_call wrapper)
-        json_resp = response_data.get("json_response", {})
-        next_specialist_from_llm = json_resp.get('next_specialist') if json_resp else None
-        if not next_specialist_from_llm:
-            return self._handle_llm_failure()
+        # Semantic retry loop: give the model a second chance with explicit correction
+        retries_remaining = self.max_routing_retries
+        last_invalid_choice = None
 
-        validated_choice = self._validate_llm_choice(next_specialist_from_llm, list(current_specialists.keys()))
+        while True:
+            request = StandardizedLLMRequest(
+                messages=final_messages, output_model_class=dynamic_route_model
+            )
+            response_data = self.llm_adapter.invoke(request)
+
+            # Parse JSON response directly (no tool_call wrapper)
+            json_resp = response_data.get("json_response", {})
+            next_specialist_from_llm = (
+                json_resp.get("next_specialist") if json_resp else None
+            )
+            if not next_specialist_from_llm:
+                return self._handle_llm_failure()
+
+            validated_choice, is_valid = self._validate_llm_choice(
+                next_specialist_from_llm, valid_names
+            )
+
+            if is_valid:
+                break
+
+            # Invalid choice — retry with correction or fall through
+            last_invalid_choice = next_specialist_from_llm
+            if retries_remaining > 0:
+                retries_remaining -= 1
+                correction = (
+                    f"Your choice '{next_specialist_from_llm}' is not a valid specialist. "
+                    f"You MUST choose from: {valid_names}. Try again."
+                )
+                final_messages.append(SystemMessage(content=correction))
+                logger.warning(
+                    f"Router: Retrying after invalid choice '{next_specialist_from_llm}' "
+                    f"({retries_remaining} retries remaining)"
+                )
+                continue
+
+            # Retries exhausted — fall through to default_responder
+            logger.error(
+                f"Router: Exhausted {self.max_routing_retries} retries. "
+                f"Last invalid choice: '{last_invalid_choice}'. "
+                f"Falling back to {CoreSpecialist.DEFAULT_RESPONDER.value}."
+            )
+            validated_choice = CoreSpecialist.DEFAULT_RESPONDER.value
+            break
+
+        # Unwrap single-item lists for downstream compatibility.
+        # The orchestrator's route_to_next_specialist does string equality checks
+        # (e.g. next_specialist == "chat_specialist") that would break with ["chat_specialist"].
+        # Multi-item lists pass through for parallel fan-out.
+        if isinstance(validated_choice, list) and len(validated_choice) == 1:
+            validated_choice = validated_choice[0]
 
         # Diagnostic logging for Thought Stream visibility
         available_specialists_list = list(current_specialists.keys())[:5]  # Show first 5

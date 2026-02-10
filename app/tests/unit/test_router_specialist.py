@@ -1,10 +1,13 @@
 # app/tests/unit/test_router_specialist.py
 import pytest
 import logging
-from unittest.mock import MagicMock, patch, ANY
+from unittest.mock import MagicMock, patch, ANY, call
 from langgraph.graph import END
 from langchain_core.messages import AIMessage, HumanMessage
-from app.src.specialists.router_specialist import RouterSpecialist
+from app.src.specialists.router_specialist import (
+    RouterSpecialist,
+    _build_route_response_model,
+)
 from app.src.utils.errors import LLMInvocationError
 from app.src.enums import CoreSpecialist
 from app.src.graph.state_factory import create_test_state
@@ -70,38 +73,52 @@ def test_handle_llm_failure_fallback_priority(router_specialist):
     result = router_specialist._handle_llm_failure()
     assert result["next_specialist"] == END
 
-def test_validate_llm_choice(router_specialist):
-    """Tests the validation of the LLM's routing choice."""
+def test_validate_llm_choice_accept(router_specialist):
+    """Valid string choice returns (choice, True)."""
     valid_options = ["spec1", "spec2"]
-
-    # Case 1: Valid choice
-    choice = router_specialist._validate_llm_choice("spec1", valid_options)
+    choice, is_valid = router_specialist._validate_llm_choice("spec1", valid_options)
     assert choice == "spec1"
+    assert is_valid is True
 
-    # Case 2: Invalid choice
-    choice = router_specialist._validate_llm_choice("invalid_spec", valid_options)
-    assert choice == CoreSpecialist.DEFAULT_RESPONDER.value
+def test_validate_llm_choice_reject_string(router_specialist):
+    """Invalid string choice returns (None, False) — no silent fallback."""
+    valid_options = ["spec1", "spec2"]
+    choice, is_valid = router_specialist._validate_llm_choice("invalid_spec", valid_options)
+    assert choice is None
+    assert is_valid is False
 
-def test_validate_llm_choice_list(router_specialist):
-    """Tests validation when LLM returns a list of specialists (Scatter-Gather)."""
+def test_validate_llm_choice_list_all_valid(router_specialist):
+    """All-valid list passes through unchanged (no unwrapping)."""
     valid_options = ["spec1", "spec2", "spec3"]
-
-    # Case 1: All valid
-    choice = router_specialist._validate_llm_choice(["spec1", "spec2"], valid_options)
+    choice, is_valid = router_specialist._validate_llm_choice(["spec1", "spec2"], valid_options)
     assert choice == ["spec1", "spec2"]
+    assert is_valid is True
 
-    # Case 2: Mixed valid/invalid (should filter invalid)
-    choice = router_specialist._validate_llm_choice(["spec1", "invalid_spec"], valid_options)
-    assert choice == "spec1" # Returns string because only 1 valid item remains
+def test_validate_llm_choice_list_preserves_single_item(router_specialist):
+    """Single-item list is preserved as a list — no unwrapping to string."""
+    valid_options = ["spec1", "spec2", "spec3"]
+    choice, is_valid = router_specialist._validate_llm_choice(["spec1"], valid_options)
+    assert choice == ["spec1"]
+    assert is_valid is True
+    assert isinstance(choice, list)
 
-    # Case 3: Single valid item in list (should return string)
-    # This is an optimization in the router to avoid overhead if only 1 task
-    choice = router_specialist._validate_llm_choice(["spec1"], valid_options)
-    assert choice == "spec1"
+def test_validate_llm_choice_list_rejects_entirely_on_any_invalid(router_specialist):
+    """Mixed valid/invalid list is rejected entirely — no partial filtering."""
+    valid_options = ["spec1", "spec2", "spec3"]
+    choice, is_valid = router_specialist._validate_llm_choice(
+        ["spec1", "invalid_spec"], valid_options
+    )
+    assert choice is None
+    assert is_valid is False
 
-    # Case 4: All invalid (fallback)
-    choice = router_specialist._validate_llm_choice(["invalid1", "invalid2"], valid_options)
-    assert choice == CoreSpecialist.DEFAULT_RESPONDER.value
+def test_validate_llm_choice_list_all_invalid(router_specialist):
+    """All-invalid list returns (None, False)."""
+    valid_options = ["spec1", "spec2", "spec3"]
+    choice, is_valid = router_specialist._validate_llm_choice(
+        ["invalid1", "invalid2"], valid_options
+    )
+    assert choice is None
+    assert is_valid is False
 
 
 # --- Integration-Style Tests for _execute_logic ---
@@ -180,15 +197,17 @@ def test_router_handles_llm_invocation_error(router_specialist):
     with pytest.raises(LLMInvocationError, match="API is down"):
         router_specialist._execute_logic(initial_state)
 
-def test_router_handles_invalid_llm_response(router_specialist):
-    """
-    Tests that the router self-corrects if the LLM returns an invalid specialist name.
+def test_router_handles_invalid_llm_response_with_retry(router_specialist):
+    """Router retries once on invalid choice, then falls back to default_responder.
+
+    With max_routing_retries=1 (default), the adapter is called twice:
+    once for the initial invalid response, once for the retry (also invalid
+    here because the mock always returns the same thing).
     """
     # Arrange
     router_specialist.set_specialist_map({"file_specialist": {"description": "File ops"}})
 
     mock_adapter = router_specialist.llm_adapter
-    # Router now uses output_model_class (json_response) instead of tool_calls
     mock_adapter.invoke.return_value = {
         "json_response": {"next_specialist": ["non_existent_specialist"]}
     }
@@ -198,12 +217,12 @@ def test_router_handles_invalid_llm_response(router_specialist):
     # Act
     result = router_specialist._execute_logic(initial_state)
 
-    # Assert
+    # Assert: 2 calls (initial + 1 retry)
+    assert mock_adapter.invoke.call_count == 2
     assert result["next_specialist"] == CoreSpecialist.DEFAULT_RESPONDER.value
-    # The router now logs the self-correction but the AI message is a standard routing message
     ai_message = result["messages"][0]
     assert "Routing to specialist: default_responder_specialist" in ai_message.content
-    assert ai_message.additional_kwargs["routing_type"] == "llm_decision" # It's still an LLM decision, just a corrected one.
+    assert ai_message.additional_kwargs["routing_type"] == "llm_decision"
 
 def test_get_available_specialists_context_aware_filtering_with_tags(router_specialist):
     """Tests that context_engineering specialists are filtered out after context gathering.
@@ -320,6 +339,112 @@ def test_get_llm_choice_dependency_logic_with_tags(router_specialist):
     # Should identify 'worker' as the recommender, not 'planner'
     assert "**Dependency Requirement:**" in system_msg
     assert "The 'worker' specialist cannot proceed" in system_msg
+
+# --- Enum-Constrained RouteResponse Tests ---
+
+def test_build_route_response_model_produces_enum_schema():
+    """Dynamic RouteResponse schema includes an enum array of valid specialist names."""
+    valid_names = ["project_director", "chat_specialist", "web_builder"]
+    model = _build_route_response_model(valid_names)
+    schema = model.model_json_schema()
+
+    # Navigate the JSON schema — items should have an enum
+    items = schema["properties"]["next_specialist"]["items"]
+    assert "enum" in items
+    assert set(items["enum"]) == set(valid_names)
+
+def test_build_route_response_model_rejects_invalid_on_parse():
+    """Dynamic RouteResponse rejects names not in the enum during Pydantic validation."""
+    valid_names = ["project_director", "chat_specialist"]
+    model = _build_route_response_model(valid_names)
+
+    # Valid parse
+    obj = model(next_specialist=["project_director"])
+    assert obj.next_specialist == ["project_director"]
+
+    # Invalid parse
+    with pytest.raises(Exception):  # ValidationError
+        model(next_specialist=["project"])
+
+def test_build_route_response_model_single_name():
+    """Works correctly with a single specialist (edge case).
+
+    Pydantic uses "const" instead of "enum" for single-value Literals,
+    but LMStudio handles both — the constraint is still enforced.
+    """
+    model = _build_route_response_model(["only_specialist"])
+    schema = model.model_json_schema()
+    items = schema["properties"]["next_specialist"]["items"]
+    # Pydantic uses "const" for single values, "enum" for multiple
+    assert items.get("const") == "only_specialist" or items.get("enum") == ["only_specialist"]
+
+
+# --- Semantic Retry Tests ---
+
+def test_retry_fires_on_invalid_then_succeeds(router_specialist):
+    """Adapter is called twice: invalid first, valid on retry."""
+    router_specialist.set_specialist_map({
+        "file_specialist": {"description": "File ops"},
+        "chat_specialist": {"description": "Chat"},
+    })
+
+    mock_adapter = router_specialist.llm_adapter
+    # First call: invalid name. Second call: valid name.
+    mock_adapter.invoke.side_effect = [
+        {"json_response": {"next_specialist": ["project"]}},
+        {"json_response": {"next_specialist": ["file_specialist"]}},
+    ]
+
+    state = {
+        "messages": [HumanMessage(content="Read my file")],
+        "artifacts": {},
+        "scratchpad": {},
+        "routing_history": [],
+    }
+
+    result = router_specialist._get_llm_choice(state)
+
+    assert mock_adapter.invoke.call_count == 2
+    # Single-item list is unwrapped to string for downstream compatibility
+    assert result["next_specialist"] == "file_specialist"
+
+    # Verify correction message was appended on the retry call
+    retry_request = mock_adapter.invoke.call_args_list[1][0][0]
+    system_messages = [m for m in retry_request.messages if hasattr(m, 'content') and "not a valid specialist" in m.content]
+    assert len(system_messages) == 1
+    assert "'project'" in system_messages[0].content
+
+def test_retry_disabled_when_max_retries_zero(router_specialist):
+    """With max_routing_retries=0, invalid choice immediately falls through."""
+    router_specialist.max_routing_retries = 0
+    router_specialist.set_specialist_map({
+        "file_specialist": {"description": "File ops"},
+    })
+
+    mock_adapter = router_specialist.llm_adapter
+    mock_adapter.invoke.return_value = {
+        "json_response": {"next_specialist": ["project"]}
+    }
+
+    state = {
+        "messages": [HumanMessage(content="Read my file")],
+        "artifacts": {},
+        "scratchpad": {},
+        "routing_history": [],
+    }
+
+    result = router_specialist._get_llm_choice(state)
+
+    # Only 1 call — no retries
+    assert mock_adapter.invoke.call_count == 1
+    assert result["next_specialist"] == CoreSpecialist.DEFAULT_RESPONDER.value
+
+def test_max_routing_retries_read_from_config(initialized_specialist_factory):
+    """max_routing_retries is read from specialist_config, defaulting to 1."""
+    router = initialized_specialist_factory("RouterSpecialist")
+    # Default from conftest mock config (no max_routing_retries key) → 1
+    assert router.max_routing_retries == 1
+
 
 def setup_module(module):
     """Set up logging for the test module."""

@@ -18,29 +18,33 @@ class TestRouterParallel:
         return router
 
     def test_validate_llm_choice_single(self, router):
-        """Test validation of a single specialist choice."""
+        """Test validation of a single specialist choice returns (choice, True)."""
         valid_options = ["specialist_a", "specialist_b"]
-        result = router._validate_llm_choice("specialist_a", valid_options)
-        assert result == "specialist_a"
+        choice, is_valid = router._validate_llm_choice("specialist_a", valid_options)
+        assert choice == "specialist_a"
+        assert is_valid is True
 
     def test_validate_llm_choice_list(self, router):
-        """Test validation of a list of specialist choices."""
+        """Test validation of a list of specialist choices returns (list, True)."""
         valid_options = ["specialist_a", "specialist_b", "specialist_c"]
-        result = router._validate_llm_choice(["specialist_a", "specialist_c"], valid_options)
-        assert result == ["specialist_a", "specialist_c"]
+        choice, is_valid = router._validate_llm_choice(["specialist_a", "specialist_c"], valid_options)
+        assert choice == ["specialist_a", "specialist_c"]
+        assert is_valid is True
 
     def test_validate_llm_choice_list_partial_invalid(self, router):
-        """Test validation filters out invalid choices from a list."""
+        """Test validation rejects entire list when any entry is invalid."""
         valid_options = ["specialist_a", "specialist_b"]
-        # specialist_c is invalid
-        result = router._validate_llm_choice(["specialist_a", "specialist_c"], valid_options)
-        assert result == "specialist_a" # Should return single string if only one valid
+        # specialist_c is invalid — entire response is rejected
+        choice, is_valid = router._validate_llm_choice(["specialist_a", "specialist_c"], valid_options)
+        assert choice is None
+        assert is_valid is False
 
     def test_validate_llm_choice_list_all_invalid(self, router):
-        """Test fallback when all choices in list are invalid."""
+        """Test rejection when all choices in list are invalid."""
         valid_options = ["specialist_a", "specialist_b"]
-        result = router._validate_llm_choice(["invalid_1", "invalid_2"], valid_options)
-        assert result == CoreSpecialist.DEFAULT_RESPONDER.value
+        choice, is_valid = router._validate_llm_choice(["invalid_1", "invalid_2"], valid_options)
+        assert choice is None
+        assert is_valid is False
 
 class TestOrchestratorParallel:
     @pytest.fixture

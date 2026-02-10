@@ -146,6 +146,7 @@ specialists:
   router_specialist:
     type: "llm"
     prompt_file: "router_prompt.md"
+    max_routing_retries: 1  # Semantic retries when model picks invalid specialist name
     description: "The master router and planner. It analyzes the user's request and routes it to the appropriate specialist. Its model should be capable of reliable tool/function calling."
     tags: ["planning", "orchestration"]
 
