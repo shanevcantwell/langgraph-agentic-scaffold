@@ -1,4 +1,5 @@
 
+import json
 import pytest
 from unittest.mock import patch, MagicMock, call
 
@@ -301,3 +302,112 @@ def test_text_response_no_json_returns_text_only(mock_openai_client, mock_model_
     # Should have text_response only
     assert result.get("text_response") == "This is a plain text response with no JSON."
     assert result.get("json_response") is None
+
+
+# =============================================================================
+# $ref Resolution Tests (LM Studio doesn't support $defs)
+# =============================================================================
+
+class TestResolveSchemaRefs:
+    """Tests for LMStudioAdapter._resolve_schema_refs — inlines $defs/$ref."""
+
+    def test_no_refs_unchanged(self):
+        """Schema without $ref passes through unchanged."""
+        node = {"type": "string", "description": "A simple param"}
+        result = LMStudioAdapter._resolve_schema_refs(node, {})
+        assert result == node
+
+    def test_direct_ref_resolved(self):
+        """A bare $ref node is replaced with the definition."""
+        defs = {
+            "Foo": {"type": "object", "properties": {"x": {"type": "integer"}}}
+        }
+        node = {"$ref": "#/$defs/Foo"}
+        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        assert result == {"type": "object", "properties": {"x": {"type": "integer"}}}
+        assert "$ref" not in str(result)
+
+    def test_ref_in_items_resolved(self):
+        """$ref inside array items is resolved (the ParallelCall pattern)."""
+        defs = {
+            "ParallelCall": {
+                "type": "object",
+                "properties": {
+                    "tool": {"type": "string"},
+                    "args": {"type": "object"}
+                },
+                "required": ["tool"]
+            }
+        }
+        node = {
+            "type": "array",
+            "items": {"$ref": "#/$defs/ParallelCall"},
+            "description": "List of calls"
+        }
+        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        assert result["items"]["type"] == "object"
+        assert result["items"]["properties"]["tool"]["type"] == "string"
+        assert "$ref" not in json.dumps(result)
+
+    def test_nested_refs_resolved_recursively(self):
+        """Refs within refs are resolved recursively."""
+        defs = {
+            "Inner": {"type": "string", "description": "inner"},
+            "Outer": {
+                "type": "object",
+                "properties": {"nested": {"$ref": "#/$defs/Inner"}}
+            }
+        }
+        node = {"$ref": "#/$defs/Outer"}
+        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        assert result["properties"]["nested"]["type"] == "string"
+        assert "$ref" not in json.dumps(result)
+
+    def test_list_elements_resolved(self):
+        """$ref inside a list (e.g., anyOf) is resolved."""
+        defs = {"Foo": {"type": "integer"}}
+        node = [{"$ref": "#/$defs/Foo"}, {"type": "string"}]
+        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        assert result == [{"type": "integer"}, {"type": "string"}]
+
+    def test_missing_def_left_as_is(self):
+        """$ref pointing to a missing definition is left unchanged."""
+        node = {"$ref": "#/$defs/NonExistent"}
+        result = LMStudioAdapter._resolve_schema_refs(node, {})
+        assert result == {"$ref": "#/$defs/NonExistent"}
+
+
+class TestBuildToolCallSchemaRefFree:
+    """Verify _build_tool_call_schema produces $ref-free output for LM Studio."""
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_parallel_tool_schema_has_no_refs(self, mock_openai_client, mock_model_config):
+        """The full ToolCallResponse schema must be $ref/$defs-free when parallel is included."""
+        from app.src.specialists.mixins.react_mixin import ReActMixin
+
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+
+        # Build tool schemas the same way the ReAct loop does
+        tools = {
+            "read_file": MagicMock(service="filesystem", function="read_file", description="Read"),
+            "parallel": MagicMock(service="system", function="parallel", description="Parallel"),
+        }
+        tool_schemas = ReActMixin._build_tool_schemas(ReActMixin(), tools)
+
+        # Build the ToolCallResponse schema the adapter sends to LM Studio
+        schema = adapter._build_tool_call_schema(tool_schemas)
+        schema_json = json.dumps(schema)
+
+        assert "$ref" not in schema_json, f"$ref found in schema: {schema_json}"
+        assert "$defs" not in schema_json, f"$defs found in schema: {schema_json}"
+
+        # Verify 'calls' property is present and fully inlined
+        calls_prop = schema["properties"]["action"]["properties"].get("calls")
+        assert calls_prop is not None, "Missing 'calls' property"
+        assert calls_prop["type"] == "array"
+        assert calls_prop["items"]["type"] == "object"
+        assert "tool" in calls_prop["items"]["properties"]

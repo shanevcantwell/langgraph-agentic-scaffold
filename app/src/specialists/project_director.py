@@ -87,6 +87,14 @@ class ProjectDirector(BaseSpecialist):
                 function="run_command",
                 description="Execute a shell command. Args: command (str). Allowed: mv, mkdir, cp, touch, ls, cat, head, tail, grep, find, wc, sort. Use wildcards for bulk: mv ./to_sort/ADR-*.md ./ADR/"
             ),
+            # --- Meta-tool: Concurrent Execution ---
+            "parallel": ToolDef(
+                service="system",
+                function="parallel",
+                description="Execute multiple independent tool calls simultaneously. "
+                            "Args: calls (list of {tool, args}). Use when operations don't depend on each other — "
+                            "e.g., reading several files, searching different topics, listing multiple directories."
+            ),
         }
 
         # Build the research prompt with current context

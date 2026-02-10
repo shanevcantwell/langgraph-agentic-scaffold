@@ -11,6 +11,7 @@ from .react_mixin import (
     ToolDef,
     ToolCall,
     ToolResult,
+    ParallelCall,  # Parallel tool execution schema
     ReActIteration,  # ADR-CORE-055: Trace record type
     ReActLoopTerminated,
     MaxIterationsExceeded,
@@ -23,6 +24,7 @@ __all__ = [
     "ToolDef",
     "ToolCall",
     "ToolResult",
+    "ParallelCall",  # Parallel tool execution schema
     "ReActIteration",  # ADR-CORE-055: Trace record type
     "ReActLoopTerminated",
     "MaxIterationsExceeded",

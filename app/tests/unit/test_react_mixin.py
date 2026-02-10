@@ -20,6 +20,7 @@ from app.src.specialists.mixins import (
     ToolDef,
     ToolCall,
     ToolResult,
+    ParallelCall,
     ReActIteration,  # ADR-CORE-055
     MaxIterationsExceeded,
     ToolExecutionError,
@@ -586,3 +587,251 @@ class TestSerializeForProvider:
         for i in range(3):
             assert isinstance(messages[1 + i*2], AIMessage)
             assert isinstance(messages[2 + i*2], ToolMessage)
+
+
+# =============================================================================
+# Parallel Tool Execution Tests
+# =============================================================================
+
+class TestParallelCallSchema:
+    """Tests for ParallelCall schema and TOOL_PARAMETERS integration."""
+
+    def test_parallel_call_creation(self):
+        """Test basic ParallelCall model creation."""
+        call = ParallelCall(tool="read_file", args={"path": "/test.txt"})
+        assert call.tool == "read_file"
+        assert call.args == {"path": "/test.txt"}
+
+    def test_parallel_call_default_args(self):
+        """Test ParallelCall with default empty args."""
+        call = ParallelCall(tool="list_directory")
+        assert call.args == {}
+
+    def test_parallel_in_tool_parameters(self):
+        """Verify 'parallel' is registered in TOOL_PARAMETERS."""
+        assert "parallel" in ReActMixin.TOOL_PARAMETERS
+        assert "calls" in ReActMixin.TOOL_PARAMETERS["parallel"]
+
+    def test_build_tool_schemas_includes_parallel(self, specialist):
+        """Verify _build_tool_schemas produces a valid schema for 'parallel'."""
+        tools = {
+            "read_file": ToolDef(service="filesystem", function="read_file", description="Read a file"),
+            "parallel": ToolDef(service="system", function="parallel", description="Parallel exec"),
+        }
+        schemas = specialist._build_tool_schemas(tools)
+        assert len(schemas) == 2
+
+        # Find the parallel schema
+        parallel_schema = next(s for s in schemas if s.__name__ == "parallel")
+        json_schema = parallel_schema.model_json_schema()
+
+        # Should have 'calls' property that references ParallelCall
+        assert "calls" in json_schema.get("properties", {})
+
+
+class TestParallelExecution:
+    """Tests for _execute_parallel concurrent dispatch."""
+
+    @pytest.fixture
+    def parallel_tools(self):
+        """Tools including parallel for testing."""
+        return {
+            "read_file": ToolDef(
+                service="filesystem",
+                function="read_file",
+                description="Read a file"
+            ),
+            "search": ToolDef(
+                service="web_specialist",
+                function="search",
+                description="Search the web"
+            ),
+            "parallel": ToolDef(
+                service="system",
+                function="parallel",
+                description="Parallel execution"
+            ),
+        }
+
+    def test_parallel_dispatches_concurrently(self, specialist, parallel_tools):
+        """Test that parallel executes sub-calls and combines results."""
+        # Mock _execute_tool for the sub-calls (bypass MCP)
+        original_execute = specialist._execute_tool
+        call_log = []
+
+        def mock_execute(tool_call, tools, stop_on_error, successful_paths=None):
+            if tool_call.name == "parallel":
+                return original_execute(tool_call, tools, stop_on_error, successful_paths)
+            call_log.append(tool_call.name)
+            return ToolResult(
+                call=tool_call,
+                success=True,
+                result=f"result_for_{tool_call.name}"
+            )
+
+        specialist._execute_tool = mock_execute
+
+        parallel_call = ToolCall(
+            id="call_p1",
+            name="parallel",
+            args={
+                "calls": [
+                    {"tool": "read_file", "args": {"path": "/a.txt"}},
+                    {"tool": "read_file", "args": {"path": "/b.txt"}},
+                    {"tool": "search", "args": {"query": "test"}},
+                ]
+            }
+        )
+
+        result = specialist._execute_parallel(parallel_call, parallel_tools, False)
+
+        assert result.success is True
+        assert len(call_log) == 3
+        assert "result_for_read_file" in result.result
+        assert "result_for_search" in result.result
+        # All three sub-results should be in the combined output
+        assert result.result.count("OK") == 3
+
+    def test_parallel_partial_failure(self, specialist, parallel_tools):
+        """Test that partial failures are reported, not raised."""
+        original_execute = specialist._execute_tool
+
+        def mock_execute(tool_call, tools, stop_on_error, successful_paths=None):
+            if tool_call.name == "parallel":
+                return original_execute(tool_call, tools, stop_on_error, successful_paths)
+            if tool_call.name == "search":
+                return ToolResult(call=tool_call, success=False, error="Network timeout")
+            return ToolResult(call=tool_call, success=True, result="file contents")
+
+        specialist._execute_tool = mock_execute
+
+        parallel_call = ToolCall(
+            id="call_p2",
+            name="parallel",
+            args={
+                "calls": [
+                    {"tool": "read_file", "args": {"path": "/a.txt"}},
+                    {"tool": "search", "args": {"query": "test"}},
+                ]
+            }
+        )
+
+        result = specialist._execute_parallel(parallel_call, parallel_tools, False)
+
+        # Overall success is False because one sub-call failed
+        assert result.success is False
+        # But both results are present in the observation
+        assert "OK" in result.result
+        assert "ERROR" in result.result
+        assert "Network timeout" in result.result
+        assert "file contents" in result.result
+
+    def test_parallel_empty_calls_list(self, specialist, parallel_tools):
+        """Test that empty calls list returns error."""
+        parallel_call = ToolCall(
+            id="call_empty",
+            name="parallel",
+            args={"calls": []}
+        )
+
+        result = specialist._execute_parallel(parallel_call, parallel_tools, False)
+
+        assert result.success is False
+        assert "empty calls list" in result.error
+
+    def test_parallel_rejects_nested_parallel(self, specialist, parallel_tools):
+        """Test that nested parallel calls are filtered out."""
+        original_execute = specialist._execute_tool
+
+        def mock_execute(tool_call, tools, stop_on_error, successful_paths=None):
+            if tool_call.name == "parallel":
+                return original_execute(tool_call, tools, stop_on_error, successful_paths)
+            return ToolResult(call=tool_call, success=True, result="ok")
+
+        specialist._execute_tool = mock_execute
+
+        parallel_call = ToolCall(
+            id="call_nested",
+            name="parallel",
+            args={
+                "calls": [
+                    {"tool": "read_file", "args": {"path": "/a.txt"}},
+                    {"tool": "parallel", "args": {"calls": []}},  # Should be filtered
+                ]
+            }
+        )
+
+        result = specialist._execute_parallel(parallel_call, parallel_tools, False)
+
+        # Only the read_file sub-call should have executed
+        assert result.success is True
+        assert result.result.count("read_file") == 1
+
+    def test_parallel_all_nested_filtered_returns_error(self, specialist, parallel_tools):
+        """Test that if all sub-calls are filtered, error is returned."""
+        parallel_call = ToolCall(
+            id="call_all_nested",
+            name="parallel",
+            args={
+                "calls": [
+                    {"tool": "parallel", "args": {"calls": []}},
+                    {"tool": "parallel", "args": {"calls": []}},
+                ]
+            }
+        )
+
+        result = specialist._execute_parallel(parallel_call, parallel_tools, False)
+
+        assert result.success is False
+        assert "no valid sub-calls" in result.error
+
+    def test_parallel_in_react_loop(self, specialist, parallel_tools):
+        """Test parallel tool works end-to-end in the ReAct loop."""
+        # Mock: LLM calls parallel, then returns final response
+        specialist.llm_adapter.invoke.side_effect = [
+            {
+                "tool_calls": [{
+                    "id": "call_p1",
+                    "name": "parallel",
+                    "args": {
+                        "calls": [
+                            {"tool": "read_file", "args": {"path": "/a.txt"}},
+                            {"tool": "read_file", "args": {"path": "/b.txt"}},
+                        ]
+                    }
+                }]
+            },
+            {
+                "text_response": "Both files read successfully.",
+                "tool_calls": []
+            }
+        ]
+
+        # Mock external MCP for filesystem calls
+        specialist.external_mcp_client = MagicMock()
+        from app.src.mcp import extract_text_from_mcp_result
+
+        # Create mock MCP results
+        mock_result_a = MagicMock()
+        mock_result_a.content = [MagicMock(text="contents of a")]
+        mock_result_b = MagicMock()
+        mock_result_b.content = [MagicMock(text="contents of b")]
+
+        # sync_call_external_mcp will be called for each sub-call
+        with patch('app.src.specialists.mixins.react_mixin.sync_call_external_mcp') as mock_mcp, \
+             patch('app.src.specialists.mixins.react_mixin.extract_text_from_mcp_result') as mock_extract:
+            mock_extract.side_effect = ["contents of a", "contents of b"]
+            mock_mcp.return_value = mock_result_a  # Doesn't matter, extract is mocked
+
+            final_response, trace = specialist.execute_with_tools(
+                task_prompt="Read both files",
+                tools=parallel_tools,
+                max_iterations=10
+            )
+
+        assert final_response == "Both files read successfully."
+        assert len(trace) == 1  # One parallel call = one trace entry
+        assert trace[0].tool_call.name == "parallel"
+        assert trace[0].success is True
+        assert "contents of a" in trace[0].observation
+        assert "contents of b" in trace[0].observation

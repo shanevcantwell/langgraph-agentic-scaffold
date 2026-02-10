@@ -93,6 +93,34 @@ class LMStudioAdapter(BaseAdapter):
                    base_url=provider_config["base_url"],
                    system_prompt=system_prompt)
 
+    @staticmethod
+    def _resolve_schema_refs(node: Any, defs: Dict[str, Any]) -> Any:
+        """Recursively resolve $ref pointers by inlining definitions from $defs.
+
+        LM Studio's structured output engine doesn't support JSON Schema $defs/$ref.
+        Pydantic v2 generates $defs for nested model types (e.g., List[ParallelCall]).
+        This method walks a schema node and replaces every $ref with the actual
+        definition, producing a flat schema LM Studio can enforce.
+        """
+        if isinstance(node, dict):
+            # Node is a $ref — replace with the referenced definition
+            if "$ref" in node and len(node) == 1:
+                ref_path = node["$ref"]  # e.g. "#/$defs/ParallelCall"
+                ref_name = ref_path.split("/")[-1]
+                if ref_name not in defs:
+                    return node  # Unknown ref — leave as-is
+                resolved = defs[ref_name]
+                # Recursively resolve in case the definition itself has $refs
+                return LMStudioAdapter._resolve_schema_refs(dict(resolved), defs)
+
+            # Otherwise recurse into each value
+            return {k: LMStudioAdapter._resolve_schema_refs(v, defs) for k, v in node.items()}
+
+        if isinstance(node, list):
+            return [LMStudioAdapter._resolve_schema_refs(item, defs) for item in node]
+
+        return node
+
     def _build_tool_call_schema(self, tools: List[Type[BaseModel]]) -> Dict[str, Any]:
         """
         Build a draft-07 JSON schema for structured tool calling (#135).
@@ -122,6 +150,7 @@ class LMStudioAdapter(BaseAdapter):
 
         for tool in tools:
             schema = tool.model_json_schema()
+            defs = schema.get("$defs", {})
 
             # Collect required fields from this tool's schema
             # This ensures model MUST output these fields (e.g., next_specialist for Route)
@@ -133,7 +162,8 @@ class LMStudioAdapter(BaseAdapter):
             for prop_name, prop_def in schema.get("properties", {}).items():
                 if prop_name not in all_params:
                     # Copy the full property definition, not just type
-                    param_def = dict(prop_def)
+                    # Resolve any $ref pointers — LM Studio doesn't support $defs
+                    param_def = self._resolve_schema_refs(dict(prop_def), defs)
                     # Ensure description exists
                     if "description" not in param_def:
                         param_def["description"] = f"Parameter for {tool.__name__}"

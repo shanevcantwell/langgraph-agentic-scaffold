@@ -35,6 +35,7 @@ Usage:
 """
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Dict, List, Any, Optional, Tuple, TYPE_CHECKING
 from pydantic import BaseModel, Field
@@ -229,6 +230,12 @@ class ToolResult(BaseModel):
         return self.call.name
 
 
+class ParallelCall(BaseModel):
+    """A single tool call within a parallel batch."""
+    tool: str = Field(..., description="Name of the tool to call")
+    args: dict = Field(default_factory=dict, description="Arguments for the tool")
+
+
 class ReActIteration(BaseModel):
     """
     A single iteration in the ReAct loop - the canonical trace record.
@@ -314,6 +321,13 @@ class ReActMixin:
         # Terminal tools (external MCP - ADR-MCP-005)
         "run_command": {
             "command": (str, Field(description="Shell command to execute (allowlist: pwd, ls, cat, head, tail, grep, etc.)"))
+        },
+        # Meta-tool: concurrent execution of independent tool calls
+        "parallel": {
+            "calls": (List[ParallelCall], Field(
+                description="List of independent tool calls to execute simultaneously. "
+                            "Each call specifies a tool name and its arguments."
+            ))
         },
     }
 
@@ -568,6 +582,10 @@ class ReActMixin:
                 raise ToolExecutionError(tool_name, error_msg, [])
             return ToolResult(call=tool_call, success=False, error=error_msg)
 
+        # Meta-tool: concurrent dispatch of independent sub-calls
+        if tool_name == "parallel":
+            return self._execute_parallel(tool_call, tools, stop_on_error, successful_paths)
+
         tool_def = tools[tool_name]
         is_external = tool_def.service in self.EXTERNAL_MCP_SERVICES
 
@@ -629,6 +647,79 @@ class ReActMixin:
             if stop_on_error:
                 raise ToolExecutionError(tool_name, error_msg, [])
             return ToolResult(call=tool_call, success=False, error=error_msg)
+
+    def _execute_parallel(
+        self,
+        tool_call: ToolCall,
+        tools: Dict[str, ToolDef],
+        stop_on_error: bool,
+        successful_paths: Optional[List[str]] = None
+    ) -> ToolResult:
+        """
+        Execute multiple tool calls concurrently via ThreadPoolExecutor.
+
+        The model controls fan-out by calling this meta-tool with a list of
+        independent sub-operations. Results are combined into one observation.
+
+        Args:
+            tool_call: The parallel tool call (args.calls = list of sub-calls)
+            tools: Available tool definitions
+            stop_on_error: Ignored for sub-calls (always False — report all results)
+            successful_paths: Shared path list for filesystem error enrichment
+        """
+        calls_raw = tool_call.args.get("calls", [])
+
+        if not calls_raw:
+            return ToolResult(call=tool_call, success=False, error="parallel: empty calls list")
+
+        # Build sub-call objects, filtering out recursive parallel calls
+        sub_calls = []
+        for i, c in enumerate(calls_raw):
+            sub_name = c.get("tool") if isinstance(c, dict) else c.tool
+            if sub_name == "parallel":
+                logger.warning("ReAct: Ignoring nested parallel call — no recursion allowed")
+                continue
+            sub_args = c.get("args", {}) if isinstance(c, dict) else c.args
+            sub_calls.append(ToolCall(
+                id=f"{tool_call.id}_sub_{i}",
+                name=sub_name,
+                args=sub_args if isinstance(sub_args, dict) else {}
+            ))
+
+        if not sub_calls:
+            return ToolResult(
+                call=tool_call, success=False,
+                error="parallel: no valid sub-calls after filtering"
+            )
+
+        logger.info(
+            f"ReAct: Parallel dispatch — {len(sub_calls)} sub-calls: "
+            f"{[tc.name for tc in sub_calls]}"
+        )
+
+        # Dispatch concurrently — sub-calls never raise (stop_on_error=False)
+        with ThreadPoolExecutor(max_workers=len(sub_calls)) as executor:
+            futures = [
+                executor.submit(self._execute_tool, tc, tools, False, successful_paths)
+                for tc in sub_calls
+            ]
+            results = [f.result() for f in futures]
+
+        # Combine results into one observation
+        parts = []
+        for r in results:
+            status = "OK" if r.success else "ERROR"
+            content = r.result if r.success else r.error
+            parts.append(f"[{r.call.name}({r.call.args})] {status}:\n{content}")
+
+        combined = "\n---\n".join(parts)
+        all_success = all(r.success for r in results)
+
+        logger.info(
+            f"ReAct: Parallel complete — {sum(1 for r in results if r.success)}/{len(results)} succeeded"
+        )
+
+        return ToolResult(call=tool_call, success=all_success, result=combined)
 
     def _format_tool_result_message(self, result: ToolResult) -> ToolMessage:
         """

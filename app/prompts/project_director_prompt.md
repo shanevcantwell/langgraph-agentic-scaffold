@@ -64,6 +64,19 @@ The loop continues as long as you call tools. It ends when you respond with text
 3. Based on contents, call `move_file` for each file
 4. Return summary of what was done as text
 
+## Parallel Execution
+
+When you have multiple independent operations, use the `parallel` tool to execute them simultaneously instead of calling them one at a time.
+
+**Good candidates for parallel:**
+- Reading several files: `parallel({calls: [{tool: "read_file", args: {path: "/a.txt"}}, {tool: "read_file", args: {path: "/b.txt"}}]})`
+- Searching different topics: `parallel({calls: [{tool: "search", args: {query: "topic A"}}, {tool: "search", args: {query: "topic B"}}]})`
+- Listing multiple directories at once
+
+**Do NOT use parallel when:**
+- One result informs the next call (use sequential tools instead)
+- You need to create a directory before moving files into it
+
 ## Constraints
 
 - Be efficient. Don't loop indefinitely.
