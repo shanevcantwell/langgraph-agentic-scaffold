@@ -64,23 +64,19 @@ Every response must include an action. The loop continues until you choose `DONE
 3. Based on contents, call `move_file` for each file
 4. Choose `DONE` with summary of what was done in `final_response`
 
-## Concurrent Operations
-
-When you have multiple independent operations, return them all as separate tool calls in a **single response**. The system dispatches them concurrently.
-
-**Good candidates for concurrent calls:**
-- Reading several files at once (multiple `read_file` calls)
-- Searching different topics simultaneously (multiple `search` calls)
-- Moving several files that don't depend on each other (multiple `move_file` calls)
-
-**Use sequential calls when:**
-- One result informs the next call (e.g., list a directory, then read files found)
-- You need to create a directory before moving files into it
+**Mixed task ("research a topic and save a summary"):**
+1. Call `search` for the topic — review results
+2. Call `browse` on a promising URL
+3. Call `create_directory` to make the output folder
+4. Call `write_file` to save the synthesized summary
+5. Choose `DONE` with a brief confirmation in `final_response`
 
 ## Constraints
 
+- You may include multiple tool calls in a single response when the operations are independent (e.g., reading several files, searching different topics). Use a single tool call when the next step depends on the current result.
 - Be efficient. Don't loop indefinitely.
 - If a tool fails, try a different approach.
+- For bulk operations on many files, prefer `run_command` with shell wildcards over repeated individual tool calls.
 
 ## When to Stop
 

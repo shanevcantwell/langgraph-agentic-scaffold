@@ -416,7 +416,7 @@ class TestBuildToolCallSchemaOneOf:
 
     @patch('app.src.llm.lmstudio_adapter.OpenAI')
     def test_multi_tool_schema_uses_oneOf(self, mock_openai_client, mock_model_config):
-        """Multi-tool schema should use oneOf for the action property."""
+        """Multi-tool schema should use oneOf inside actions array items."""
         adapter = LMStudioAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
@@ -431,11 +431,14 @@ class TestBuildToolCallSchemaOneOf:
             command: str = Field(description="Shell command")
 
         schema = adapter._build_tool_call_schema([create_directory, run_command])
-        action = schema["properties"]["action"]
+        actions_prop = schema["properties"]["actions"]
+        assert actions_prop["type"] == "array"
+        assert actions_prop["minItems"] == 1
+        items = actions_prop["items"]
 
-        assert "oneOf" in action, f"Expected oneOf in action, got: {action.keys()}"
+        assert "oneOf" in items, f"Expected oneOf in items, got: {items.keys()}"
         # 2 tools + DONE = 3 variants
-        assert len(action["oneOf"]) == 3
+        assert len(items["oneOf"]) == 3
 
     @patch('app.src.llm.lmstudio_adapter.OpenAI')
     def test_each_variant_has_only_own_params(self, mock_openai_client, mock_model_config):
@@ -454,7 +457,7 @@ class TestBuildToolCallSchemaOneOf:
             command: str = Field(description="Shell command")
 
         schema = adapter._build_tool_call_schema([create_directory, run_command])
-        variants = schema["properties"]["action"]["oneOf"]
+        variants = schema["properties"]["actions"]["items"]["oneOf"]
 
         # Find create_directory variant
         cd_variant = next(v for v in variants if v["properties"]["tool_name"].get("const") == "create_directory")
@@ -479,7 +482,7 @@ class TestBuildToolCallSchemaOneOf:
             path: str = Field(description="File path")
 
         schema = adapter._build_tool_call_schema([read_file, read_file])
-        for variant in schema["properties"]["action"]["oneOf"]:
+        for variant in schema["properties"]["actions"]["items"]["oneOf"]:
             assert variant.get("additionalProperties") is False
 
     @patch('app.src.llm.lmstudio_adapter.OpenAI')
@@ -496,7 +499,7 @@ class TestBuildToolCallSchemaOneOf:
             next_specialist: str = Field(description="Next specialist")
 
         schema = adapter._build_tool_call_schema([Route])
-        variants = schema["properties"]["action"]["oneOf"]
+        variants = schema["properties"]["actions"]["items"]["oneOf"]
 
         assert len(variants) == 1
         assert variants[0]["properties"]["tool_name"]["const"] == "Route"
@@ -519,11 +522,267 @@ class TestBuildToolCallSchemaOneOf:
             destination: str = Field(description="Dest")
 
         schema = adapter._build_tool_call_schema([read_file, move_file])
-        done_variant = next(v for v in schema["properties"]["action"]["oneOf"]
+        done_variant = next(v for v in schema["properties"]["actions"]["items"]["oneOf"]
                           if v["properties"]["tool_name"].get("const") == "DONE")
 
         assert set(done_variant["properties"].keys()) == {"tool_name"}
         assert done_variant["required"] == ["tool_name"]
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_schema_required_has_actions_not_action(self, mock_openai_client, mock_model_config):
+        """Schema should require 'actions' (array), not 'action' (singular)."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config,
+            base_url=MOCK_BASE_URL,
+            system_prompt="Test"
+        )
+        from pydantic import Field
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        schema = adapter._build_tool_call_schema([read_file, read_file])
+        assert "actions" in schema["required"]
+        assert "action" not in schema["required"]
+        assert "actions" in schema["properties"]
+        assert "action" not in schema["properties"]
+
+
+# =============================================================================
+# Parse Completion: Actions Array (Phase 0.9)
+# =============================================================================
+
+class TestParseCompletionActionsArray:
+    """Verify _parse_completion handles the actions array format for concurrent dispatch."""
+
+    def _make_completion(self, json_content: str):
+        """Helper: build a mock completion with JSON content."""
+        mock_completion = MagicMock()
+        mock_completion.choices = [MagicMock()]
+        mock_completion.choices[0].message.content = json_content
+        mock_completion.choices[0].message.tool_calls = None
+        return mock_completion
+
+    def _make_request_and_kwargs(self, adapter, tool_classes):
+        """Helper: build request + api_kwargs that trigger the JSON schema path."""
+        import time
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="test")],
+            tools=tool_classes,
+        )
+        api_kwargs = adapter._build_request_kwargs(request)
+        return request, api_kwargs
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_single_action_in_array(self, mock_openai_client, mock_model_config):
+        """Single action in array produces one tool_call."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, move_file])
+        completion = self._make_completion(json.dumps({
+            "reasoning": "Need to read file",
+            "actions": [{"tool_name": "read_file", "path": "/tmp/a.txt"}]
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert "tool_calls" in result
+        assert len(result["tool_calls"]) == 1
+        assert result["tool_calls"][0]["name"] == "read_file"
+        assert result["tool_calls"][0]["args"] == {"path": "/tmp/a.txt"}
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_multiple_actions_in_array(self, mock_openai_client, mock_model_config):
+        """Multiple actions produce multiple tool_calls for concurrent dispatch."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, move_file])
+        completion = self._make_completion(json.dumps({
+            "reasoning": "Read both files concurrently",
+            "actions": [
+                {"tool_name": "read_file", "path": "/tmp/a.txt"},
+                {"tool_name": "read_file", "path": "/tmp/b.txt"},
+            ]
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert len(result["tool_calls"]) == 2
+        assert result["tool_calls"][0]["name"] == "read_file"
+        assert result["tool_calls"][0]["args"] == {"path": "/tmp/a.txt"}
+        assert result["tool_calls"][1]["args"] == {"path": "/tmp/b.txt"}
+        # Each should have a unique ID
+        assert result["tool_calls"][0]["id"] != result["tool_calls"][1]["id"]
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_done_in_array(self, mock_openai_client, mock_model_config):
+        """DONE action in array returns text_response."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, move_file])
+        completion = self._make_completion(json.dumps({
+            "reasoning": "Task complete",
+            "actions": [{"tool_name": "DONE"}],
+            "final_response": "All files sorted successfully."
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert "text_response" in result
+        assert result["text_response"] == "All files sorted successfully."
+        assert "tool_calls" not in result
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_mixed_done_and_tools_done_wins(self, mock_openai_client, mock_model_config):
+        """DONE takes priority over concurrent tool calls in mixed array."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, move_file])
+        completion = self._make_completion(json.dumps({
+            "reasoning": "Done now",
+            "actions": [
+                {"tool_name": "read_file", "path": "/tmp/a.txt"},
+                {"tool_name": "DONE"},
+            ],
+            "final_response": "Done."
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert "text_response" in result
+        assert result["text_response"] == "Done."
+        assert "tool_calls" not in result
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_fallback_to_singular_action(self, mock_openai_client, mock_model_config):
+        """Old singular 'action' format still works as backward compat fallback."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, move_file])
+        completion = self._make_completion(json.dumps({
+            "reasoning": "Reading file",
+            "action": {"tool_name": "read_file", "path": "/tmp/a.txt"}
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert "tool_calls" in result
+        assert len(result["tool_calls"]) == 1
+        assert result["tool_calls"][0]["name"] == "read_file"
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_reasoning_threaded_as_text_response(self, mock_openai_client, mock_model_config):
+        """Reasoning field should be passed through as text_response for thought capture."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class move_file(BaseModel):
+            source: str = Field(description="Source")
+            destination: str = Field(description="Dest")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, move_file])
+        completion = self._make_completion(json.dumps({
+            "reasoning": "I need to read both files to understand their contents",
+            "actions": [{"tool_name": "read_file", "path": "/tmp/a.txt"}]
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert result["text_response"] == "I need to read both files to understand their contents"
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_param_stripping_per_action(self, mock_openai_client, mock_model_config):
+        """Param stripping is applied independently to each action in the array."""
+        adapter = LMStudioAdapter(
+            model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
+        )
+        from pydantic import Field
+        import time
+
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        class create_directory(BaseModel):
+            path: str = Field(description="Dir path")
+
+        request, api_kwargs = self._make_request_and_kwargs(adapter, [read_file, create_directory])
+        # Model hallucinated 'command' param on read_file and 'query' on create_directory
+        completion = self._make_completion(json.dumps({
+            "reasoning": "Read and create",
+            "actions": [
+                {"tool_name": "read_file", "path": "/tmp/a.txt", "command": "cat"},
+                {"tool_name": "create_directory", "path": "/tmp/new", "query": "test"},
+            ]
+        }))
+
+        result = adapter._parse_completion(completion, request, api_kwargs, time.perf_counter())
+
+        assert len(result["tool_calls"]) == 2
+        # read_file should only have 'path', not 'command'
+        assert result["tool_calls"][0]["args"] == {"path": "/tmp/a.txt"}
+        # create_directory should only have 'path', not 'query'
+        assert result["tool_calls"][1]["args"] == {"path": "/tmp/new"}
 
 
 # =============================================================================

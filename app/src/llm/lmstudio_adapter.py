@@ -195,18 +195,21 @@ class LMStudioAdapter(BaseAdapter):
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "ToolCallResponse",
             "type": "object",
-            "required": ["reasoning", "action"],
+            "required": ["reasoning", "actions"],
             "properties": {
                 "reasoning": {
                     "type": "string",
                     "description": "Your thought process before taking action"
                 },
-                "action": {
-                    "oneOf": variants
+                "actions": {
+                    "type": "array",
+                    "items": {"oneOf": variants},
+                    "minItems": 1,
+                    "description": "One or more tool calls to execute. Use multiple items for independent operations."
                 },
                 "final_response": {
                     "type": "string",
-                    "description": "Only when action.tool_name is DONE - the final summary"
+                    "description": "Only when any action has tool_name DONE - the final summary"
                 }
             }
         }
@@ -303,7 +306,7 @@ class LMStudioAdapter(BaseAdapter):
                 "Do NOT use function calling syntax like 'to=functions.X'. "
                 "Your ENTIRE response must be exactly this format:\n"
                 '```json\n'
-                '{"reasoning": "your thought process", "action": {"tool_name": "tool_name_here", ...params}}\n'
+                '{"reasoning": "your thought process", "actions": [{"tool_name": "tool_name_here", ...params}]}\n'
                 '```\n'
                 "Start your response with '{' and end with '}'."
             )
@@ -488,64 +491,101 @@ class LMStudioAdapter(BaseAdapter):
             capture_trace(request, result, latency_ms, self.model_name)
             return result
 
-        # Issue #135: Parse tool call from JSON schema-enforced response.
+        # Issue #135: Parse tool call(s) from JSON schema-enforced response.
         # This is the primary path when request.tools is set - we use response_format
         # with JSON schema instead of native tool-calling (Harmony) for reliability.
+        # Phase 0.9: Supports "actions" array for concurrent multi-tool dispatch.
         if request.tools and "response_format" in api_kwargs:
             content = message.content or ""
             if content.strip():
                 try:
                     json_resp = json.loads(content)
 
-                    # Try nested format first: {"action": {"tool_name": "...", ...}}
-                    action = json_resp.get("action", {})
-                    tool_name = action.get("tool_name")
+                    # Primary path: "actions" array (Phase 0.9 concurrent dispatch)
+                    actions = json_resp.get("actions", [])
 
-                    # Fallback: flat format {"tool_name": "...", ...} (some models ignore nesting)
-                    if not tool_name:
-                        tool_name = json_resp.get("tool_name")
-                        if tool_name:
-                            logger.info(f"LMStudioAdapter: Using flat format tool_name: {tool_name}")
-                            action = json_resp  # Use root as action
+                    # Fallback 1: singular "action" object (backward compat)
+                    if not actions:
+                        singular_action = json_resp.get("action")
+                        if singular_action and isinstance(singular_action, dict):
+                            logger.info("LMStudioAdapter: Falling back to singular 'action' format")
+                            actions = [singular_action]
 
-                    if tool_name == "DONE":
-                        # Task complete - return final response as text
-                        logger.info("LMStudioAdapter: JSON response indicates task DONE.")
-                        result = {"text_response": json_resp.get("final_response", "")}
-                        latency_ms = int((time.perf_counter() - start_time) * 1000)
-                        capture_trace(request, result, latency_ms, self.model_name)
-                        return result
-                    elif tool_name:
-                        # Convert JSON action to tool_calls format
-                        logger.info(f"LMStudioAdapter: Parsed tool call from JSON: {tool_name}")
-                        # Extract args from action (everything except tool_name)
-                        args = {k: v for k, v in action.items() if k != "tool_name" and v is not None}
-                        # Defense-in-depth: strip params not belonging to this tool.
-                        # Even with oneOf schema enforcement, some backends may not
-                        # fully isolate per-tool fields.
-                        if request.tools:
-                            known = self._get_known_params_for_tool(tool_name, request.tools)
-                            if known is not None:
-                                stripped = {k for k in args if k not in known}
-                                if stripped:
-                                    logger.debug(f"LMStudioAdapter: Stripped irrelevant params from {tool_name}: {stripped}")
-                                args = {k: v for k, v in args.items() if k in known}
-                        result = {"tool_calls": [{
-                            "name": tool_name,
-                            "args": args,
-                            "id": f"json_{uuid4().hex[:8]}"
-                        }]}
-                        latency_ms = int((time.perf_counter() - start_time) * 1000)
-                        capture_trace(request, result, latency_ms, self.model_name)
-                        return result
+                    # Fallback 2: flat format {"tool_name": "...", ...} (no nesting)
+                    if not actions:
+                        flat_tool_name = json_resp.get("tool_name")
+                        if flat_tool_name:
+                            logger.info(f"LMStudioAdapter: Using flat format tool_name: {flat_tool_name}")
+                            actions = [json_resp]
+
+                    if actions:
+                        # Check for DONE in any action — DONE takes priority
+                        has_done = any(
+                            a.get("tool_name") == "DONE" for a in actions
+                            if isinstance(a, dict)
+                        )
+
+                        if has_done:
+                            non_done = [a for a in actions if isinstance(a, dict) and a.get("tool_name") != "DONE"]
+                            if non_done:
+                                logger.warning(
+                                    f"LMStudioAdapter: DONE mixed with {len(non_done)} other action(s). "
+                                    f"DONE takes priority — discarding: {[a.get('tool_name') for a in non_done]}"
+                                )
+                            logger.info("LMStudioAdapter: JSON response indicates task DONE.")
+                            result = {"text_response": json_resp.get("final_response", "")}
+                            latency_ms = int((time.perf_counter() - start_time) * 1000)
+                            capture_trace(request, result, latency_ms, self.model_name)
+                            return result
+
+                        # Build tool_calls list from all actions
+                        tool_calls = []
+                        for action in actions:
+                            if not isinstance(action, dict):
+                                logger.warning(f"LMStudioAdapter: Skipping non-dict action: {type(action)}")
+                                continue
+                            tool_name = action.get("tool_name")
+                            if not tool_name:
+                                logger.warning(f"LMStudioAdapter: Skipping action without tool_name: {list(action.keys())}")
+                                continue
+
+                            # Extract args (everything except tool_name, skip None values)
+                            args = {k: v for k, v in action.items() if k != "tool_name" and v is not None}
+
+                            # Defense-in-depth: strip params not belonging to this tool
+                            if request.tools:
+                                known = self._get_known_params_for_tool(tool_name, request.tools)
+                                if known is not None:
+                                    stripped = {k for k in args if k not in known}
+                                    if stripped:
+                                        logger.debug(f"LMStudioAdapter: Stripped irrelevant params from {tool_name}: {stripped}")
+                                    args = {k: v for k, v in args.items() if k in known}
+
+                            tool_calls.append({
+                                "name": tool_name,
+                                "args": args,
+                                "id": f"json_{uuid4().hex[:8]}"
+                            })
+
+                        if tool_calls:
+                            logger.info(f"LMStudioAdapter: Parsed {len(tool_calls)} tool call(s) from JSON: {[tc['name'] for tc in tool_calls]}")
+                            # Thread reasoning through so ReActMixin can capture it as thought
+                            result = {
+                                "tool_calls": tool_calls,
+                                "text_response": json_resp.get("reasoning", ""),
+                            }
+                            latency_ms = int((time.perf_counter() - start_time) * 1000)
+                            capture_trace(request, result, latency_ms, self.model_name)
+                            return result
+                        else:
+                            logger.warning("LMStudioAdapter: Actions present but no valid tool calls extracted")
                     else:
-                        # JSON parsed but no tool_name found - log what we got
-                        logger.warning(f"LMStudioAdapter: JSON parsed but no tool_name. Keys: {list(json_resp.keys())}, action keys: {list(action.keys()) if action else 'N/A'}")
+                        logger.warning(f"LMStudioAdapter: JSON parsed but no actions found. Keys: {list(json_resp.keys())}")
                 except json.JSONDecodeError:
                     logger.warning(f"LMStudioAdapter: Failed to parse JSON response: {content[:200]}")
 
             # Issue #136: FALLTHROUGH GUARD - if we reach here in tools mode,
-            # content was empty, JSON parse failed, or tool_name was missing.
+            # content was empty, JSON parse failed, or actions were missing.
             # Return empty tool_calls to signal failure - do NOT fall through
             # to output_model_class path which would raise ValueError.
             logger.warning(f"LMStudioAdapter: Tools mode fallthrough - content length: {len(content)}, first 100 chars: {content[:100]}")
