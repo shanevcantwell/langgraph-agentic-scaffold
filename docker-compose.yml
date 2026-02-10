@@ -34,8 +34,9 @@ services:
       # Docker socket access for external MCP containers (ADR-MCP-003)
       - /var/run/docker.sock:/var/run/docker.sock
     # Add docker group permissions for external MCP container spawning
+    # DOCKER_GID must match the host's docker socket GID: stat -c '%g' /var/run/docker.sock
     group_add:
-      - "1001"  # Host docker group GID - allows appuser to access docker.sock
+      - "${DOCKER_GID:-133}"
     ports:
       # Map the API and UI ports from the container to your host machine.
       - "8000:8000"
