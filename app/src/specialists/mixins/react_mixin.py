@@ -672,6 +672,11 @@ class ReActMixin:
         canonical trace, ensuring the LLM sees both its decisions (AIMessage with
         tool_calls) and their results (ToolMessage).
 
+        Concurrent batches (multiple tool calls in the same iteration) are grouped
+        into a single AIMessage with multiple tool_calls, followed by one ToolMessage
+        per call. This accurately reflects what the model produced — one response
+        with N tool calls, not N separate responses.
+
         The system prompt is handled separately by the LLM adapter layer
         (e.g., lmstudio_adapter.py passes it via static_system_prompt).
 
@@ -682,30 +687,36 @@ class ReActMixin:
         Returns:
             List of LangChain messages ready for the adapter's invoke() method
         """
+        from itertools import groupby
         from langchain_core.messages import HumanMessage
 
         # Start with the goal as the initial human message
         messages: List[BaseMessage] = [HumanMessage(content=goal)]
 
-        for step in trace:
-            # AIMessage with tool_calls - the LLM's decision
+        # Group trace entries by iteration — concurrent batches share the same
+        # iteration number and must serialize as one AIMessage with all tool_calls
+        for _iteration_num, steps_iter in groupby(trace, key=lambda step: step.iteration):
+            steps = list(steps_iter)
+
+            # One AIMessage with all tool calls from this iteration
             ai_msg = AIMessage(
-                content=step.thought or "",
+                content=steps[0].thought or "",
                 tool_calls=[{
                     "id": step.tool_call.id,
                     "name": step.tool_call.name,
                     "args": step.tool_call.args
-                }]
+                } for step in steps]
             )
             messages.append(ai_msg)
 
-            # ToolMessage with result - the observation
-            tool_msg = ToolMessage(
-                content=step.observation,
-                tool_call_id=step.tool_call.id,
-                name=step.tool_call.name
-            )
-            messages.append(tool_msg)
+            # One ToolMessage per call (order preserved)
+            for step in steps:
+                tool_msg = ToolMessage(
+                    content=step.observation,
+                    tool_call_id=step.tool_call.id,
+                    name=step.tool_call.name
+                )
+                messages.append(tool_msg)
 
         return messages
 

@@ -587,6 +587,126 @@ class TestSerializeForProvider:
             assert isinstance(messages[1 + i*2], AIMessage)
             assert isinstance(messages[2 + i*2], ToolMessage)
 
+    def test_concurrent_batch_groups_into_single_ai_message(self, specialist):
+        """Concurrent calls (same iteration) should produce one AIMessage with multiple tool_calls."""
+        call_a = ToolCall(id="call_0_0", name="read_file", args={"path": "a.txt"})
+        call_b = ToolCall(id="call_0_1", name="read_file", args={"path": "b.txt"})
+        call_c = ToolCall(id="call_0_2", name="read_file", args={"path": "c.txt"})
+
+        trace = [
+            ReActIteration(iteration=0, tool_call=call_a, observation="apple", success=True, thought="Read all three"),
+            ReActIteration(iteration=0, tool_call=call_b, observation="banana", success=True, thought="Read all three"),
+            ReActIteration(iteration=0, tool_call=call_c, observation="cherry", success=True, thought="Read all three"),
+        ]
+
+        messages = specialist._serialize_for_provider(goal="Read files", trace=trace)
+
+        # Human + 1 AI (3 tool_calls) + 3 Tool = 5 messages
+        assert len(messages) == 5
+        assert isinstance(messages[0], HumanMessage)
+        assert isinstance(messages[1], AIMessage)
+        assert len(messages[1].tool_calls) == 3
+        assert messages[1].tool_calls[0]["name"] == "read_file"
+        assert messages[1].tool_calls[1]["id"] == "call_0_1"
+        assert messages[1].tool_calls[2]["args"] == {"path": "c.txt"}
+        assert isinstance(messages[2], ToolMessage)
+        assert isinstance(messages[3], ToolMessage)
+        assert isinstance(messages[4], ToolMessage)
+        assert messages[2].content == "apple"
+        assert messages[3].content == "banana"
+        assert messages[4].content == "cherry"
+
+    def test_mixed_single_and_concurrent_iterations(self, specialist):
+        """Mix of single-call and concurrent-call iterations serializes correctly."""
+        trace = [
+            # Iteration 0: single call
+            ReActIteration(
+                iteration=0,
+                tool_call=ToolCall(id="c0", name="list_directory", args={"path": "."}),
+                observation="[FILE] a.txt\n[FILE] b.txt",
+                success=True,
+                thought="List first"
+            ),
+            # Iteration 1: concurrent batch (3 calls)
+            ReActIteration(
+                iteration=1,
+                tool_call=ToolCall(id="c1_0", name="read_file", args={"path": "a.txt"}),
+                observation="apple",
+                success=True,
+                thought="Read both"
+            ),
+            ReActIteration(
+                iteration=1,
+                tool_call=ToolCall(id="c1_1", name="read_file", args={"path": "b.txt"}),
+                observation="banana",
+                success=True,
+                thought="Read both"
+            ),
+            ReActIteration(
+                iteration=1,
+                tool_call=ToolCall(id="c1_2", name="read_file", args={"path": "c.txt"}),
+                observation="cherry",
+                success=True,
+                thought="Read both"
+            ),
+            # Iteration 2: single call
+            ReActIteration(
+                iteration=2,
+                tool_call=ToolCall(id="c2", name="move_file", args={"source": "a.txt", "destination": "fruit/a.txt"}),
+                observation="moved",
+                success=True,
+                thought="Move it"
+            ),
+        ]
+
+        messages = specialist._serialize_for_provider(goal="Sort files", trace=trace)
+
+        # Human + iter0(AI+Tool) + iter1(AI+3*Tool) + iter2(AI+Tool) = 1+2+4+2 = 9
+        assert len(messages) == 9
+        assert isinstance(messages[0], HumanMessage)
+
+        # Iteration 0: single call
+        assert isinstance(messages[1], AIMessage)
+        assert len(messages[1].tool_calls) == 1
+        assert messages[1].content == "List first"
+        assert isinstance(messages[2], ToolMessage)
+
+        # Iteration 1: concurrent batch
+        assert isinstance(messages[3], AIMessage)
+        assert len(messages[3].tool_calls) == 3
+        assert messages[3].content == "Read both"
+        assert isinstance(messages[4], ToolMessage)
+        assert isinstance(messages[5], ToolMessage)
+        assert isinstance(messages[6], ToolMessage)
+        assert messages[4].tool_call_id == "c1_0"
+        assert messages[5].tool_call_id == "c1_1"
+        assert messages[6].tool_call_id == "c1_2"
+
+        # Iteration 2: single call
+        assert isinstance(messages[7], AIMessage)
+        assert len(messages[7].tool_calls) == 1
+        assert isinstance(messages[8], ToolMessage)
+
+    def test_concurrent_batch_shared_thought_uses_first(self, specialist):
+        """All entries in a batch share the same thought; serializer uses first entry's thought."""
+        trace = [
+            ReActIteration(
+                iteration=0,
+                tool_call=ToolCall(id="c0", name="read_file", args={"path": "a.txt"}),
+                observation="apple", success=True, thought="I'll read both files"
+            ),
+            ReActIteration(
+                iteration=0,
+                tool_call=ToolCall(id="c1", name="read_file", args={"path": "b.txt"}),
+                observation="banana", success=True, thought="I'll read both files"
+            ),
+        ]
+
+        messages = specialist._serialize_for_provider(goal="Read", trace=trace)
+
+        assert messages[1].content == "I'll read both files"
+        assert len(messages[1].tool_calls) == 2
+
 
 # =============================================================================
 # Concurrent Multi-Tool-Call Dispatch Tests (#149)
