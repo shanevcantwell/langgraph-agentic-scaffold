@@ -204,7 +204,7 @@ class TextAnalysisSpecialist(BaseSpecialist):
             "calculate_drift": ToolDef(
                 service="semantic-chunker",
                 function="calculate_drift",
-                description="Cosine distance between two texts in NV-Embed-v2 space. Args: text_a (str), text_b (str). Returns float 0.0-2.0.",
+                description="Cosine distance between two texts in embedding space (768-d embeddinggemma-300m). Args: text_a (str), text_b (str). Returns float 0.0-2.0.",
             ),
             "analyze_variants": ToolDef(
                 service="semantic-chunker",

@@ -136,7 +136,7 @@ ArchiveTestExtractor (Phase 4)
 Two scoring mechanisms exist:
 
 **Semantic drift** (`calculate_drift` via semantic-chunker MCP):
-- Cosine distance in NV-Embed-v2 4096-dim space
+- Cosine distance in 768-dim embedding space (embeddinggemma-300m; NV-Embed-v2 4096-d available)
 - Calibrated: correct file categorizations land at ~0.25-0.28 drift
 - 0.3 = "semantic squelch" threshold for behavioral correctness
 - Good for: "did the model produce a response semantically close to the exemplar?"
@@ -272,4 +272,4 @@ These are the questions that benefit from multi-model architectural discussion:
 - **prompt-prix CLI** — `prompt-prix-cli models`, `prompt-prix-cli run-battery` (implemented, container running)
 - **react_step()** — `prompt_prix/mcp/tools/react_step.py` (stateless single-iteration primitive)
 - **ReActMixin** — `app/src/specialists/mixins/react_mixin.py` (~500 lines, marked for deprecation)
-- **Drift calibration** — Correct categorizations at ~0.25-0.28 drift in NV-Embed-v2 space. 0.3 = semantic squelch threshold.
+- **Drift calibration** — Correct categorizations at ~0.25-0.28 drift in embeddinggemma-300m (768-d) space. 0.3 = semantic squelch threshold.

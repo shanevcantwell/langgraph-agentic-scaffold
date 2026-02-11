@@ -103,8 +103,8 @@ await external_client.disconnect_all()
 | `complete()` | Base completion primitive |
 | `judge()` | LLM-as-judge (deprecated — prefer semantic-chunker tools for deterministic eval) |
 | `list_models()` | Discover available models on configured LM Studio servers |
-| `calculate_drift()` | Cosine distance via NV-Embed-v2 embeddings (proxied to semantic-chunker) |
-| `analyze_variants()` | Prompt phrasing geometry in 4096-dim embedding space |
+| `calculate_drift()` | Cosine distance via semantic-chunker embeddings (embeddinggemma-300m 768-d default) |
+| `analyze_variants()` | Prompt phrasing geometry in embedding space |
 | `generate_variants()` | Generate prompt phrasing variants |
 | `analyze_trajectory()` | ReAct trajectory quality assessment |
 | `compare_trajectories()` | Cross-trajectory comparison |

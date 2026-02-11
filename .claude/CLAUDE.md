@@ -21,7 +21,7 @@ LAS applies computing metaphors to LLM orchestration (see `docs/ADRs/proposed/AG
 
 **semantic-chunker MCP** provides embedding infrastructure:
 - `classify_document` — DMA-mode classification (operates on content without loading to LLM context)
-- `analyze_variants` — measures prompt phrasing geometry in 4096-dim NV-Embed-v2 space
+- `analyze_variants` — measures prompt phrasing geometry in 768-dim embedding space (embeddinggemma-300m default, NV-Embed-v2 available)
 - **Sleeptime tool:** probe which phrasings land in different "neural neighborhoods"
 
 **Prompt geometry hypothesis:** RLHF shapes response space by making regions "cold." Phrasings geometrically distant from trained forms may hit unexplored regions — measuring this enables orchestration-layer optimization without changing model weights.

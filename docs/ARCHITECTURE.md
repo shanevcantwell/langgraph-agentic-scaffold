@@ -209,7 +209,7 @@ Factory pattern with provider abstraction:
 - **filesystem:** File read/write/list operations
 - **terminal:** Shell command execution (run_command, get_cwd)
 - **surf-mcp:** Browser automation with Fara visual grounding
-- **semantic-chunker:** NV-Embed-v2 embeddings (calculate_drift, classify_document, analyze_variants)
+- **semantic-chunker:** Embedding analysis — embeddinggemma-300m (768-d) default, NV-Embed-v2 (4096-d) available (calculate_drift, classify_document, analyze_variants)
 - **it-tools-mcp:** 119 IT utility tools (format_json, convert_json_to_csv, etc.)
 - **prompt-prix-mcp:** Eval primitives (react_step, complete, list_models) — Phase 2b, not yet implemented
 

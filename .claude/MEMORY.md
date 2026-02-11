@@ -95,10 +95,10 @@ ADRs: 066 (Sleeptime), 067 (subsumed), 068 (Pool Extraction), MCP-006 (Vision as
   - `ServerPool` (atomic slot management, JIT-swap guard, least-loaded balancing)
   - `ConcurrentDispatcher` (FIFO queue, head-of-line avoidance)
   - Already consumed by LAS via `PooledLMStudioAdapter`
-- **semantic-chunker** — NV-Embed-v2 embeddings, already mounted as MCP in LAS
+- **semantic-chunker** — embeddinggemma-300m (768-d) default, NV-Embed-v2 (4096-d) available. MCP mounted in LAS.
   - `calculate_drift` — cosine distance between texts
   - `classify_document` — DMA-mode classification
-  - `analyze_variants` — prompt geometry in 4096-dim space
+  - `analyze_variants` — prompt geometry in embedding space
 - **it-tools-mcp** — 119 IT utility tools (wrenchpilot/it-tools-mcp:v5.10.2). Committed, wired to text_analysis_specialist.
 
 ## Specialist Consolidation (Feb 2026) — DONE
