@@ -685,14 +685,12 @@ def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
     assert "do not repeat these operations" not in gathered
 
 
-def test_facilitator_surfaces_exit_interview_feedback(facilitator):
+def test_facilitator_surfaces_curated_exit_interview_feedback(facilitator):
     """
-    Issue #121: EI feedback (reasoning, missing_elements) is NOT surfaced in gathered_context.
+    Issue #167 (revises #121): Curated EI feedback IS surfaced in gathered_context.
 
-    The exit_interview_result.recommended_specialists is used by Router for routing decisions.
-    The formatted "Next Steps" feedback was polluting gathered_context but no consumer
-    actually reads it - specialists use gathered_context for file listings and resume_trace
-    for continuation context. Removed entirely per #121.
+    #121 removed raw EI dumps that polluted context. #167 re-enables a curated
+    version: only missing_elements + reasoning, no routing data.
     """
     plan = ContextPlan(
         reasoning="Continue task after Exit Interview flagged incomplete",
@@ -724,11 +722,46 @@ def test_facilitator_surfaces_exit_interview_feedback(facilitator):
 
     gathered = result["artifacts"]["gathered_context"]
 
-    # Issue #121: EI feedback should NOT be present in gathered_context
-    assert "### Next Steps (from Exit Interview)" not in gathered
+    # #167: Curated feedback IS present
+    assert "Retry Context" in gathered
+    assert "Files 4.txt, 5.txt, 6.txt" in gathered
+    assert "Only 3 of 6" in gathered
+    # Routing data should NOT appear in gathered_context
+    assert "project_director" not in gathered
     # Directory listing should still be present
     assert "Directory:" in gathered
     assert "4.txt" in gathered
+
+
+def test_facilitator_curated_feedback_excludes_routing_data(facilitator):
+    """
+    Issue #167: Curated feedback should contain only missing_elements and reasoning,
+    NOT recommended_specialists (that's for Router, not PD).
+    """
+    plan = ContextPlan(
+        reasoning="Retry",
+        actions=[]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "Files not moved",
+                "missing_elements": "Move remaining files",
+                "recommended_specialists": ["project_director", "web_specialist"]
+            }
+        }
+    }
+
+    result = facilitator.execute(state)
+    gathered = result["artifacts"]["gathered_context"]
+
+    assert "Move remaining files" in gathered
+    assert "Files not moved" in gathered
+    # Routing recommendations should not leak into gathered_context
+    assert "web_specialist" not in gathered
 
 
 def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
@@ -764,7 +797,39 @@ def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
     gathered = result["artifacts"]["gathered_context"]
 
     # Should NOT have Exit Interview feedback since task was complete
-    assert "### Next Steps (from Exit Interview)" not in gathered
+    assert "Retry Context" not in gathered
+
+
+def test_context_plan_reasoning_in_gathered_context(facilitator):
+    """
+    Issue #167: Triage reasoning should appear in gathered_context so PD
+    understands the strategic intent behind the task.
+    """
+    plan = ContextPlan(
+        reasoning="User wants files sorted by content into category subfolders",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            )
+        ]
+    )
+
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+        }
+    }
+
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["1.txt", "2.txt"]
+        result = facilitator.execute(state)
+
+    gathered = result["artifacts"]["gathered_context"]
+
+    assert "### Task Strategy" in gathered
+    assert "sorted by content into category subfolders" in gathered
 
 
 # =============================================================================

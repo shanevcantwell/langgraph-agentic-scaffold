@@ -268,13 +268,21 @@ class FacilitatorSpecialist(BaseSpecialist):
         gathered_context = []
         logger.info(f"Facilitator: Executing plan with {len(context_plan.actions)} actions.")
 
+        # Surface triage reasoning so PD understands the strategic intent (#167)
+        if context_plan.reasoning:
+            gathered_context.append(f"### Task Strategy\n{context_plan.reasoning}")
+
         # Read routing_history early - needed for both EI feedback and WIP summary
         routing_history = state.get("routing_history", [])
 
-        # Issue #121: EI feedback (reasoning, missing_elements) is NOT used for inference
-        # Router uses recommended_specialists for routing; specialists use gathered_context
-        # and resume_trace. The formatted EI feedback was polluting gathered_context but
-        # no consumer actually reads it. Removing entirely.
+        # Issue #167 (revises #121): Curated EI feedback for retry guidance.
+        # Only missing_elements + reasoning — no raw dumps, no routing data.
+        if exit_interview_result and not exit_interview_result.get("is_complete", True):
+            missing = exit_interview_result.get("missing_elements", "")
+            if missing:
+                feedback = self._format_exit_interview_feedback(exit_interview_result)
+                gathered_context.append(feedback)
+                logger.info("Facilitator: Added curated EI retry context")
 
         # Issue #108: Surface work-in-progress for BENIGN interrupts
         # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN
