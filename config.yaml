@@ -229,9 +229,6 @@ specialists:
       filesystem:
         - read_file
         - list_directory
-      terminal:
-        - run_command
-        - get_cwd
       semantic-chunker:
         - calculate_drift
         - analyze_variants

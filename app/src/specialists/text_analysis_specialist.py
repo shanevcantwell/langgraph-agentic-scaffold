@@ -34,11 +34,6 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
         "properties": {"path": {"type": "string", "description": "Directory path to list"}},
         "required": ["path"],
     },
-    "run_command": {
-        "type": "object",
-        "properties": {"command": {"type": "string", "description": "Shell command to execute"}},
-        "required": ["command"],
-    },
     "calculate_drift": {
         "type": "object",
         "properties": {
@@ -420,12 +415,6 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 service="filesystem",
                 function="list_directory",
                 description="List files and directories. Args: path (str).",
-            ),
-            # Terminal tools (external MCP)
-            "run_command": _ToolDef(
-                service="terminal",
-                function="run_command",
-                description="Execute a shell command. Args: command (str). Use for jq, yq, csvtool, sort, wc, grep.",
             ),
             # Semantic tools (external MCP)
             "calculate_drift": _ToolDef(
