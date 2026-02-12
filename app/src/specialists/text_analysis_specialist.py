@@ -116,13 +116,19 @@ class TextAnalysisSpecialist(BaseSpecialist):
             content=report,
         )
 
+        pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+        summary_blurb = f"### Text Analysis (pass {pass_num})\n{report}"
+
         return {
             "messages": [ai_message],
             "artifacts": {
-                "text_analysis_report.md": report,
-                "text_analysis": json_response,
+                "text_analysis_results": self._append_result(state, {
+                    "status": "complete",
+                    "summary": report,
+                    "data": json_response,
+                }),
+                "gathered_context": self._append_to_gathered_context(state, summary_blurb),
             },
-            "task_is_complete": True,
         }
 
     def _execute_react(
@@ -142,15 +148,21 @@ class TextAnalysisSpecialist(BaseSpecialist):
 
             logger.info(f"TextAnalysisSpecialist completed after {len(trace)} tool calls")
 
-            trace_key = self._get_trace_key(state)
+            serialized_trace = [self._serialize_react_iteration(step) for step in trace]
+            pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+            summary_blurb = f"### Text Analysis (pass {pass_num})\n{final_response}"
+
             return {
                 "messages": [AIMessage(content=final_response)],
                 "artifacts": {
-                    trace_key: [self._serialize_react_iteration(step) for step in trace],
-                    "iterations_used": len(trace),
-                    "analysis_status": "complete",
+                    "text_analysis_results": self._append_result(state, {
+                        "status": "complete",
+                        "summary": final_response,
+                        "trace": serialized_trace,
+                        "iterations": len(trace),
+                    }),
+                    "gathered_context": self._append_to_gathered_context(state, summary_blurb),
                 },
-                "task_is_complete": True,
             }
 
         except StagnationDetected as e:
@@ -158,25 +170,42 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 f"TextAnalysisSpecialist stagnation: '{e.tool_name}' called "
                 f"{e.repeat_count} times after {e.iterations} iterations"
             )
-            trace_key = self._get_trace_key(state)
+            serialized_trace = [self._serialize_react_iteration(h) for h in e.history]
+            pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+            stagnation_msg = f"Analysis stalled: repeatedly calling '{e.tool_name}'. Partial progress:\n{self._summarize_trace(e.history)}"
+            summary_blurb = f"### Text Analysis (pass {pass_num}) — stagnated\n{stagnation_msg}"
+
             return {
-                "messages": [AIMessage(content=f"Analysis stalled: repeatedly calling '{e.tool_name}'. Partial progress:\n{self._summarize_trace(e.history)}")],
+                "messages": [AIMessage(content=stagnation_msg)],
                 "artifacts": {
-                    trace_key: [self._serialize_react_iteration(h) for h in e.history],
-                    "iterations_used": e.iterations,
-                    "analysis_status": "stagnated",
+                    "text_analysis_results": self._append_result(state, {
+                        "status": "stagnated",
+                        "summary": stagnation_msg,
+                        "trace": serialized_trace,
+                        "iterations": e.iterations,
+                        "stagnation_tool": e.tool_name,
+                    }),
+                    "gathered_context": self._append_to_gathered_context(state, summary_blurb),
                 },
             }
 
         except MaxIterationsExceeded as e:
             logger.warning(f"TextAnalysisSpecialist hit max iterations ({e.max_iterations})")
-            trace_key = self._get_trace_key(state)
+            serialized_trace = [self._serialize_react_iteration(h) for h in e.history]
+            pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+            partial_msg = f"Analysis reached iteration limit ({e.max_iterations}). Partial progress:\n{self._summarize_trace(e.history)}"
+            summary_blurb = f"### Text Analysis (pass {pass_num}) — partial\n{partial_msg}"
+
             return {
-                "messages": [AIMessage(content=f"Analysis reached iteration limit ({e.max_iterations}). Partial progress:\n{self._summarize_trace(e.history)}")],
+                "messages": [AIMessage(content=partial_msg)],
                 "artifacts": {
-                    trace_key: [self._serialize_react_iteration(h) for h in e.history],
-                    "iterations_used": e.max_iterations,
-                    "analysis_status": "max_iterations",
+                    "text_analysis_results": self._append_result(state, {
+                        "status": "max_iterations",
+                        "summary": partial_msg,
+                        "trace": serialized_trace,
+                        "iterations": e.max_iterations,
+                    }),
+                    "gathered_context": self._append_to_gathered_context(state, summary_blurb),
                 },
             }
 
@@ -254,13 +283,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
             return self._react_config.get('max_iterations', self.DEFAULT_MAX_ITERATIONS)
         return self.specialist_config.get("max_iterations", self.DEFAULT_MAX_ITERATIONS)
 
-    def _get_trace_key(self, state: Dict[str, Any]) -> str:
-        """Generate indexed trace key to preserve across invocations."""
-        artifacts = state.get("artifacts", {})
-        idx = 0
-        while f"analysis_trace_{idx}" in artifacts:
-            idx += 1
-        return f"analysis_trace_{idx}"
+    def _append_result(self, state: Dict[str, Any], entry: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Append a result entry to the text_analysis_results list (read-append-write)."""
+        existing = state.get("artifacts", {}).get("text_analysis_results", [])
+        return existing + [entry]
 
     def _serialize_react_iteration(self, step: ReActIteration) -> Dict[str, Any]:
         """Serialize a ReActIteration for artifact storage."""

@@ -80,6 +80,29 @@ class BaseSpecialist(ABC):
 
         return messages
 
+    def _append_to_gathered_context(self, state: Dict[str, Any], summary: str) -> str:
+        """
+        Append a summary blurb to gathered_context (read-append-write).
+
+        Specialists use this to leave breadcrumbs for downstream specialists.
+        The write-back partner to _get_enriched_messages() which handles the read side.
+
+        Because artifacts use operator.ior (dict merge), writing to the
+        "gathered_context" key replaces the previous value. This method
+        preserves existing content by reading first and appending.
+
+        Args:
+            state: The graph state containing artifacts
+            summary: The blurb to append (will be separated by blank lines)
+
+        Returns:
+            The updated gathered_context string (caller includes in artifacts dict)
+        """
+        existing = state.get("artifacts", {}).get("gathered_context", "")
+        if existing:
+            return f"{existing}\n\n{summary}"
+        return summary
+
     def execute(self, state: dict) -> Dict[str, Any]:
         """Public method to execute the specialist's task."""
         logger.info(f"--- Executing specialist: {self.specialist_name} ---")

@@ -34,8 +34,14 @@ def test_text_analysis_with_text(text_analysis_specialist):
     assert called_request.output_model_class == TextAnalysis
 
     assert "artifacts" in result_state
-    assert result_state["artifacts"]["text_analysis"] == mock_response
-    assert "text_analysis_report.md" in result_state["artifacts"]
+    # Results stored as list (supports 0→many invocations)
+    results = result_state["artifacts"]["text_analysis_results"]
+    assert len(results) == 1
+    assert results[0]["data"] == mock_response
+    assert results[0]["status"] == "complete"
+    # Writes back to gathered_context for downstream visibility
+    assert "gathered_context" in result_state["artifacts"]
+    assert "Text Analysis" in result_state["artifacts"]["gathered_context"]
     assert isinstance(result_state["messages"][0], AIMessage)
     assert "Test summary" in result_state["messages"][0].content
 
@@ -96,13 +102,13 @@ def test_text_analysis_handles_malformed_llm_response(text_analysis_specialist):
 # Task Completion Signal Tests
 # ==============================================================================
 
-def test_text_analysis_sets_task_is_complete(text_analysis_specialist):
+def test_text_analysis_does_not_claim_terminal_authority(text_analysis_specialist):
     """
-    Test that successful analysis sets task_is_complete at root level.
+    Test that TA does NOT set task_is_complete.
 
-    Bug fixed: Without task_is_complete=True at ROOT level (not scratchpad),
-    check_task_completion() wouldn't see it, causing Router to keep routing
-    back to text_analysis_specialist until loop detection kicked in.
+    Specialists are stateless functional primitives — termination is a graph-level
+    decision owned by ExitInterview, not individual specialists. TA writes its
+    results to gathered_context and artifacts, then yields control back to Router.
     """
     # Arrange
     mock_response = {"summary": "Analysis complete", "main_points": ["Point 1"]}
@@ -116,9 +122,8 @@ def test_text_analysis_sets_task_is_complete(text_analysis_specialist):
     # Act
     result_state = text_analysis_specialist._execute_logic(initial_state)
 
-    # Assert - verify task_is_complete is set at ROOT level (not scratchpad!)
-    # check_task_completion() checks state.get("task_is_complete"), not scratchpad
-    assert result_state.get("task_is_complete") is True
+    # Assert - TA should NOT set task_is_complete (that's EI's job)
+    assert "task_is_complete" not in result_state
 
 
 def test_text_analysis_no_task_complete_on_missing_text(text_analysis_specialist):
