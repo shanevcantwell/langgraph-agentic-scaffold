@@ -75,36 +75,6 @@ def test_real_config_loads_successfully():
         )
 
 
-@pytest.mark.integration
-def test_critic_specialist_has_required_strategy_config():
-    """
-    Specific validation for CriticSpecialist configuration.
-
-    CriticSpecialist requires a 'critique_strategy' section in config.yaml.
-    This test prevents a repeat of the config error that caused server crash-loops.
-    """
-    config_loader = ConfigLoader()
-    config = config_loader.get_config()
-
-    # Check if critic_specialist is enabled
-    if 'critic_specialist' not in config['specialists']:
-        pytest.skip("critic_specialist not in config (may be disabled)")
-
-    critic_config = config['specialists']['critic_specialist']
-
-    # Verify required fields
-    assert 'critique_strategy' in critic_config, \
-        "critic_specialist missing required 'critique_strategy' section in config.yaml"
-
-    strategy_config = critic_config['critique_strategy']
-    assert 'type' in strategy_config, \
-        "critique_strategy missing 'type' field"
-    assert 'prompt_file' in strategy_config, \
-        "critique_strategy missing 'prompt_file' field"
-
-    print(f"\n✓ critic_specialist has valid critique_strategy config")
-    print(f"  Strategy type: {strategy_config['type']}")
-    print(f"  Prompt file: {strategy_config['prompt_file']}")
 
 
 @pytest.mark.integration

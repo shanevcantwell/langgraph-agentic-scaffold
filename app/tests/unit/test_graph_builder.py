@@ -199,49 +199,6 @@ def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router(mock_load_prompt,
         {"chat_specialist": "chat_specialist"}  # Router cannot route to itself
     )
 
-@patch("app.src.strategies.critique.llm_strategy.load_prompt", return_value="Critique prompt")
-@patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
-def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_critic(mock_load_prompt, mock_strategy_load_prompt, mock_config_loader, mock_adapter_factory):
-    """Test that the critic edge uses the safe wrapper method."""
-    # Arrange
-    mock_workflow = MagicMock()
-    mock_decider = MagicMock()
-    mock_config = mock_config_loader.get_config.return_value
-    mock_config['specialists'] = {
-        "router_specialist": {"type": "llm", "llm_config": "test"},
-        "critic_specialist": {
-            "type": "llm",
-            "llm_config": "test",
-            "revision_target": "router_specialist",
-            "critique_strategy": {
-                "type": "llm",
-                "prompt_file": "fake_critique.md"
-            }
-        }
-    }
-    mock_config['llm_providers'] = {"test": {"type": "gemini", "api_identifier": "test-model"}}
-    mock_config['workflow'] = {"entry_point": "router_specialist"}
-
-    # Act
-    builder = GraphBuilder(config_loader=mock_config_loader, adapter_factory=mock_adapter_factory)
-    builder._wire_hub_and_spoke_edges(mock_workflow)
-
-    # Assert
-    # The call to add_conditional_edges should have been made with the safe_decider function
-    # from _add_safe_conditional_edges, which is a wrapper around the actual decider.
-    # We check that the `add_conditional_edges` method was called with the correct source and map.
-    # Note: Multiple calls expected (router + critic), so we check for the specific critic call
-    from unittest.mock import call
-    mock_workflow.add_conditional_edges.assert_any_call(
-        "critic_specialist",
-        builder.orchestrator.after_critique_decider,
-        {
-            "router_specialist": "router_specialist",
-            "end_specialist": "end_specialist",
-            "critic_specialist": "critic_specialist"
-        }
-    )
-
 @patch("app.src.workflow.graph_builder.load_prompt", return_value="Base prompt")
 def test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_task_completion(mock_load_prompt, mock_config_loader, mock_adapter_factory):
     """Test that task completion edges use the safe wrapper method."""

@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 72 | 717 |
-| Integration | 28 | 193 |
+| Unit | 71 | 713 |
+| Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **107** | **1001** |
+| **Total** | **106** | **995** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -78,8 +78,6 @@
   - *Tests that specialists with required_artifacts fail gracefully when artifacts are missing.*
 - **`test_artifact_passing_simple_producer_consumer`**
   - *Tests simple artifact passing: systems_architect → web_builder*
-- **`test_artifact_chain_three_specialists`**
-  - *Tests artifact chain: systems_architect → web_builder → critic_specialist*
 - **`test_conditional_artifacts_any_of`**
   - *Tests conditional artifact requirements (all-of pattern within a list).*
 - **`test_artifact_cleanup_not_leaked`**
@@ -103,8 +101,6 @@
 
 - **`test_real_config_loads_successfully`**
   - *Validates that the actual config.yaml can be loaded by GraphBuilder.*
-- **`test_critic_specialist_has_required_strategy_config`**
-  - *Specific validation for CriticSpecialist configuration.*
 - **`test_all_llm_specialists_have_valid_model_bindings`**
   - *Validates that all LLM specialists have valid model bindings.*
 
@@ -561,8 +557,8 @@
   - *REQUIREMENT: Router specialist execution does NOT clear forbidden list.*
 - **`test_full_loop_recovery_flow`**
   - *REQUIREMENT: Full flow - Loop detected → Menu filter activates → Alternative selected → Clearance.*
-- **`test_oscillation_recovery_web_builder_critic`**
-  - *REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.*
+- **`test_oscillation_recovery_web_builder_systems_architect`**
+  - *REQUIREMENT: 2-step oscillation between web_builder and systems_architect.*
 - **`test_exactly_threshold_repetitions`**
   - *REQUIREMENT: Exactly threshold repetitions (not exceeding) should NOT trigger.*
 - **`test_threshold_plus_one_triggers`**
@@ -848,15 +844,6 @@
 - **`test_tribe_conductor_init`**
 - **`test_tribe_conductor_routing`**
 
-## `app/tests/unit/test_critic_specialist.py`
-
-- **`test_critic_specialist_accepts_and_completes_task`**
-  - *Tests that the specialist accepts the work and signals task completion.*
-- **`test_critic_specialist_revises_and_recommends_target`**
-  - *Tests that the specialist recommends revision and a target specialist.*
-- **`test_critic_specialist_handles_strategy_failure`**
-  - *Tests that the specialist handles unrecoverable failure from its strategy.*
-
 ## `app/tests/unit/test_cycle_detection.py`
 
 - **`test_single_item_repeated`**
@@ -948,7 +935,7 @@
   - *Exit Interview should always call LLM for semantic evaluation.*
 - **`test_llm_returns_incomplete`**
   - *When LLM determines task is incomplete, result reflects that.*
-- **`test_stray_json_without_is_complete_defaults_to_complete`**
+- **`test_stray_json_without_is_complete_defaults_to_incomplete`**
   - *Issue #150: LLM sometimes returns stray JSON (e.g. prior specialist's tool*
 - **`test_exit_interview_has_no_check_heuristics_method`**
   - *ADR-CORE-061: _check_heuristics() belongs in Interrupt Classifier.*
@@ -1082,8 +1069,6 @@
   - *Tests that a SpecialistLoadError is raised if a prompt file cannot be loaded.*
 - **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_router`**
   - *Test that the router edge uses the safe wrapper method.*
-- **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_critic`**
-  - *Test that the critic edge uses the safe wrapper method.*
 - **`test_wire_hub_and_spoke_edges_uses_safe_wrapper_for_task_completion`**
   - *Test that task completion edges use the safe wrapper method.*
 

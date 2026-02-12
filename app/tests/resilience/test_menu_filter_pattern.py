@@ -75,13 +75,13 @@ class TestMenuFilterActivation:
         REQUIREMENT: 2-step cycle (A→B→A→B) triggers menu filter and forbids BOTH specialists.
         EXPECTED: Returns state update with forbidden_specialists = ["A", "B"]
         """
-        # Setup: 4 complete cycles of [web_builder, critic_specialist]
+        # Setup: 4 complete cycles of [web_builder, systems_architect]
         # That's 8 total entries (4 * 2)
         base_state["routing_history"] = [
-            "web_builder", "critic_specialist",
-            "web_builder", "critic_specialist",
-            "web_builder", "critic_specialist",
-            "web_builder", "critic_specialist"
+            "web_builder", "systems_architect",
+            "web_builder", "systems_architect",
+            "web_builder", "systems_architect",
+            "web_builder", "systems_architect"
         ]
 
         # Execute
@@ -95,7 +95,7 @@ class TestMenuFilterActivation:
         forbidden = result["scratchpad"]["forbidden_specialists"]
         assert len(forbidden) == 2
         assert "web_builder" in forbidden
-        assert "critic_specialist" in forbidden
+        assert "systems_architect" in forbidden
         assert "2-step cycle" in result["scratchpad"]["loop_detection_reason"]
 
     def test_below_threshold_does_not_trigger_menu_filter(self, monitor, base_state):
@@ -268,12 +268,12 @@ class TestSpecialistExtractionFromErrors:
         REQUIREMENT: Extract BOTH specialist names from 2-step cycle error message.
         EXPECTED: Returns ["specialist_a", "specialist_b"]
         """
-        error_msg = "Detected 2-step cycle loop: ['web_builder', 'critic_specialist'] repeated 4 times."
+        error_msg = "Detected 2-step cycle loop: ['web_builder', 'systems_architect'] repeated 4 times."
         result = monitor._extract_forbidden_specialists_from_error(error_msg)
 
         assert len(result) == 2
         assert "web_builder" in result
-        assert "critic_specialist" in result
+        assert "systems_architect" in result
 
     def test_invalid_error_format_returns_empty_list(self, monitor):
         """
@@ -478,9 +478,9 @@ class TestIntegrationScenarios:
         # Step 4: Alternative specialist executes successfully
         # Step 5: GraphOrchestrator clears forbidden_specialists (tested separately)
 
-    def test_oscillation_recovery_web_builder_critic(self, monitor):
+    def test_oscillation_recovery_web_builder_systems_architect(self, monitor):
         """
-        REQUIREMENT: 2-step oscillation between web_builder and critic_specialist.
+        REQUIREMENT: 2-step oscillation between web_builder and systems_architect.
         EXPECTED: Both specialists forbidden, router forced to pick alternative
         """
         state = {
@@ -488,13 +488,13 @@ class TestIntegrationScenarios:
             "routing_history": [
                 "router",
                 "web_builder",
-                "critic_specialist",
+                "systems_architect",
                 "web_builder",
-                "critic_specialist",
+                "systems_architect",
                 "web_builder",
-                "critic_specialist",
+                "systems_architect",
                 "web_builder",
-                "critic_specialist"
+                "systems_architect"
             ],
             "turn_count": 8,
             "task_is_complete": False,
@@ -513,7 +513,7 @@ class TestIntegrationScenarios:
         forbidden = result["scratchpad"]["forbidden_specialists"]
         assert len(forbidden) == 2
         assert "web_builder" in forbidden
-        assert "critic_specialist" in forbidden
+        assert "systems_architect" in forbidden
 
 
 class TestBoundaryConditions:

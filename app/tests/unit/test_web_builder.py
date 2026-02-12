@@ -28,8 +28,8 @@ def test_web_builder_generates_html(specialist):
     specialist.llm_adapter.invoke.assert_called_once()
     # It should place the generated HTML into the artifacts.
     assert result_state["artifacts"]["html_document.html"] == mock_response["html_document"]
-    # It should always recommend the critic to review its work (Task 2.7: moved to scratchpad).
-    assert result_state["scratchpad"]["recommended_specialists"] == ["critic_specialist"]
+    # Web builder no longer recommends critic — it's a standard spoke that flows through classify_interrupt.
+    assert "recommended_specialists" not in result_state.get("scratchpad", {})
     # Task 2.7: routing_history is now tracked centrally by GraphOrchestrator.safe_executor, not by specialists
     assert "routing_history" not in result_state
 

@@ -187,7 +187,7 @@ def test_router_routes_to_expected_specialist(
         artifacts = final_state.get("artifacts", {})
 
         if desc == "web_ui_task":
-            # Web UI flow MUST produce HTML and go through critic
+            # Web UI flow MUST produce HTML and go through exit interview
             assert "html_document.html" in artifacts, (
                 f"[{desc}] web_builder must produce html_document.html artifact. "
                 f"Got artifacts: {list(artifacts.keys())}"
@@ -195,8 +195,8 @@ def test_router_routes_to_expected_specialist(
             assert len(artifacts["html_document.html"]) > 100, (
                 f"[{desc}] html_document.html is suspiciously small ({len(artifacts['html_document.html'])} chars)"
             )
-            assert "critic_specialist" in routing_history, (
-                f"[{desc}] critic_specialist must review HTML. History: {routing_history}"
+            assert "exit_interview_specialist" in routing_history, (
+                f"[{desc}] exit_interview_specialist must evaluate HTML completion. History: {routing_history}"
             )
             assert final_state.get("task_is_complete") is True, (
                 f"[{desc}] task_is_complete must be True for successful web build"

@@ -586,7 +586,7 @@ class TestGenerationFlows:
         - triage_architect
         - router_specialist
         - web_builder → generate HTML
-        - critic_specialist → review (optional loop)
+        - exit_interview_specialist → completion gate
         - end_specialist
         """
         result = invoke_flow(
@@ -856,7 +856,7 @@ class TestVisionFlows:
         - image_specialist → analyze uploaded mockup
         - systems_architect → create implementation plan
         - web_builder → generate HTML/CSS
-        - critic_specialist → review output
+        - exit_interview_specialist → completion gate
         - end_specialist → termination
 
         REGRESSION: image_specialist must add itself to forbidden_specialists
@@ -894,11 +894,11 @@ class TestVisionFlows:
 
         # Full generation flow should include planning and building
         called = set(result['specialist_order'])
-        generation_specialists = {"systems_architect", "web_builder", "critic_specialist"}
+        generation_specialists = {"systems_architect", "web_builder"}
         missing = generation_specialists - called
         # At least some generation specialists should be called
-        assert len(missing) < 3, (
-            f"Flow 7.1: Expected generation specialists (systems_architect, web_builder, critic). "
+        assert len(missing) < 2, (
+            f"Flow 7.1: Expected generation specialists (systems_architect, web_builder). "
             f"Missing: {missing}. Called: {result['specialist_order']}"
         )
 
