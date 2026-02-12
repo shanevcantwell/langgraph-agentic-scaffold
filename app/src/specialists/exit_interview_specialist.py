@@ -275,22 +275,22 @@ Example verification steps:
                 if "is_complete" not in json_data:
                     logger.warning(
                         f"ExitInterviewSpecialist: JSON response missing 'is_complete' "
-                        f"(got keys: {list(json_data.keys())}), defaulting to complete"
+                        f"(got keys: {list(json_data.keys())}), defaulting to incomplete"
                     )
                     return CompletionEvaluation(
-                        is_complete=True,
-                        reasoning="LLM returned unrelated JSON - defaulting to complete",
-                        missing_elements=""
+                        is_complete=False,
+                        reasoning="LLM returned unrelated JSON - defaulting to incomplete (circuit breaker handles loop prevention)",
+                        missing_elements="EI could not evaluate — model produced wrong JSON schema"
                     )
                 return CompletionEvaluation(**json_data)
 
-            # If no JSON found, default to complete
+            # If no JSON found, default to incomplete — circuit breaker handles loop prevention
             text_response = response.get("text_response", "")
             logger.warning(f"ExitInterviewSpecialist: No JSON in response: {text_response[:200]}")
             return CompletionEvaluation(
-                is_complete=True,
-                reasoning="Could not parse LLM response - defaulting to complete to avoid loops",
-                missing_elements=""
+                is_complete=False,
+                reasoning="Could not parse LLM response - defaulting to incomplete (circuit breaker handles loop prevention)",
+                missing_elements="EI could not evaluate — model produced no parseable JSON"
             )
         except Exception as e:
             # Graceful degradation: default to COMPLETE to avoid infinite loops
