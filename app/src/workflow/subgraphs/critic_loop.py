@@ -42,11 +42,22 @@ class CriticLoopSubgraph(BaseSubgraph):
                 logger.info("Graph Edge: Added conditional edge web_builder → [critic_specialist|router] (ADR-CORE-012 subgraph)")
 
     def get_excluded_specialists(self) -> list[str]:
-        # 2025-12-25: web_builder exclusion removed per Issue #7
-        # Original intent was tight subgraph routing, but this blocked direct
-        # routing from Triage recommendations. MCP migration will handle critique
-        # internally. See ADR-CORE-012 for history.
+        # ADR-CORE-012: Both critic and web_builder are subgraph-managed.
+        # web_builder's outgoing edges are wired here (after_web_builder),
+        # so it MUST be excluded from hub-and-spoke to prevent LangGraph
+        # from adding a second parallel branch (classify_interrupt) that
+        # leaks into the termination sequence.
+        #
+        # Note: This only affects OUTGOING edges from web_builder.
+        # The router can still route TO web_builder via its destinations map.
+        #
+        # History: Issue #7 (2025-12-25) removed the exclusion thinking it
+        # blocked triage routing, but that was a misunderstanding — exclusion
+        # only affects hub-and-spoke outgoing edges, not router destinations.
+        # Restored after discovering the parallel branch leak (Feb 2026).
         excluded = []
         if CoreSpecialist.CRITIC.value in self.specialists:
             excluded.append(CoreSpecialist.CRITIC.value)
+        if "web_builder" in self.specialists:
+            excluded.append("web_builder")
         return excluded

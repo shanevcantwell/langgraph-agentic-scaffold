@@ -102,11 +102,21 @@ class GraphOrchestrator:
         Conditional edge after web_builder (ADR-CORE-012 subgraph).
         Only route to critic if web_builder succeeded.
         If blocked by safe_executor, return to router for dependency resolution.
+
+        Note: web_builder is excluded from hub-and-spoke routing to prevent
+        LangGraph from adding a parallel classify_interrupt branch (see
+        CriticLoopSubgraph.get_excluded_specialists). This function handles
+        all outgoing routing for web_builder.
         """
         # Check for stabilization action first
         stabilization_target = self._check_stabilization_action(state)
         if stabilization_target:
             return stabilization_target
+
+        # Immediate termination on user abort
+        if state.get("scratchpad", {}).get("user_abort"):
+            logger.info("after_web_builder: TERMINAL (user_abort) → End")
+            return CoreSpecialist.END.value
 
         # Check if web_builder produced html_document.html FIRST (success case)
         # This must come before the recommended_specialists check because
