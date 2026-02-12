@@ -26,9 +26,19 @@ from app.src.enums import CoreSpecialist
 
 @pytest.fixture
 def orchestrator():
-    """Create a GraphOrchestrator instance for testing."""
+    """Create a GraphOrchestrator instance for testing.
+
+    Issue #161: Specialists dict must include specialists that classify_interrupt
+    routes to, since routing functions now guard with `in self.specialists` checks.
+    """
     config = {"workflow": {"max_loop_cycles": 3}}
-    specialists = {}  # Empty specialists dict - not needed for classify_interrupt
+    specialists = {
+        "interrupt_evaluator_specialist": MagicMock(),
+        "facilitator_specialist": MagicMock(),
+        CoreSpecialist.EXIT_INTERVIEW.value: MagicMock(),
+        CoreSpecialist.END.value: MagicMock(),
+        CoreSpecialist.ROUTER.value: MagicMock(),
+    }
     orch = GraphOrchestrator(config, specialists)
     # Mock the external_mcp_client for stutter detection
     orch.external_mcp_client = MagicMock()

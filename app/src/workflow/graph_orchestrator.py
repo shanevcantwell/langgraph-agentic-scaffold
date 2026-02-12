@@ -85,6 +85,21 @@ class GraphOrchestrator:
             return CoreSpecialist.END.value
         return None
 
+    def _route_pathological(self, reason: str) -> str:
+        """
+        Issue #161: Guarded routing for pathological interrupts with fallback chain.
+
+        Tries: interrupt_evaluator → exit_interview → router
+        """
+        if "interrupt_evaluator_specialist" in self.specialists:
+            logger.info(f"classify_interrupt: PATHOLOGICAL ({reason}) → Interrupt Evaluator")
+            return "interrupt_evaluator_specialist"
+        if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+            logger.info(f"classify_interrupt: PATHOLOGICAL ({reason}) → Exit Interview (no Interrupt Evaluator)")
+            return CoreSpecialist.EXIT_INTERVIEW.value
+        logger.warning(f"classify_interrupt: PATHOLOGICAL ({reason}) → Router (no IE, no EI)")
+        return CoreSpecialist.ROUTER.value
+
     def after_critique_decider(self, state: GraphState) -> str:
         # Check for stabilization action first
         stabilization_target = self._check_stabilization_action(state)
@@ -499,27 +514,26 @@ class GraphOrchestrator:
 
         # context_overflow: Context bloat - compress and continue
         if scratchpad.get("context_overflow"):
-            logger.info("classify_interrupt: BENIGN (context_overflow) → Facilitator (compress and continue)")
-            return "facilitator_specialist"
+            if "facilitator_specialist" in self.specialists:
+                logger.info("classify_interrupt: BENIGN (context_overflow) → Facilitator (compress and continue)")
+                return "facilitator_specialist"
+            logger.info("classify_interrupt: BENIGN (context_overflow) → Router (no facilitator)")
+            return CoreSpecialist.ROUTER.value
 
         # === PATHOLOGICAL: Needs LLM judgment on recoverability ===
-        # Explicit flags
+        # Issue #161: All pathological paths use guarded routing with fallback chain
         if scratchpad.get("stagnation_detected"):
-            logger.info("classify_interrupt: PATHOLOGICAL (stagnation_detected) → Interrupt Evaluator")
-            return "interrupt_evaluator_specialist"
+            return self._route_pathological("stagnation_detected")
 
         if scratchpad.get("tool_error"):
-            logger.info("classify_interrupt: PATHOLOGICAL (tool_error) → Interrupt Evaluator")
-            return "interrupt_evaluator_specialist"
+            return self._route_pathological("tool_error")
 
         # Heuristic detection (moved from Exit Interview per ADR-CORE-061)
         if self._detect_unrecovered_failures(artifacts):
-            logger.info("classify_interrupt: PATHOLOGICAL (unrecovered failure) → Interrupt Evaluator")
-            return "interrupt_evaluator_specialist"
+            return self._route_pathological("unrecovered failure")
 
         if self._detect_trace_stutter(artifacts):
-            logger.info("classify_interrupt: PATHOLOGICAL (trace stutter) → Interrupt Evaluator")
-            return "interrupt_evaluator_specialist"
+            return self._route_pathological("trace stutter")
 
         # === NORMAL FLOW: No interrupt ===
         # Produced artifacts? Exit Interview evaluates semantic completion
