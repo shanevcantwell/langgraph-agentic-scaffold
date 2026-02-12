@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 70 | 687 |
+| Unit | 70 | 698 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **105** | **969** |
+| **Total** | **105** | **980** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -963,6 +963,16 @@
   - *Binary artifacts should show size, not content.*
 - **`test_artifact_preview_passed_to_llm_prompt`**
   - *#155: The LLM prompt should contain artifact value previews, not just keys.*
+- **`test_trace_summary_shows_operation_inventory`**
+  - *resume_trace should show tool counts with success/fail.*
+- **`test_trace_summary_handles_run_command`**
+  - *run_command operations should appear in trace summary.*
+- **`test_trace_summary_empty_trace`**
+  - *Empty trace should return placeholder.*
+- **`test_trace_summary_shows_recent_operations`**
+  - *Recent section should show last operations with args.*
+- **`test_artifact_summary_uses_trace_summary_for_resume_trace`**
+  - *_build_artifact_summary should special-case resume_trace.*
 - **`test_ei_does_not_clear_max_iterations_on_complete`**
   - *When EI says COMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
 - **`test_ei_does_not_clear_max_iterations_on_incomplete`**
@@ -1011,10 +1021,14 @@
   - *Issue #96: First pass (no existing gathered_context) should work normally.*
 - **`test_facilitator_assembles_resume_trace_for_prior_work`**
   - *ADR-CORE-059: Facilitator assembles resume_trace from prior research traces.*
-- **`test_facilitator_surfaces_exit_interview_feedback`**
-  - *Issue #121: EI feedback (reasoning, missing_elements) is NOT surfaced in gathered_context.*
+- **`test_facilitator_surfaces_curated_exit_interview_feedback`**
+  - *Issue #167 (revises #121): Curated EI feedback IS surfaced in gathered_context.*
+- **`test_facilitator_curated_feedback_excludes_routing_data`**
+  - *Issue #167: Curated feedback should contain only missing_elements and reasoning,*
 - **`test_facilitator_skips_exit_interview_feedback_when_complete`**
   - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
+- **`test_context_plan_reasoning_in_gathered_context`**
+  - *Issue #167: Triage reasoning should appear in gathered_context so PD*
 - **`test_facilitator_passes_trace_on_benign_interrupt`**
   - *Issue #114 supersedes Issue #108: BENIGN interrupt passes trace, not WIP summary.*
 - **`test_facilitator_no_wip_summary_without_max_iterations`**
@@ -1822,6 +1836,14 @@
   - *Test that Phase 2 subgraph doesn't exclude specialists from hub-and-spoke.*
 - **`test_subgraph_build_no_custom_edges`**
   - *Test that Phase 2 subgraph doesn't add custom edges.*
+- **`test_filesystem_operations_populate_knowledge_base`**
+  - *move_file, create_directory, run_command all produce knowledge entries.*
+- **`test_failed_operations_not_tracked`**
+  - *Only successful operations should add knowledge entries.*
+- **`test_research_tools_still_tracked`**
+  - *search and browse still produce knowledge entries.*
+- **`test_iteration_count_updated`**
+  - *context.iteration should equal trace length.*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 
