@@ -410,7 +410,7 @@ class TestReActMixinDependencies:
         # Assert: Tool failed due to missing MCP client
         assert len(trace) == 1
         assert trace[0].success is False
-        assert "MCP client not available" in trace[0].observation
+        assert "No MCP client available" in trace[0].observation
 
 
 # =============================================================================

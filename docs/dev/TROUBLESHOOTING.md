@@ -216,7 +216,6 @@ Also check class attributes are injected:
 attributes_to_inject = [
     'CYCLE_MIN_REPETITIONS',  # Stagnation threshold
     'TOOL_PARAMETERS',        # MCP tool schema cache
-    'EXTERNAL_MCP_SERVICES',  # External MCP service list
 ]
 ```
 

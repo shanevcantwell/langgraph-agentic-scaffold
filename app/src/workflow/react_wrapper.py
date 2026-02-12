@@ -77,6 +77,7 @@ class ReactEnabledSpecialist:
             'execute_with_tools',
             '_build_tool_schemas',
             '_execute_tool',
+            '_is_external_service',  # Config-driven external MCP dispatch
             '_format_tool_result_message',
             '_compute_call_signature',  # For stagnation detection
             '_serialize_for_provider',  # ADR-CORE-055: trace-based message serialization
@@ -93,7 +94,6 @@ class ReactEnabledSpecialist:
 
         # Inject class attributes needed by the methods (fixes #69)
         class_attrs_to_inject = [
-            'EXTERNAL_MCP_SERVICES',
             'CYCLE_MIN_REPETITIONS',  # For stagnation/cycle detection
             'TOOL_PARAMETERS',  # For proper tool schema generation
         ]

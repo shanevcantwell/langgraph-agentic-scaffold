@@ -678,6 +678,8 @@ class LMStudioAdapter(BaseAdapter):
         except OpenAIRateLimitError as e:
             error_message = f"LMStudio API rate limit exceeded: {e}"
             logger.error(error_message, exc_info=True)
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, {"error": error_message}, latency_ms, self.model_name)
             raise RateLimitError(error_message) from e
 
         # Consolidated proxy/network error handling. These exceptions all indicate a failure
@@ -687,7 +689,8 @@ class LMStudioAdapter(BaseAdapter):
                              "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
             # Log the full error for debugging, but raise a clean message.
             logger.error(f"{clean_message} Original error: {e}", exc_info=True)
-            # Re-raise as a specific, catchable error.
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
             raise ProxyError(clean_message) from e
 
         except BadRequestError as e:
@@ -695,12 +698,17 @@ class LMStudioAdapter(BaseAdapter):
                 error_message = (f"LMStudio API context length error: {e}. This can happen if the configured "
                                  f"'context_window' in config.yaml is too large for the loaded model.")
                 logger.error(error_message, exc_info=True)
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, {"error": error_message}, latency_ms, self.model_name)
                 raise LLMInvocationError(error_message) from e
-            # Check for HTML in the response body, which is a strong indicator of a proxy error page.
             else:
                 logger.error(f"LMStudio API BadRequestError: {e}", exc_info=True)
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
                 raise LLMInvocationError(f"LMStudio API BadRequestError: {e}") from e
 
         except Exception as e:
             logger.error(f"LMStudio API error during invoke: {e}", exc_info=True)
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
+            capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
             raise LLMInvocationError(f"LMStudio API error: {e}") from e

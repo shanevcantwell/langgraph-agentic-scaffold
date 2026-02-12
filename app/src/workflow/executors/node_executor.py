@@ -274,7 +274,11 @@ class NodeExecutor:
             except (SpecialistError, Exception) as e:
                 logger.error(f"Caught unhandled exception from specialist '{specialist_name}': {e}", exc_info=True)
                 clear_current_specialist()  # Clean up trace context
-                flush_adapter_traces()  # Discard any partial traces from failed execution
+
+                # Capture error traces for archive visibility (no more ghost executions)
+                error_adapter_traces = flush_adapter_traces()
+                execution_latency_ms = int((time.perf_counter() - start_time) * 1000)
+
                 tb_str = traceback.format_exc()
                 pruned_state = state_pruner.prune_state(state)
                 report_data = ErrorReport(
@@ -288,12 +292,32 @@ class NodeExecutor:
                 # Ensure failed executions are also tracked for observability
                 # NOTE: "error" moved INTO scratchpad because GraphState doesn't define
                 # a top-level "error" field - LangGraph would drop it. Issue #70.
-                return {
+                update = {
                     "scratchpad": {
                         "error": f"Specialist '{specialist_name}' failed. See report for details.",
                         "error_report": markdown_report
                     },
                     "routing_history": [routing_entry]
                 }
+
+                # Emit error traces so failed specialists appear in llm_traces.jsonl
+                if error_adapter_traces:
+                    turn_trace = build_specialist_turn_trace(
+                        adapter_traces=error_adapter_traces,
+                        step=step,
+                        specialist_name=specialist_name,
+                        specialist_type=specialist_config.get("type", "llm"),
+                        from_source=from_source,
+                        system_prompt=system_prompt,
+                        context_artifacts_before=artifacts_before,
+                        artifacts_produced=[],
+                        scratchpad_signals={"error": str(e)},
+                        routing_decision=None,
+                        execution_latency_ms=execution_latency_ms,
+                    )
+                    update["llm_traces"] = [turn_trace.model_dump()]
+                    logger.debug(f"Captured error trace for '{specialist_name}' (step {step})")
+
+                return update
 
         return safe_executor

@@ -316,6 +316,41 @@ class ReActMixin:
         "run_command": {
             "command": (str, Field(description="Shell command to execute (allowlist: pwd, ls, cat, head, tail, grep, etc.)"))
         },
+        "get_cwd": {},  # No parameters
+        # Semantic-chunker tools (external MCP)
+        "calculate_drift": {
+            "text_a": (str, Field(description="First text for semantic comparison")),
+            "text_b": (str, Field(description="Second text for semantic comparison"))
+        },
+        "analyze_variants": {
+            "variants": (list, Field(description="List of text variants to measure geometric distance"))
+        },
+        # IT-tools (external MCP — wrenchpilot/it-tools-mcp)
+        "format_json": {
+            "json": (str, Field(description="JSON string to pretty-print"))
+        },
+        "minify_json": {
+            "json": (str, Field(description="JSON string to minify"))
+        },
+        "compare_json": {
+            "json1": (str, Field(description="First JSON string")),
+            "json2": (str, Field(description="Second JSON string"))
+        },
+        "convert_json_to_csv": {
+            "json": (str, Field(description="JSON array string to convert to CSV"))
+        },
+        "convert_json_to_yaml": {
+            "json": (str, Field(description="JSON string to convert to YAML"))
+        },
+        "format_yaml": {
+            "yaml": (str, Field(description="YAML string to format"))
+        },
+        "format_xml": {
+            "xml": (str, Field(description="XML string to format"))
+        },
+        "convert_html_to_markdown": {
+            "html": (str, Field(description="HTML string to convert to Markdown"))
+        },
     }
 
     def execute_with_tools(
@@ -546,9 +581,20 @@ class ReActMixin:
         sorted_args = tuple(sorted(tool_call.args.items()))
         return (tool_call.name, sorted_args)
 
-    # Services that require external MCP (containerized)
-    # These are defined in config.yaml under mcp.external_mcp.services
-    EXTERNAL_MCP_SERVICES = {"filesystem", "terminal"}
+    def _is_external_service(self, service_name: str) -> bool:
+        """
+        Check if a service is reachable via external MCP (containerized).
+
+        Config-driven: uses PermissionedMcpClient.is_connected() which checks
+        both config.yaml permissions AND container connectivity. No hardcoded
+        service list — new external services (semantic-chunker, it-tools,
+        prompt-prix) work automatically via config.
+        """
+        return (
+            hasattr(self, 'external_mcp_client')
+            and self.external_mcp_client is not None
+            and self.external_mcp_client.is_connected(service_name)
+        )
 
     def _execute_tool(
         self,
@@ -560,8 +606,9 @@ class ReActMixin:
         """
         Execute a single tool call via MCP.
 
-        Routes to external MCP for containerized services (filesystem)
-        and internal MCP for Python-based specialists.
+        Routes to external MCP for containerized services and internal MCP
+        for Python-based specialists. Dispatch is config-driven via
+        PermissionedMcpClient — no hardcoded service list.
 
         Args:
             tool_call: The tool call to execute
@@ -583,19 +630,18 @@ class ReActMixin:
             return ToolResult(call=tool_call, success=False, error=error_msg)
 
         tool_def = tools[tool_name]
-        is_external = tool_def.service in self.EXTERNAL_MCP_SERVICES
+        is_external = self._is_external_service(tool_def.service)
 
         # Check for required MCP client
         if is_external:
-            if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
-                error_msg = f"External MCP client not available for service '{tool_def.service}'"
-                logger.warning(f"ReAct: {error_msg}")
-                if stop_on_error:
-                    raise ToolExecutionError(tool_name, error_msg, [])
-                return ToolResult(call=tool_call, success=False, error=error_msg)
+            # external_mcp_client already confirmed by _is_external_service
+            pass
         else:
             if not hasattr(self, 'mcp_client') or self.mcp_client is None:
-                error_msg = "Internal MCP client not available"
+                error_msg = (
+                    f"No MCP client available for service '{tool_def.service}'. "
+                    f"Check config.yaml tools: section and external MCP connectivity."
+                )
                 logger.warning(f"ReAct: {error_msg}")
                 if stop_on_error:
                     raise ToolExecutionError(tool_name, error_msg, [])
