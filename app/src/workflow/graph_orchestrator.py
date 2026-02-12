@@ -71,11 +71,18 @@ class GraphOrchestrator:
         """
         Checks if a stabilization action (Circuit Breaker) has been triggered.
         Returns the target specialist name if an action is present, else None.
+
+        Issue #161: Routes to Exit Interview (can evaluate recoverability)
+        instead of the non-existent 'error_handling_specialist'.
+        Falls back to END if Exit Interview is not loaded.
         """
         action = state.get("scratchpad", {}).get("stabilization_action")
         if action == "ROUTE_TO_ERROR_HANDLER":
-            logger.warning("Stabilization action 'ROUTE_TO_ERROR_HANDLER' detected. Forcing route to 'error_handling_specialist'.")
-            return "error_handling_specialist"
+            if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+                logger.warning("Stabilization action detected. Routing to Exit Interview for evaluation.")
+                return CoreSpecialist.EXIT_INTERVIEW.value
+            logger.warning("Stabilization action detected. No Exit Interview available. Routing to END.")
+            return CoreSpecialist.END.value
         return None
 
     def after_critique_decider(self, state: GraphState) -> str:
@@ -469,6 +476,11 @@ class GraphOrchestrator:
         pauses that the model should be unaware of. Only PATHOLOGICAL interrupts need
         semantic judgment about recoverability.
         """
+        # Issue #161: Check for circuit breaker stabilization action first
+        stabilization_target = self._check_stabilization_action(state)
+        if stabilization_target:
+            return stabilization_target
+
         scratchpad = state.get("scratchpad", {})
         artifacts = state.get("artifacts", {})
 
