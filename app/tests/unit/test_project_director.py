@@ -1,15 +1,10 @@
 """
-Integration tests for Emergent Project Subgraph - Phase 2 (ReAct capability)
+Tests for ProjectDirector — autonomous agent for multi-step projects.
 
-Phase 2 changes the architecture from graph-level cycling to internal iteration:
-- ProjectDirector uses ReAct to call search/browse via MCP
-- No custom graph edges (standard hub-and-spoke)
-- Loop controlled by max_iterations parameter
+ProjectDirector uses prompt-prix MCP react_step() for iterative tool use (#162).
+PD owns the loop and tool dispatch; prompt-prix owns the LLM call.
 
-ADR-CORE-051: ReAct capability is now config-driven, not mixin inheritance.
-GraphBuilder injects execute_with_tools() via ReactEnabledSpecialist wrapper.
-
-See ADR-CORE-029 for details.
+See ADR-CORE-029, ADR-CORE-064 for details.
 """
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
@@ -64,20 +59,16 @@ def mock_mcp_client():
 class TestProjectDirectorPhase2:
     """Tests for ProjectDirector with config-driven ReAct internal iteration."""
 
-    def test_project_director_no_longer_inherits_react_mixin(self):
+    def test_project_director_is_base_specialist(self):
         """
-        ADR-CORE-051: Verify ProjectDirector uses config-driven ReAct, not mixin.
-
-        ReAct capability is now injected by ReactEnabledSpecialist wrapper
-        when config has `react: enabled: true`. This test verifies the mixin
-        inheritance was removed as part of ADR-CORE-051.
+        #162: PD is a plain BaseSpecialist using react_step MCP directly.
+        No mixin inheritance, no wrapper injection.
         """
-        from app.src.specialists.mixins import ReActMixin
-        # Should NOT inherit from ReActMixin anymore
-        assert not issubclass(ProjectDirector, ReActMixin)
-        # But should still be a BaseSpecialist
         from app.src.specialists.base import BaseSpecialist
         assert issubclass(ProjectDirector, BaseSpecialist)
+        # Verify it uses shared react_step helpers
+        from app.src.mcp import is_react_available
+        assert callable(is_react_available)
 
     def test_project_director_defines_tools(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
         """Test that ProjectDirector defines search and browse tools."""
@@ -87,7 +78,7 @@ class TestProjectDirectorPhase2:
 
         # The tools are defined inside _execute_logic, so we verify by checking
         # the ToolDef imports work
-        from app.src.specialists.mixins import ToolDef
+        from app.src.mcp import ToolDef
         tools = {
             "search": ToolDef(service="web_specialist", function="search"),
             "browse": ToolDef(service="browse_specialist", function="browse"),
@@ -140,8 +131,8 @@ class TestProjectDirectorPhase2:
         assert len(context.knowledge_base) == 2
         assert context.iteration == 5
 
-    def test_research_prompt_building(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
-        """Test that research prompt includes context information."""
+    def test_task_prompt_building(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
+        """Test that task prompt includes context information (#162)."""
         director = ProjectDirector("project_director", mock_specialist_config)
         director.llm_adapter = mock_llm_adapter
         director.mcp_client = mock_mcp_client
@@ -153,13 +144,11 @@ class TestProjectDirectorPhase2:
         )
 
         state = {"artifacts": {}, "scratchpad": {}}
-        prompt = director._build_research_prompt(context, state)
+        prompt = director._build_task_prompt(context, state)
 
         assert "Research AI safety" in prompt
         assert "AI alignment is important" in prompt
         assert "What are current approaches?" in prompt
-        assert "search" in prompt.lower()
-        assert "browse" in prompt.lower()
 
     def test_max_iterations_from_config(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
         """Test that max_iterations is read from config."""
@@ -177,45 +166,8 @@ class TestProjectDirectorPhase2:
 
         assert director._get_max_iterations() == 15  # DEFAULT_MAX_ITERATIONS
 
-    def test_max_iterations_from_react_config(self, mock_llm_adapter, mock_mcp_client):
-        """
-        ADR-CORE-051: Test that _react_config (injected by ReactEnabledSpecialist)
-        takes precedence over legacy config.
-        """
-        director = ProjectDirector("project_director", {"type": "hybrid", "max_iterations": 5})
-        director.llm_adapter = mock_llm_adapter
-        director.mcp_client = mock_mcp_client
-
-        # Simulate what ReactEnabledSpecialist does
-        director._react_config = {"max_iterations": 20, "stop_on_error": False}
-
-        # Should use _react_config value, not legacy config
-        assert director._get_max_iterations() == 20
-
-    def test_tool_result_serialization(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
-        """Test that tool results are serialized correctly for artifacts."""
-        from app.src.specialists.mixins import ToolResult, ToolCall
-
-        director = ProjectDirector("project_director", mock_specialist_config)
-
-        result = ToolResult(
-            call=ToolCall(id="test_1", name="search", args={"query": "test"}),
-            success=True,
-            result=[{"title": "Result", "url": "http://example.com"}]
-        )
-
-        serialized = director._serialize_tool_result(result)
-
-        assert serialized["tool"] == "search"
-        assert serialized["args"] == {"query": "test"}
-        assert serialized["success"] is True
-        assert serialized["error"] is None
-        assert "Result" in serialized["result_preview"]
-
     def test_partial_synthesis_on_max_iterations(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
-        """Test graceful degradation when max iterations exceeded."""
-        from app.src.specialists.mixins import ToolResult, ToolCall
-
+        """Test graceful degradation when max iterations exceeded (#162)."""
         director = ProjectDirector("project_director", mock_specialist_config)
 
         context = ProjectContext(
@@ -223,20 +175,22 @@ class TestProjectDirectorPhase2:
             knowledge_base=["Found some info"],
         )
 
-        history = [
-            ToolResult(
-                call=ToolCall(id="1", name="search", args={"query": "topic"}),
-                success=True,
-                result=[{"title": "R1"}]
-            ),
-            ToolResult(
-                call=ToolCall(id="2", name="browse", args={"url": "http://example.com"}),
-                success=True,
-                result={"title": "Example", "status": "success"}
-            ),
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "search", "args": {"query": "topic"}},
+                "observation": "Result 1",
+                "success": True,
+            },
+            {
+                "iteration": 1,
+                "tool_call": {"id": "2", "name": "browse", "args": {"url": "http://example.com"}},
+                "observation": "Page content",
+                "success": True,
+            },
         ]
 
-        partial = director._synthesize_partial(context, history)
+        partial = director._synthesize_partial(context, trace, max_iter=5)
 
         assert "Research Incomplete" in partial
         assert "Complex research topic" in partial

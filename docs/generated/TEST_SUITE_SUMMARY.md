@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 71 | 713 |
+| Unit | 70 | 679 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **106** | **995** |
+| **Total** | **105** | **961** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1792,26 +1792,22 @@
 
 ## `app/tests/unit/test_project_director.py`
 
-- **`test_project_director_no_longer_inherits_react_mixin`**
-  - *ADR-CORE-051: Verify ProjectDirector uses config-driven ReAct, not mixin.*
+- **`test_project_director_is_base_specialist`**
+  - *#162: PD is a plain BaseSpecialist using react_step MCP directly.*
 - **`test_project_director_defines_tools`**
   - *Test that ProjectDirector defines search and browse tools.*
 - **`test_project_context_initialization`**
   - *Test that ProjectContext is initialized from user_request artifact.*
 - **`test_project_context_restoration`**
   - *Test that existing ProjectContext is restored from artifacts.*
-- **`test_research_prompt_building`**
-  - *Test that research prompt includes context information.*
+- **`test_task_prompt_building`**
+  - *Test that task prompt includes context information (#162).*
 - **`test_max_iterations_from_config`**
   - *Test that max_iterations is read from config.*
 - **`test_max_iterations_default`**
   - *Test default max_iterations when not in config.*
-- **`test_max_iterations_from_react_config`**
-  - *ADR-CORE-051: Test that _react_config (injected by ReactEnabledSpecialist)*
-- **`test_tool_result_serialization`**
-  - *Test that tool results are serialized correctly for artifacts.*
 - **`test_partial_synthesis_on_max_iterations`**
-  - *Test graceful degradation when max iterations exceeded.*
+  - *Test graceful degradation when max iterations exceeded (#162).*
 - **`test_subgraph_returns_empty_exclusions`**
   - *Test that Phase 2 subgraph doesn't exclude specialists from hub-and-spoke.*
 - **`test_subgraph_build_no_custom_edges`**
@@ -1838,73 +1834,6 @@
   - *Tests fallback to default_responder when LLM returns an empty list of recommendations.*
 - **`test_prompt_triage_no_specialist_map_configured`**
   - *Tests behavior when specialist_map is empty.*
-
-## `app/tests/unit/test_react_mixin.py`
-
-- **`test_full_name_property`**
-  - *Test that full_name returns 'service.function' format.*
-- **`test_optional_description`**
-  - *Test that description is optional.*
-- **`test_basic_creation`**
-  - *Test basic ToolCall creation.*
-- **`test_empty_args`**
-  - *Test ToolCall with no arguments.*
-- **`test_success_result`**
-  - *Test successful tool result.*
-- **`test_error_result`**
-  - *Test error tool result.*
-- **`test_successful_iteration`**
-  - *Test creating a successful iteration record.*
-- **`test_failed_iteration`**
-  - *Test creating a failed iteration record.*
-- **`test_immediate_final_response_no_tools`**
-  - *Test that LLM returning text (no tools) completes immediately.*
-- **`test_single_tool_call_then_final_response`**
-  - *Test: LLM calls tool → sees result → returns final response.*
-- **`test_multiple_tool_calls_in_sequence`**
-  - *Test: LLM makes multiple sequential tool calls.*
-- **`test_max_iterations_exceeded`**
-  - *Test that MaxIterationsExceeded is raised when limit hit.*
-- **`test_unknown_tool_returns_error_to_llm`**
-  - *Test that unknown tool name is reported as error to LLM.*
-- **`test_tool_execution_error_reported_to_llm`**
-  - *Test that MCP errors are reported to LLM when stop_on_error=False.*
-- **`test_tool_execution_error_raises_when_stop_on_error`**
-  - *Test that MCP errors raise when stop_on_error=True.*
-- **`test_missing_llm_adapter_raises`**
-  - *Test that missing llm_adapter raises ValueError.*
-- **`test_missing_mcp_client_returns_error`**
-  - *Test that missing mcp_client returns error result.*
-- **`test_ai_message_with_tool_calls_included_in_chain`**
-  - *ADR-CORE-055: Verify AIMessage with tool_calls is included in message chain.*
-- **`test_message_chain_order_preserved`**
-  - *ADR-CORE-055: Verify message chain maintains correct order:*
-- **`test_error_result_formatted_correctly`**
-  - *Test that error results are formatted with 'Error:' prefix.*
-- **`test_empty_trace_produces_human_message_only`**
-  - *Empty trace should produce just the goal as HumanMessage.*
-- **`test_single_iteration_produces_three_messages`**
-  - *One iteration should produce: Human, AI, Tool.*
-- **`test_multiple_iterations_preserve_order`**
-  - *Multiple iterations maintain: Human, [AI, Tool]* pattern.*
-- **`test_concurrent_batch_groups_into_single_ai_message`**
-  - *Concurrent calls (same iteration) should produce one AIMessage with multiple tool_calls.*
-- **`test_mixed_single_and_concurrent_iterations`**
-  - *Mix of single-call and concurrent-call iterations serializes correctly.*
-- **`test_concurrent_batch_shared_thought_uses_first`**
-  - *All entries in a batch share the same thought; serializer uses first entry's thought.*
-- **`test_single_tool_call_dispatched_sequentially`**
-  - *Single tool call should not use ThreadPoolExecutor.*
-- **`test_multiple_tool_calls_dispatched_concurrently`**
-  - *Multiple tool calls in one response should dispatch concurrently.*
-- **`test_concurrent_dispatch_preserves_all_results`**
-  - *All results from concurrent batch should appear in trace.*
-- **`test_concurrent_dispatch_partial_failure`**
-  - *Partial failures in concurrent batch are reported, not raised.*
-- **`test_concurrent_batch_shares_thought`**
-  - *All trace entries in a concurrent batch share the same thought.*
-- **`test_concurrent_then_sequential_iterations`**
-  - *Mix of concurrent and sequential calls across iterations.*
 
 ## `app/tests/unit/test_research_flow.py`
 

@@ -20,8 +20,6 @@ from .subgraphs.distillation import DistillationSubgraph
 from .subgraphs.context_engineering import ContextEngineeringSubgraph
 from .subgraphs.emergent_project import EmergentProjectSubgraph
 from ..specialists.tribe_conductor import TribeConductor
-from .react_wrapper import ReactEnabledSpecialist
-
 logger = logging.getLogger(__name__)
 
 
@@ -185,20 +183,16 @@ class GraphBuilder:
             specialist_config = self.config.get("specialists", {}).get(name, {})
             tool_permissions = specialist_config.get("tools", {})
 
-            # Unwrap ReactEnabledSpecialist to get the actual specialist instance
-            # The ReAct methods are bound to _inner, so external_mcp_client must be set there
-            target = instance._inner if hasattr(instance, '_inner') else instance
-
             if tool_permissions:
                 # Specialist has explicit tool config - wrap with permissions
-                target.external_mcp_client = PermissionedMcpClient(
+                instance.external_mcp_client = PermissionedMcpClient(
                     self.external_mcp_client,
                     allowed_tools=tool_permissions
                 )
                 logger.debug(f"Attached PermissionedMcpClient to '{name}' with tools: {list(tool_permissions.keys())}")
             else:
                 # No tools config = no external MCP access (ADR-CORE-051 secure default)
-                target.external_mcp_client = None
+                instance.external_mcp_client = None
                 logger.debug(f"No external MCP access for '{name}' (no tools: config)")
 
         logger.info(
@@ -362,59 +356,7 @@ class GraphBuilder:
                         exc_info=True
                     )
 
-        # ADR-CORE-051: Apply ReactEnabledSpecialist wrapper based on config
-        # Specialists with react.enabled: true get ReAct capability injected
-        loaded_specialists = self._apply_react_wrappers(loaded_specialists, all_configs)
-
         return loaded_specialists
-
-    def _apply_react_wrappers(
-        self,
-        specialists: Dict[str, BaseSpecialist],
-        configs: Dict
-    ) -> Dict[str, BaseSpecialist]:
-        """
-        Apply ReactEnabledSpecialist wrapper to specialists with react config (ADR-CORE-051).
-
-        Args:
-            specialists: Dict of loaded specialist instances
-            configs: Dict of specialist configurations
-
-        Returns:
-            Updated specialists dict with wrappers applied where configured
-        """
-        # Get global react defaults
-        global_react_defaults = self.config.get("react", {}).get("defaults", {})
-        default_max_iterations = global_react_defaults.get("max_iterations", 10)
-        default_stop_on_error = global_react_defaults.get("stop_on_error", False)
-
-        wrapped_specialists = {}
-
-        for name, instance in specialists.items():
-            spec_config = configs.get(name, {})
-            # Use `or {}` to handle Pydantic adding react: null for all specialists
-            react_config = spec_config.get("react") or {}
-
-            if react_config.get("enabled", False):
-                # Specialist has react enabled - wrap it
-                max_iterations = react_config.get("max_iterations", default_max_iterations)
-                stop_on_error = react_config.get("stop_on_error", default_stop_on_error)
-
-                wrapped = ReactEnabledSpecialist(
-                    inner=instance,
-                    max_iterations=max_iterations,
-                    stop_on_error=stop_on_error
-                )
-                wrapped_specialists[name] = wrapped
-                logger.info(
-                    f"Applied ReactEnabledSpecialist wrapper to '{name}' "
-                    f"(max_iterations={max_iterations})"
-                )
-            else:
-                # No react config - keep original instance
-                wrapped_specialists[name] = instance
-
-        return wrapped_specialists
 
     def _build_exclusion_index(self, configs: Dict[str, Any]) -> Dict[str, Set[str]]:
         """

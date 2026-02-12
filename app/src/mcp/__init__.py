@@ -27,6 +27,14 @@ from .client import McpClient
 from .external_client import ExternalMcpClient, sync_call_external_mcp
 from .permissioned_client import PermissionedMcpClient
 from .utils import extract_text_from_mcp_result
+from .react_step import (
+    ToolDef,
+    is_react_available,
+    call_react_step,
+    parse_react_step_result,
+    build_tool_schemas,
+    dispatch_external_tool,
+)
 
 __all__ = [
     "McpRequest",
@@ -37,4 +45,11 @@ __all__ = [
     "PermissionedMcpClient",
     "sync_call_external_mcp",
     "extract_text_from_mcp_result",
+    # react_step helpers (#162)
+    "ToolDef",
+    "is_react_available",
+    "call_react_step",
+    "parse_react_step_result",
+    "build_tool_schemas",
+    "dispatch_external_tool",
 ]

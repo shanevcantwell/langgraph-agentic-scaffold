@@ -43,20 +43,6 @@ workflow:
   enable_menu_filter: true
 
 # ==============================================================================
-# REACT CONFIGURATION (ADR-CORE-051)
-# ==============================================================================
-# Global defaults for specialists with react.enabled: true.
-# Enables iterative tool use: LLM → tool → LLM → tool → ... → done
-# ==============================================================================
-react:
-  defaults:
-    # ADR-ROADMAP-001: Raised from 10 to 50. Stagnation detection (cycle detection)
-    # is the primary safety valve - arbitrary iteration limits cause artificial
-    # boundaries that require cross-invocation continuity reconstruction.
-    max_iterations: 50
-    stop_on_error: false
-
-# ==============================================================================
 # MCP (MESSAGE-CENTRIC PROTOCOL) CONFIGURATION
 # ==============================================================================
 # MCP enables specialists to call each other's functions directly without routing
@@ -236,10 +222,6 @@ specialists:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
     description: "Analyzes, summarizes, extracts, or transforms text and structured data. Handles analytical tasks (summarize, extract key points, analyze structure), data operations (extract JSON, format/convert data), and semantic measurement (calculate drift between texts, compare embeddings, analyze variants). For conversational questions, use chat_specialist instead."
-    # ReAct capability for iterative data operations (ADR-CORE-051)
-    react:
-      enabled: true
-      max_iterations: 10
     # Tool permissions — optional use; simple analysis doesn't require tools
     tools:
       prompt-prix:
@@ -361,12 +343,10 @@ specialists:
     prompt_file: "project_director_prompt.md"
     description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Batch or recursive processes or deep agents to gather information, refine understanding, and generate actionable solutions."
     tags: ["planning", "research", "complex_tasks"]
-    # ADR-CORE-051: ReAct capability for iterative research
-    react:
-      enabled: true
-      max_iterations: 15
-    # ADR-CORE-051: Tool permissions (enables external_mcp_client injection)
+    # Tool permissions (enables external_mcp_client injection)
     tools:
+      prompt-prix:
+        - react_step
       filesystem:
         - list_directory
         - read_file
@@ -463,11 +443,6 @@ specialists:
     excluded_from:
       - triage_architect
       - router_specialist
-    # Issue #117: ReAct enabled for filesystem verification
-    # EI must verify file operations actually happened before marking COMPLETE
-    react:
-      enabled: true
-      max_iterations: 5  # Verification shouldn't need many iterations
     # Issue #115: EI calls SA via MCP on-demand to produce exit_plan
     # (removed dead requires_artifacts/artifact_providers - never enforced for graph-wired specialists)
     tools:

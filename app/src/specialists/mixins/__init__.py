@@ -1,31 +1,7 @@
 # app/src/specialists/mixins/__init__.py
 """
-Specialist mixins for optional capabilities.
+Specialist mixins package.
 
-Mixins provide orthogonal capabilities that specialists can opt into:
-- ReActMixin: Iterative tool use (LLM → tool → LLM → tool → ... → done)
+ReActMixin was removed in #162 — specialists now use react_step() MCP directly.
+See app/src/mcp/react_step.py for the shared helper pattern.
 """
-
-from .react_mixin import (
-    ReActMixin,
-    ToolDef,
-    ToolCall,
-    ToolResult,
-    ReActIteration,  # ADR-CORE-055: Trace record type
-    ReActLoopTerminated,
-    MaxIterationsExceeded,
-    StagnationDetected,
-    ToolExecutionError,
-)
-
-__all__ = [
-    "ReActMixin",
-    "ToolDef",
-    "ToolCall",
-    "ToolResult",
-    "ReActIteration",  # ADR-CORE-055: Trace record type
-    "ReActLoopTerminated",
-    "MaxIterationsExceeded",
-    "StagnationDetected",
-    "ToolExecutionError",
-]
