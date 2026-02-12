@@ -83,6 +83,10 @@ services:
     profiles: ["filesystem"]  # Only starts with --profile filesystem
     container_name: filesystem-mcp
     image: node:20-slim
+    # Run as UID 1000 to match terminal-mcp (mcpuser) and app (appuser).
+    # Without this, filesystem-mcp runs as root and creates dirs owned by
+    # root:root that terminal-mcp's mcpuser can't write into.
+    user: "1000:1000"
     stdin_open: true  # Required for MCP stdio transport
     tty: true
     working_dir: /workspace
