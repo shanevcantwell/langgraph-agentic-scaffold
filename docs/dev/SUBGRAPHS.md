@@ -24,7 +24,6 @@ This is the foundational step where the system discovers and prepares all availa
     *   Each specialist is instantiated, injecting its specific configuration block and name. This decouples specialists from global configuration.
 
 3.  **Specialized Instantiation (Handling Edge Cases):**
-    *   **`CriticSpecialist`:** This specialist has a complex dependency. The `GraphBuilder` reads the `critique_strategy` sub-configuration, instantiates the required strategy (e.g., `LLMCritiqueStrategy`), creates a dedicated LLM adapter for it, and injects the strategy instance into the `CriticSpecialist`'s constructor.
     *   **`EndSpecialist`:** This procedural coordinator needs the configurations for the specialists it manages (`ResponseSynthesizer` and `Archiver`). The `GraphBuilder` gathers these configurations and passes them, along with the `AdapterFactory`, to the `EndSpecialist`'s constructor.
 
 4.  **LLM Adapter Injection:** For any specialist that requires an LLM (indicated by the `llm_config` key), the `GraphBuilder` invokes the `AdapterFactory` to create and attach the appropriate `BaseAdapter` instance.
@@ -51,7 +50,7 @@ Once all specialists are loaded and configured, the `build` method assembles the
 
 This is where the agent's behavior and control flow are defined. The system uses a hybrid approach of conditional and direct edges, all managed by the `GraphOrchestrator`.
 
-The `GraphBuilder` delegates complex wiring to specialized `BaseSubgraph` implementations (e.g., `TieredChatSubgraph`, `DistillationSubgraph`, `ContextEngineeringSubgraph`, `CriticLoopSubgraph`).
+The `GraphBuilder` delegates complex wiring to specialized `BaseSubgraph` implementations (e.g., `TieredChatSubgraph`, `DistillationSubgraph`, `ContextEngineeringSubgraph`).
 
 #### The Main Loop (Hub-and-Spoke)
 
@@ -65,41 +64,11 @@ The `GraphBuilder` delegates complex wiring to specialized `BaseSubgraph` implem
 
 The system uses explicit, high-priority conditional edges for specific, well-defined sub-workflows, bypassing the main router for efficiency. These are typically managed by their respective Subgraph classes.
 
-*   **The "Generate-and-Critique" Loop (ADR-CORE-012):**
-    *   Managed by `CriticLoopSubgraph`.
-    *   Creates a **bidirectional subgraph** for iterative refinement:
-
-    ```
-    Router → web_builder → critic_specialist
-                ↑              ↓
-                └── REVISE ────┘
-                    ACCEPT → check_task_completion → END
-    ```
-
-    **Key Components:**
-    1. **Direct Edge:** `web_builder → critic_specialist` (bypasses router)
-    2. **Exclusion:** `web_builder` excluded from hub-and-spoke routing
-    3. **Conditional Edge:** `critic_specialist → after_critique_decider`
-    4. **Config:** `critic_specialist.revision_target: "web_builder"`
-
-    **Flow:**
-    - Router routes to `web_builder` (generates initial UI)
-    - `web_builder` completes → **directly** to `critic_specialist` (no router hop)
-    - `critic_specialist` reviews artifact → `after_critique_decider`
-    - **REVISE** → routes back to `web_builder` (refine based on feedback)
-    - **ACCEPT** → routes to `check_task_completion` (begin termination)
-
-    **Critical Configuration:**
-    ```yaml
-    critic_specialist:
-      revision_target: "web_builder"  # MUST match generator specialist
-    ```
-
-    **Why This Pattern:**
-    - ✅ **Efficiency:** 66% fewer hops (1 edge vs 3 per iteration)
-    - ✅ **Prevents False Loop Detection:** Valid refinement cycles don't trigger loop detection
-    - ✅ **Architectural Clarity:** Intent is explicit in code and config
-    - ⚠️ **Regression Risk:** Lost across LLM context windows - well documented now
+*   **Web Builder (Standard Spoke):**
+    *   As of issue #161, `web_builder` is a standard hub-and-spoke specialist.
+    *   It flows through `classify_interrupt` like every other non-terminal specialist.
+    *   Completion evaluation is handled by Exit Interview (not a dedicated critic loop).
+    *   The previous "Generate-and-Critique" loop (ADR-CORE-012, `CriticLoopSubgraph`) was removed.
 
 *   **The Termination Sequence:**
     *   The `end_specialist` is the designated finalizer. A direct, non-conditional edge is wired from the `end_specialist` node to the special `END` node of the graph. This guarantees that once the finalizer runs, the workflow terminates cleanly.

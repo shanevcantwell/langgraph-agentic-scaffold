@@ -14,7 +14,7 @@ Each flow shows: **Prompt** → **Specialists Called** → **Expected Output**
 | [File](#2-file-operations) | "read/write/list file" | Triage → Facilitate → Router → Response |
 | [Browser](#3-browser) | "go to / click / fill" | Triage → Router → NavigatorBrowser |
 | [Research](#4-research) | "research / investigate" | Triage → Router → ResearchOrchestrator |
-| [Generation](#5-generation) | "create / build / generate" | Triage → Router → Builder ↔ Critic |
+| [Generation](#5-generation) | "create / build / generate" | Triage → Router → Builder → Exit Interview |
 | [Analysis](#6-analysis) | "analyze / extract / summarize" | Triage → Router → Analyst |
 
 ---
@@ -439,11 +439,9 @@ FLOW:
   Router              → Routes to web_builder
   WebBuilder          → Generates HTML artifact
                         artifacts: {html_document: "<!DOCTYPE..."}
-                        recommended_specialists: ["critic_specialist"]
-  CriticSpecialist    → Reviews HTML
-                        critique_decision: "ACCEPT" or "REVISE"
-  [If REVISE]         → WebBuilder refines (max iterations configurable)
-  [If ACCEPT]         → EndSpecialist archives
+  ExitInterview       → Evaluates completion
+  [If incomplete]     → Router re-routes for refinement
+  [If complete]       → EndSpecialist archives
 
 OUTPUT: HTML file in artifacts, viewable in browser
 ```
@@ -452,19 +450,10 @@ OUTPUT: HTML file in artifacts, viewable in browser
 flowchart TB
     User([User]) --> Triage[TriageArchitect]
     Triage --> Router[Router]
-    Router --> CL
-
-    subgraph CL[Generate-Critique Loop]
-        direction TB
-        Builder[WebBuilder<br/>Generate HTML]
-        Critic{CriticSpecialist<br/>Review}
-
-        Builder --> Critic
-        Critic -->|REVISE| Builder
-        Critic -->|ACCEPT| Done[Done]
-    end
-
-    CL --> End[EndSpecialist]
+    Router --> Builder[WebBuilder<br/>Generate HTML]
+    Builder --> EI{ExitInterview<br/>Evaluate}
+    EI -->|incomplete| Router
+    EI -->|complete| End[EndSpecialist]
     End --> Response([HTML Artifact])
 
     style CL fill:#FFDAB9
