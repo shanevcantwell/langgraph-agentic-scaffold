@@ -253,7 +253,7 @@ specialists:
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
-    description: "Analyzes, summarizes, extracts, or transforms text and structured data. Handles analytical tasks (summarize, extract key points, analyze structure) and data operations (extract JSON, format/convert data). For conversational questions, use chat_specialist instead."
+    description: "Analyzes, summarizes, extracts, or transforms text and structured data. Handles analytical tasks (summarize, extract key points, analyze structure), data operations (extract JSON, format/convert data), and semantic measurement (calculate drift between texts, compare embeddings, analyze variants). For conversational questions, use chat_specialist instead."
     # ReAct capability for iterative data operations (ADR-CORE-051)
     react:
       enabled: true
