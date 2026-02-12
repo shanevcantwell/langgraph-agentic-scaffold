@@ -37,10 +37,18 @@ class DistillationSubgraph(BaseSubgraph):
             )
 
             # Coordinator routes based on phase and completion status
+            # Issue #161: Include exit_interview — check_task_completion can route
+            # there via the unproductive loop path
+            destinations = {
+                CoreSpecialist.END.value: CoreSpecialist.END.value,
+                CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
+            }
+            if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+                destinations[CoreSpecialist.EXIT_INTERVIEW.value] = CoreSpecialist.EXIT_INTERVIEW.value
             workflow.add_conditional_edges(
                 "distillation_coordinator_specialist",
                 self.orchestrator.check_task_completion,
-                {CoreSpecialist.END.value: CoreSpecialist.END.value, CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value}
+                destinations
             )
 
             logger.info("Graph Edge: Added distillation subgraph with graph-driven iteration")

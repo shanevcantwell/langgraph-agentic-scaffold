@@ -23,10 +23,18 @@ class TieredChatSubgraph(BaseSubgraph):
             logger.info("Graph Edge: Added fan-in edge for tiered chat subgraph (CORE-CHAT-002)")
 
             # Wire synthesizer to check_task_completion (it sets task_is_complete: True)
+            # Issue #161: Include exit_interview — check_task_completion can route
+            # there via the unproductive loop path
+            destinations = {
+                CoreSpecialist.END.value: CoreSpecialist.END.value,
+                CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
+            }
+            if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
+                destinations[CoreSpecialist.EXIT_INTERVIEW.value] = CoreSpecialist.EXIT_INTERVIEW.value
             workflow.add_conditional_edges(
                 "tiered_synthesizer_specialist",
                 self.orchestrator.check_task_completion,
-                {CoreSpecialist.END.value: CoreSpecialist.END.value, CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value}
+                destinations
             )
 
     def get_excluded_specialists(self) -> list[str]:
