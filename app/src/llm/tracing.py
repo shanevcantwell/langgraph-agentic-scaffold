@@ -276,7 +276,7 @@ def build_specialist_turn_trace(
         specialist=specialist_name,
         specialist_type=specialist_type,
         from_source=from_source,
-        system_prompt=system_prompt,
+        system_prompt=system_prompt if isinstance(system_prompt, str) else None,
         assembled_prompt=assembled_prompt,
         context_artifacts=context_artifacts_before,
         response_text=response_text,

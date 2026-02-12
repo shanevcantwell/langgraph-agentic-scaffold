@@ -124,7 +124,9 @@ def mock_adapter_factory() -> MagicMock:
     a generic, mocked LLM adapter.
     """
     mock = MagicMock()
-    mock.create_adapter.return_value = MagicMock(name="mock_llm_adapter")
+    mock_adapter = MagicMock(name="mock_llm_adapter")
+    mock_adapter.system_prompt = ""  # Pydantic SpecialistTurnTrace expects str, not MagicMock
+    mock.create_adapter.return_value = mock_adapter
     return mock
 
 
