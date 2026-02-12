@@ -445,10 +445,24 @@ class ProjectDirector(BaseSpecialist):
             name = tc.get("name", "")
             args = tc.get("args", {})
 
+            # Research tools
             if name == "search":
                 context.add_knowledge(f"Searched for '{args.get('query', '?')}'")
             elif name == "browse":
                 context.add_knowledge(f"Read content from {args.get('url', '?')}")
+            # Filesystem tools (#166)
+            elif name == "list_directory":
+                context.add_knowledge(f"Listed {args.get('path', '?')}")
+            elif name == "read_file":
+                context.add_knowledge(f"Read {args.get('path', '?')}")
+            elif name == "create_directory":
+                context.add_knowledge(f"Created directory {args.get('path', '?')}")
+            elif name == "move_file":
+                context.add_knowledge(
+                    f"Moved {args.get('source', '?')} → {args.get('destination', '?')}"
+                )
+            elif name == "run_command":
+                context.add_knowledge(f"Ran: {args.get('command', '?')}")
 
         context.iteration = len(trace)
 

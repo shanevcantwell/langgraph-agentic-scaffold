@@ -229,3 +229,80 @@ class TestEmergentProjectSubgraphPhase2:
 
         # Should NOT call add_conditional_edges
         mock_workflow.add_conditional_edges.assert_not_called()
+
+
+# =============================================================================
+# Issue #166: knowledge_base for filesystem operations
+# =============================================================================
+
+class TestUpdateContextFromTrace:
+    """
+    _update_context_from_trace should populate knowledge_base for filesystem
+    operations, not just search/browse. Previously knowledge_base was always
+    empty after filesystem tasks.
+    """
+
+    @pytest.fixture
+    def pd_instance(self, mock_specialist_config, mock_llm_adapter):
+        pd = ProjectDirector("project_director", mock_specialist_config)
+        pd.llm_adapter = mock_llm_adapter
+        return pd
+
+    def test_filesystem_operations_populate_knowledge_base(self, pd_instance):
+        """move_file, create_directory, run_command all produce knowledge entries."""
+        context = ProjectContext(project_goal="Sort files")
+        trace = [
+            {"tool_call": {"name": "list_directory", "args": {"path": "/workspace"}}, "success": True},
+            {"tool_call": {"name": "read_file", "args": {"path": "/workspace/1.txt"}}, "success": True},
+            {"tool_call": {"name": "create_directory", "args": {"path": "/workspace/animals"}}, "success": True},
+            {"tool_call": {"name": "move_file", "args": {"source": "1.txt", "destination": "animals/1.txt"}}, "success": True},
+            {"tool_call": {"name": "run_command", "args": {"command": "mv /workspace/2.txt /workspace/animals/"}}, "success": True},
+        ]
+
+        pd_instance._update_context_from_trace(context, trace)
+
+        assert len(context.knowledge_base) == 5
+        assert any("Listed" in k for k in context.knowledge_base)
+        assert any("Read" in k for k in context.knowledge_base)
+        assert any("Created directory" in k for k in context.knowledge_base)
+        assert any("Moved" in k and "animals" in k for k in context.knowledge_base)
+        assert any("Ran:" in k for k in context.knowledge_base)
+
+    def test_failed_operations_not_tracked(self, pd_instance):
+        """Only successful operations should add knowledge entries."""
+        context = ProjectContext(project_goal="Sort files")
+        trace = [
+            {"tool_call": {"name": "move_file", "args": {"source": "1.txt", "destination": "animals/1.txt"}}, "success": True},
+            {"tool_call": {"name": "move_file", "args": {"source": "2.txt", "destination": "plants/2.txt"}}, "success": False},
+        ]
+
+        pd_instance._update_context_from_trace(context, trace)
+
+        assert len(context.knowledge_base) == 1
+        assert "1.txt" in context.knowledge_base[0]
+
+    def test_research_tools_still_tracked(self, pd_instance):
+        """search and browse still produce knowledge entries."""
+        context = ProjectContext(project_goal="Research topic")
+        trace = [
+            {"tool_call": {"name": "search", "args": {"query": "quantum computing"}}, "success": True},
+            {"tool_call": {"name": "browse", "args": {"url": "https://example.com"}}, "success": True},
+        ]
+
+        pd_instance._update_context_from_trace(context, trace)
+
+        assert len(context.knowledge_base) == 2
+        assert any("quantum computing" in k for k in context.knowledge_base)
+        assert any("example.com" in k for k in context.knowledge_base)
+
+    def test_iteration_count_updated(self, pd_instance):
+        """context.iteration should equal trace length."""
+        context = ProjectContext(project_goal="Sort files")
+        trace = [
+            {"tool_call": {"name": "list_directory", "args": {"path": "/workspace"}}, "success": True},
+            {"tool_call": {"name": "read_file", "args": {"path": "/workspace/1.txt"}}, "success": True},
+        ]
+
+        pd_instance._update_context_from_trace(context, trace)
+
+        assert context.iteration == 2
