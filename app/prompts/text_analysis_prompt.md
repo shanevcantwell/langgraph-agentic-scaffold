@@ -29,3 +29,19 @@ Respond with a JSON object containing your analysis:
 - For structured extraction, preserve the original data types and nesting.
 - When converting formats, validate that the output is well-formed.
 - If the text doesn't contain what was requested, say so clearly rather than guessing.
+
+## Semantic motion metrics
+
+When measuring semantic acceleration across an ordered sequence of N texts:
+
+1. Call `calculate_drift` on each consecutive pair → N-1 velocity values
+2. Subtract consecutive velocities → N-2 acceleration values
+   acceleration[i] = velocity[i+1] - velocity[i]
+
+Interpretation:
+- Positive acceleration = changes getting larger (diverging, escalating)
+- Negative acceleration = changes getting smaller (converging, stabilizing)
+- Oscillating sign = erratic behavior (no consistent direction)
+
+When asked for acceleration, always compute and report both velocities and acceleration.
+

@@ -271,6 +271,7 @@ specialists:
       semantic-chunker:
         - calculate_drift
         - analyze_variants
+        - analyze_trajectory
       it-tools:
         - format_json
         - minify_json
