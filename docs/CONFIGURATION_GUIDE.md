@@ -241,33 +241,27 @@ No code changes needed beyond config.yaml updates.
 
 ## 6.0 ReAct Loop Configuration
 
-Specialists using the ReAct pattern (like `project_director`) iteratively call tools until they synthesize a final response. The loop includes safeguards against infinite loops and stagnation.
+ProjectDirector (and any future react_step consumers) iteratively call tools via prompt-prix MCP until the task completes or a safeguard triggers. The loop is owned by each specialist directly — there is no shared mixin.
 
 ### 6.1 Max Iterations
 
-The global default for ReAct iterations is set in `config.yaml`:
+Each specialist reads `max_iterations` from its own config block in `config.yaml`, falling back to a hardcoded default if absent.
 
 ```yaml
 # config.yaml
-react:
-  defaults:
-    max_iterations: 50  # Global default for all ReAct specialists
-```
-
-**Design rationale:** Stagnation detection (Section 6.2) is the primary safety valve, not arbitrary iteration limits. Low limits cause artificial boundaries that force complex cross-invocation continuity reconstruction. The 50-iteration default allows complex tasks to complete naturally while stagnation detection catches actual loops.
-
-Per-specialist overrides are possible but discouraged:
-
-```yaml
-# config.yaml - avoid unless truly necessary
 specialists:
-  some_specialist:
-    react:
-      enabled: true
-      max_iterations: 25  # Overrides global default
+  project_director:
+    type: "llm"
+    max_iterations: 20  # Optional — overrides the code default (15)
+    # ...
 ```
 
-If the limit is reached, the specialist produces a partial synthesis with whatever progress was made.
+**Code defaults** (in `project_director.py`):
+```python
+DEFAULT_MAX_ITERATIONS = 15  # Used when config omits max_iterations
+```
+
+**Design rationale:** Stagnation detection (Section 6.2) is the primary safety valve, not arbitrary iteration limits. Low limits cause artificial boundaries that force complex cross-invocation continuity reconstruction. If the limit is reached, the specialist produces a partial synthesis with whatever progress was made and sets `max_iterations_exceeded: True` in artifacts.
 
 ### 6.2 Cycle Detection (Stagnation)
 
@@ -275,7 +269,7 @@ The ReAct loop detects when the LLM is stuck making the same tool calls repeated
 - **Identical calls**: `list_directory(X)` → `list_directory(X)` → `list_directory(X)`
 - **Cyclic patterns**: `read(A)` → `move(A)` → `read(A)` → `move(A)` (period 2, repeated)
 
-**Configuration** (code-level, in `react_mixin.py`):
+**Configuration** (code-level class constant in `project_director.py`):
 ```python
 CYCLE_MIN_REPETITIONS = 3  # Pattern must repeat this many times to trigger stagnation
 ```
@@ -286,7 +280,32 @@ CYCLE_MIN_REPETITIONS = 3  # Pattern must repeat this many times to trigger stag
 
 **When stagnation is detected**, the specialist:
 1. Stops the loop immediately
-2. Returns a message explaining what happened
+2. Returns a message explaining what happened (`research_status: "stagnated"`)
 3. Includes artifacts showing the tool history and the repeating pattern
 
-This is particularly relevant for file operations like "sort files by content" where the natural pattern is `read → move → read → move` for each file.
+### 6.3 Trace Persistence
+
+All tool calls are recorded in a single `resume_trace` artifact — a list of dicts with `{iteration, tool_call, observation, success}`. On re-invocation (e.g., after EI returns incomplete), Facilitator passes the existing `resume_trace` back so PD can see its prior work and continue from where it left off.
+
+### 6.4 Tool Permissions
+
+PD's available tools are declared in `config.yaml` under `tools:` — each entry maps an MCP service to the specific functions PD may call:
+
+```yaml
+specialists:
+  project_director:
+    tools:
+      prompt-prix:
+        - react_step
+      filesystem:
+        - list_directory
+        - read_file
+        - create_directory
+        - move_file
+      terminal:
+        - run_command
+        - get_cwd
+        - get_allowed_commands
+```
+
+The model chooses which tools to call based on the tool schemas injected into the react_step prompt. Adding or removing tools here changes what PD can do without code changes.

@@ -435,7 +435,7 @@ Evaluate whether:
 3. If specialists were recommended, have the appropriate ones executed?
 4. Are there meaningful artifacts or responses that answer the request?
 
-**IMPORTANT:** Do NOT trust claims of completed work in messages. If the exit plan specifies file operations, you should use your `list_directory` tool to VERIFY the filesystem state matches the success criteria.
+**IMPORTANT:** Do NOT trust claims of completed work in messages alone. For file operations, check the artifacts for concrete evidence — look for `resume_trace` entries showing successful tool calls (move_file, create_directory, etc.) with observations confirming the expected filesystem state.
 
 Be CONSERVATIVE: If in doubt, mark as INCOMPLETE to give the system another chance.
 The only cost of being conservative is one more routing cycle.

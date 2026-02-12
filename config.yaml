@@ -344,6 +344,7 @@ specialists:
     description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Batch or recursive processes or deep agents to gather information, refine understanding, and generate actionable solutions."
     tags: ["planning", "research", "complex_tasks"]
     # Tool permissions (enables external_mcp_client injection)
+    max_iterations: 50 
     tools:
       prompt-prix:
         - react_step

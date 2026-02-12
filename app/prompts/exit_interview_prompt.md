@@ -86,6 +86,8 @@ Default to `project_director` for file operations or when uncertain.
 
 ## Verification Instructions
 
-If the exit plan specifies file operations (create, move, delete files or directories), you MUST use your `list_directory` tool to verify the filesystem state before marking as COMPLETE.
-
-Example: If success criteria says "files should be in categories/animals/", call `list_directory("categories/animals")` to verify the files actually exist there.
+For file operation tasks, do NOT trust claims of completed work in messages alone. Instead, check the **Artifacts Produced** section for concrete evidence:
+- Look for `resume_trace` entries showing successful `move_file`, `create_directory`, or `write_file` tool calls
+- Verify that tool observations confirm the expected filesystem state (e.g., "moved X to Y", directory listings showing files in place)
+- If artifacts show the tool calls succeeded, mark as COMPLETE
+- If artifacts are missing or show errors/incomplete operations, mark as INCOMPLETE

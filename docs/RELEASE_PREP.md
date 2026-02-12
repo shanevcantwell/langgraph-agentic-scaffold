@@ -144,6 +144,15 @@ gh release create v0.1.0 --title "v0.1.0 - Bedrock Complete" --notes-file RELEAS
 
 ---
 
+## Known Bugs Fixed (Post-Bedrock)
+
+| Issue | Description | Fix |
+|-------|-------------|-----|
+| #163 | Trace duplication: `research_trace_N` accumulated duplicates across PD invocations | Single `resume_trace` artifact replaces numbered traces |
+| #164 | EI prompt/schema coherence: prompt told model to call `list_directory` tool but EI has no tool-calling wired. Weaker models (gpt-oss-20b) echoed tool-call args instead of evaluation JSON, causing infinite PD→EI loops. | Replaced tool-calling instructions with artifact-based verification ("check resume_trace for successful tool results") |
+
+---
+
 ## Decision Log
 
 | Decision | Rationale |
