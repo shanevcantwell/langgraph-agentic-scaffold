@@ -1,4 +1,5 @@
 # app/tests/unit/test_text_analysis_specialist.py
+import json
 import pytest
 from unittest.mock import MagicMock, patch, PropertyMock
 from langchain_core.messages import AIMessage, HumanMessage
@@ -6,6 +7,15 @@ from app.src.specialists.text_analysis_specialist import TextAnalysisSpecialist
 from app.src.utils.errors import LLMInvocationError
 from app.src.utils.prompt_loader import load_prompt # Import load_prompt directly
 from app.src.specialists.schemas import TextAnalysis
+
+
+def _fake_call_tool_result(data: dict) -> MagicMock:
+    """Wrap a dict as a fake MCP CallToolResult for testing the real parsing path."""
+    text_content = MagicMock()
+    text_content.text = json.dumps(data)
+    result = MagicMock()
+    result.content = [text_content]
+    return result
 
 @pytest.fixture
 def text_analysis_specialist(initialized_specialist_factory):
@@ -481,3 +491,111 @@ def test_openai_tool_schema_format(text_analysis_specialist):
     drift_schema = next(s for s in schemas if s["function"]["name"] == "calculate_drift")
     assert "text_a" in drift_schema["function"]["parameters"]["properties"]
     assert "text_b" in drift_schema["function"]["parameters"]["properties"]
+
+
+# ==============================================================================
+# CallToolResult Parsing Tests (production MCP path)
+# ==============================================================================
+
+def test_parse_react_step_result_from_call_tool_result(react_ta):
+    """
+    Test that _parse_react_step_result correctly handles real MCP CallToolResult objects.
+
+    In production, sync_call_external_mcp returns a CallToolResult with
+    .content[0].text containing JSON. This test ensures the extraction + parsing
+    pipeline works end-to-end.
+
+    Bug fixed: 'CallToolResult' object has no attribute 'get' — TA was treating
+    the raw MCP result as a dict instead of extracting text and parsing JSON.
+    """
+    data = {
+        "completed": True,
+        "final_response": "Drift is 0.28",
+        "pending_tool_calls": [],
+        "call_counter": 0,
+        "latency_ms": 150.0,
+    }
+    fake_result = _fake_call_tool_result(data)
+    parsed = react_ta._parse_react_step_result(fake_result)
+
+    assert isinstance(parsed, dict)
+    assert parsed["completed"] is True
+    assert parsed["final_response"] == "Drift is 0.28"
+
+
+def test_parse_react_step_result_dict_passthrough(react_ta):
+    """Test that dicts pass through _parse_react_step_result unchanged."""
+    data = {"completed": True, "final_response": "Done"}
+    assert react_ta._parse_react_step_result(data) == data
+
+
+def test_parse_react_step_result_permission_denied(react_ta):
+    """Test that string (permission denied) passes through as-is."""
+    error = "Permission Denied: Service 'prompt-prix' is not available"
+    assert react_ta._parse_react_step_result(error) == error
+
+
+def test_react_path_with_call_tool_result(react_ta):
+    """
+    End-to-end test: react_step returns a CallToolResult (like production),
+    TA parses it and produces a proper message + artifacts.
+
+    This is the regression test for the 'CallToolResult has no attribute get' crash.
+    """
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp") as mock_mcp:
+        mock_mcp.return_value = _fake_call_tool_result({
+            "completed": True,
+            "final_response": "The semantic drift between the strings is 0.31.",
+            "new_iterations": [],
+            "pending_tool_calls": [],
+            "call_counter": 0,
+            "latency_ms": 250.0,
+        })
+
+        initial_state = {
+            "messages": [HumanMessage(content="Calculate drift between A and B.")],
+            "artifacts": {"gathered_context": "Facilitator context"},
+        }
+
+        result = react_ta._execute_logic(initial_state)
+
+    # Assert — proper message and artifacts produced
+    assert isinstance(result["messages"][0], AIMessage)
+    assert "0.31" in result["messages"][0].content
+    results = result["artifacts"]["text_analysis_results"]
+    assert results[0]["status"] == "complete"
+    assert "gathered_context" in result["artifacts"]
+
+
+def test_react_error_produces_message_and_artifacts(react_ta):
+    """
+    Test that errors in the react loop produce a message and artifacts,
+    NOT just a silent scratchpad entry.
+
+    Bug fixed: when an exception occurred after the MCP call (e.g., parsing
+    the result), it propagated to SafeExecutor which wrote to scratchpad only.
+    The widened try/except now catches all loop errors and produces
+    _build_error_result with a proper message and artifacts.
+    """
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp") as mock_mcp:
+        # Return something that will cause an error during processing
+        mock_mcp.return_value = None  # extract_text_from_mcp_result(None) → ""
+
+        initial_state = {
+            "messages": [HumanMessage(content="Analyze something.")],
+            "artifacts": {"gathered_context": "Context"},
+        }
+
+        result = react_ta._execute_logic(initial_state)
+
+    # Assert — error produces a MESSAGE (visible in conversation)
+    assert "messages" in result
+    assert isinstance(result["messages"][0], AIMessage)
+    # Assert — error produces ARTIFACTS (visible in archive)
+    assert "artifacts" in result
+    results = result["artifacts"]["text_analysis_results"]
+    assert results[0]["status"] == "error"

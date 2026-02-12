@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 72 | 705 |
+| Unit | 72 | 717 |
 | Integration | 28 | 193 |
 | Other | 7 | 91 |
-| **Total** | **107** | **989** |
+| **Total** | **107** | **1001** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -2173,14 +2173,38 @@
   - *Tests that an LLMInvocationError is propagated correctly.*
 - **`test_text_analysis_handles_malformed_llm_response`**
   - *Tests that the specialist raises an error if the LLM response is not valid JSON.*
-- **`test_text_analysis_sets_task_is_complete`**
-  - *Test that successful analysis sets task_is_complete at root level.*
+- **`test_text_analysis_does_not_claim_terminal_authority`**
+  - *Test that TA does NOT set task_is_complete.*
 - **`test_text_analysis_no_task_complete_on_missing_text`**
   - *Test that task_is_complete is NOT set when text is missing.*
 - **`test_text_analysis_treats_content_as_context`**
   - *Test that the specialist treats uploaded content as context, not target.*
 - **`test_text_analysis_preserves_user_message`**
   - *Test that the user's original message is preserved in the context.*
+- **`test_react_path_completion`**
+  - *Test that the react_step path handles a simple completion (no tool calls).*
+- **`test_react_path_tool_dispatch`**
+  - *Test that pending tool calls from react_step are dispatched to real MCP services.*
+- **`test_react_path_max_iterations`**
+  - *Test that the react_step path respects max_iterations.*
+- **`test_react_path_mcp_error`**
+  - *Test graceful handling when react_step MCP call fails.*
+- **`test_react_path_unknown_tool`**
+  - *Test that unknown tool names in pending calls are handled gracefully.*
+- **`test_react_capability_detection`**
+  - *Test that _has_react_capability correctly detects prompt-prix connectivity.*
+- **`test_openai_tool_schema_format`**
+  - *Test that _build_openai_tool_schemas produces valid OpenAI function calling format.*
+- **`test_parse_react_step_result_from_call_tool_result`**
+  - *Test that _parse_react_step_result correctly handles real MCP CallToolResult objects.*
+- **`test_parse_react_step_result_dict_passthrough`**
+  - *Test that dicts pass through _parse_react_step_result unchanged.*
+- **`test_parse_react_step_result_permission_denied`**
+  - *Test that string (permission denied) passes through as-is.*
+- **`test_react_path_with_call_tool_result`**
+  - *End-to-end test: react_step returns a CallToolResult (like production),*
+- **`test_react_error_produces_message_and_artifacts`**
+  - *Test that errors in the react loop produce a message and artifacts,*
 
 ## `app/tests/unit/test_thought_stream_events.py`
 

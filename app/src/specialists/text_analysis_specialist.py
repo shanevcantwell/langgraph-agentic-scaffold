@@ -8,6 +8,7 @@ Two execution modes:
   operations (read files, format JSON, convert data, measure drift).
   Activated when external_mcp_client can reach prompt-prix service.
 """
+import json
 import logging
 from typing import Dict, Any, List, Optional
 
@@ -219,7 +220,7 @@ class TextAnalysisSpecialist(BaseSpecialist):
 
         for iteration in range(max_iterations):
             try:
-                result = sync_call_external_mcp(
+                raw_result = sync_call_external_mcp(
                     self.external_mcp_client,
                     "prompt-prix",
                     "react_step",
@@ -234,50 +235,54 @@ class TextAnalysisSpecialist(BaseSpecialist):
                     },
                     timeout=600.0,
                 )
+
+                # Parse MCP CallToolResult → dict
+                result = self._parse_react_step_result(raw_result)
+
+                # Permission denied or parse error returns a string
+                if isinstance(result, str):
+                    logger.error(f"TextAnalysisSpecialist react_step returned error: {result}")
+                    return self._build_error_result(state, result, trace)
+
+                call_counter = result.get("call_counter", call_counter)
+
+                if result.get("completed"):
+                    final_response = result.get("final_response", "Analysis complete.")
+                    logger.info(
+                        f"TextAnalysisSpecialist completed after {iteration + 1} iterations, "
+                        f"{len(trace)} tool calls"
+                    )
+                    return self._build_success_result(state, final_response, trace)
+
+                # Dispatch pending tool calls to real MCP services
+                pending = result.get("pending_tool_calls", [])
+                thought = result.get("thought")
+
+                if not pending:
+                    logger.warning("react_step returned incomplete but no pending tool calls")
+                    return self._build_error_result(
+                        state, "react_step returned no tool calls and no completion", trace
+                    )
+
+                for tc in pending:
+                    observation = self._dispatch_tool_call(tc, tools)
+                    trace.append({
+                        "iteration": iteration,
+                        "tool_call": {
+                            "id": tc.get("id", f"call_{call_counter}"),
+                            "name": tc.get("name", "unknown"),
+                            "args": tc.get("args", {}),
+                        },
+                        "observation": observation,
+                        "success": not observation.startswith("Error:"),
+                        "thought": thought,
+                    })
+
             except Exception as e:
-                logger.error(f"TextAnalysisSpecialist react_step MCP call failed: {e}")
+                logger.error(f"TextAnalysisSpecialist react loop error at iteration {iteration}: {e}")
                 return self._build_error_result(
-                    state, f"react_step MCP call failed: {e}", trace
+                    state, f"react loop error at iteration {iteration}: {e}", trace
                 )
-
-            # Handle MCP result — may be string (error) or dict
-            if isinstance(result, str):
-                logger.error(f"TextAnalysisSpecialist react_step returned error: {result}")
-                return self._build_error_result(state, result, trace)
-
-            call_counter = result.get("call_counter", call_counter)
-
-            if result.get("completed"):
-                final_response = result.get("final_response", "Analysis complete.")
-                logger.info(
-                    f"TextAnalysisSpecialist completed after {iteration + 1} iterations, "
-                    f"{len(trace)} tool calls"
-                )
-                return self._build_success_result(state, final_response, trace)
-
-            # Dispatch pending tool calls to real MCP services
-            pending = result.get("pending_tool_calls", [])
-            thought = result.get("thought")
-
-            if not pending:
-                logger.warning("react_step returned incomplete but no pending tool calls")
-                return self._build_error_result(
-                    state, "react_step returned no tool calls and no completion", trace
-                )
-
-            for tc in pending:
-                observation = self._dispatch_tool_call(tc, tools)
-                trace.append({
-                    "iteration": iteration,
-                    "tool_call": {
-                        "id": tc.get("id", f"call_{call_counter}"),
-                        "name": tc.get("name", "unknown"),
-                        "args": tc.get("args", {}),
-                    },
-                    "observation": observation,
-                    "success": not observation.startswith("Error:"),
-                    "thought": thought,
-                })
 
         # Max iterations exceeded
         partial_msg = (
@@ -286,6 +291,40 @@ class TextAnalysisSpecialist(BaseSpecialist):
         )
         logger.warning(f"TextAnalysisSpecialist hit max iterations ({max_iterations})")
         return self._build_partial_result(state, partial_msg, trace, max_iterations)
+
+    def _parse_react_step_result(self, raw_result: Any) -> Any:
+        """Parse MCP CallToolResult from react_step into a dict.
+
+        sync_call_external_mcp returns either:
+        - A string (permission denied from PermissionedMcpClient)
+        - A dict (direct return in tests or future bridge changes)
+        - A CallToolResult object (MCP SDK type with .content list)
+
+        react_step returns JSON in the text content. We extract and parse it.
+        """
+        # Already a dict (direct return or test mock) → pass through
+        if isinstance(raw_result, dict):
+            return raw_result
+
+        # Permission denied → already a string
+        if isinstance(raw_result, str):
+            return raw_result
+
+        # Extract text from CallToolResult
+        text = extract_text_from_mcp_result(raw_result)
+        if not text:
+            return "react_step returned empty response"
+
+        # Parse JSON → dict
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+            return f"react_step returned non-dict JSON: {type(parsed).__name__}"
+        except json.JSONDecodeError as e:
+            # If it's not JSON, treat as plain text completion
+            logger.warning(f"react_step returned non-JSON text: {e}")
+            return {"completed": True, "final_response": text}
 
     def _dispatch_tool_call(
         self, pending: Dict[str, Any], tools: Dict[str, _ToolDef]
