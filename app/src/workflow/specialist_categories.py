@@ -19,7 +19,7 @@ class SpecialistCategories:
 
     Categories:
     - MCP_ONLY: Not added as graph nodes, accessed only via MCP
-    - CORE_INFRASTRUCTURE: Router, archiver, end, critic - special graph roles
+    - CORE_INFRASTRUCTURE: Router, archiver, end - special graph roles
     - SERVICE_LAYER: MCP-only internal services (not user-facing)
     """
 
@@ -32,11 +32,11 @@ class SpecialistCategories:
 
     # Core infrastructure: Special graph roles
     # ADR-ROADMAP-001: EXIT_INTERVIEW added - has special edge wiring (after_exit_interview)
+    # Issue #161: CRITIC removed — critic subgraph deleted, web_builder is standard spoke
     CORE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
-        CoreSpecialist.CRITIC.value,
         CoreSpecialist.EXIT_INTERVIEW.value,
     ])
 
@@ -51,7 +51,6 @@ class SpecialistCategories:
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
-        CoreSpecialist.CRITIC.value,
         CoreSpecialist.EXIT_INTERVIEW.value,
     ])
 
@@ -121,7 +120,7 @@ class SpecialistCategories:
         ADR-CORE-053: Returns specialists that should NOT appear in triage's menu.
 
         Combines:
-        - TRIAGE_INFRASTRUCTURE (router, archiver, end, critic)
+        - TRIAGE_INFRASTRUCTURE (router, archiver, end)
         - Subgraph-managed specialists (from subgraph.get_triage_excluded_specialists())
         - Config-driven exclusions (from specialist.excluded_from lists)
         - Current triage itself (cannot recommend itself)

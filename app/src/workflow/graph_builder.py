@@ -12,14 +12,12 @@ from ..graph.state import GraphState
 from ..enums import CoreSpecialist
 from ..llm.factory import AdapterFactory
 from ..utils.errors import SpecialistLoadError, WorkflowError
-from ..strategies.critique.base import BaseCritiqueStrategy
 from .graph_orchestrator import GraphOrchestrator
 from .executors.node_executor import NodeExecutor
 from .specialist_categories import SpecialistCategories
 from .subgraphs.tiered_chat import TieredChatSubgraph
 from .subgraphs.distillation import DistillationSubgraph
 from .subgraphs.context_engineering import ContextEngineeringSubgraph
-from .subgraphs.critic_loop import CriticLoopSubgraph
 from .subgraphs.emergent_project import EmergentProjectSubgraph
 from ..specialists.tribe_conductor import TribeConductor
 from .react_wrapper import ReactEnabledSpecialist
@@ -80,7 +78,6 @@ class GraphBuilder:
             TieredChatSubgraph(self.specialists, self.orchestrator, self.config),
             DistillationSubgraph(self.specialists, self.orchestrator, self.config),
             ContextEngineeringSubgraph(self.specialists, self.orchestrator, self.config),
-            CriticLoopSubgraph(self.specialists, self.orchestrator, self.config),
             EmergentProjectSubgraph(self.specialists, self.orchestrator, self.config)
         ]
 
@@ -277,31 +274,7 @@ class GraphBuilder:
             try:
                 SpecialistClass = get_specialist_class(name, config)
                 
-                if name == "critic_specialist":
-                    from ..strategies.critique.llm_strategy import LLMCritiqueStrategy
-                    strategy_config = config.get("critique_strategy")
-                    if not strategy_config:
-                        raise ValueError("CriticSpecialist config is missing required 'critique_strategy' section.")
-                    
-                    strategy_type = strategy_config.get("type")
-                    if strategy_type == "llm":
-                        logger.debug("CriticSpecialist: Found LLM critique strategy. Configuring...")
-                        strategy_llm_binding = config.get("llm_config")
-                        strategy_prompt_file = strategy_config.get("prompt_file")
-                        if not (strategy_llm_binding and strategy_prompt_file):
-                            raise ValueError("LLM critique_strategy requires 'llm_config' and 'prompt_file'.")
-                        
-                        logger.debug(f"CriticSpecialist: Creating internal adapter for strategy using specialist name '{name}'.")
-                        strategy_llm_adapter = self.adapter_factory.create_adapter(name, "") # Pass specialist name
-                        if not strategy_llm_adapter: # pragma: no cover
-                            logger.error(f"CRITICAL: AdapterFactory returned None for CriticSpecialist's internal strategy adapter.")
-                        critique_strategy_instance = LLMCritiqueStrategy(llm_adapter=strategy_llm_adapter, prompt_file=strategy_prompt_file)
-                    else:
-                        raise NotImplementedError(f"Critique strategy type '{strategy_type}' is not supported.")
-
-                    instance = SpecialistClass(specialist_name=name, specialist_config=config, critique_strategy=critique_strategy_instance)
-                
-                elif name == "web_specialist":
+                if name == "web_specialist":
                     # TASK: Inject Search Strategy
                     from ..strategies.search.duckduckgo_strategy import DuckDuckGoSearchStrategy
                     # TODO: Read from config to allow switching strategies (e.g. Tavily, Google)

@@ -49,7 +49,6 @@ class Artifacts(BaseModel):
     final_user_response_md: Optional[str] = None
     archive_report_md: Optional[str] = None
     system_plan: Optional[Dict[str, Any]] = None
-    critique_md: Optional[str] = None
     html_document_html: Optional[str] = None
     # text_to_process REMOVED: Already handled via artifacts dict (runner.py puts file content in artifacts["text_to_process"])
     text_analysis_report_md: Optional[str] = None
@@ -70,10 +69,8 @@ class Scratchpad(BaseModel):
     model_config = ConfigDict(extra="allow", arbitrary_types_allowed=True)
 
     user_response_snippets: List[str] = []
-    critique_decision: Optional[str] = None
     extraction_schema: Optional[Any] = None
     target_artifact_name: Optional[str] = None
-    web_builder_iteration: Optional[int] = None
     termination_reason: Optional[str] = None
 
     # Loop recovery state (ADR-CORE-016: Menu Filter Pattern - Tier 1)

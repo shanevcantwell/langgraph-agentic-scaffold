@@ -5,7 +5,6 @@ from ._data import ExtractedData, Sentiment, CodeExecutionParams
 from ._file_ops import CreateDirectoryParams, WriteFileParams, CreateZipFromDirectoryParams
 from ._orchestration import (
     SystemPlan,
-    Critique,
     TriageRecommendations,
 )
 from ._web import WebContent
@@ -23,7 +22,7 @@ __all__ = [
     "SpecialistOutput", "StatusEnum", "SuccessReport",
     "ExtractedData", "Sentiment",
     "CreateDirectoryParams", "WriteFileParams", "CreateZipFromDirectoryParams",
-    "SystemPlan", "Critique", "TriageRecommendations", "CodeExecutionParams",
+    "SystemPlan", "TriageRecommendations", "CodeExecutionParams",
     "WebContent",
     "TextAnalysis",
     "SpecialistResult",

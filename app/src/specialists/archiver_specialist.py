@@ -97,7 +97,7 @@ class ArchiverSpecialist(BaseSpecialist):
 
         # Include key string artifacts that downstream consumers (tests, UI) need access to
         artifacts = state.get("artifacts", {})
-        key_artifacts = ["html_document.html", "critique.md", "alpha_response.md", "bravo_response.md"]
+        key_artifacts = ["html_document.html", "alpha_response.md", "bravo_response.md"]
         for key in key_artifacts:
             if key in artifacts and isinstance(artifacts[key], str):
                 safe_artifacts[key] = artifacts[key]

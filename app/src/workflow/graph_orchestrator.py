@@ -100,62 +100,6 @@ class GraphOrchestrator:
         logger.warning(f"classify_interrupt: PATHOLOGICAL ({reason}) → Router (no IE, no EI)")
         return CoreSpecialist.ROUTER.value
 
-    def after_critique_decider(self, state: GraphState) -> str:
-        # Check for stabilization action first
-        stabilization_target = self._check_stabilization_action(state)
-        if stabilization_target:
-            return stabilization_target
-
-        decision = state.get("scratchpad", {}).get("critique_decision")
-        logger.info(f"--- GraphOrchestrator: After Critique. Decision: {decision} ---")
-        critic_config = self.config.get("specialists", {}).get(CoreSpecialist.CRITIC.value, {})
-        revision_target = critic_config.get("revision_target", CoreSpecialist.ROUTER.value)
-
-        if decision == "REVISE":
-            logger.info(f"Routing to configured revision target: {revision_target}")
-            return revision_target
-        elif decision == "ACCEPT":
-            return self.check_task_completion(state)
-        else:
-            return CoreSpecialist.ROUTER.value
-
-    def after_web_builder(self, state: GraphState) -> str:
-        """
-        Conditional edge after web_builder (ADR-CORE-012 subgraph).
-        Only route to critic if web_builder succeeded.
-        If blocked by safe_executor, return to router for dependency resolution.
-
-        Note: web_builder is excluded from hub-and-spoke routing to prevent
-        LangGraph from adding a parallel classify_interrupt branch (see
-        CriticLoopSubgraph.get_excluded_specialists). This function handles
-        all outgoing routing for web_builder.
-        """
-        # Check for stabilization action first
-        stabilization_target = self._check_stabilization_action(state)
-        if stabilization_target:
-            return stabilization_target
-
-        # Immediate termination on user abort
-        if state.get("scratchpad", {}).get("user_abort"):
-            logger.info("after_web_builder: TERMINAL (user_abort) → End")
-            return CoreSpecialist.END.value
-
-        # Check if web_builder produced html_document.html FIRST (success case)
-        # This must come before the recommended_specialists check because
-        # web_builder sets recommended_specialists: ["critic_specialist"] on SUCCESS
-        if state.get("artifacts", {}).get("html_document.html"):
-            logger.info("after_web_builder: html_document.html produced - routing to critic for review")
-            return CoreSpecialist.CRITIC.value
-
-        # Check if web_builder was blocked (safe_executor set recommended_specialists without producing HTML)
-        if state.get("scratchpad", {}).get("recommended_specialists"):
-            logger.info("after_web_builder: web_builder blocked (no HTML) - returning to router for dependency resolution")
-            return CoreSpecialist.ROUTER.value
-
-        # Fallback to router if no artifact produced
-        logger.warning("after_web_builder: web_builder did not produce artifact - returning to router")
-        return CoreSpecialist.ROUTER.value
-
     def check_task_completion(self, state: GraphState) -> str:
         if state.get("task_is_complete"):
             # ADR-ROADMAP-001: Gate task_is_complete through exit_interview

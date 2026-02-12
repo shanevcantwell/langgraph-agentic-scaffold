@@ -14,17 +14,15 @@ logger = logging.getLogger(__name__)
 class WebBuilder(BaseSpecialist):
     """
     A specialist that generates or refines a self-contained HTML document based
-    on a system_plan or a critique.
+    on a system_plan. Standard hub-and-spoke specialist — completion is evaluated
+    by Exit Interview via classify_interrupt.
     """
     def __init__(self, specialist_name: str, specialist_config: Dict[str, Any]):
         super().__init__(specialist_name, specialist_config)
         logger.info(f"---INITIALIZED {self.specialist_name}---")
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        # The specialist's logic is now stateless. It simply acts on the current
-        # message history. If a critique was added by the CriticSpecialist, it will
-        # be in the history, naturally guiding the LLM to refine the HTML.
-        logger.info("Executing WebBuilder logic to generate/refine HTML.")
+        logger.info("Executing WebBuilder logic to generate HTML.")
 
         artifacts = state.get("artifacts", {})
 
@@ -77,23 +75,19 @@ class WebBuilder(BaseSpecialist):
         ai_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content="Completed HTML generation/refinement. The document is now ready for critique.",
+            content="HTML generation complete.",
         )
         
-        # MODIFICATION: The specialist no longer signals 'task_is_complete'.
-        # It simply builds the artifact and recommends the critic. The critic's
-        # 'ACCEPT' decision is the new signal for task completion.
         output_artifacts = {"html_document.html": web_content.html_document}
 
-        # Persist the plan if we created it via MCP (so critic can reference it)
+        # Persist the plan if we created it via MCP
         if created_plan and system_plan:
             output_artifacts["system_plan"] = system_plan
 
         updated_state = {
             "messages": [ai_message],
             "artifacts": output_artifacts,
-            "scratchpad": {"recommended_specialists": ["critic_specialist"]},  # Task 2.7: moved to scratchpad
-            # NOTE: routing_history is tracked centrally by GraphOrchestrator.safe_executor
+            "scratchpad": {},
         }
 
         return updated_state

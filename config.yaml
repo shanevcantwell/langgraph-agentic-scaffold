@@ -169,24 +169,6 @@ specialists:
     description: "Creates plans and designs implementation strategies. Use when user asks to 'plan', 'design', or 'architect' something. Produces a 'system_plan' artifact."
     tags: ["planning"]
 
-  critic_specialist:
-    type: "llm"
-    prompt_file: "critic_prompt.md"
-    description: "Analyzes a UI artifact and provides a critique for improvement. It is a key part of the refinement loop."
-    # ADR-CORE-012: revision_target defines where REVISE decisions route in the generate-critique-refine subgraph
-    # CRITICAL: Must match the specialist that generates the artifact being critiqued (web_builder)
-    # Setting this to "router_specialist" breaks the subgraph and creates unproductive loops
-    revision_target: "web_builder"
-    requires_artifacts: ["html_document.html"]
-    artifact_providers:
-      html_document.html: "web_builder"
-    critique_strategy:
-      type: "llm"
-      prompt_file: "critic_prompt.md"
-      # ADR-CORE-053: Internal execution engine - not user-routable
-    excluded_from:
-      - triage_architect
-
   # --- Core Capabilities ---
   web_builder:
     type: "llm"

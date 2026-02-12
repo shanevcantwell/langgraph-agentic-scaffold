@@ -385,7 +385,6 @@ def get_graph_topology():
         "navigator_browser_specialist": "browser",
         # Builders
         "web_builder": "builders",
-        "critic_specialist": "builders",
         # Distillation (internal subgraph)
         "distillation_coordinator_specialist": "distillation",
         "distillation_prompt_expander_specialist": "distillation",
