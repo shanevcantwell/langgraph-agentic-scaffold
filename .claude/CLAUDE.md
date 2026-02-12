@@ -191,6 +191,15 @@ If parallel specialists produce suspiciously similar outputs:
 2. Include the updated summary in the same commit as test file changes
 3. This ensures documentation stays in sync with actual test coverage
 
+### Commit-and-File Workflow
+**Commit frequently. File issues for anything deferred.**
+
+- Commit working changes as soon as they're coherent — don't hold commits waiting for "verification" or "the next step"
+- A commit that establishes a pattern or fixes a bug is valuable even if related work remains
+- When a discussion surfaces a problem that isn't being fixed right now, file a GitHub Issue immediately
+- Issues are cheap; lost context is expensive. If it came up in conversation, capture it before moving on
+- Prefer the "right" fix over the "fast" fix — unless actively driving a release or code promotion
+
 ---
 
 ## Git Operations Safety
