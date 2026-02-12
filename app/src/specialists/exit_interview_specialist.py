@@ -128,9 +128,8 @@ Example verification steps:
         elif exit_plan:
             logger.info(f"ExitInterviewSpecialist: Using existing exit_plan for verification")
 
-        # Build artifact summary (excluding internal/large artifacts)
-        artifact_keys = [k for k in artifacts.keys()
-                        if not k.startswith("_") and k not in ("gathered_context", "context_plan")]
+        # Build artifact summary with value previews (#155)
+        artifact_summary = self._build_artifact_summary(artifacts)
 
         # Get recent messages (last 5) for context
         recent_messages = messages[-5:] if len(messages) > 5 else messages
@@ -138,7 +137,7 @@ Example verification steps:
 
         logger.info(
             f"ExitInterviewSpecialist evaluating completion: "
-            f"artifacts={artifact_keys}, routing_history={routing_history[-3:]}"
+            f"artifact_count={len(artifact_summary.splitlines())}, routing_history={routing_history[-3:]}"
         )
 
         # Evaluate completion using LLM
@@ -147,7 +146,7 @@ Example verification steps:
             exit_plan=exit_plan,
             recommended_specialists=recommended_specialists,
             routing_history=routing_history,
-            artifact_keys=artifact_keys,
+            artifact_summary=artifact_summary,
             recent_summary=recent_summary
         )
 
@@ -215,7 +214,7 @@ Example verification steps:
         exit_plan: dict,
         recommended_specialists: list,
         routing_history: list,
-        artifact_keys: list,
+        artifact_summary: str,
         recent_summary: str
     ) -> CompletionEvaluation:
         """
@@ -253,7 +252,7 @@ Example verification steps:
             exit_plan=exit_plan_summary,
             recommended_specialists=", ".join(recommended_specialists) if recommended_specialists else "[No specific recommendations]",
             routing_history=", ".join(routing_history[-10:]) if routing_history else "[No routing history]",
-            artifact_keys=", ".join(artifact_keys) if artifact_keys else "[No artifacts produced]",
+            artifact_summary=artifact_summary or "[No artifacts produced]",
             recent_summary=recent_summary or "[No recent activity]"
         )
 
@@ -310,6 +309,65 @@ Example verification steps:
             summaries.append(f"[{msg_type}]: {content}")
         return "\n".join(summaries)
 
+    def _build_artifact_summary(self, artifacts: dict, max_preview: int = 300) -> str:
+        """
+        Build artifact summary with value previews for completion evaluation (#155).
+
+        Instead of just listing key names, includes truncated previews so EI can
+        distinguish a successful analysis from an empty/error result.
+
+        Excludes internal artifacts (prefixed with _) and large context artifacts
+        (gathered_context, context_plan) that are already represented elsewhere.
+        """
+        import json as _json
+
+        excluded = {"gathered_context", "context_plan"}
+        lines = []
+
+        for key, value in artifacts.items():
+            if key.startswith("_") or key in excluded:
+                continue
+
+            preview = self._preview_artifact_value(value, max_preview)
+            lines.append(f"- **{key}**: {preview}")
+
+        return "\n".join(lines) if lines else "[No artifacts produced]"
+
+    @staticmethod
+    def _preview_artifact_value(value, max_len: int = 300) -> str:
+        """Produce a truncated text preview of an artifact value."""
+        import json as _json
+
+        if value is None:
+            return "(empty)"
+        if isinstance(value, bytes):
+            return f"(binary, {len(value)} bytes)"
+        if isinstance(value, str):
+            if len(value) <= max_len:
+                return value
+            return value[:max_len] + "..."
+        if isinstance(value, dict):
+            try:
+                text = _json.dumps(value, default=str)
+                if len(text) <= max_len:
+                    return text
+                return text[:max_len] + "..."
+            except (TypeError, ValueError):
+                return str(value)[:max_len] + "..."
+        if isinstance(value, list):
+            text = f"(list, {len(value)} items)"
+            if value:
+                first = str(value[0])
+                if len(first) > 80:
+                    first = first[:80] + "..."
+                text += f" first: {first}"
+            return text
+        # Fallback for other types
+        text = str(value)
+        if len(text) > max_len:
+            return text[:max_len] + "..."
+        return text
+
     def _format_exit_plan(self, exit_plan: dict) -> str:
         """
         Format the exit_plan artifact for the evaluation prompt.
@@ -363,8 +421,8 @@ Example verification steps:
 **What Has Executed:**
 {routing_history}
 
-**Current Artifacts:**
-{artifact_keys}
+**Current Artifacts (with value previews):**
+{artifact_summary}
 
 **Recent Activity:**
 {recent_summary}

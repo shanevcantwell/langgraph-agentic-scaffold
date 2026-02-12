@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 70 | 679 |
+| Unit | 70 | 687 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **105** | **961** |
+| **Total** | **105** | **969** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -953,6 +953,16 @@
   - *If SA MCP call fails, EI should proceed without exit_plan.*
 - **`test_persists_exit_plan_on_incomplete`**
   - *When task is incomplete, exit_plan should still be persisted for next iteration.*
+- **`test_artifact_summary_includes_value_previews`**
+  - *Artifact summary should include truncated value previews.*
+- **`test_artifact_summary_handles_empty_artifacts`**
+  - *Empty artifacts should return a placeholder.*
+- **`test_artifact_summary_truncates_long_values`**
+  - *Long artifact values should be truncated.*
+- **`test_artifact_summary_handles_binary`**
+  - *Binary artifacts should show size, not content.*
+- **`test_artifact_preview_passed_to_llm_prompt`**
+  - *#155: The LLM prompt should contain artifact value previews, not just keys.*
 - **`test_ei_does_not_clear_max_iterations_on_complete`**
   - *When EI says COMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
 - **`test_ei_does_not_clear_max_iterations_on_incomplete`**
@@ -2176,6 +2186,7 @@
 - **`test_triage_architect_generates_plan`**
 - **`test_triage_architect_handles_no_messages`**
 - **`test_triage_architect_handles_llm_error`**
+  - *#154: LLM errors should return a valid fallback ContextPlan, not bare {'error': ...}.*
 - **`test_triage_populates_recommended_specialists`**
   - *Test that TriageArchitect populates recommended_specialists in scratchpad.*
 - **`test_triage_empty_recommendations_for_greeting`**
@@ -2184,6 +2195,12 @@
   - *Test TriageArchitect can recommend multiple specialists.*
 - **`test_triage_default_empty_recommendations_if_not_provided`**
   - *Test TriageArchitect handles LLM not providing recommended_specialists.*
+- **`test_triage_handles_malformed_actions_field`**
+  - *#154: LLM returns actions as string instead of list — should not crash.*
+- **`test_triage_handles_no_tool_calls`**
+  - *#154: LLM returns no tool calls — should return fallback, not crash.*
+- **`test_triage_handles_validation_error`**
+  - *#154: Pydantic rejects args — salvage what we can (recommended_specialists).*
 - **`test_triage_appends_system_note_for_text_to_process`**
   - *Test that TriageArchitect appends a system note when text_to_process is in artifacts.*
 - **`test_triage_no_system_note_without_text_to_process`**

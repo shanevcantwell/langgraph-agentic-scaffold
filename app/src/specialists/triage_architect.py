@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any, List
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
+from pydantic import ValidationError
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan
 from ..llm.adapter import StandardizedLLMRequest
@@ -58,17 +59,30 @@ class TriageArchitect(BaseSpecialist):
         try:
             response_data = self.llm_adapter.invoke(request)
             tool_calls = response_data.get("tool_calls", [])
-            
+
             if not tool_calls:
                 logger.warning("TriageArchitect LLM did not return a tool call.")
-                return {"error": "Failed to generate context plan."}
-                
+                return self._fallback_plan("LLM did not return a tool call")
+
             # Extract the first tool call (ContextPlan)
-            plan_args = tool_calls[0]['args']
-            
-            # Validate against Pydantic model (optional but good practice)
-            context_plan = ContextPlan(**plan_args)
-            
+            plan_args = tool_calls[0].get('args', {})
+
+            # Guard malformed fields before Pydantic validation (#154)
+            if not isinstance(plan_args.get("actions"), list):
+                plan_args["actions"] = []
+            if not plan_args.get("reasoning"):
+                plan_args["reasoning"] = "Context plan generated (reasoning was empty)"
+
+            try:
+                context_plan = ContextPlan(**plan_args)
+            except ValidationError as ve:
+                logger.warning(f"TriageArchitect: ContextPlan validation failed: {ve}")
+                # Salvage what we can — keep recommended_specialists if present
+                context_plan = ContextPlan(
+                    reasoning=plan_args.get("reasoning", "Validation fallback"),
+                    recommended_specialists=plan_args.get("recommended_specialists", [])
+                )
+
             logger.info(f"TriageArchitect generated plan with {len(context_plan.actions)} actions.")
 
             # 5. Return Artifact with recommendations
@@ -81,7 +95,21 @@ class TriageArchitect(BaseSpecialist):
                     "recommended_specialists": context_plan.recommended_specialists
                 }
             }
-            
+
         except Exception as e:
             logger.error(f"Error in TriageArchitect: {e}", exc_info=True)
-            return {"error": str(e)}
+            return self._fallback_plan(str(e))
+
+    def _fallback_plan(self, reason: str) -> Dict[str, Any]:
+        """Return a minimal valid ContextPlan when LLM output is unusable (#154)."""
+        fallback = ContextPlan(reasoning=f"Triage fallback: {reason}")
+        return {
+            "messages": [AIMessage(content=f"[Triage] {reason}")],
+            "artifacts": {
+                "context_plan": fallback.model_dump()
+            },
+            "scratchpad": {
+                "triage_reasoning": fallback.reasoning,
+                "recommended_specialists": []
+            }
+        }

@@ -66,12 +66,18 @@ def test_triage_architect_handles_no_messages(triage_architect):
     assert result == {}
 
 def test_triage_architect_handles_llm_error(triage_architect, mock_llm_adapter):
+    """#154: LLM errors should return a valid fallback ContextPlan, not bare {'error': ...}."""
     state = {"messages": [HumanMessage(content="Hello")]}
     mock_llm_adapter.invoke.side_effect = Exception("LLM Error")
 
     result = triage_architect.execute(state)
-    assert "error" in result
-    assert result["error"] == "LLM Error"
+    # Must return valid specialist result with artifacts + scratchpad
+    assert "artifacts" in result
+    assert "context_plan" in result["artifacts"]
+    plan = result["artifacts"]["context_plan"]
+    assert "LLM Error" in plan["reasoning"]
+    assert plan["actions"] == []
+    assert result["scratchpad"]["recommended_specialists"] == []
 
 
 def test_triage_populates_recommended_specialists(triage_architect, mock_llm_adapter):
@@ -241,6 +247,61 @@ def test_triage_default_empty_recommendations_if_not_provided(triage_architect, 
     assert "scratchpad" in result
     assert "recommended_specialists" in result["scratchpad"]
     assert result["scratchpad"]["recommended_specialists"] == []
+
+
+def test_triage_handles_malformed_actions_field(triage_architect, mock_llm_adapter):
+    """#154: LLM returns actions as string instead of list — should not crash."""
+    state = {"messages": [HumanMessage(content="Do something")]}
+
+    mock_llm_adapter.invoke.return_value = {
+        "tool_calls": [{
+            "name": "ContextPlan",
+            "args": {
+                "reasoning": "A plan",
+                "actions": "not a list",  # Malformed
+                "recommended_specialists": ["chat_specialist"]
+            }
+        }]
+    }
+
+    result = triage_architect.execute(state)
+    assert "artifacts" in result
+    # Malformed actions replaced with empty list
+    assert result["artifacts"]["context_plan"]["actions"] == []
+    assert result["scratchpad"]["recommended_specialists"] == ["chat_specialist"]
+
+
+def test_triage_handles_no_tool_calls(triage_architect, mock_llm_adapter):
+    """#154: LLM returns no tool calls — should return fallback, not crash."""
+    state = {"messages": [HumanMessage(content="Hello")]}
+
+    mock_llm_adapter.invoke.return_value = {"tool_calls": []}
+
+    result = triage_architect.execute(state)
+    assert "artifacts" in result
+    assert "context_plan" in result["artifacts"]
+    assert "fallback" in result["artifacts"]["context_plan"]["reasoning"].lower()
+
+
+def test_triage_handles_validation_error(triage_architect, mock_llm_adapter):
+    """#154: Pydantic rejects args — salvage what we can (recommended_specialists)."""
+    state = {"messages": [HumanMessage(content="Do something")]}
+
+    mock_llm_adapter.invoke.return_value = {
+        "tool_calls": [{
+            "name": "ContextPlan",
+            "args": {
+                "reasoning": "A plan",
+                "actions": [{"type": "INVALID_TYPE", "target": "x"}],  # Will fail ContextAction validation
+                "recommended_specialists": ["researcher_specialist"]
+            }
+        }]
+    }
+
+    result = triage_architect.execute(state)
+    assert "artifacts" in result
+    # Salvage: recommended_specialists preserved despite validation failure
+    assert result["scratchpad"]["recommended_specialists"] == ["researcher_specialist"]
 
 
 # ==============================================================================

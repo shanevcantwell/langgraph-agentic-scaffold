@@ -76,8 +76,8 @@ Default to `project_director` for file operations or when uncertain.
 **Specialists That Have Executed:**
 {routing_history}
 
-**Artifacts Produced:**
-{artifact_keys}
+**Artifacts Produced (with value previews):**
+{artifact_summary}
 
 **Recent Messages:**
 {recent_summary}

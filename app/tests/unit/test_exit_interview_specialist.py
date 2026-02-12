@@ -371,6 +371,99 @@ class TestExitInterviewSAIntegration:
 
 
 # =============================================================================
+# Issue #155: Artifact Value Previews
+# =============================================================================
+
+class TestArtifactSummary:
+    """
+    Issue #155: EI should see artifact values, not just key names.
+
+    Previously EI only passed artifact key names to the LLM (e.g., "text_analysis_results")
+    which prevented it from distinguishing a successful analysis from an empty/error result.
+    """
+
+    def test_artifact_summary_includes_value_previews(self, exit_interview):
+        """Artifact summary should include truncated value previews."""
+        artifacts = {
+            "user_request": "Analyze the text",
+            "text_analysis_results": {"summary": "The text discusses AI safety", "word_count": 500},
+            "final_response": "Here is the analysis of your text...",
+            "_internal_flag": True,  # Should be excluded (underscore prefix)
+            "gathered_context": "large context blob",  # Should be excluded
+            "context_plan": {"reasoning": "..."},  # Should be excluded
+        }
+
+        summary = exit_interview._build_artifact_summary(artifacts)
+
+        # Included artifacts should show values
+        assert "text_analysis_results" in summary
+        assert "AI safety" in summary  # Value preview
+        assert "final_response" in summary
+        assert "analysis of your text" in summary  # Value preview
+
+        # Excluded artifacts should NOT appear
+        assert "_internal_flag" not in summary
+        assert "gathered_context" not in summary
+        assert "context_plan" not in summary
+
+    def test_artifact_summary_handles_empty_artifacts(self, exit_interview):
+        """Empty artifacts should return a placeholder."""
+        summary = exit_interview._build_artifact_summary({})
+        assert summary == "[No artifacts produced]"
+
+    def test_artifact_summary_truncates_long_values(self, exit_interview):
+        """Long artifact values should be truncated."""
+        artifacts = {
+            "big_result": "x" * 1000,
+        }
+
+        summary = exit_interview._build_artifact_summary(artifacts, max_preview=100)
+        assert len(summary) < 200  # Truncated, not 1000 chars
+        assert "..." in summary
+
+    def test_artifact_summary_handles_binary(self, exit_interview):
+        """Binary artifacts should show size, not content."""
+        artifacts = {
+            "uploaded_image.png": b"\x89PNG" + b"\x00" * 1000,
+        }
+
+        summary = exit_interview._build_artifact_summary(artifacts)
+        assert "binary" in summary
+        assert "1004 bytes" in summary
+
+    def test_artifact_preview_passed_to_llm_prompt(self, exit_interview):
+        """#155: The LLM prompt should contain artifact value previews, not just keys."""
+        state = {
+            "artifacts": {
+                "user_request": "Analyze text",
+                "analysis_result": {"quality": "good", "score": 0.95},
+            },
+            "messages": [],
+            "routing_history": ["text_analysis_specialist"]
+        }
+
+        exit_interview.llm_adapter = MagicMock()
+        exit_interview.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "is_complete": True,
+                "reasoning": "Analysis complete with good quality",
+                "missing_elements": "",
+                "recommended_specialists": []
+            }
+        }
+
+        exit_interview._execute_logic(state)
+
+        # Inspect the prompt sent to LLM
+        call_args = exit_interview.llm_adapter.invoke.call_args[0][0]
+        prompt_content = call_args.messages[0].content
+
+        # Should contain value preview, not just "analysis_result"
+        assert "quality" in prompt_content
+        assert "0.95" in prompt_content
+
+
+# =============================================================================
 # Issue #114: EI should NOT clear max_iterations_exceeded
 # =============================================================================
 
