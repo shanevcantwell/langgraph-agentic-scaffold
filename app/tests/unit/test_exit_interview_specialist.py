@@ -464,6 +464,86 @@ class TestArtifactSummary:
 
 
 # =============================================================================
+# EI resume_trace Visibility (Phase 1a)
+# =============================================================================
+
+class TestTraceSummary:
+    """
+    EI should see a full operation inventory for resume_trace, not just
+    '(list, N items) first: ...' which only shows the first entry.
+
+    Previously EI saw: (list, 9 items) first: {'iteration': 0, 'tool_call': {'name': 'list_directory'...
+    Now EI sees: (trace, 9 operations) list_directory: 1 ok, read_file: 5 ok, run_command: 3 ok ...
+    """
+
+    def test_trace_summary_shows_operation_inventory(self, exit_interview):
+        """resume_trace should show tool counts with success/fail."""
+        trace = [
+            {"tool_call": {"name": "list_directory", "args": {"path": "/workspace"}}, "success": True},
+            {"tool_call": {"name": "read_file", "args": {"path": "/workspace/1.txt"}}, "success": True},
+            {"tool_call": {"name": "read_file", "args": {"path": "/workspace/2.txt"}}, "success": True},
+            {"tool_call": {"name": "move_file", "args": {"source": "1.txt", "destination": "animals/1.txt"}}, "success": True},
+            {"tool_call": {"name": "move_file", "args": {"source": "2.txt", "destination": "animals/2.txt"}}, "success": True},
+            {"tool_call": {"name": "move_file", "args": {"source": "3.txt", "destination": "plants/3.txt"}}, "success": False},
+        ]
+
+        summary = exit_interview._build_trace_summary(trace)
+
+        assert "6 operations" in summary
+        assert "list_directory" in summary
+        assert "read_file" in summary
+        assert "move_file" in summary
+        # move_file: 2 ok, 1 fail
+        assert "2 ok" in summary
+        assert "1 fail" in summary
+
+    def test_trace_summary_handles_run_command(self, exit_interview):
+        """run_command operations should appear in trace summary."""
+        trace = [
+            {"tool_call": {"name": "run_command", "args": {"command": "mkdir -p /workspace/animals"}}, "success": True},
+            {"tool_call": {"name": "run_command", "args": {"command": "mv /workspace/1.txt /workspace/animals/"}}, "success": True},
+        ]
+
+        summary = exit_interview._build_trace_summary(trace)
+        assert "run_command" in summary
+        assert "2 ok" in summary
+        assert "2 operations" in summary
+
+    def test_trace_summary_empty_trace(self, exit_interview):
+        """Empty trace should return placeholder."""
+        assert exit_interview._build_trace_summary([]) == "(empty trace)"
+
+    def test_trace_summary_shows_recent_operations(self, exit_interview):
+        """Recent section should show last operations with args."""
+        trace = [
+            {"tool_call": {"name": "list_directory", "args": {"path": "/workspace"}}, "success": True},
+            {"tool_call": {"name": "move_file", "args": {"source": "1.txt", "destination": "animals/1.txt"}}, "success": True},
+        ]
+
+        summary = exit_interview._build_trace_summary(trace)
+        assert "Recent:" in summary
+        assert "[ok] move_file" in summary
+
+    def test_artifact_summary_uses_trace_summary_for_resume_trace(self, exit_interview):
+        """_build_artifact_summary should special-case resume_trace."""
+        artifacts = {
+            "user_request": "Sort files",
+            "resume_trace": [
+                {"tool_call": {"name": "move_file", "args": {}}, "success": True},
+                {"tool_call": {"name": "move_file", "args": {}}, "success": True},
+                {"tool_call": {"name": "create_directory", "args": {}}, "success": True},
+            ],
+        }
+
+        summary = exit_interview._build_artifact_summary(artifacts)
+
+        # Should show operation inventory, not generic list preview
+        assert "3 operations" in summary
+        assert "move_file" in summary
+        assert "(list, 3 items)" not in summary
+
+
+# =============================================================================
 # Issue #114: EI should NOT clear max_iterations_exceeded
 # =============================================================================
 
