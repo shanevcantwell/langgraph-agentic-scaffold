@@ -148,7 +148,7 @@ class ProjectDirector(BaseSpecialist):
 
         if not is_react_available(getattr(self, 'external_mcp_client', None)):
             return self._build_error_result(
-                state, project_context,
+                project_context,
                 "prompt-prix MCP not reachable — cannot execute react_step loop", []
             )
 
@@ -191,7 +191,7 @@ class ProjectDirector(BaseSpecialist):
                         f"{len(trace)} tool calls"
                     )
                     return self._build_success_result(
-                        state, project_context, final_response, trace
+                        project_context, final_response, trace
                     )
 
                 # Dispatch pending tool calls to real MCP services
@@ -201,7 +201,7 @@ class ProjectDirector(BaseSpecialist):
                 if not pending:
                     logger.warning("react_step returned incomplete with no pending tool calls")
                     return self._build_error_result(
-                        state, project_context,
+                        project_context,
                         "react_step returned no tool calls and no completion", trace
                     )
 
@@ -235,12 +235,12 @@ class ProjectDirector(BaseSpecialist):
                     logger.warning("ProjectDirector: stagnation detected in trace")
                     project_context.update_state(ProjectState.SYNTHESIZING)
                     self._update_context_from_trace(project_context, trace)
-                    return self._build_stagnation_result(state, project_context, trace)
+                    return self._build_stagnation_result(project_context, trace)
 
             except Exception as e:
                 logger.error(f"ProjectDirector react loop error at iteration {iteration}: {e}")
                 return self._build_error_result(
-                    state, project_context,
+                    project_context,
                     f"react loop error at iteration {iteration}: {e}", trace
                 )
 
@@ -248,7 +248,7 @@ class ProjectDirector(BaseSpecialist):
         project_context.update_state(ProjectState.SYNTHESIZING)
         self._update_context_from_trace(project_context, trace)
         logger.warning(f"ProjectDirector hit max iterations ({max_iterations})")
-        return self._build_partial_result(state, project_context, trace, max_iterations)
+        return self._build_partial_result(project_context, trace, max_iterations)
 
     # ─── react_step infrastructure ─────────────────────────────────────
 
@@ -434,12 +434,6 @@ class ProjectDirector(BaseSpecialist):
         logger.info(f"Initialized new ProjectContext: {context.project_goal}")
         return context
 
-    def _get_trace_key(self, state: dict) -> str:
-        """Generate indexed trace key to avoid overwrites (Issue #91)."""
-        artifacts = state.get("artifacts", {})
-        existing_traces = [k for k in artifacts.keys() if k.startswith("research_trace")]
-        return f"research_trace_{len(existing_traces)}"
-
     def _update_context_from_trace(
         self, context: ProjectContext, trace: List[Dict[str, Any]]
     ) -> None:
@@ -461,37 +455,35 @@ class ProjectDirector(BaseSpecialist):
     # ─── Result builders ───────────────────────────────────────────────
 
     def _build_success_result(
-        self, state: dict, context: ProjectContext,
+        self, context: ProjectContext,
         final_response: str, trace: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        trace_key = self._get_trace_key(state)
         return {
             "messages": [AIMessage(content=final_response)],
             "artifacts": {
                 "project_context": context.model_dump(),
-                trace_key: trace,
+                "resume_trace": trace,
                 "iterations_used": len(trace),
                 "research_status": "complete",
             },
         }
 
     def _build_error_result(
-        self, state: dict, context: ProjectContext,
+        self, context: ProjectContext,
         error_msg: str, trace: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
-        trace_key = self._get_trace_key(state)
         return {
             "messages": [AIMessage(content=error_msg)],
             "artifacts": {
                 "project_context": context.model_dump(),
-                trace_key: trace,
+                "resume_trace": trace,
                 "iterations_used": len(trace),
                 "research_status": "error",
             },
         }
 
     def _build_stagnation_result(
-        self, state: dict, context: ProjectContext,
+        self, context: ProjectContext,
         trace: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         # Find the repeated pattern for the message
@@ -506,12 +498,11 @@ class ProjectDirector(BaseSpecialist):
             f"Progress before stagnation:\n{self._summarize_trace(trace)}"
         )
 
-        trace_key = self._get_trace_key(state)
         return {
             "messages": [AIMessage(content=stagnation_message)],
             "artifacts": {
                 "project_context": context.model_dump(),
-                trace_key: trace,
+                "resume_trace": trace,
                 "iterations_used": len(trace),
                 "stagnation_detected": True,
                 "stagnation_tool": tool_name,
@@ -521,16 +512,15 @@ class ProjectDirector(BaseSpecialist):
         }
 
     def _build_partial_result(
-        self, state: dict, context: ProjectContext,
+        self, context: ProjectContext,
         trace: List[Dict[str, Any]], max_iter: int
     ) -> Dict[str, Any]:
         partial_msg = self._synthesize_partial(context, trace, max_iter)
-        trace_key = self._get_trace_key(state)
         return {
             "messages": [AIMessage(content=partial_msg)],
             "artifacts": {
                 "project_context": context.model_dump(),
-                trace_key: trace,
+                "resume_trace": trace,
                 "iterations_used": max_iter,
                 "max_iterations_exceeded": True,
                 "research_status": "partial",

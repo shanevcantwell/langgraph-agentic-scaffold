@@ -654,7 +654,7 @@ def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             # Simulate previous work recorded in research_trace
-            "research_trace_0": [
+            "resume_trace": [
                 {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
                 {"tool": "move_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
                 {"tool": "move_file", "args": {"source": "/workspace/2.txt", "destination": "/workspace/animals/2.txt"}, "success": False, "error": "Hit iteration limit"},
@@ -808,7 +808,7 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
             # BENIGN interrupt flag
             "max_iterations_exceeded": True,
             # Trace from the specialist's work
-            "research_trace_0": original_trace
+            "resume_trace": original_trace
         },
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
@@ -848,7 +848,7 @@ def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             # NO max_iterations_exceeded - normal flow
-            "research_trace_0": [
+            "resume_trace": [
                 {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
             ]
         },
@@ -898,7 +898,7 @@ def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
                 "is_complete": False,  # EI judged incomplete
                 "reasoning": "Files not fully categorized"
             },
-            "research_trace_0": original_trace
+            "resume_trace": original_trace
         },
         "routing_history": ["project_director"]
     }
@@ -978,7 +978,7 @@ def test_facilitator_benign_passes_full_trace(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
-            "research_trace_0": original_trace
+            "resume_trace": original_trace
         },
         "routing_history": ["project_director"]
     }
@@ -1044,7 +1044,7 @@ def test_facilitator_benign_resume_passes_trace_without_context_accumulation(fac
             "gathered_context": original_gathered_context,
             "max_iterations_exceeded": True,  # BENIGN interrupt flag
             # Prior work trace - this is what should be passed through
-            "research_trace_0": [
+            "resume_trace": [
                 {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
                 {"tool": "read_file", "args": {"path": "/workspace/test/1.txt"}, "success": True},
                 {"tool": "create_directory", "args": {"path": "/workspace/test/animals"}, "success": True},
@@ -1067,14 +1067,14 @@ def test_facilitator_benign_resume_passes_trace_without_context_accumulation(fac
 
     # =========================================================================
     # CRITICAL PATTERN: Trace passthrough must be UNMODIFIED
-    # The exact data in artifacts["research_trace_0"] must come out in
-    # artifacts["resume_trace"] - no transformation, no appending, no filtering.
+    # The exact data in artifacts["resume_trace"] must pass through unchanged
+    # - no transformation, no appending, no filtering.
     # =========================================================================
     assert "resume_trace" in result["artifacts"]
     resume_trace = result["artifacts"]["resume_trace"]
 
     # Must match the input EXACTLY - same count, same order, same data
-    original_trace = state["artifacts"]["research_trace_0"]
+    original_trace = state["artifacts"]["resume_trace"]
     assert resume_trace == original_trace, (
         f"resume_trace was modified during passthrough!\n"
         f"Input: {original_trace}\n"
@@ -1128,7 +1128,7 @@ def test_facilitator_benign_resume_no_early_return_without_trace(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,  # BENIGN flag
-            # NO research_trace_0 - no prior work exists
+            # NO resume_trace - no prior work exists
         },
         "scratchpad": {},  # NO exit_interview_result
         "routing_history": []
@@ -1172,7 +1172,7 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "research_trace_0": [
+            "resume_trace": [
                 {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
             ],
             # Exit Interview result IS present - this is EI retry, not BENIGN
@@ -1239,7 +1239,7 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "research_trace_0": original_trace,
+            "resume_trace": original_trace,
             # KEY: Both flags present - this is BENIGN+INCOMPLETE
             "max_iterations_exceeded": True,  # Model was working
             "exit_interview_result": {

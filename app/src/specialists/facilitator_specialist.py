@@ -75,37 +75,18 @@ class FacilitatorSpecialist(BaseSpecialist):
 
     def _assemble_resume_trace(self, artifacts: dict) -> Optional[List[dict]]:
         """
-        Assemble trace for ReAct loop resumption (ADR-CORE-059: Memento fix).
+        Read resume_trace for ReAct loop resumption (ADR-CORE-059: Memento fix).
 
-        Instead of summarizing prior work in gathered_context (which creates conflicting
-        sources of truth), we give the ReAct loop its actual prior trace. The model
-        sees its own tool conversation and continues naturally.
-
-        This replaces _summarize_prior_work() which used prompt engineering ("don't repeat
-        these operations") instead of context engineering (give the model back its experience).
-
-        Returns:
-            List of trace entries (dicts) if traces exist, None otherwise.
-            The specialist will deserialize these into ReActIteration objects.
+        PD saves the full accumulated trace as 'resume_trace' directly.
+        Facilitator decides whether to pass it through (accumulate/delta)
+        or drop it (reset mode).
         """
-        all_traces: List[dict] = []
-
-        # Collect all research_trace_N artifacts, sorted by index
-        trace_keys = sorted(
-            [k for k in artifacts.keys() if k.startswith("research_trace")],
-            key=lambda x: int(x.split("_")[-1]) if x.split("_")[-1].isdigit() else 0
-        )
-
-        for trace_key in trace_keys:
-            trace_data = artifacts.get(trace_key)
-            if isinstance(trace_data, list):
-                all_traces.extend(trace_data)
-
-        if not all_traces:
+        trace_data = artifacts.get("resume_trace")
+        if not isinstance(trace_data, list) or not trace_data:
             return None
 
-        logger.info(f"Facilitator: Assembled {len(all_traces)} trace entries for resumption")
-        return all_traces
+        logger.info(f"Facilitator: Found resume_trace with {len(trace_data)} entries")
+        return trace_data
 
     def _format_exit_interview_feedback(self, result: dict) -> str:
         """

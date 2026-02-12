@@ -55,7 +55,7 @@ def generate_report(report_data: ErrorReport) -> str:
     return "\n\n".join(report_parts)
 
 def _format_research_trace(trace: list, trace_name: str) -> str:
-    """Format a research_trace_N artifact as a readable tool call log."""
+    """Format a resume_trace (or legacy research_trace_N) as a readable tool call log."""
     if not trace or not isinstance(trace, list):
         return f"```\n{trace}\n```"
 
@@ -66,9 +66,11 @@ def _format_research_trace(trace: list, trace_name: str) -> str:
             continue
 
         iteration = entry.get("iteration", "?")
-        tool = entry.get("tool", "unknown")
-        args = entry.get("args", {})
-        result = entry.get("result", "")
+        # Support both new format (tool_call.name) and legacy (tool)
+        tc = entry.get("tool_call", {})
+        tool = tc.get("name", entry.get("tool", "unknown"))
+        args = tc.get("args", entry.get("args", {}))
+        result = entry.get("observation", entry.get("result", ""))
 
         # Summarize args (show key info only)
         if isinstance(args, dict):
@@ -145,8 +147,8 @@ def _format_artifact(key: str, value) -> str:
     Intelligently format an artifact based on its type and key.
     Returns formatted markdown string.
     """
-    # research_trace_N - format as tool call log
-    if key.startswith("research_trace_") and isinstance(value, list):
+    # resume_trace (or legacy research_trace_N) - format as tool call log
+    if (key == "resume_trace" or key.startswith("research_trace_")) and isinstance(value, list):
         return _format_research_trace(value, key)
 
     # exit_interview_result - format as structured fields

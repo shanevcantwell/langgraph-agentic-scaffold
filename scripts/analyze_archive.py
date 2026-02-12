@@ -28,6 +28,36 @@ from pathlib import Path
 from collections import Counter
 
 
+def _get_trace_entries(artifacts: dict) -> dict:
+    """Get trace entries keyed by trace name.
+
+    Supports both new format (single 'resume_trace') and legacy
+    ('research_trace_N' per invocation).  Returns a dict of
+    {trace_name: [entries]} so callers can iterate uniformly.
+    """
+    traces = {}
+    # New format: single accumulated trace
+    if "resume_trace" in artifacts and isinstance(artifacts["resume_trace"], list):
+        traces["resume_trace"] = artifacts["resume_trace"]
+    # Legacy format: indexed per invocation
+    for key, value in artifacts.items():
+        if key.startswith("research_trace") and isinstance(value, list):
+            traces[key] = value
+    return traces
+
+
+def _entry_tool_name(entry: dict) -> str:
+    """Extract tool name from a trace entry (handles both formats)."""
+    tc = entry.get("tool_call", {})
+    return tc.get("name", entry.get("tool", "unknown"))
+
+
+def _entry_tool_args(entry: dict) -> dict:
+    """Extract tool args from a trace entry (handles both formats)."""
+    tc = entry.get("tool_call", {})
+    return tc.get("args", entry.get("args", {}))
+
+
 def load_archive(path: str) -> dict:
     """Load all files from archive into a dict."""
     data = {}
@@ -81,12 +111,11 @@ def cmd_summary(data: dict):
     final_state = data.get('final_state.json', {})
     artifacts_data = final_state.get('artifacts', {})
 
-    # Find research_trace_N keys
-    for key, value in artifacts_data.items():
-        if key.startswith('research_trace') and isinstance(value, list):
-            for entry in value:
-                if isinstance(entry, dict) and 'tool' in entry:
-                    tool_counts[entry['tool']] += 1
+    # Count tool calls from traces
+    for _name, entries in _get_trace_entries(artifacts_data).items():
+        for entry in entries:
+            if isinstance(entry, dict):
+                tool_counts[_entry_tool_name(entry)] += 1
 
     if tool_counts:
         print(f"\nTool calls:")
@@ -124,14 +153,13 @@ def cmd_tools(data: dict):
     tool_counts = Counter()
     tool_examples = {}
 
-    for key, value in artifacts.items():
-        if key.startswith('research_trace') and isinstance(value, list):
-            for entry in value:
-                if isinstance(entry, dict) and 'tool' in entry:
-                    tool = entry['tool']
-                    tool_counts[tool] += 1
-                    if tool not in tool_examples:
-                        tool_examples[tool] = entry.get('args', {})
+    for _name, entries in _get_trace_entries(artifacts).items():
+        for entry in entries:
+            if isinstance(entry, dict):
+                tool = _entry_tool_name(entry)
+                tool_counts[tool] += 1
+                if tool not in tool_examples:
+                    tool_examples[tool] = _entry_tool_args(entry)
 
     print("Tool call counts:")
     for tool, count in sorted(tool_counts.items(), key=lambda x: -x[1]):
@@ -160,19 +188,16 @@ def cmd_concurrency(data: dict):
     final_state = data.get('final_state.json', {})
     artifacts = final_state.get('artifacts', {})
 
-    trace_keys = sorted(
-        k for k in artifacts if k.startswith('research_trace') and isinstance(artifacts[k], list)
-    )
+    all_traces = _get_trace_entries(artifacts)
 
-    if not trace_keys:
-        print("No research traces found in artifacts.")
+    if not all_traces:
+        print("No traces found in artifacts.")
         return
 
     total_iterations = 0
     total_concurrent = 0
 
-    for trace_key in trace_keys:
-        entries = artifacts[trace_key]
+    for trace_key, entries in all_traces.items():
         if not entries:
             continue
 
@@ -188,7 +213,7 @@ def cmd_concurrency(data: dict):
 
         for iteration in sorted(iter_groups.keys()):
             group = iter_groups[iteration]
-            tools = [e.get('tool') or e.get('tool_name', '?') for e in group]
+            tools = [_entry_tool_name(e) for e in group]
             batch_size = len(group)
 
             marker = ""
@@ -208,9 +233,9 @@ def cmd_concurrency(data: dict):
         print(f"  {len(iter_groups)} iterations: {concurrent_in_trace} concurrent, {sequential_in_trace} sequential (max batch: {max_batch})")
 
     # Overall summary
-    if len(trace_keys) > 1:
+    if len(all_traces) > 1:
         print(f"\n--- Overall ---")
-        print(f"  {total_iterations} total iterations across {len(trace_keys)} traces")
+        print(f"  {total_iterations} total iterations across {len(all_traces)} traces")
         print(f"  {total_concurrent} concurrent batches")
 
 
@@ -252,11 +277,10 @@ def cmd_compare(data1: dict, path2: str):
         final_state = data.get('final_state.json', {})
         artifacts = final_state.get('artifacts', {})
         counts = Counter()
-        for key, value in artifacts.items():
-            if key.startswith('research_trace') and isinstance(value, list):
-                for entry in value:
-                    if isinstance(entry, dict) and 'tool' in entry:
-                        counts[entry['tool']] += 1
+        for _name, entries in _get_trace_entries(artifacts).items():
+            for entry in entries:
+                if isinstance(entry, dict):
+                    counts[_entry_tool_name(entry)] += 1
         return counts
 
     counts1 = get_tool_counts(data1)
