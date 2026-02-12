@@ -4,23 +4,85 @@ Text analysis specialist — absorbs data_extractor and data_processor roles.
 
 Two execution modes:
 - **Single-pass** (default): Text in, structured analysis out. No tools needed.
-- **ReAct** (when tools available): Iterative tool use for data operations
-  (read files, format JSON, convert data, measure drift). Activated by
-  config.yaml `react: enabled: true` — the ReactEnabledSpecialist wrapper
-  injects execute_with_tools() at load time (ADR-CORE-051).
+- **ReAct** (via prompt-prix MCP react_step): Iterative tool use for data
+  operations (read files, format JSON, convert data, measure drift).
+  Activated when external_mcp_client can reach prompt-prix service.
 """
 import logging
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 from .base import BaseSpecialist
 from .helpers import create_llm_message
-from .mixins import ToolDef, MaxIterationsExceeded, StagnationDetected, ReActIteration
 from ..llm.adapter import StandardizedLLMRequest
+from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
 from .schemas import TextAnalysis
 
 logger = logging.getLogger(__name__)
+
+# Tool parameter schemas for OpenAI tool format
+_TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
+    "read_file": {
+        "type": "object",
+        "properties": {"path": {"type": "string", "description": "File path to read"}},
+        "required": ["path"],
+    },
+    "list_directory": {
+        "type": "object",
+        "properties": {"path": {"type": "string", "description": "Directory path to list"}},
+        "required": ["path"],
+    },
+    "run_command": {
+        "type": "object",
+        "properties": {"command": {"type": "string", "description": "Shell command to execute"}},
+        "required": ["command"],
+    },
+    "calculate_drift": {
+        "type": "object",
+        "properties": {
+            "text_a": {"type": "string", "description": "First text"},
+            "text_b": {"type": "string", "description": "Second text"},
+        },
+        "required": ["text_a", "text_b"],
+    },
+    "analyze_variants": {
+        "type": "object",
+        "properties": {
+            "variants": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of prompt variant strings",
+            }
+        },
+        "required": ["variants"],
+    },
+    "format_json": {
+        "type": "object",
+        "properties": {"json": {"type": "string", "description": "JSON string to format"}},
+        "required": ["json"],
+    },
+    "convert_json_to_csv": {
+        "type": "object",
+        "properties": {"json": {"type": "string", "description": "JSON array string to convert"}},
+        "required": ["json"],
+    },
+    "convert_json_to_yaml": {
+        "type": "object",
+        "properties": {"json": {"type": "string", "description": "JSON string to convert"}},
+        "required": ["json"],
+    },
+}
+
+
+class _ToolDef:
+    """Lightweight tool definition mapping tool names to MCP services."""
+    __slots__ = ("service", "function", "description")
+
+    def __init__(self, service: str, function: str, description: str = ""):
+        self.service = service
+        self.function = function
+        self.description = description
 
 
 class TextAnalysisSpecialist(BaseSpecialist):
@@ -28,9 +90,9 @@ class TextAnalysisSpecialist(BaseSpecialist):
     Analyzes, summarizes, extracts, or transforms text and structured data.
 
     Absorbs the former data_extractor_specialist (LLM + schema) and
-    data_processor_specialist (procedural stamp). When ReAct is enabled
-    via config, can iteratively use filesystem, terminal, semantic-chunker,
-    and it-tools MCP services for structured data operations.
+    data_processor_specialist (procedural stamp). When prompt-prix MCP
+    is reachable, can iteratively use filesystem, terminal, semantic-chunker,
+    and it-tools MCP services for structured data operations via react_step().
     """
 
     DEFAULT_MAX_ITERATIONS = 10
@@ -41,8 +103,8 @@ class TextAnalysisSpecialist(BaseSpecialist):
         text_to_process = artifacts.get("text_to_process")
         gathered_context = artifacts.get("gathered_context", "")
 
-        # Determine if we have ReAct capability (injected by ReactEnabledSpecialist wrapper)
-        has_react = hasattr(self, 'execute_with_tools')
+        # ReAct capability: can we reach prompt-prix MCP for react_step?
+        has_react = self._has_react_capability()
 
         # If we have ReAct tools and gathered_context suggests iterative work,
         # use the ReAct path. Otherwise, fast-path single-pass analysis.
@@ -50,6 +112,14 @@ class TextAnalysisSpecialist(BaseSpecialist):
             return self._execute_react(state, messages, gathered_context)
 
         return self._execute_single_pass(state, messages, text_to_process)
+
+    def _has_react_capability(self) -> bool:
+        """Check if prompt-prix MCP is reachable for react_step calls."""
+        return (
+            hasattr(self, 'external_mcp_client')
+            and self.external_mcp_client is not None
+            and self.external_mcp_client.is_connected("prompt-prix")
+        )
 
     def _should_use_tools(self, state: Dict[str, Any]) -> bool:
         """
@@ -131,132 +201,237 @@ class TextAnalysisSpecialist(BaseSpecialist):
             },
         }
 
+    # ─── ReAct path via prompt-prix MCP react_step() ───────────────────
+
     def _execute_react(
         self, state: Dict[str, Any], messages: List[BaseMessage], gathered_context: str
     ) -> Dict[str, Any]:
-        """ReAct path: iterative tool use for complex data operations."""
+        """ReAct path: iterative tool use via prompt-prix MCP react_step()."""
         tools = self._build_tools()
         task_prompt = self._build_task_prompt(state, gathered_context)
+        tool_schemas = self._build_openai_tool_schemas(tools)
+        model_id = getattr(self.llm_adapter, 'model_name', None) or "default"
+        system_prompt = self.llm_adapter.system_prompt if hasattr(self.llm_adapter, 'system_prompt') else ""
+        max_iterations = self._get_max_iterations()
+
+        trace: List[Dict[str, Any]] = []
+        call_counter = 0
+
+        for iteration in range(max_iterations):
+            try:
+                result = sync_call_external_mcp(
+                    self.external_mcp_client,
+                    "prompt-prix",
+                    "react_step",
+                    {
+                        "model_id": model_id,
+                        "system_prompt": system_prompt,
+                        "initial_message": task_prompt,
+                        "trace": trace,
+                        "mock_tools": None,
+                        "tools": tool_schemas,
+                        "call_counter": call_counter,
+                    },
+                    timeout=600.0,
+                )
+            except Exception as e:
+                logger.error(f"TextAnalysisSpecialist react_step MCP call failed: {e}")
+                return self._build_error_result(
+                    state, f"react_step MCP call failed: {e}", trace
+                )
+
+            # Handle MCP result — may be string (error) or dict
+            if isinstance(result, str):
+                logger.error(f"TextAnalysisSpecialist react_step returned error: {result}")
+                return self._build_error_result(state, result, trace)
+
+            call_counter = result.get("call_counter", call_counter)
+
+            if result.get("completed"):
+                final_response = result.get("final_response", "Analysis complete.")
+                logger.info(
+                    f"TextAnalysisSpecialist completed after {iteration + 1} iterations, "
+                    f"{len(trace)} tool calls"
+                )
+                return self._build_success_result(state, final_response, trace)
+
+            # Dispatch pending tool calls to real MCP services
+            pending = result.get("pending_tool_calls", [])
+            thought = result.get("thought")
+
+            if not pending:
+                logger.warning("react_step returned incomplete but no pending tool calls")
+                return self._build_error_result(
+                    state, "react_step returned no tool calls and no completion", trace
+                )
+
+            for tc in pending:
+                observation = self._dispatch_tool_call(tc, tools)
+                trace.append({
+                    "iteration": iteration,
+                    "tool_call": {
+                        "id": tc.get("id", f"call_{call_counter}"),
+                        "name": tc.get("name", "unknown"),
+                        "args": tc.get("args", {}),
+                    },
+                    "observation": observation,
+                    "success": not observation.startswith("Error:"),
+                    "thought": thought,
+                })
+
+        # Max iterations exceeded
+        partial_msg = (
+            f"Analysis reached iteration limit ({max_iterations}). "
+            f"Partial progress:\n{self._summarize_trace_dicts(trace)}"
+        )
+        logger.warning(f"TextAnalysisSpecialist hit max iterations ({max_iterations})")
+        return self._build_partial_result(state, partial_msg, trace, max_iterations)
+
+    def _dispatch_tool_call(
+        self, pending: Dict[str, Any], tools: Dict[str, _ToolDef]
+    ) -> str:
+        """Dispatch a single pending tool call to the appropriate MCP service."""
+        tool_name = pending.get("name", "")
+        tool_args = pending.get("args", {})
+        tool_def = tools.get(tool_name)
+
+        if not tool_def:
+            return f"Error: Unknown tool '{tool_name}'"
 
         try:
-            final_response, trace = self.execute_with_tools(
-                task_prompt=task_prompt,
-                tools=tools,
-                max_iterations=self._get_max_iterations(),
-                stop_on_error=False,
+            raw_result = sync_call_external_mcp(
+                self.external_mcp_client,
+                tool_def.service,
+                tool_def.function,
+                tool_args,
             )
+            return extract_text_from_mcp_result(raw_result)
+        except Exception as e:
+            logger.error(f"Tool dispatch failed for {tool_name}: {e}")
+            return f"Error: {tool_name} failed: {e}"
 
-            logger.info(f"TextAnalysisSpecialist completed after {len(trace)} tool calls")
+    # ─── Result builders ───────────────────────────────────────────────
 
-            serialized_trace = [self._serialize_react_iteration(step) for step in trace]
-            pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
-            summary_blurb = f"### Text Analysis (pass {pass_num})\n{final_response}"
+    def _build_success_result(
+        self, state: Dict[str, Any], final_response: str, trace: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+        summary_blurb = f"### Text Analysis (pass {pass_num})\n{final_response}"
+        return {
+            "messages": [AIMessage(content=final_response)],
+            "artifacts": {
+                "text_analysis_results": self._append_result(state, {
+                    "status": "complete",
+                    "summary": final_response,
+                    "trace": trace,
+                    "iterations": len(trace),
+                }),
+                "gathered_context": self._append_to_gathered_context(state, summary_blurb),
+            },
+        }
 
-            return {
-                "messages": [AIMessage(content=final_response)],
-                "artifacts": {
-                    "text_analysis_results": self._append_result(state, {
-                        "status": "complete",
-                        "summary": final_response,
-                        "trace": serialized_trace,
-                        "iterations": len(trace),
-                    }),
-                    "gathered_context": self._append_to_gathered_context(state, summary_blurb),
-                },
-            }
+    def _build_error_result(
+        self, state: Dict[str, Any], error_msg: str, trace: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+        summary_blurb = f"### Text Analysis (pass {pass_num}) — error\n{error_msg}"
+        return {
+            "messages": [AIMessage(content=error_msg)],
+            "artifacts": {
+                "text_analysis_results": self._append_result(state, {
+                    "status": "error",
+                    "summary": error_msg,
+                    "trace": trace,
+                    "iterations": len(trace),
+                }),
+                "gathered_context": self._append_to_gathered_context(state, summary_blurb),
+            },
+        }
 
-        except StagnationDetected as e:
-            logger.warning(
-                f"TextAnalysisSpecialist stagnation: '{e.tool_name}' called "
-                f"{e.repeat_count} times after {e.iterations} iterations"
-            )
-            serialized_trace = [self._serialize_react_iteration(h) for h in e.history]
-            pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
-            stagnation_msg = f"Analysis stalled: repeatedly calling '{e.tool_name}'. Partial progress:\n{self._summarize_trace(e.history)}"
-            summary_blurb = f"### Text Analysis (pass {pass_num}) — stagnated\n{stagnation_msg}"
+    def _build_partial_result(
+        self, state: Dict[str, Any], msg: str, trace: List[Dict[str, Any]], max_iter: int
+    ) -> Dict[str, Any]:
+        pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
+        summary_blurb = f"### Text Analysis (pass {pass_num}) — partial\n{msg}"
+        return {
+            "messages": [AIMessage(content=msg)],
+            "artifacts": {
+                "text_analysis_results": self._append_result(state, {
+                    "status": "max_iterations",
+                    "summary": msg,
+                    "trace": trace,
+                    "iterations": max_iter,
+                }),
+                "gathered_context": self._append_to_gathered_context(state, summary_blurb),
+            },
+        }
 
-            return {
-                "messages": [AIMessage(content=stagnation_msg)],
-                "artifacts": {
-                    "text_analysis_results": self._append_result(state, {
-                        "status": "stagnated",
-                        "summary": stagnation_msg,
-                        "trace": serialized_trace,
-                        "iterations": e.iterations,
-                        "stagnation_tool": e.tool_name,
-                    }),
-                    "gathered_context": self._append_to_gathered_context(state, summary_blurb),
-                },
-            }
+    # ─── Tool definitions ──────────────────────────────────────────────
 
-        except MaxIterationsExceeded as e:
-            logger.warning(f"TextAnalysisSpecialist hit max iterations ({e.max_iterations})")
-            serialized_trace = [self._serialize_react_iteration(h) for h in e.history]
-            pass_num = len(state.get("artifacts", {}).get("text_analysis_results", []))
-            partial_msg = f"Analysis reached iteration limit ({e.max_iterations}). Partial progress:\n{self._summarize_trace(e.history)}"
-            summary_blurb = f"### Text Analysis (pass {pass_num}) — partial\n{partial_msg}"
-
-            return {
-                "messages": [AIMessage(content=partial_msg)],
-                "artifacts": {
-                    "text_analysis_results": self._append_result(state, {
-                        "status": "max_iterations",
-                        "summary": partial_msg,
-                        "trace": serialized_trace,
-                        "iterations": e.max_iterations,
-                    }),
-                    "gathered_context": self._append_to_gathered_context(state, summary_blurb),
-                },
-            }
-
-    def _build_tools(self) -> Dict[str, ToolDef]:
-        """Define available tools for ReAct loop."""
+    def _build_tools(self) -> Dict[str, _ToolDef]:
+        """Define available tools mapping tool names to MCP service coordinates."""
         return {
             # Filesystem tools (external MCP)
-            "read_file": ToolDef(
+            "read_file": _ToolDef(
                 service="filesystem",
                 function="read_file",
                 description="Read the contents of a file. Args: path (str).",
             ),
-            "list_directory": ToolDef(
+            "list_directory": _ToolDef(
                 service="filesystem",
                 function="list_directory",
                 description="List files and directories. Args: path (str).",
             ),
             # Terminal tools (external MCP)
-            "run_command": ToolDef(
+            "run_command": _ToolDef(
                 service="terminal",
                 function="run_command",
                 description="Execute a shell command. Args: command (str). Use for jq, yq, csvtool, sort, wc, grep.",
             ),
             # Semantic tools (external MCP)
-            "calculate_drift": ToolDef(
+            "calculate_drift": _ToolDef(
                 service="semantic-chunker",
                 function="calculate_drift",
                 description="Cosine distance between two texts in embedding space (768-d embeddinggemma-300m). Args: text_a (str), text_b (str). Returns float 0.0-2.0.",
             ),
-            "analyze_variants": ToolDef(
+            "analyze_variants": _ToolDef(
                 service="semantic-chunker",
                 function="analyze_variants",
                 description="Measure geometric distance between prompt phrasings. Args: variants (list[str]).",
             ),
             # IT tools (external MCP)
-            "format_json": ToolDef(
+            "format_json": _ToolDef(
                 service="it-tools",
                 function="format_json",
                 description="Pretty-print JSON. Args: json (str).",
             ),
-            "convert_json_to_csv": ToolDef(
+            "convert_json_to_csv": _ToolDef(
                 service="it-tools",
                 function="convert_json_to_csv",
                 description="Convert JSON array to CSV. Args: json (str).",
             ),
-            "convert_json_to_yaml": ToolDef(
+            "convert_json_to_yaml": _ToolDef(
                 service="it-tools",
                 function="convert_json_to_yaml",
                 description="Convert JSON to YAML. Args: json (str).",
             ),
         }
+
+    def _build_openai_tool_schemas(self, tools: Dict[str, _ToolDef]) -> List[Dict[str, Any]]:
+        """Convert tool definitions to OpenAI function calling format for react_step."""
+        schemas = []
+        for name, tool_def in tools.items():
+            schemas.append({
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": tool_def.description,
+                    "parameters": _TOOL_PARAMS.get(name, {"type": "object", "properties": {}}),
+                },
+            })
+        return schemas
+
+    # ─── Prompt & config helpers ───────────────────────────────────────
 
     def _build_task_prompt(self, state: Dict[str, Any], gathered_context: str) -> str:
         """Build the task prompt from state and gathered context."""
@@ -288,23 +463,13 @@ class TextAnalysisSpecialist(BaseSpecialist):
         existing = state.get("artifacts", {}).get("text_analysis_results", [])
         return existing + [entry]
 
-    def _serialize_react_iteration(self, step: ReActIteration) -> Dict[str, Any]:
-        """Serialize a ReActIteration for artifact storage."""
-        return {
-            "iteration": step.iteration,
-            "tool": step.tool_call.name,
-            "args": step.tool_call.args,
-            "success": step.success,
-            "thought": step.thought,
-            "observation_preview": step.observation[:500] if step.observation else None,
-        }
-
-    def _summarize_trace(self, history) -> str:
-        """Summarize tool call history for error messages."""
-        if not history:
+    def _summarize_trace_dicts(self, trace: List[Dict[str, Any]]) -> str:
+        """Summarize trace (list of dicts) for error messages."""
+        if not trace:
             return "(no tool calls recorded)"
         lines = []
-        for step in history:
-            status = "ok" if step.success else "FAIL"
-            lines.append(f"  [{status}] {step.tool_call.name}({step.tool_call.args})")
-        return "\n".join(lines[-10:])  # Last 10 calls
+        for step in trace[-10:]:
+            tc = step.get("tool_call", {})
+            status = "ok" if step.get("success") else "FAIL"
+            lines.append(f"  [{status}] {tc.get('name', '?')}({tc.get('args', {})})")
+        return "\n".join(lines)

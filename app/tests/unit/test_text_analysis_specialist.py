@@ -1,6 +1,6 @@
 # app/tests/unit/test_text_analysis_specialist.py
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.text_analysis_specialist import TextAnalysisSpecialist
 from app.src.utils.errors import LLMInvocationError
@@ -48,7 +48,7 @@ def test_text_analysis_with_text(text_analysis_specialist):
 def test_text_analysis_without_text_self_correction(text_analysis_specialist):
     """
     Tests graceful failure when no text is provided and no ReAct tools available.
-    (Specialist has no execute_with_tools — not wrapped by ReactEnabledSpecialist in unit tests.)
+    (Specialist has no external_mcp_client — not connected to prompt-prix in unit tests.)
     """
     # Arrange
     initial_state = {"messages": [HumanMessage(content="Analyze this.")], "artifacts": {"text_to_process": None}}
@@ -224,3 +224,260 @@ def test_text_analysis_preserves_user_message(text_analysis_specialist):
             break
 
     assert user_message_found, "User's original message should be preserved in LLM context"
+
+
+# ==============================================================================
+# ReAct Path Tests (via prompt-prix MCP react_step)
+# ==============================================================================
+
+@pytest.fixture
+def react_ta(text_analysis_specialist):
+    """TA with mocked external_mcp_client simulating prompt-prix connectivity."""
+    mock_client = MagicMock()
+    mock_client.is_connected.return_value = True
+    text_analysis_specialist.external_mcp_client = mock_client
+    text_analysis_specialist.llm_adapter.model_name = "test-model"
+    text_analysis_specialist.llm_adapter.system_prompt = "You are a test specialist."
+    return text_analysis_specialist
+
+
+def test_react_path_completion(react_ta):
+    """
+    Test that the react_step path handles a simple completion (no tool calls).
+    """
+    # Arrange — react_step returns completed on first call
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp") as mock_mcp:
+        mock_mcp.return_value = {
+            "completed": True,
+            "final_response": "The drift between the two texts is 0.28.",
+            "new_iterations": [],
+            "pending_tool_calls": [],
+            "call_counter": 0,
+            "latency_ms": 500.0,
+        }
+
+        initial_state = {
+            "messages": [HumanMessage(content="Calculate drift between A and B.")],
+            "artifacts": {"gathered_context": "Some facilitator context"},
+        }
+
+        # Act
+        result = react_ta._execute_logic(initial_state)
+
+    # Assert
+    assert isinstance(result["messages"][0], AIMessage)
+    assert "0.28" in result["messages"][0].content
+    results = result["artifacts"]["text_analysis_results"]
+    assert len(results) == 1
+    assert results[0]["status"] == "complete"
+    assert "gathered_context" in result["artifacts"]
+
+
+def test_react_path_tool_dispatch(react_ta):
+    """
+    Test that pending tool calls from react_step are dispatched to real MCP services.
+    """
+    # Arrange — react_step returns pending tool call, then completes
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+
+    call_count = 0
+
+    def mock_mcp_side_effect(client, service, tool, args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if service == "prompt-prix" and tool == "react_step":
+            if call_count == 1:
+                # First call: model wants to calculate_drift
+                return {
+                    "completed": False,
+                    "final_response": None,
+                    "new_iterations": [],
+                    "pending_tool_calls": [
+                        {"id": "call_1", "name": "calculate_drift", "args": {"text_a": "hello", "text_b": "world"}},
+                    ],
+                    "call_counter": 1,
+                    "thought": "I need to measure the drift.",
+                    "latency_ms": 300.0,
+                }
+            else:
+                # Second call: model completes
+                return {
+                    "completed": True,
+                    "final_response": "The drift is 0.35.",
+                    "new_iterations": [],
+                    "pending_tool_calls": [],
+                    "call_counter": 1,
+                    "latency_ms": 200.0,
+                }
+        elif service == "semantic-chunker" and tool == "calculate_drift":
+            # Real MCP tool dispatch — return a mock MCP result
+            return "0.35"
+        return "Error: unexpected call"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp", side_effect=mock_mcp_side_effect):
+        with patch("app.src.specialists.text_analysis_specialist.extract_text_from_mcp_result", side_effect=lambda r: str(r)):
+            initial_state = {
+                "messages": [HumanMessage(content="Calculate drift.")],
+                "artifacts": {"gathered_context": "Context from facilitator"},
+            }
+
+            # Act
+            result = react_ta._execute_logic(initial_state)
+
+    # Assert
+    assert isinstance(result["messages"][0], AIMessage)
+    assert "0.35" in result["messages"][0].content
+    results = result["artifacts"]["text_analysis_results"]
+    assert results[0]["status"] == "complete"
+    # Trace should contain the tool call
+    assert len(results[0]["trace"]) == 1
+    assert results[0]["trace"][0]["tool_call"]["name"] == "calculate_drift"
+    assert results[0]["trace"][0]["success"] is True
+
+
+def test_react_path_max_iterations(react_ta):
+    """
+    Test that the react_step path respects max_iterations.
+    """
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+    react_ta.specialist_config["max_iterations"] = 2
+
+    def mock_mcp_always_pending(client, service, tool, args, **kwargs):
+        if service == "prompt-prix":
+            return {
+                "completed": False,
+                "final_response": None,
+                "new_iterations": [],
+                "pending_tool_calls": [
+                    {"id": "call_1", "name": "read_file", "args": {"path": "/test"}},
+                ],
+                "call_counter": 1,
+                "thought": "Reading...",
+                "latency_ms": 100.0,
+            }
+        return "file contents here"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp", side_effect=mock_mcp_always_pending):
+        with patch("app.src.specialists.text_analysis_specialist.extract_text_from_mcp_result", side_effect=lambda r: str(r)):
+            initial_state = {
+                "messages": [HumanMessage(content="Read and analyze.")],
+                "artifacts": {"gathered_context": "Context"},
+            }
+
+            result = react_ta._execute_logic(initial_state)
+
+    # Assert — should hit max_iterations and return partial
+    results = result["artifacts"]["text_analysis_results"]
+    assert results[0]["status"] == "max_iterations"
+    assert "iteration limit" in result["messages"][0].content
+
+
+def test_react_path_mcp_error(react_ta):
+    """
+    Test graceful handling when react_step MCP call fails.
+    """
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp", side_effect=RuntimeError("MCP timeout")):
+        initial_state = {
+            "messages": [HumanMessage(content="Analyze something.")],
+            "artifacts": {"gathered_context": "Context"},
+        }
+
+        result = react_ta._execute_logic(initial_state)
+
+    # Assert — should return error result, not crash
+    results = result["artifacts"]["text_analysis_results"]
+    assert results[0]["status"] == "error"
+    assert "MCP timeout" in result["messages"][0].content
+
+
+def test_react_path_unknown_tool(react_ta):
+    """
+    Test that unknown tool names in pending calls are handled gracefully.
+    """
+    react_ta.external_mcp_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+
+    call_count = 0
+
+    def mock_mcp(client, service, tool, args, **kwargs):
+        nonlocal call_count
+        call_count += 1
+        if service == "prompt-prix" and call_count == 1:
+            return {
+                "completed": False,
+                "final_response": None,
+                "new_iterations": [],
+                "pending_tool_calls": [
+                    {"id": "call_1", "name": "nonexistent_tool", "args": {}},
+                ],
+                "call_counter": 1,
+                "thought": "Trying something.",
+                "latency_ms": 100.0,
+            }
+        elif service == "prompt-prix":
+            return {
+                "completed": True,
+                "final_response": "Done despite error.",
+                "new_iterations": [],
+                "pending_tool_calls": [],
+                "call_counter": 1,
+                "latency_ms": 100.0,
+            }
+        return "Error: unexpected"
+
+    with patch("app.src.specialists.text_analysis_specialist.sync_call_external_mcp", side_effect=mock_mcp):
+        initial_state = {
+            "messages": [HumanMessage(content="Try something.")],
+            "artifacts": {"gathered_context": "Context"},
+        }
+
+        result = react_ta._execute_logic(initial_state)
+
+    # Assert — should handle gracefully (error observation fed back)
+    results = result["artifacts"]["text_analysis_results"]
+    assert results[0]["status"] == "complete"
+    trace = results[0]["trace"]
+    assert trace[0]["success"] is False
+    assert "Unknown tool" in trace[0]["observation"]
+
+
+def test_react_capability_detection(text_analysis_specialist):
+    """
+    Test that _has_react_capability correctly detects prompt-prix connectivity.
+    """
+    # No external_mcp_client → no react
+    assert text_analysis_specialist._has_react_capability() is False
+
+    # Client exists but prompt-prix not connected
+    mock_client = MagicMock()
+    mock_client.is_connected.return_value = False
+    text_analysis_specialist.external_mcp_client = mock_client
+    assert text_analysis_specialist._has_react_capability() is False
+
+    # Client exists and prompt-prix connected
+    mock_client.is_connected.side_effect = lambda s: s == "prompt-prix"
+    assert text_analysis_specialist._has_react_capability() is True
+
+
+def test_openai_tool_schema_format(text_analysis_specialist):
+    """
+    Test that _build_openai_tool_schemas produces valid OpenAI function calling format.
+    """
+    tools = text_analysis_specialist._build_tools()
+    schemas = text_analysis_specialist._build_openai_tool_schemas(tools)
+
+    assert len(schemas) == len(tools)
+    for schema in schemas:
+        assert schema["type"] == "function"
+        assert "name" in schema["function"]
+        assert "description" in schema["function"]
+        assert "parameters" in schema["function"]
+        assert schema["function"]["parameters"]["type"] == "object"
+
+    # Verify specific tool has correct params
+    drift_schema = next(s for s in schemas if s["function"]["name"] == "calculate_drift")
+    assert "text_a" in drift_schema["function"]["parameters"]["properties"]
+    assert "text_b" in drift_schema["function"]["parameters"]["properties"]

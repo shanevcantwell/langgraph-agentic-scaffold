@@ -260,6 +260,8 @@ specialists:
       max_iterations: 10
     # Tool permissions — optional use; simple analysis doesn't require tools
     tools:
+      prompt-prix:
+        - react_step
       filesystem:
         - read_file
         - list_directory
