@@ -54,7 +54,7 @@ def generate_report(report_data: ErrorReport) -> str:
     ]
     return "\n\n".join(report_parts)
 
-def _format_research_trace(trace: list, trace_name: str) -> str:
+def _format_trace(trace: list, trace_name: str) -> str:
     """Format a resume_trace (or legacy research_trace_N) as a readable tool call log."""
     if not trace or not isinstance(trace, list):
         return f"```\n{trace}\n```"
@@ -120,28 +120,6 @@ def _format_exit_interview_result(result: dict) -> str:
     return "\n".join(lines)
 
 
-def _format_project_context(ctx: dict) -> str:
-    """Format project_context artifact as structured fields."""
-    if not isinstance(ctx, dict):
-        return f"```\n{ctx}\n```"
-
-    state = ctx.get("state", "?")
-    summary = ctx.get("summary", "")
-    next_steps = ctx.get("next_steps", [])
-
-    lines = [f"**State:** `{state}`"]
-    if summary:
-        lines.append(f"**Summary:** {summary}")
-    if next_steps:
-        lines.append("**Next steps:**")
-        for step in next_steps[:5]:  # Limit to 5
-            lines.append(f"  - {step}")
-        if len(next_steps) > 5:
-            lines.append(f"  - ... and {len(next_steps) - 5} more")
-
-    return "\n".join(lines)
-
-
 def _format_artifact(key: str, value) -> str:
     """
     Intelligently format an artifact based on its type and key.
@@ -149,15 +127,11 @@ def _format_artifact(key: str, value) -> str:
     """
     # resume_trace (or legacy research_trace_N) - format as tool call log
     if (key == "resume_trace" or key.startswith("research_trace_")) and isinstance(value, list):
-        return _format_research_trace(value, key)
+        return _format_trace(value, key)
 
     # exit_interview_result - format as structured fields
     if key == "exit_interview_result" and isinstance(value, dict):
         return _format_exit_interview_result(value)
-
-    # project_context - format as structured fields
-    if key == "project_context" and isinstance(value, dict):
-        return _format_project_context(value)
 
     # context_plan - pretty JSON
     if key == "context_plan" and isinstance(value, dict):

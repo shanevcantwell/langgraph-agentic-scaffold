@@ -1,7 +1,6 @@
 import logging
 from typing import Dict, Any, Optional, List
 from .base import BaseSpecialist
-from .schemas import ReturnControlMode
 from ..interface.context_schema import ContextPlan, ContextActionType
 from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
 from ..utils.prompt_loader import load_prompt
@@ -73,20 +72,8 @@ class FacilitatorSpecialist(BaseSpecialist):
             logger.error(f"Facilitator: Filesystem MCP list_directory failed: {e}")
             raise
 
-    def _assemble_resume_trace(self, artifacts: dict) -> Optional[List[dict]]:
-        """
-        Read resume_trace for ReAct loop resumption (ADR-CORE-059: Memento fix).
-
-        PD saves the full accumulated trace as 'resume_trace' directly.
-        Facilitator decides whether to pass it through (accumulate/delta)
-        or drop it (reset mode).
-        """
-        trace_data = artifacts.get("resume_trace")
-        if not isinstance(trace_data, list) or not trace_data:
-            return None
-
-        logger.info(f"Facilitator: Found resume_trace with {len(trace_data)} entries")
-        return trace_data
+    # #170: _assemble_resume_trace removed. PD writes resume_trace directly
+    # to artifacts via ior merge; Facilitator no longer relays it.
 
     def _format_exit_interview_feedback(self, result: dict) -> str:
         """
@@ -101,6 +88,41 @@ class FacilitatorSpecialist(BaseSpecialist):
             missing_elements=result.get("missing_elements", "Remaining work not specified"),
             recommended_specialists=", ".join(result.get("recommended_specialists", ["project_director"]))
         )
+
+    def _extract_trace_knowledge(self, artifacts: dict) -> Optional[str]:
+        """
+        #170: Extract knowledge of prior write operations from resume_trace.
+
+        On retry, PD starts with an empty trace. This method surfaces what
+        write operations (create_directory, move_file, write_file) succeeded
+        in prior invocations so the model doesn't redo them.
+
+        Read operations are omitted — they're cheap and re-reading ensures
+        the model sees current filesystem state.
+        """
+        trace = artifacts.get("resume_trace", [])
+        if not trace or not isinstance(trace, list):
+            return None
+
+        entries = []
+        for step in trace:
+            if not step.get("success"):
+                continue
+            tc = step.get("tool_call", {})
+            name = tc.get("name", "")
+            args = tc.get("args", {})
+
+            if name == "create_directory":
+                entries.append(f"Created directory {args.get('path', '?')}")
+            elif name == "move_file":
+                entries.append(f"Moved {args.get('source', '?')} → {args.get('destination', '?')}")
+            elif name == "write_file":
+                entries.append(f"Wrote {args.get('path', '?')}")
+
+        if not entries:
+            return None
+
+        return "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in entries)
 
     def _summarize_work_in_progress(self, artifacts: dict, routing_history: list) -> Optional[str]:
         """
@@ -200,29 +222,11 @@ class FacilitatorSpecialist(BaseSpecialist):
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
-        
-        # Determine Return Control Mode (Issue #96 / ADR-ROADMAP-001)
         exit_interview_result = artifacts.get("exit_interview_result")
-        return_control = ReturnControlMode.ACCUMULATE # Default
-        
-        if exit_interview_result:
-             mode_str = exit_interview_result.get("return_control", "accumulate")
-             try:
-                 return_control = ReturnControlMode(mode_str)
-             except ValueError:
-                 logger.warning(f"Facilitator: Unknown return_control '{mode_str}', defaulting to ACCUMULATE")
 
-        logger.info(f"Facilitator: executing with mode {return_control.value}")
-
-        # Handle Context Cleanup (RESET mode)
-        existing_context = artifacts.get("gathered_context", "")
-        if return_control == ReturnControlMode.RESET:
-            logger.info("Facilitator: RESET mode - clearing gathered_context")
-            existing_context = ""
-
-        # DELTA mode not yet implemented (requires LLM capability) - fall back to ACCUMULATE
-        if return_control == ReturnControlMode.DELTA:
-            logger.warning("Facilitator: DELTA mode requested but not implemented, using ACCUMULATE")
+        # #170: gathered_context is rebuilt fresh each invocation.
+        # return_control modes (ACCUMULATE/RESET) are no longer needed —
+        # every invocation rebuilds from current plan actions + trace knowledge.
 
         # Issue #114: BENIGN continuation - pass trace when model was working but ran out of runway
         # Key signal: max_iterations_exceeded must be True (model hit runway limit)
@@ -237,17 +241,19 @@ class FacilitatorSpecialist(BaseSpecialist):
         is_benign_continuation = max_exceeded and (not exit_interview_result or ei_incomplete)
 
         if is_benign_continuation:
-            resume_trace = self._assemble_resume_trace(artifacts)
-            if resume_trace:
+            # #170: resume_trace is already in artifacts from PD's write (ior merge).
+            # Facilitator only needs to clear the flag so the next loop doesn't
+            # re-trigger BENIGN. PD starts fresh regardless (trace=[]).
+            resume_trace = artifacts.get("resume_trace")
+            if resume_trace and isinstance(resume_trace, list):
                 logger.info(
-                    f"Facilitator: BENIGN continuation - passing {len(resume_trace)} trace entries "
+                    f"Facilitator: BENIGN continuation - {len(resume_trace)} trace entries "
                     f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
                 )
                 return {
                     "artifacts": {
                         "resume_trace": resume_trace,
-                        "max_iterations_exceeded": False,  # Consumer clears the flag
-                        # Don't touch gathered_context - keep original value
+                        "max_iterations_exceeded": False,  # Clear the flag
                     },
                     "scratchpad": {
                         "facilitator_complete": True
@@ -283,6 +289,16 @@ class FacilitatorSpecialist(BaseSpecialist):
                 feedback = self._format_exit_interview_feedback(exit_interview_result)
                 gathered_context.append(feedback)
                 logger.info("Facilitator: Added curated EI retry context")
+
+        # #170: Extract knowledge of prior write operations from trace
+        # On retry, PD starts fresh (no trace resumption), so the model needs to
+        # know what directories were created and files were moved. Read operations
+        # are omitted — cheap to redo and ensures model sees current state.
+        if exit_interview_result and not exit_interview_result.get("is_complete", True):
+            knowledge = self._extract_trace_knowledge(artifacts)
+            if knowledge:
+                gathered_context.append(knowledge)
+                logger.info("Facilitator: Added prior work knowledge from trace")
 
         # Issue #108: Surface work-in-progress for BENIGN interrupts
         # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN
@@ -419,34 +435,12 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.error(f"Failed to execute action {action}: {e}")
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")
 
-        # ADR-CORE-059: Assemble resume trace for ReAct loop continuation (Memento fix)
-        # However, we must generally AVOID this during Exit Interview retries (Issue #96/101),
-        # because "resuming" a state where the agent thought it was done just makes it think it's done again.
-        # Retry loops should be "fresh attempts with feedback", not "continuations of efficient failure".
-        resume_trace = None
-        
-        # Only use resume_trace if we are NOT driven by an Exit Interview rejection,
-        # OR if we are explicitly told to ACCUMULATE (and it wasn't a logic error).
-        # But for now, safe default: if missing elements identified, start fresh.
-        if not exit_interview_result:
-            resume_trace = self._assemble_resume_trace(artifacts)
-        elif return_control == ReturnControlMode.ACCUMULATE:
-            # ACCUMULATE mode always passes trace (stutter detection, max_iterations, etc.)
-            resume_trace = self._assemble_resume_trace(artifacts)
-            logger.info("Facilitator: Resuming trace (ACCUMULATE mode)")
-        else:
-            logger.info("Facilitator: Skipping resume_trace assembly (RESET mode or fresh attempt)")
+        # #170: Fresh rebuild — no accumulation across passes.
+        # resume_trace is already in artifacts from PD's write (ior merge) —
+        # Facilitator doesn't need to relay it.
+        final_context = "\n\n".join(gathered_context)
 
-        # Assemble final payload - Issue #96: ACCUMULATE existing + new context
-        new_context = "\n\n".join(gathered_context)
-        if existing_context:
-            # Preserve previous context, append new with separator
-            final_context = f"{existing_context}\n\n---\n\n{new_context}"
-            logger.info(f"Facilitator: Accumulated context (existing: {len(existing_context)} chars + new: {len(new_context)} chars)")
-        else:
-            final_context = new_context
-
-        result = {
+        return {
             "artifacts": {
                 "gathered_context": final_context
             },
@@ -454,10 +448,3 @@ class FacilitatorSpecialist(BaseSpecialist):
                 "facilitator_complete": True
             }
         }
-
-        # Add resume_trace if we have prior work to continue from
-        if resume_trace:
-            result["artifacts"]["resume_trace"] = resume_trace
-            logger.info(f"Facilitator: Added resume_trace with {len(resume_trace)} entries")
-
-        return result

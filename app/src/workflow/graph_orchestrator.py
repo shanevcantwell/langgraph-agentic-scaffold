@@ -348,13 +348,8 @@ class GraphOrchestrator:
     def after_web_specialist(self, state: GraphState) -> str:
         """
         Decides next step after WebSpecialist.
-        If part of a Project (Emergent Subgraph), return to ProjectDirector.
-        Else, return to Router.
+        #170: Emergent Project Subgraph removed — always return to Router.
         """
-        artifacts = state.get("artifacts", {})
-        if artifacts.get("project_context"):
-            return "project_director"
-
         return CoreSpecialist.ROUTER.value
 
     def after_exit_interview(self, state: GraphState) -> str:

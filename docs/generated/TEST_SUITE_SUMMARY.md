@@ -1015,12 +1015,12 @@
   - *Per FACILITATOR.md: Invalid ContextPlan data returns an error.*
 - **`test_facilitator_continues_after_action_error`**
   - *Per FACILITATOR.md: Individual action failures don't halt the entire plan.*
-- **`test_facilitator_accumulates_existing_context_on_retry`**
-  - *Issue #96: Facilitator should ACCUMULATE context, not OVERWRITE.*
+- **`test_facilitator_rebuilds_context_fresh_on_retry`**
+  - *#170: Facilitator rebuilds gathered_context fresh each invocation.*
 - **`test_facilitator_fresh_context_when_no_existing`**
   - *Issue #96: First pass (no existing gathered_context) should work normally.*
-- **`test_facilitator_assembles_resume_trace_for_prior_work`**
-  - *ADR-CORE-059: Facilitator assembles resume_trace from prior research traces.*
+- **`test_facilitator_does_not_relay_resume_trace`**
+  - *#170: Facilitator does NOT relay resume_trace in non-BENIGN path.*
 - **`test_facilitator_surfaces_curated_exit_interview_feedback`**
   - *Issue #167 (revises #121): Curated EI feedback IS surfaced in gathered_context.*
 - **`test_facilitator_curated_feedback_excludes_routing_data`**
@@ -1047,6 +1047,16 @@
   - *Issue #114: When exit_interview_result is present, NO early return.*
 - **`test_facilitator_benign_continuation_after_ei_incomplete`**
   - *Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations was the cause.*
+- **`test_extracts_write_operations`**
+  - *create_directory, move_file, write_file produce knowledge entries.*
+- **`test_skips_failed_operations`**
+  - *Only successful operations produce entries.*
+- **`test_returns_none_for_empty_trace`**
+  - *No trace = no knowledge.*
+- **`test_returns_none_for_read_only_trace`**
+  - *Trace with only reads produces no knowledge (reads are cheap to redo).*
+- **`test_integrated_in_retry_gathered_context`**
+  - *#170: On EI retry, gathered_context includes prior work knowledge.*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1820,30 +1830,20 @@
   - *#162: PD is a plain BaseSpecialist using react_step MCP directly.*
 - **`test_project_director_defines_tools`**
   - *Test that ProjectDirector defines search and browse tools.*
-- **`test_project_context_initialization`**
-  - *Test that ProjectContext is initialized from user_request artifact.*
-- **`test_project_context_restoration`**
-  - *Test that existing ProjectContext is restored from artifacts.*
-- **`test_task_prompt_building`**
-  - *Test that task prompt includes context information (#162).*
+- **`test_task_prompt_includes_user_request`**
+  - *#170: Task prompt includes user_request as Goal.*
+- **`test_task_prompt_no_gathered_context`**
+  - *#170: Task prompt works without gathered_context.*
 - **`test_max_iterations_from_config`**
   - *Test that max_iterations is read from config.*
 - **`test_max_iterations_default`**
   - *Test default max_iterations when not in config.*
 - **`test_partial_synthesis_on_max_iterations`**
-  - *Test graceful degradation when max iterations exceeded (#162).*
+  - *#170: Partial synthesis shows tool counts and last actions.*
 - **`test_subgraph_returns_empty_exclusions`**
   - *Test that Phase 2 subgraph doesn't exclude specialists from hub-and-spoke.*
 - **`test_subgraph_build_no_custom_edges`**
   - *Test that Phase 2 subgraph doesn't add custom edges.*
-- **`test_filesystem_operations_populate_knowledge_base`**
-  - *move_file, create_directory, run_command all produce knowledge entries.*
-- **`test_failed_operations_not_tracked`**
-  - *Only successful operations should add knowledge entries.*
-- **`test_research_tools_still_tracked`**
-  - *search and browse still produce knowledge entries.*
-- **`test_iteration_count_updated`**
-  - *context.iteration should equal trace length.*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 

@@ -531,16 +531,13 @@ def test_facilitator_continues_after_action_error(facilitator):
 # Issue #96: Context Accumulation on Exit Interview Retry
 # =============================================================================
 
-def test_facilitator_accumulates_existing_context_on_retry(facilitator):
+def test_facilitator_rebuilds_context_fresh_on_retry(facilitator):
     """
-    Issue #96: Facilitator should ACCUMULATE context, not OVERWRITE.
+    #170: Facilitator rebuilds gathered_context fresh each invocation.
 
-    When Exit Interview routes back through Facilitator for retry, the existing
-    gathered_context must be preserved and new context appended. Without this,
-    specialists see stale/incomplete context and create hedged duplicates
-    (e.g., "Plant_new" instead of continuing with "Plant").
-
-    The fix is += not = for gathered_context.
+    The old behavior (Issue #96) accumulated context across retries, causing
+    tripling. Now each invocation builds from the current plan actions only.
+    Stale prior context from artifacts is NOT carried forward.
     """
     plan = ContextPlan(
         reasoning="Re-check directory state on retry",
@@ -553,20 +550,15 @@ def test_facilitator_accumulates_existing_context_on_retry(facilitator):
         ]
     )
 
-    # Simulate RETRY state: gathered_context already exists from first pass
+    # Simulate RETRY state: gathered_context exists from first pass (should be ignored)
     existing_context = """### Directory: /workspace/test
 - [FILE] /workspace/test/1.txt
-- [FILE] /workspace/test/2.txt
-
-### Previous Work (do not repeat these operations)
-**research_trace_0:**
-- create_directory ✓: {'path': '/workspace/test/animals'}
-- move_file ✓: {'source': '/workspace/test/1.txt', 'destination':"""
+- [FILE] /workspace/test/2.txt"""
 
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "gathered_context": existing_context  # PRE-EXISTING from first pass
+            "gathered_context": existing_context  # Should NOT be preserved
         }
     }
 
@@ -577,13 +569,11 @@ def test_facilitator_accumulates_existing_context_on_retry(facilitator):
 
     gathered = result["artifacts"]["gathered_context"]
 
-    # CRITICAL: Existing context MUST be preserved (not overwritten)
-    assert "### Directory: /workspace/test" in gathered  # From existing
-    assert "- [FILE] /workspace/test/1.txt" in gathered  # From existing (original state)
-    assert "### Previous Work" in gathered  # From existing
-
-    # Separator should be present (indicates accumulation, not overwrite)
-    assert "---" in gathered
+    # #170: Fresh rebuild — shows CURRENT directory state, not accumulated old + new
+    assert "2.txt" in gathered  # Current listing
+    assert "animals" in gathered  # Current listing
+    # Old content should NOT be preserved (no accumulation)
+    assert "- [FILE] /workspace/test/1.txt" not in gathered
 
     # New context should be appended
     assert "- /workspace/test/2.txt" in gathered  # From new listing
@@ -631,13 +621,13 @@ def test_facilitator_fresh_context_when_no_existing(facilitator):
     assert separator_count == 0, f"Fresh context should not have separators, found {separator_count}"
 
 
-def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
+def test_facilitator_does_not_relay_resume_trace(facilitator):
     """
-    ADR-CORE-059: Facilitator assembles resume_trace from prior research traces.
+    #170: Facilitator does NOT relay resume_trace in non-BENIGN path.
 
-    Instead of summarizing prior work in gathered_context (prompt engineering),
-    we give the specialist its actual trace to resume from (context engineering).
-    The model sees its own tool conversation and continues naturally.
+    PD writes resume_trace directly to artifacts (ior merge). Facilitator
+    only reads it for _extract_trace_knowledge(). On first pass (no EI result),
+    Facilitator builds gathered_context without trace knowledge.
     """
     plan = ContextPlan(
         reasoning="Continue task after partial completion",
@@ -653,11 +643,9 @@ def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            # Simulate previous work recorded in research_trace
             "resume_trace": [
                 {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
                 {"tool": "move_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
-                {"tool": "move_file", "args": {"source": "/workspace/2.txt", "destination": "/workspace/animals/2.txt"}, "success": False, "error": "Hit iteration limit"},
             ]
         }
     }
@@ -666,23 +654,12 @@ def test_facilitator_assembles_resume_trace_for_prior_work(facilitator):
         mock_list.return_value = ["3.txt", "[DIR] animals"]
         result = facilitator.execute(state)
 
-    # ADR-CORE-059: Prior work is now provided as resume_trace, NOT in gathered_context
-    assert "resume_trace" in result["artifacts"]
-    resume_trace = result["artifacts"]["resume_trace"]
-
-    # All 3 trace entries should be assembled
-    assert len(resume_trace) == 3
-
-    # Verify trace entries are passed through correctly
-    assert resume_trace[0]["tool"] == "create_directory"
-    assert resume_trace[1]["tool"] == "move_file"
-    assert resume_trace[2]["tool"] == "move_file"
-    assert resume_trace[2]["success"] is False  # Failed operation preserved
-
-    # gathered_context should NOT contain the old summary format
+    # #170: Facilitator does NOT relay resume_trace (PD wrote it directly)
+    assert "resume_trace" not in result["artifacts"]
+    # gathered_context should have directory listing but NOT trace knowledge
+    # (no EI result = first pass, trace knowledge only on retry)
     gathered = result["artifacts"]["gathered_context"]
-    assert "### Previous Work" not in gathered
-    assert "do not repeat these operations" not in gathered
+    assert "### Directory: /workspace" in gathered
 
 
 def test_facilitator_surfaces_curated_exit_interview_feedback(facilitator):
@@ -1338,3 +1315,114 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
 
     # Should mark facilitator complete
     assert result["scratchpad"] == {"facilitator_complete": True}
+
+
+# =============================================================================
+# Issue #170: Trace Knowledge Extraction
+# =============================================================================
+
+class TestExtractTraceKnowledge:
+    """
+    #170: _extract_trace_knowledge extracts write operations from resume_trace
+    so PD knows what was already done on retry.
+    """
+
+    def test_extracts_write_operations(self, facilitator):
+        """create_directory, move_file, write_file produce knowledge entries."""
+        artifacts = {
+            "resume_trace": [
+                {"tool_call": {"name": "list_directory", "args": {"path": "/ws"}}, "success": True},
+                {"tool_call": {"name": "read_file", "args": {"path": "/ws/1.txt"}}, "success": True},
+                {"tool_call": {"name": "create_directory", "args": {"path": "/ws/animals"}}, "success": True},
+                {"tool_call": {"name": "move_file", "args": {"source": "/ws/1.txt", "destination": "/ws/animals/1.txt"}}, "success": True},
+                {"tool_call": {"name": "write_file", "args": {"path": "/ws/output.txt"}}, "success": True},
+            ]
+        }
+
+        result = facilitator._extract_trace_knowledge(artifacts)
+
+        assert result is not None
+        assert "### Prior Work Completed" in result
+        assert "Created directory /ws/animals" in result
+        assert "Moved /ws/1.txt" in result
+        assert "animals/1.txt" in result
+        assert "Wrote /ws/output.txt" in result
+        # Reads should NOT appear
+        assert "list_directory" not in result
+        assert "read_file" not in result
+
+    def test_skips_failed_operations(self, facilitator):
+        """Only successful operations produce entries."""
+        artifacts = {
+            "resume_trace": [
+                {"tool_call": {"name": "move_file", "args": {"source": "a", "destination": "b"}}, "success": True},
+                {"tool_call": {"name": "move_file", "args": {"source": "c", "destination": "d"}}, "success": False},
+            ]
+        }
+
+        result = facilitator._extract_trace_knowledge(artifacts)
+
+        assert "Moved a" in result
+        assert "Moved c" not in result
+
+    def test_returns_none_for_empty_trace(self, facilitator):
+        """No trace = no knowledge."""
+        assert facilitator._extract_trace_knowledge({}) is None
+        assert facilitator._extract_trace_knowledge({"resume_trace": []}) is None
+
+    def test_returns_none_for_read_only_trace(self, facilitator):
+        """Trace with only reads produces no knowledge (reads are cheap to redo)."""
+        artifacts = {
+            "resume_trace": [
+                {"tool_call": {"name": "list_directory", "args": {"path": "/ws"}}, "success": True},
+                {"tool_call": {"name": "read_file", "args": {"path": "/ws/1.txt"}}, "success": True},
+            ]
+        }
+
+        assert facilitator._extract_trace_knowledge(artifacts) is None
+
+    def test_integrated_in_retry_gathered_context(self, facilitator):
+        """#170: On EI retry, gathered_context includes prior work knowledge."""
+        plan = ContextPlan(
+            reasoning="Sort files into categories",
+            actions=[
+                ContextAction(
+                    type=ContextActionType.LIST_DIRECTORY,
+                    target="/workspace",
+                    description="List workspace"
+                )
+            ]
+        )
+
+        state = {
+            "artifacts": {
+                "context_plan": plan.model_dump(),
+                "exit_interview_result": {
+                    "is_complete": False,
+                    "reasoning": "Only 2 of 6 files moved",
+                    "missing_elements": "4 files still need moving",
+                    "recommended_specialists": ["project_director"]
+                },
+                "resume_trace": [
+                    {"tool_call": {"name": "create_directory", "args": {"path": "/workspace/animals"}}, "success": True},
+                    {"tool_call": {"name": "move_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}}, "success": True},
+                    {"tool_call": {"name": "move_file", "args": {"source": "/workspace/4.txt", "destination": "/workspace/animals/4.txt"}}, "success": True},
+                ]
+            }
+        }
+
+        with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+            mock_list.return_value = ["2.txt", "3.txt", "5.txt", "6.txt", "[DIR] animals"]
+            result = facilitator.execute(state)
+
+        gathered = result["artifacts"]["gathered_context"]
+
+        # Task strategy
+        assert "### Task Strategy" in gathered
+        # EI feedback
+        assert "4 files still need moving" in gathered
+        # Prior work knowledge from trace
+        assert "### Prior Work Completed" in gathered
+        assert "Created directory /workspace/animals" in gathered
+        assert "Moved /workspace/1.txt" in gathered
+        assert "Moved /workspace/4.txt" in gathered

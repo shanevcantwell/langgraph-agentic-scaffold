@@ -16,7 +16,6 @@ from typing import Dict, Any, List
 from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
-from ..interface.project_context import ProjectContext, ProjectState
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
     dispatch_external_tool,
@@ -143,29 +142,28 @@ class ProjectDirector(BaseSpecialist):
     CYCLE_MIN_REPETITIONS = 3
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        project_context = self._get_or_init_context(state)
-        logger.info(f"ProjectDirector starting: {project_context.project_goal}")
+        # #170: PD gets goal from artifacts, not ProjectContext
+        artifacts = state.get("artifacts", {})
+        user_request = artifacts.get("user_request", "Unknown request")
+        logger.info(f"ProjectDirector starting: {user_request}")
 
         if not is_react_available(getattr(self, 'external_mcp_client', None)):
             return self._build_error_result(
-                project_context,
                 "prompt-prix MCP not reachable — cannot execute react_step loop", []
             )
 
         tools = self._build_tools()
         tool_schemas = build_tool_schemas(tools, _TOOL_PARAMS)
-        task_prompt = self._build_task_prompt(project_context, state)
+        task_prompt = self._build_task_prompt(user_request, state)
         model_id = getattr(self.llm_adapter, 'model_name', None) or "default"
         system_prompt = getattr(self.llm_adapter, 'system_prompt', "") or ""
         max_iterations = self._get_max_iterations()
 
-        # ADR-CORE-059: Resume from prior trace if available (Memento fix)
-        trace: List[Dict[str, Any]] = self._load_resume_trace(state.get("artifacts", {}))
-        call_counter = len(trace)
+        # #170: Fresh trace each invocation — no resumption from prior runs.
+        # Facilitator provides retry context via gathered_context.
+        trace: List[Dict[str, Any]] = []
+        call_counter = 0
         successful_paths: List[str] = []  # For filesystem error enrichment
-
-        if trace:
-            logger.info(f"ProjectDirector: Resuming from {len(trace)} prior trace entries")
 
         for iteration in range(max_iterations):
             try:
@@ -184,15 +182,11 @@ class ProjectDirector(BaseSpecialist):
 
                 if result.get("completed"):
                     final_response = result.get("final_response", "Task complete.")
-                    project_context.update_state(ProjectState.COMPLETE)
-                    self._update_context_from_trace(project_context, trace)
                     logger.info(
                         f"ProjectDirector completed after {iteration + 1} iterations, "
                         f"{len(trace)} tool calls"
                     )
-                    return self._build_success_result(
-                        project_context, final_response, trace
-                    )
+                    return self._build_success_result(final_response, trace)
 
                 # Dispatch pending tool calls to real MCP services
                 pending = result.get("pending_tool_calls", [])
@@ -201,7 +195,6 @@ class ProjectDirector(BaseSpecialist):
                 if not pending:
                     logger.warning("react_step returned incomplete with no pending tool calls")
                     return self._build_error_result(
-                        project_context,
                         "react_step returned no tool calls and no completion", trace
                     )
 
@@ -233,22 +226,17 @@ class ProjectDirector(BaseSpecialist):
                 # Stagnation detection after each iteration batch
                 if self._check_stagnation(trace):
                     logger.warning("ProjectDirector: stagnation detected in trace")
-                    project_context.update_state(ProjectState.SYNTHESIZING)
-                    self._update_context_from_trace(project_context, trace)
-                    return self._build_stagnation_result(project_context, trace)
+                    return self._build_stagnation_result(trace)
 
             except Exception as e:
                 logger.error(f"ProjectDirector react loop error at iteration {iteration}: {e}")
                 return self._build_error_result(
-                    project_context,
                     f"react loop error at iteration {iteration}: {e}", trace
                 )
 
         # Max iterations exceeded
-        project_context.update_state(ProjectState.SYNTHESIZING)
-        self._update_context_from_trace(project_context, trace)
         logger.warning(f"ProjectDirector hit max iterations ({max_iterations})")
-        return self._build_partial_result(project_context, trace, max_iterations)
+        return self._build_partial_result(trace, max_iterations)
 
     # ─── react_step infrastructure ─────────────────────────────────────
 
@@ -348,8 +336,12 @@ class ProjectDirector(BaseSpecialist):
 
     # ─── Prompt & config helpers ───────────────────────────────────────
 
-    def _build_task_prompt(self, context: ProjectContext, state: dict) -> str:
-        """Build the task prompt from ProjectContext and gathered context."""
+    def _build_task_prompt(self, user_request: str, state: dict) -> str:
+        """Build the task prompt from user request and gathered context.
+
+        #170: Facilitator is the sole context writer. PD receives everything
+        it needs via gathered_context — no private knowledge_base or open_questions.
+        """
         gathered_context = state.get("artifacts", {}).get("gathered_context", "")
 
         context_section = ""
@@ -357,23 +349,7 @@ class ProjectDirector(BaseSpecialist):
             context_section = f"\n**System Context (gathered before your invocation):**\n{gathered_context}\n"
             logger.info("ProjectDirector: Injected gathered_context into prompt")
 
-        knowledge_section = ""
-        if context.knowledge_base:
-            knowledge_section = (
-                "\nWhat I've learned so far:\n"
-                + "\n".join(f"- {fact}" for fact in context.knowledge_base)
-                + "\n"
-            )
-
-        questions_section = ""
-        if context.open_questions:
-            questions_section = (
-                "\nOpen questions to investigate:\n"
-                + "\n".join(f"- {q}" for q in context.open_questions)
-                + "\n"
-            )
-
-        return f"**Goal:** {context.project_goal}\n{context_section}{knowledge_section}{questions_section}"
+        return f"**Goal:** {user_request}\n{context_section}"
 
     def _get_max_iterations(self) -> int:
         """Get max iterations from specialist config."""
@@ -383,122 +359,30 @@ class ProjectDirector(BaseSpecialist):
         """Check if an internal MCP service is available."""
         return hasattr(self, 'mcp_client') and self.mcp_client is not None
 
-    # ─── Resume trace (ADR-CORE-059 Memento fix) ──────────────────────
-
-    def _load_resume_trace(self, artifacts: dict) -> List[Dict[str, Any]]:
-        """
-        Load resume_trace artifact as list of dicts.
-
-        Facilitator assembles prior traces into resume_trace artifact.
-        The trace format is already dicts — same format react_step uses.
-        """
-        resume_trace = artifacts.get("resume_trace")
-        if not resume_trace or not isinstance(resume_trace, list):
-            return []
-
-        valid = []
-        for entry in resume_trace:
-            if not isinstance(entry, dict):
-                continue
-            # Normalize: ensure tool_call dict exists
-            if "tool_call" not in entry and "tool" in entry:
-                entry = {
-                    "iteration": entry.get("iteration", len(valid)),
-                    "tool_call": {
-                        "id": entry.get("id", f"resume_{len(valid)}"),
-                        "name": entry.get("tool", "unknown"),
-                        "args": entry.get("args", {}),
-                    },
-                    "observation": entry.get("observation_preview") or entry.get("observation", ""),
-                    "success": entry.get("success", True),
-                    "thought": entry.get("thought"),
-                }
-            valid.append(entry)
-
-        if valid:
-            logger.info(f"ProjectDirector: Loaded {len(valid)} resume trace entries")
-        return valid
-
-    # ─── ProjectContext tracking ───────────────────────────────────────
-
-    def _get_or_init_context(self, state: dict) -> ProjectContext:
-        """Get existing ProjectContext from artifacts or initialize new one."""
-        artifacts = state.get("artifacts", {})
-        project_context_data = artifacts.get("project_context")
-
-        if project_context_data:
-            return ProjectContext(**project_context_data)
-
-        user_request = artifacts.get("user_request", "Unknown request")
-        context = ProjectContext(project_goal=user_request)
-        logger.info(f"Initialized new ProjectContext: {context.project_goal}")
-        return context
-
-    def _update_context_from_trace(
-        self, context: ProjectContext, trace: List[Dict[str, Any]]
-    ) -> None:
-        """Update ProjectContext with insights from trace dicts."""
-        for step in trace:
-            if not step.get("success"):
-                continue
-            tc = step.get("tool_call", {})
-            name = tc.get("name", "")
-            args = tc.get("args", {})
-
-            # Research tools
-            if name == "search":
-                context.add_knowledge(f"Searched for '{args.get('query', '?')}'")
-            elif name == "browse":
-                context.add_knowledge(f"Read content from {args.get('url', '?')}")
-            # Filesystem tools (#166)
-            elif name == "list_directory":
-                context.add_knowledge(f"Listed {args.get('path', '?')}")
-            elif name == "read_file":
-                context.add_knowledge(f"Read {args.get('path', '?')}")
-            elif name == "create_directory":
-                context.add_knowledge(f"Created directory {args.get('path', '?')}")
-            elif name == "move_file":
-                context.add_knowledge(
-                    f"Moved {args.get('source', '?')} → {args.get('destination', '?')}"
-                )
-            elif name == "run_command":
-                context.add_knowledge(f"Ran: {args.get('command', '?')}")
-
-        context.iteration = len(trace)
-
     # ─── Result builders ───────────────────────────────────────────────
 
     def _build_success_result(
-        self, context: ProjectContext,
-        final_response: str, trace: List[Dict[str, Any]]
+        self, final_response: str, trace: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         return {
             "messages": [AIMessage(content=final_response)],
             "artifacts": {
-                "project_context": context.model_dump(),
                 "resume_trace": trace,
-                "iterations_used": len(trace),
-                "research_status": "complete",
             },
         }
 
     def _build_error_result(
-        self, context: ProjectContext,
-        error_msg: str, trace: List[Dict[str, Any]]
+        self, error_msg: str, trace: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         return {
             "messages": [AIMessage(content=error_msg)],
             "artifacts": {
-                "project_context": context.model_dump(),
                 "resume_trace": trace,
-                "iterations_used": len(trace),
-                "research_status": "error",
             },
         }
 
     def _build_stagnation_result(
-        self, context: ProjectContext,
-        trace: List[Dict[str, Any]]
+        self, trace: List[Dict[str, Any]]
     ) -> Dict[str, Any]:
         # Find the repeated pattern for the message
         last_tc = trace[-1].get("tool_call", {}) if trace else {}
@@ -515,61 +399,42 @@ class ProjectDirector(BaseSpecialist):
         return {
             "messages": [AIMessage(content=stagnation_message)],
             "artifacts": {
-                "project_context": context.model_dump(),
                 "resume_trace": trace,
-                "iterations_used": len(trace),
                 "stagnation_detected": True,
                 "stagnation_tool": tool_name,
                 "stagnation_args": tool_args,
-                "research_status": "stagnated",
             },
         }
 
     def _build_partial_result(
-        self, context: ProjectContext,
-        trace: List[Dict[str, Any]], max_iter: int
+        self, trace: List[Dict[str, Any]], max_iter: int
     ) -> Dict[str, Any]:
-        partial_msg = self._synthesize_partial(context, trace, max_iter)
+        partial_msg = self._synthesize_partial(trace, max_iter)
         return {
             "messages": [AIMessage(content=partial_msg)],
             "artifacts": {
-                "project_context": context.model_dump(),
                 "resume_trace": trace,
-                "iterations_used": max_iter,
                 "max_iterations_exceeded": True,
-                "research_status": "partial",
             },
         }
 
     def _synthesize_partial(
-        self, context: ProjectContext, trace: List[Dict[str, Any]], max_iter: int
+        self, trace: List[Dict[str, Any]], max_iter: int
     ) -> str:
         """Generate partial synthesis when max iterations exceeded."""
-        successful_searches = sum(
-            1 for s in trace
-            if s.get("success") and s.get("tool_call", {}).get("name") == "search"
-        )
-        successful_browses = sum(
-            1 for s in trace
-            if s.get("success") and s.get("tool_call", {}).get("name") == "browse"
-        )
+        tool_counts: Dict[str, int] = {}
+        for step in trace:
+            if step.get("success"):
+                name = step.get("tool_call", {}).get("name", "unknown")
+                tool_counts[name] = tool_counts.get(name, 0) + 1
 
-        knowledge_section = ""
-        if context.knowledge_base:
-            knowledge_section = (
-                "\n\n**Key findings:**\n"
-                + "\n".join(f"- {fact}" for fact in context.knowledge_base[-10:])
-            )
+        progress_lines = [f"- {name}: {count}" for name, count in tool_counts.items()]
 
         return (
-            f"**Research Incomplete** (reached maximum iteration limit)\n\n"
-            f"**Goal:** {context.project_goal}\n\n"
-            f"**Progress:**\n"
-            f"- Performed {successful_searches} searches\n"
-            f"- Read {successful_browses} pages"
-            f"{knowledge_section}\n\n"
-            f"**Note:** The research iteration limit was reached before a complete "
-            f"synthesis could be formed."
+            f"**Task Incomplete** (reached {max_iter} iteration limit)\n\n"
+            f"**Progress ({len(trace)} tool calls):**\n"
+            + "\n".join(progress_lines) + "\n\n"
+            f"**Last actions:**\n{self._summarize_trace(trace)}"
         )
 
     def _summarize_trace(self, trace: List[Dict[str, Any]]) -> str:
