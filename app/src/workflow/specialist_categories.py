@@ -24,20 +24,20 @@ class SpecialistCategories:
     """
 
     # MCP-only: Not added as graph nodes, accessed only via MCP
-    # Issue #129: systems_architect is now MCP-only (called by web_builder, exit_interview)
     MCP_ONLY: frozenset = frozenset([
         "summarizer_specialist",
-        "systems_architect",
     ])
 
-    # Core infrastructure: Special graph roles
+    # Core infrastructure: Special graph roles (excluded from hub-and-spoke edges)
     # ADR-ROADMAP-001: EXIT_INTERVIEW added - has special edge wiring (after_exit_interview)
     # Issue #161: CRITIC removed — critic subgraph deleted, web_builder is standard spoke
+    # Issue #171: systems_architect added - entry pipeline node (SA → Triage), not a spoke
     CORE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
         CoreSpecialist.EXIT_INTERVIEW.value,
+        "systems_architect",
     ])
 
     # Service layer: MCP-only internal services
@@ -47,11 +47,13 @@ class SpecialistCategories:
     # ADR-CORE-053: Triage infrastructure - always excluded from triage menus
     # These are core infrastructure specialists that should never appear in triage's recommendations
     # ADR-ROADMAP-001: EXIT_INTERVIEW added - internal gate, not user-routable
+    # Issue #171: systems_architect added - entry pipeline, not triage-routable
     TRIAGE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
         CoreSpecialist.EXIT_INTERVIEW.value,
+        "systems_architect",
     ])
 
     # Specialists that skip Exit Interview validation on completion
@@ -75,12 +77,13 @@ class SpecialistCategories:
 
         Combines:
         - MCP-only specialists (not graph nodes)
+        - Core infrastructure (entry pipeline, special wiring — not spokes)
         - Service layer specialists (internal services)
         - Subgraph-managed specialists (from subgraph.get_router_excluded_specialists())
         - Config-driven exclusions (from specialist.excluded_from lists) - Issue #90
         - Router itself (cannot route to itself)
         """
-        exclusions = set(cls.MCP_ONLY) | set(cls.SERVICE_LAYER) | {CoreSpecialist.ROUTER.value}
+        exclusions = set(cls.MCP_ONLY) | set(cls.CORE_INFRASTRUCTURE) | set(cls.SERVICE_LAYER) | {CoreSpecialist.ROUTER.value}
         if subgraph_exclusions:
             exclusions.update(subgraph_exclusions)
         if config_exclusions:

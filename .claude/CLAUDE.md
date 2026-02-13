@@ -146,6 +146,9 @@ response = mcp_client.call_safe(
 
 ## Development Directives
 
+### No Truncation — CRITICAL
+**NEVER truncate data in artifacts, context, or state.** No `[:max_len]`, no `first_80_chars`, no preview helpers that slice content. Truncation creates a soup of confusion — downstream consumers can't tell whether data is missing because it was never produced or because it was silently cut. Data size is not a concern — the Dockyard architecture (ADR-MCP-002) will move content off-graph behind keys/references, eliminating bloat structurally. Until then, store the full data. Never introduce truncation as a workaround for size.
+
 ### Script Discovery Protocol - CRITICAL
 **ALWAYS check existing code before creating new solutions.**
 

@@ -415,7 +415,7 @@ class GraphBuilder:
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
             "1. **Precondition Fulfillment**: Review the conversation history. If a specialist (e.g., 'systems_architect') previously stated it was blocked waiting for an artifact, and the most recent specialist (e.g., 'file_specialist') just provided that artifact, your next step is to route back to the original, blocked specialist.\n"
             "2. **Error Correction**: If a specialist reports an error or that it cannot perform a task, you MUST use that feedback to select a different, more appropriate specialist to resolve the issue. Do not give up.\n"
-            "3. **Follow the Plan**: If a `system_plan` has just been added to the state, you MUST route to the specialist best suited to execute the next step (e.g., 'web_builder').\n"
+            "3. **Follow the Plan**: If a `task_plan` exists in state, route to the specialist best suited to execute it. The task_plan captures the system's understanding of the user's intent.\n"
             "4. **Use Provided Tools**: You MUST choose from the list of specialists provided to you."
         )
         dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"

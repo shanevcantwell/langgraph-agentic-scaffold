@@ -29,7 +29,7 @@ def prune_state(state: GraphState) -> Dict[str, Any]:
     # --- Deprecated Fields ---
 
     # Include smaller, valuable artifacts as-is
-    for key in ["system_plan", "critique_artifact", "extracted_data", "json_artifact"]:
+    for key in ["task_plan", "system_plan", "critique_artifact", "extracted_data", "json_artifact"]:
         if value := state.get(key):
             pruned[key] = value
 
@@ -137,8 +137,8 @@ def _format_artifact(key: str, value) -> str:
     if key == "context_plan" and isinstance(value, dict):
         return f"```json\n{json.dumps(value, indent=2, default=str)}\n```"
 
-    # system_plan - pretty JSON
-    if key == "system_plan" and isinstance(value, dict):
+    # task_plan / system_plan - pretty JSON
+    if key in ("task_plan", "system_plan") and isinstance(value, dict):
         return f"```json\n{json.dumps(value, indent=2, default=str)}\n```"
 
     # Other dicts/lists - pretty JSON with size limit

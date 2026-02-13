@@ -44,9 +44,13 @@ class ExitInterviewArtifactConfig(BaseModel):
 # Key: artifact name as it appears in state["artifacts"]
 # Value: ExitInterviewArtifactConfig
 EXIT_INTERVIEW_ARTIFACTS: Dict[str, ExitInterviewArtifactConfig] = {
+    "task_plan": ExitInterviewArtifactConfig(
+        mode="present",
+        # Issue #171: SA entry point produces task_plan
+    ),
     "system_plan": ExitInterviewArtifactConfig(
         mode="present",
-        # Uses custom formatter (registered below)
+        # WebBuilder's implementation plan (via SA MCP)
     ),
     "image_description": ExitInterviewArtifactConfig(
         mode="context",
@@ -73,6 +77,7 @@ def format_system_plan(plan: Dict[str, Any]) -> str:
 
 
 ARTIFACT_FORMATTERS: Dict[str, Callable[[Any], str]] = {
+    "task_plan": format_system_plan,    # Same format — SystemPlan schema
     "system_plan": format_system_plan,
     # Add formatters for other "present" mode artifacts here
 }

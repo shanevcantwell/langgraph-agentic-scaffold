@@ -40,13 +40,10 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     assert mock_plan_summary in result_state["messages"][0].content
 
     assert "artifacts" in result_state
-    assert "system_plan" in result_state["artifacts"]
-    assert result_state["artifacts"]["system_plan"]["plan_summary"] == mock_plan_summary # This is a dict now
-    assert "Generate HTML" in result_state["artifacts"]["system_plan"]["execution_steps"]
-
-    # "Not me" pattern: specialist adds itself to forbidden list after completing its job
-    assert "forbidden_specialists" in result_state["scratchpad"]
-    assert "systems_architect" in result_state["scratchpad"]["forbidden_specialists"]
+    # Issue #171: SA entry point writes task_plan (not system_plan)
+    assert "task_plan" in result_state["artifacts"]
+    assert result_state["artifacts"]["task_plan"]["plan_summary"] == mock_plan_summary
+    assert "Generate HTML" in result_state["artifacts"]["task_plan"]["execution_steps"]
 
 def test_systems_architect_handles_no_json_response(systems_architect_specialist):
     """Tests that the specialist raises an error if LLM returns no JSON response."""

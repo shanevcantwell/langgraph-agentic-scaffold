@@ -45,18 +45,17 @@ class SystemsArchitect(BaseSpecialist):
         return SystemPlan(**json_response)
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        # "Not me" pattern: if system_plan already exists, don't create another
-        # Add self to forbidden_specialists so Router won't route back here
-        existing_plan = state.get("artifacts", {}).get("system_plan")
+        # Issue #171: SA is the entry point — produces task_plan (system's theory of user intent)
+        # Guard: if task_plan already exists, pass through (e.g., on retry the plan persists)
+        existing_plan = state.get("artifacts", {}).get("task_plan")
         if existing_plan:
-            logger.info("SystemsArchitect: system_plan already exists, adding self to forbidden_specialists")
+            logger.info("SystemsArchitect: task_plan already exists, passing through")
             return {
                 "messages": [create_llm_message(
                     specialist_name=self.specialist_name,
                     llm_adapter=self.llm_adapter,
-                    content=f"A system plan already exists: {existing_plan.get('plan_summary', 'see artifacts')}",
+                    content=f"Task plan exists: {existing_plan.get('plan_summary', 'see artifacts')}",
                 )],
-                "scratchpad": {"forbidden_specialists": [self.specialist_name]},
             }
 
         # Get enriched messages (includes gathered_context if available)
@@ -66,15 +65,14 @@ class SystemsArchitect(BaseSpecialist):
         new_message = create_llm_message(
             specialist_name=self.specialist_name,
             llm_adapter=self.llm_adapter,
-            content=f"I have created a system plan: {plan.plan_summary}",
+            content=f"I have created a task plan: {plan.plan_summary}",
         )
 
-        # System Plan is a durable output - placed in artifacts
-        # Add self to forbidden_specialists: job done, don't route back here
+        # Task plan is a durable artifact — persists across retries
+        # Consumed by Triage (classification), Router (routing), specialists (execution), EI (verification)
         return {
             "messages": [new_message],
-            "artifacts": {"system_plan": plan.model_dump()},
-            "scratchpad": {"forbidden_specialists": [self.specialist_name]},
+            "artifacts": {"task_plan": plan.model_dump()},
         }
 
     # --- MCP Tool Interface (Issue #115) ---

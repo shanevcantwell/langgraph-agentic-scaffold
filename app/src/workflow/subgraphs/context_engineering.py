@@ -7,9 +7,15 @@ logger = logging.getLogger(__name__)
 
 class ContextEngineeringSubgraph(BaseSubgraph):
     def build(self, workflow: StateGraph) -> None:
-        # CONTEXT ENGINEERING SUBGRAPH
-        # TriageArchitect -> [Facilitator | Router]
+        # CONTEXT ENGINEERING SUBGRAPH (Issue #171: SA added as entry point)
+        # SystemsArchitect -> TriageArchitect -> [Facilitator | Router]
         # Facilitator -> Router
+
+        # Issue #171: SA is the entry point — produces task_plan, then hands off to Triage
+        if "systems_architect" in self.specialists and "triage_architect" in self.specialists:
+            workflow.add_edge("systems_architect", "triage_architect")
+            logger.info("Graph Edge: Added SystemsArchitect -> TriageArchitect edge (#171)")
+
         if "triage_architect" in self.specialists:
             # ADR-CORE-018: Simplified routing - all plans with actions go through Facilitator chain
             # Facilitator → Dialogue → Router handles both context-gathering and ask_user actions
@@ -33,6 +39,8 @@ class ContextEngineeringSubgraph(BaseSubgraph):
     def get_excluded_specialists(self) -> list[str]:
         """Return specialists that have dedicated edges and shouldn't be in the general router menu."""
         excluded = []
+        if "systems_architect" in self.specialists:
+            excluded.append("systems_architect")
         if "triage_architect" in self.specialists:
             excluded.append("triage_architect")
         if "facilitator_specialist" in self.specialists:

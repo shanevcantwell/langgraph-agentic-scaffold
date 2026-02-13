@@ -17,7 +17,7 @@
 # Define the entry point for the graph. Defaults to 'router_specialist'.
 # ==============================================================================
 workflow:
-  entry_point: "triage_architect"
+  entry_point: "systems_architect"
   # The number of times a short sequence of specialists can repeat before the
   # workflow is halted to prevent unproductive loops.
   max_loop_cycles: 3

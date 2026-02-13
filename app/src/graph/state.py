@@ -48,7 +48,8 @@ class Artifacts(BaseModel):
 
     final_user_response_md: Optional[str] = None
     archive_report_md: Optional[str] = None
-    system_plan: Optional[Dict[str, Any]] = None
+    task_plan: Optional[Dict[str, Any]] = None       # Issue #171: SA entry point produces this
+    system_plan: Optional[Dict[str, Any]] = None      # WebBuilder's implementation plan (via SA MCP)
     html_document_html: Optional[str] = None
     # text_to_process REMOVED: Already handled via artifacts dict (runner.py puts file content in artifacts["text_to_process"])
     text_analysis_report_md: Optional[str] = None
