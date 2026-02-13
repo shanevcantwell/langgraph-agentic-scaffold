@@ -2,39 +2,64 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Date:** 2026-01-15
+**Updated:** 2026-02-12 (#170 context entity cleanup)
 
 ---
 
 ## Executive Summary
 
-The **Facilitator** is a deterministic, non-LLM specialist that bridges intent classification (Triage) and task execution (Router). Its sole job is to **autonomously gather background context** before the system decides how to handle a user request.
+The **Facilitator** is a deterministic, non-LLM specialist that bridges intent classification (Triage) and task execution (Router). Its job is to **autonomously gather background context** before the system decides how to handle a user request, and to **curate retry context** when Exit Interview sends a task back for another attempt.
 
 Key characteristics:
 - **Procedural, not LLM-based** — executes a plan, doesn't reason
 - **MCP orchestrator** — calls internal and external services via Model Context Protocol
-- **Context collector, not task executor** — gathers information but doesn't solve problems
-- **Single-pass execution** — runs once per request, no internal loops
+- **Sole context writer** — specialists receive context via `gathered_context`, never accumulate their own (#170)
+- **Fresh rebuild each invocation** — no accumulation across retries (#170)
+- **Trace knowledge extraction** — surfaces prior write operations on retry (#170)
 
 ---
 
 ## Where Facilitator Fits in the Execution Flow
 
-### The Context Engineering Subgraph
+### First Pass (New Request)
 
 ```
 User Request
-    ↓
+    |
 TriageArchitect (LLM: classifies intent, creates ContextPlan)
-    ↓
+    |
     [Does ContextPlan have actions?]
-    ├─ YES → Facilitator → DialogueSpecialist → Router
-    └─ NO  → Router (direct)
+    |-- YES --> Facilitator --> Router --> Specialist
+    '-- NO  --> Router (direct)
+```
+
+### Retry Path (EI says INCOMPLETE)
+
+```
+Specialist (e.g., PD)
+    |
+classify_interrupt --> ExitInterview
+    |
+    [is_complete?]
+    |-- YES --> END
+    '-- NO  --> Facilitator (rebuild context + trace knowledge) --> Router --> Specialist
+```
+
+### BENIGN Continuation (max_iterations hit, model was working)
+
+```
+Specialist hits max_iterations
+    |
+    [max_iterations_exceeded + (no EI or EI=INCOMPLETE)]
+    |
+Facilitator: early return, clear flag, don't rebuild context
+    |
+Router --> Specialist continues
 ```
 
 ### Routing Decision Logic
 
-The routing decision is made in `check_triage_outcome()` ([graph_orchestrator.py:33](../app/src/workflow/graph_orchestrator.py#L33)):
+The routing decision is made in `check_triage_outcome()` ([graph_orchestrator.py](../app/src/workflow/graph_orchestrator.py)):
 
 ```python
 def check_triage_outcome(self, state: GraphState) -> str:
@@ -47,8 +72,6 @@ def check_triage_outcome(self, state: GraphState) -> str:
 
     return "router_specialist"  # No context needed
 ```
-
-**Important:** ALL plans with actions route through Facilitator, including those with only `ASK_USER` actions. The Facilitator processes automated actions and passes through `ASK_USER` for DialogueSpecialist to handle.
 
 ---
 
@@ -72,50 +95,107 @@ class ContextAction(BaseModel):
     strategy: Optional[str]   # Provider hint (e.g., "google", "duckduckgo")
 ```
 
-### Execution: Action-by-Action Processing
+### Context Assembly Order (#170)
 
-The Facilitator iterates through `context_plan.actions` and executes each:
+Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
+
+1. **Task Strategy** — `context_plan.reasoning` from Triage (#167)
+2. **EI Retry Feedback** — curated `missing_elements` + `reasoning` (only on retry, #167)
+3. **Prior Work Knowledge** — extracted write operations from `resume_trace` (only on retry, #170)
+4. **WIP Summary** — work-in-progress for BENIGN interrupts (only when `max_iterations_exceeded` without EI, #108)
+5. **Plan Action Results** — RESEARCH, READ_FILE, SUMMARIZE, LIST_DIRECTORY, ASK_USER
+
+### Action-by-Action Processing
 
 | Action Type | MCP Service Called | Result |
 |-------------|-------------------|--------|
 | `RESEARCH` | Internal: `web_specialist.search(query)` | Web search results formatted as markdown links |
 | `READ_FILE` | External: `filesystem.read_file(path)` | File contents in code block |
-| `SUMMARIZE` | Internal: `summarizer_specialist.summarize(text)` | Condensed summary (see note below) |
-| `LIST_DIRECTORY` | External: `filesystem.list_directory(path)` | Markdown bullet list of entries |
-| `ASK_USER` | **Skipped** — handled by DialogueSpecialist | Passes through unchanged (implicit skip) |
+| `SUMMARIZE` | Internal: `summarizer_specialist.summarize(text)` | Condensed summary |
+| `LIST_DIRECTORY` | External: `filesystem.list_directory(path)` | Markdown bullet list with full paths |
+| `ASK_USER` | LangGraph `interrupt()` | Pauses graph for user input, adds response to context |
 
-**SUMMARIZE file path heuristic:** If the target looks like a file path (starts with `/` or `./`), Facilitator attempts to read the file first via filesystem MCP, then summarizes the content. This allows `SUMMARIZE /docs/README.md` to work as expected.
+**SUMMARIZE file path heuristic:** If the target looks like a file path (starts with `/` or `./`), Facilitator attempts to read the file first via filesystem MCP, then summarizes the content.
 
-**ASK_USER implicit skip:** There's no explicit handler for `ASK_USER` in the action loop — it simply falls through without producing output. DialogueSpecialist handles these actions downstream.
+**ASK_USER:** Uses LangGraph's `interrupt()` primitive to pause execution. The user's answer is added to `gathered_context` as `### User Clarification`.
+
+**LIST_DIRECTORY path enrichment:** Each entry includes the full path (e.g., `- [FILE] /workspace/test/1.txt`) so downstream specialists have unambiguous paths.
 
 ### Output: gathered_context Artifact
-
-After processing all actions, Facilitator produces:
 
 ```python
 {
     "artifacts": {
-        "gathered_context": """### Research: quantum computing trends
-- [Article 1](https://...) : Recent breakthroughs...
-- [Article 2](https://...) : IBM announces...
+        "gathered_context": """### Task Strategy
+User wants files sorted by content into category subfolders
 
-### File: /workspace/config.yaml
-```yaml
-project:
-  name: example
-```
+### Retry Context (from Exit Interview evaluation)
+**What still needs to be done:** 4 files still need moving
+**Why incomplete:** Only 2 of 6 files were categorized
 
-### Directory: /workspace/docs
-- README.md
-- API.md
-- ARCHITECTURE.md
-"""
+### Prior Work Completed
+- Created directory /workspace/animals
+- Moved /workspace/1.txt -> /workspace/animals/1.txt
+- Moved /workspace/4.txt -> /workspace/animals/4.txt
+
+### Directory: /workspace
+- [FILE] /workspace/2.txt
+- [FILE] /workspace/3.txt
+- [DIR] /workspace/animals"""
     },
     "scratchpad": {
         "facilitator_complete": True
     }
 }
 ```
+
+---
+
+## #170: Fresh Rebuild (No Accumulation)
+
+### The Problem
+
+Before #170, Facilitator accumulated context: `existing_context + "\n\n---\n\n" + new_context`. On retry, identical Task Strategy + EI Feedback blocks got tripled. PD saw the same instructions 3 times and got confused.
+
+### The Fix
+
+Each invocation rebuilds `gathered_context` from scratch using current plan actions and current state. No reading of prior `gathered_context` from artifacts.
+
+### Trace Knowledge Extraction
+
+On retry (EI said INCOMPLETE), Facilitator reads `resume_trace` from artifacts and extracts a knowledge summary of **write operations only** (create_directory, move_file, write_file). Read operations are omitted because they're cheap to redo and re-reading ensures the model sees current filesystem state.
+
+```python
+def _extract_trace_knowledge(self, artifacts: dict) -> Optional[str]:
+    trace = artifacts.get("resume_trace", [])
+    # Only successful write operations
+    # Returns: "### Prior Work Completed\n- Created directory ...\n- Moved ..."
+```
+
+### Why Not Pass the Full Trace?
+
+PD starts with `trace = []` each invocation (#170 Step 3). The model gets a fresh start but knows what write operations already succeeded via `gathered_context`. This avoids the stale-trace problem where the model re-feeds its prior conversation and thinks it already finished.
+
+---
+
+## BENIGN Continuation (#114)
+
+When `max_iterations_exceeded` is True, the model was working correctly but ran out of runway. Facilitator detects this and **early returns** without rebuilding context:
+
+```python
+if is_benign_continuation:
+    return {
+        "artifacts": {
+            "resume_trace": resume_trace,          # Already in artifacts from PD
+            "max_iterations_exceeded": False,       # Clear the flag
+        },
+        "scratchpad": {"facilitator_complete": True}
+    }
+```
+
+Two scenarios qualify as BENIGN:
+1. **Pure BENIGN:** `max_exceeded` + no EI result (interrupted before EI ran)
+2. **BENIGN after EI:** `max_exceeded` + EI said INCOMPLETE (model was working, EI judged)
 
 ---
 
@@ -126,18 +206,10 @@ project:
 Called via `self.mcp_client.call()`:
 
 ```python
-# Web search
 results = self.mcp_client.call(
     service_name="web_specialist",
     function_name="search",
     query="quantum computing 2026"
-)
-
-# Summarization
-summary = self.mcp_client.call(
-    service_name="summarizer_specialist",
-    function_name="summarize",
-    text=long_document
 )
 ```
 
@@ -146,7 +218,6 @@ summary = self.mcp_client.call(
 Called via the sync-to-async bridge `sync_call_external_mcp()`, with results parsed by `extract_text_from_mcp_result()`:
 
 ```python
-# File read (ADR-CORE-035: uses official Anthropic MCP filesystem server)
 content = sync_call_external_mcp(
     self.external_mcp_client,
     "filesystem",
@@ -155,24 +226,21 @@ content = sync_call_external_mcp(
 )
 ```
 
-The sync bridge ([mcp/external_client.py:462](../app/src/mcp/external_client.py#L462)) handles the async-to-sync translation:
+The sync bridge handles the async-to-sync translation:
 - Facilitator code is synchronous (LangGraph node execution)
 - External MCP uses async stdio transport
 - `asyncio.run_coroutine_threadsafe()` schedules calls on the main event loop
 
 ### Special Case: In-Memory Artifacts
 
-Before calling filesystem MCP, Facilitator checks if the target exists as an in-memory artifact:
+Before calling filesystem MCP, Facilitator checks if the target exists as an in-memory artifact (e.g., uploaded images stored as base64):
 
 ```python
-# From facilitator_specialist.py:110-133
 if artifact_key in artifacts:
     content = artifacts[artifact_key]  # Use in-memory version
 else:
     content = self._read_file_via_filesystem_mcp(target_path)  # Filesystem
 ```
-
-This handles uploaded images (stored as base64) and other artifacts that never touch the filesystem.
 
 ---
 
@@ -185,7 +253,6 @@ If external filesystem MCP is not connected:
 ```python
 def _read_file_via_filesystem_mcp(self, path: str) -> Optional[str]:
     if not self._is_filesystem_available():
-        logger.warning("Facilitator: Filesystem MCP not available")
         return None  # Graceful fail
 ```
 
@@ -207,74 +274,14 @@ except Exception as e:
 
 ## What the Facilitator Does NOT Do
 
-Understanding boundaries is critical:
-
 | Capability | Facilitator | Who Does It |
 |------------|-------------|-------------|
 | LLM reasoning | No | TriageArchitect, Router, Specialists |
 | Routing decisions | No | Router |
-| User interaction | No | DialogueSpecialist |
-| Task completion loops | No | Proposed: External Facilitation Agent (ADR-CORE-049) |
-| Prompt curation/retry | No | Proposed: External Facilitation Agent (ADR-CORE-049) |
+| Task completion loops | No | Graph: EI -> Facilitator -> Router -> PD |
 | Direct GraphState mutation | No | SafeExecutor/NodeExecutor |
-
----
-
-## Example Flow: File Read Request
-
-**User prompt:** "Read the contents of README.md"
-
-### Step 1: TriageArchitect
-
-Produces `context_plan` artifact:
-
-```json
-{
-  "actions": [
-    {
-      "type": "read_file",
-      "target": "README.md",
-      "description": "User explicitly requested file contents"
-    }
-  ],
-  "reasoning": "User wants to see file contents before further processing",
-  "recommended_specialists": ["chat_specialist"]
-}
-```
-
-### Step 2: check_triage_outcome
-
-`plan.actions` is non-empty → routes to `"facilitator_specialist"`
-
-### Step 3: Facilitator Execution
-
-```
-[INFO] Facilitator: Executing plan with 1 actions.
-[INFO] Facilitator: Executing action read_file -> README.md
-[INFO] sync_call_external_mcp: Calling filesystem.read_file
-```
-
-Produces:
-
-```json
-{
-  "artifacts": {
-    "gathered_context": "### File: README.md\n```\n# LAS Project\n...\n```"
-  }
-}
-```
-
-### Step 4: DialogueSpecialist
-
-Checks for `ASK_USER` actions. None found → passes through (no-op).
-
-### Step 5: Router
-
-Sees `gathered_context` artifact. Routes to `chat_specialist` (or per `recommended_specialists`).
-
-### Step 6: ChatSpecialist
-
-Presents file contents to user with appropriate formatting.
+| Accumulate private context | No (#170) | Specialists produce artifacts; Facilitator curates |
+| Relay resume_trace | No (#170) | PD writes resume_trace directly via ior merge |
 
 ---
 
@@ -287,30 +294,17 @@ To verify Facilitator execution:
 ```bash
 # Check routing history
 unzip -p ./logs/archive/run_*.zip manifest.json | jq '.routing_history'
-# Look for: ["triage_architect", "facilitator_specialist", "dialogue_specialist", "router_specialist", ...]
 
-# Check gathered context (in final_state or as separate artifact)
-unzip -l ./logs/archive/run_*.zip
-# May include: gathered_context.md or embedded in final_state.json
+# Check gathered_context in final state
+unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_context'
 ```
 
-**Note:** Facilitator is procedural, so `llm_traces.jsonl` will NOT contain Facilitator entries (no LLM calls). Only specialists that invoke models appear in traces.
+**Key things to check post-#170:**
+- `gathered_context` is NOT tripled (no `---` separators between duplicated blocks)
+- No `project_context` artifact in final state
+- `resume_trace` is written by PD, not Facilitator
 
----
-
-## Relationship to ADR-CORE-049 (Proposed)
-
-**ADR-CORE-049** proposes a different concept: **Facilitation-as-Tool** — an external agent that uses LAS as a tool for retry/refinement loops.
-
-| Concept | Current Facilitator | Proposed Facilitation Agent |
-|---------|--------------------|-----------------------------|
-| Location | Inside graph | Outside graph (uses API) |
-| Purpose | Gather context once | Retry incomplete tasks |
-| Invokes LLMs | No | Yes (prompt curation) |
-| Loop control | None (single pass) | max_retries, stagnation detection |
-| State handling | Writes to GraphState | Fresh GraphState per invocation |
-
-**The current Facilitator and proposed Facilitation Agent serve different purposes and would coexist if ADR-CORE-049 is implemented.**
+**Note:** Facilitator is procedural, so `llm_traces.jsonl` will NOT contain Facilitator entries (no LLM calls).
 
 ---
 
@@ -339,13 +333,7 @@ mcp:
 
 ### Dependency Injection
 
-`external_mcp_client` is injected by GraphBuilder after specialist instantiation:
-
-```python
-# In GraphBuilder initialization
-for instance in self.specialists.values():
-    instance.external_mcp_client = self.external_mcp_client
-```
+`external_mcp_client` is injected by GraphBuilder after specialist instantiation.
 
 ---
 
@@ -353,12 +341,13 @@ for instance in self.specialists.values():
 
 | File | Purpose |
 |------|---------|
-| [facilitator_specialist.py](../app/src/specialists/facilitator_specialist.py) | Facilitator implementation |
-| [context_schema.py](../app/src/interface/context_schema.py) | ContextPlan/ContextAction schemas |
-| [context_engineering.py](../app/src/workflow/subgraphs/context_engineering.py) | Subgraph edge definitions |
-| [graph_orchestrator.py](../app/src/workflow/graph_orchestrator.py) | `check_triage_outcome()` routing logic |
-| [external_client.py](../app/src/mcp/external_client.py) | `sync_call_external_mcp()` bridge |
-| [mcp/utils.py](../app/src/mcp/utils.py) | `extract_text_from_mcp_result()` helper |
+| [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Facilitator implementation |
+| [context_schema.py](../../app/src/interface/context_schema.py) | ContextPlan/ContextAction schemas |
+| [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | Subgraph edge definitions |
+| [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_triage_outcome()` routing logic |
+| [external_client.py](../../app/src/mcp/external_client.py) | `sync_call_external_mcp()` bridge |
+| [mcp/utils.py](../../app/src/mcp/utils.py) | `extract_text_from_mcp_result()` helper |
+| [exit_interview_feedback.md](../../app/prompts/exit_interview_feedback.md) | EI feedback prompt template |
 
 ---
 
@@ -367,8 +356,9 @@ for instance in self.specialists.values():
 The Facilitator is a **procedural MCP orchestrator** that:
 
 1. Receives a `ContextPlan` from TriageArchitect
-2. Executes automated context-gathering actions (RESEARCH, READ_FILE, SUMMARIZE, LIST_DIRECTORY)
-3. Produces a `gathered_context` artifact
-4. Passes control to DialogueSpecialist (for user clarification) then Router
+2. Rebuilds `gathered_context` fresh each invocation (Task Strategy + EI feedback + trace knowledge + plan action results)
+3. Produces a unified `gathered_context` artifact for downstream specialists
+4. On BENIGN continuation (model was working, hit max_iterations), early returns with flag cleared
+5. Does NOT accumulate across invocations, relay resume_trace, or invoke LLMs
 
-It does NOT make decisions, invoke LLMs, or loop. It simply gathers the background information needed for downstream specialists to do their work.
+Facilitator is the **sole writer of context** (#170). Specialists produce output artifacts; Facilitator curates them into `gathered_context`.

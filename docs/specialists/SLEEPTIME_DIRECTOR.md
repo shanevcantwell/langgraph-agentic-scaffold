@@ -2,8 +2,8 @@
 
 **Purpose:** Technical briefing on the SleeptimeDirector's role as a background orchestration agent.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Date:** 2026-02-11
-**Status:** Design Profile — not yet implemented. Grounded in smoke-tested infrastructure.
+**Updated:** 2026-02-12
+**Status:** Design Profile — not yet implemented. Tier 1/2 eval scripts written (uncommitted). Grounded in smoke-tested infrastructure.
 
 ---
 
@@ -136,7 +136,7 @@ Uses prompt-prix MCP's `react_step` in tool-forwarding mode. The director mediat
 
 **Why the director mediates:** prompt-prix doesn't need to know about LAS's MCP endpoints. Keeps the container wall clean.
 
-**Dependency:** ~20-line change in prompt-prix to support `mock_tools={}` returning `pending_tool_calls` instead of raising `ReactLoopIncomplete`.
+**Proven:** prompt-prix `react_step` tool-forwarding mode (`mock_tools=None`) returns `pending_tool_calls` instead of executing tools. Validated from LAS via MCP.
 
 ### Tier 3 Execution: Full LAS Integration
 
@@ -370,12 +370,15 @@ async def run_tournament(config: TournamentConfig):
 | Dependency | Status | Notes |
 |------------|--------|-------|
 | prompt-prix CLI | **Smoke-tested** | Battery execution via `docker exec` proven |
-| prompt-prix MCP | **Smoke-tested** | `list_models` (59ms), `complete` (250ms) proven |
+| prompt-prix MCP | **Smoke-tested** | `list_models` (59ms), `complete` (250ms), `react_step` tool-forwarding proven |
 | semantic-chunker MCP | **Available** | LAS has direct connection; prompt-prix MCP path blocked |
 | filesystem MCP | **Available** | Sandbox setup/teardown |
+| Tier 1 shell wrapper | **Written** | `scripts/run_tier1_battery.sh` (uncommitted, shelved for #170) |
+| Tier 2 eval runner | **Written** | `scripts/run_tier2_eval.py` (uncommitted, shelved for #170) |
+| 13-file benchmark | **Written** | `tests/prompt-prix/react_file_categorization_13_benchmark.json` (uncommitted) |
 | `CompletionResult` schema | **Not built** | Needed for Tier 3 only |
 | Model override on invoke | **Not built** | Needed for Tier 3 only |
-| react_step tool-forwarding | **Not built** | ~20-line change in prompt-prix; needed for Tier 2 |
+| react_step tool-forwarding | **Built & validated** | prompt-prix `mock_tools=None` returns `pending_tool_calls` |
 
 ---
 
@@ -390,6 +393,16 @@ async def run_tournament(config: TournamentConfig):
 | ADR-CORE-066 | Sleeptime Autonomous Orchestration (Phase 6 target) |
 | ADR-CORE-068 | Shared GPU Pool (PooledLMStudioAdapter, proven) |
 | [scripts/smoke_test_mcp.py](../../scripts/smoke_test_mcp.py) | MCP connectivity smoke test |
+
+### Key Files (Existing — Uncommitted)
+
+| File | Purpose |
+|------|---------|
+| [scripts/run_tier1_battery.sh](../../scripts/run_tier1_battery.sh) | Shell wrapper for CLI battery runs |
+| [scripts/run_tier2_eval.py](../../scripts/run_tier2_eval.py) | Async Python runner for real filesystem dispatch |
+| [tests/prompt-prix/react_file_categorization_13_benchmark.json](../../tests/prompt-prix/react_file_categorization_13_benchmark.json) | 13-file/7-category benchmark (Tier 1 + Tier 2) |
+| [tests/prompt-prix/react_file_categorization_benchmark.json](../../tests/prompt-prix/react_file_categorization_benchmark.json) | 6-file/3-category benchmark (5 scenarios) |
+| [tests/prompt-prix/file_categorization_drift_tests.yaml](../../tests/prompt-prix/file_categorization_drift_tests.yaml) | Single-pass drift tests (4 cases) |
 
 ### Key Files (Proposed — Not Yet Created)
 
