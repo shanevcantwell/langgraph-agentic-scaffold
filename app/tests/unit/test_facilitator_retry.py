@@ -116,13 +116,9 @@ def test_facilitator_fresh_context_when_no_existing(facilitator):
     assert separator_count == 0, f"Fresh context should not have separators, found {separator_count}"
 
 
-def test_facilitator_does_not_relay_resume_trace(facilitator):
+def test_facilitator_first_pass_builds_gathered_context(facilitator):
     """
-    #170: Facilitator does NOT relay resume_trace in non-BENIGN path.
-
-    PD writes resume_trace directly to artifacts (ior merge). Facilitator
-    only reads it for _extract_trace_knowledge(). On first pass (no EI result),
-    Facilitator builds gathered_context without trace knowledge.
+    #170: First pass (no EI result) builds gathered_context from plan actions.
     """
     plan = ContextPlan(
         reasoning="Continue task after partial completion",
@@ -138,10 +134,6 @@ def test_facilitator_does_not_relay_resume_trace(facilitator):
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "resume_trace": [
-                {"tool": "create_directory", "args": {"path": "/workspace/animals"}, "success": True},
-                {"tool": "move_file", "args": {"source": "/workspace/1.txt", "destination": "/workspace/animals/1.txt"}, "success": True},
-            ]
         }
     }
 
@@ -149,10 +141,6 @@ def test_facilitator_does_not_relay_resume_trace(facilitator):
         mock_list.return_value = ["3.txt", "[DIR] animals"]
         result = facilitator.execute(state)
 
-    # #170: Facilitator does NOT relay resume_trace (PD wrote it directly)
-    assert "resume_trace" not in result["artifacts"]
-    # gathered_context should have directory listing but NOT trace knowledge
-    # (no EI result = first pass, trace knowledge only on retry)
     gathered = result["artifacts"]["gathered_context"]
     assert "### Directory: /workspace" in gathered
 

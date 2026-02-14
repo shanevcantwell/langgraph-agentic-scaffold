@@ -366,9 +366,7 @@ class ProjectDirector(BaseSpecialist):
     ) -> Dict[str, Any]:
         return {
             "messages": [AIMessage(content=final_response)],
-            "artifacts": {
-                "resume_trace": trace,
-            },
+            "artifacts": {},
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
             },
@@ -379,9 +377,7 @@ class ProjectDirector(BaseSpecialist):
     ) -> Dict[str, Any]:
         return {
             "messages": [AIMessage(content=error_msg)],
-            "artifacts": {
-                "resume_trace": trace,
-            },
+            "artifacts": {},
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
             },
@@ -405,7 +401,6 @@ class ProjectDirector(BaseSpecialist):
         return {
             "messages": [AIMessage(content=stagnation_message)],
             "artifacts": {
-                "resume_trace": trace,
                 "stagnation_detected": True,
                 "stagnation_tool": tool_name,
                 "stagnation_args": tool_args,
@@ -422,7 +417,6 @@ class ProjectDirector(BaseSpecialist):
         return {
             "messages": [AIMessage(content=partial_msg)],
             "artifacts": {
-                "resume_trace": trace,
                 "max_iterations_exceeded": True,
             },
             "scratchpad": {
@@ -435,7 +429,8 @@ class ProjectDirector(BaseSpecialist):
         ADR-073 Phase 3: Summarize trace as human-readable activity entries.
 
         Written to scratchpad["specialist_activity"] so Facilitator can surface
-        prior work on retry without parsing resume_trace.
+        prior work on retry. The local trace stays in PD — only this summary
+        reaches state.
         """
         entries = []
         for step in trace:

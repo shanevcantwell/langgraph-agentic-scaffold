@@ -138,45 +138,9 @@ class TestClassifyInterruptPathological:
         assert result == "interrupt_evaluator_specialist", \
             "tool_error should route to Interrupt Evaluator (PATHOLOGICAL)"
 
-    def test_trace_stutter_detected_routes_to_interrupt_evaluator(self, orchestrator):
-        """PATHOLOGICAL: trace stutter (via semantic-chunker drift) → Interrupt Evaluator."""
-        # Simulate two nearly-identical traces (low drift = stutter)
-        state = {
-            "scratchpad": {},
-            "artifacts": {
-                "research_trace_0": [{"tool": "read_file", "args": {"path": "/foo"}}],
-                "research_trace_1": [{"tool": "read_file", "args": {"path": "/foo"}}],  # Same!
-            },
-            "routing_history": ["project_director", "project_director"],
-        }
-
-        # Mock semantic-chunker to return low drift (stutter)
-        orchestrator.external_mcp_client = MagicMock()
-        with patch.object(orchestrator, '_detect_trace_stutter', return_value=True):
-            result = orchestrator.classify_interrupt(state)
-
-        assert result == "interrupt_evaluator_specialist", \
-            "Trace stutter should route to Interrupt Evaluator (PATHOLOGICAL)"
-
-    def test_unrecovered_failure_routes_to_interrupt_evaluator(self, orchestrator):
-        """PATHOLOGICAL: unrecovered tool failure in trace → Interrupt Evaluator."""
-        state = {
-            "scratchpad": {},
-            "artifacts": {
-                "research_trace_0": [
-                    {"tool": "read_file", "success": True},
-                    {"tool": "move_file", "success": False, "error": "Permission denied"},
-                    # No successful ops after failure
-                ],
-            },
-            "routing_history": ["project_director"],
-        }
-
-        with patch.object(orchestrator, '_detect_unrecovered_failures', return_value=True):
-            result = orchestrator.classify_interrupt(state)
-
-        assert result == "interrupt_evaluator_specialist", \
-            "Unrecovered failure should route to Interrupt Evaluator (PATHOLOGICAL)"
+    # resume_trace heuristics (_detect_unrecovered_failures, _detect_trace_stutter)
+    # removed — IM loop detection and PD's own _check_stagnation() cover these cases.
+    # See ADR-073 Phase 4, issues #170, #173.
 
 
 class TestClassifyInterruptNormalFlow:
@@ -190,10 +154,7 @@ class TestClassifyInterruptNormalFlow:
             "routing_history": ["text_analysis_specialist"],
         }
 
-        # Ensure no pathological detection triggers
-        with patch.object(orchestrator, '_detect_trace_stutter', return_value=False):
-            with patch.object(orchestrator, '_detect_unrecovered_failures', return_value=False):
-                result = orchestrator.classify_interrupt(state)
+        result = orchestrator.classify_interrupt(state)
 
         assert result == CoreSpecialist.EXIT_INTERVIEW.value, \
             "Artifacts present should route to Exit Interview (semantic completion)"

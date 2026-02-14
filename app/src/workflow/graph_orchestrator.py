@@ -467,13 +467,6 @@ class GraphOrchestrator:
         if scratchpad.get("tool_error"):
             return self._route_pathological("tool_error")
 
-        # Heuristic detection (moved from Exit Interview per ADR-CORE-061)
-        if self._detect_unrecovered_failures(artifacts):
-            return self._route_pathological("unrecovered failure")
-
-        if self._detect_trace_stutter(artifacts):
-            return self._route_pathological("trace stutter")
-
         # === NORMAL FLOW: No interrupt ===
         # Produced artifacts? Exit Interview evaluates semantic completion
         if artifacts:
@@ -484,87 +477,3 @@ class GraphOrchestrator:
         logger.info("classify_interrupt: Normal flow, no artifacts → Router")
         return CoreSpecialist.ROUTER.value
 
-    def _detect_unrecovered_failures(self, artifacts: dict) -> bool:
-        """
-        ADR-CORE-061: Detect unrecovered tool failures in resume_trace.
-
-        Checks if the accumulated trace ends with a failure that was not
-        followed by successful operations.
-
-        Returns True if the trace ends with an unrecovered failure.
-        """
-        trace = artifacts.get("resume_trace", [])
-        if not trace or not isinstance(trace, list):
-            return False
-
-        # Check if the LAST entry in the trace is a failure
-        for i in range(len(trace) - 1, -1, -1):
-            entry = trace[i]
-            if not isinstance(entry, dict):
-                continue
-
-            # Found the last valid entry
-            success = entry.get("success", True)
-            if not success:
-                # Check if any success after it
-                has_recovery = any(
-                    isinstance(trace[j], dict) and trace[j].get("success", True)
-                    for j in range(i + 1, len(trace))
-                )
-                if not has_recovery:
-                    tc = entry.get("tool_call", {})
-                    tool_name = tc.get("name", entry.get("tool", "unknown"))
-                    logger.warning(f"Unrecovered failure in resume_trace: {tool_name}")
-                    return True
-            break  # Only check the last valid entry
-
-        return False
-
-    def _detect_trace_stutter(self, artifacts: dict) -> bool:
-        """
-        ADR-CORE-061: Detect trace stutter (model cycling without progress).
-
-        Compares the first and second halves of resume_trace using
-        semantic-chunker's calculate_drift. Low drift indicates the model
-        is repeating the same operations across PD invocations.
-
-        PD's own _check_stagnation() detects cycles within a single
-        invocation; this catches cross-invocation repetition.
-
-        Returns True if stutter is detected.
-        """
-        trace = artifacts.get("resume_trace", [])
-        if not isinstance(trace, list) or len(trace) < 6:
-            # Need a reasonable trace to split into halves
-            return False
-
-        if not hasattr(self, 'external_mcp_client') or self.external_mcp_client is None:
-            logger.debug("_detect_trace_stutter: No external_mcp_client available, skipping")
-            return False
-
-        try:
-            import json
-            mid = len(trace) // 2
-            text_a = json.dumps(trace[:mid], sort_keys=True, default=str)
-            text_b = json.dumps(trace[mid:], sort_keys=True, default=str)
-
-            result = self.external_mcp_client.call_tool(
-                server_name="semantic-chunker",
-                tool_name="calculate_drift",
-                arguments={"text_a": text_a, "text_b": text_b}
-            )
-
-            if result and "drift_score" in result:
-                drift_score = result["drift_score"]
-                STUTTER_THRESHOLD = 0.1
-                if drift_score < STUTTER_THRESHOLD:
-                    logger.warning(
-                        f"Trace stutter detected: drift_score={drift_score:.4f} < {STUTTER_THRESHOLD} "
-                        f"(resume_trace halves, {len(trace)} entries)"
-                    )
-                    return True
-
-        except Exception as e:
-            logger.debug(f"_detect_trace_stutter: Error calling semantic-chunker: {e}")
-
-        return False

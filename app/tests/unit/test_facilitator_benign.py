@@ -31,8 +31,7 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
     ADR-073 Phase 4: BENIGN interrupt early-returns, clearing the flag.
 
     When max_iterations_exceeded is set (BENIGN interrupt), Facilitator should
-    early return clearing the flag. PD writes resume_trace directly via ior merge;
-    Facilitator no longer relays it.
+    early return clearing the flag.
     """
     plan = ContextPlan(
         reasoning="Continue interrupted task",
@@ -49,9 +48,6 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
-            "resume_trace": [
-                {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
-            ]
         },
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
@@ -63,7 +59,7 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
         # CRITICAL: Should NOT call filesystem (early return)
         mock_list.assert_not_called()
 
-    # Only clears the flag — resume_trace stays in artifacts via ior merge
+    # Only clears the flag
     assert "gathered_context" not in result["artifacts"]
     assert result["artifacts"]["max_iterations_exceeded"] is False
 
@@ -87,9 +83,6 @@ def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             # NO max_iterations_exceeded - normal flow
-            "resume_trace": [
-                {"tool": "list_directory", "args": {"path": "/workspace"}, "success": True},
-            ]
         },
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
@@ -131,9 +124,6 @@ def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
                 "is_complete": False,
                 "reasoning": "Files not fully categorized"
             },
-            "resume_trace": [
-                {"tool": "copy_file", "args": {"source": "a", "destination": "b"}, "success": True},
-            ]
         },
         "routing_history": ["project_director"]
     }
@@ -150,13 +140,13 @@ def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
     assert result["artifacts"]["max_iterations_exceeded"] is False
 
 
-def test_facilitator_benign_early_returns_without_trace(facilitator):
+def test_facilitator_benign_early_returns_minimal_state(facilitator):
     """
-    ADR-073 Phase 4: BENIGN always early-returns, even without resume_trace.
+    BENIGN always early-returns with minimal state.
 
     max_iterations_exceeded means the model was mid-work. Facilitator clears the
-    flag regardless of whether resume_trace exists. Context was already gathered
-    in the first Facilitator pass and persists in artifacts via ior merge.
+    flag. Context was already gathered in the first Facilitator pass and persists
+    in artifacts via ior merge.
     """
     plan = ContextPlan(
         reasoning="Continue interrupted task",
@@ -173,7 +163,6 @@ def test_facilitator_benign_early_returns_without_trace(facilitator):
         "artifacts": {
             "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
-            # NO resume_trace
         },
         "routing_history": ["project_director"]
     }
@@ -213,9 +202,6 @@ def test_facilitator_benign_does_not_accumulate_context(facilitator):
             "context_plan": plan.model_dump(),
             "gathered_context": "### Directory: /workspace/test\n- [FILE] 1.txt",
             "max_iterations_exceeded": True,
-            "resume_trace": [
-                {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
-            ]
         },
         "scratchpad": {},
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
@@ -234,9 +220,9 @@ def test_facilitator_benign_does_not_accumulate_context(facilitator):
     assert result["scratchpad"] == {"facilitator_complete": True}
 
 
-def test_facilitator_benign_early_returns_even_without_resume_trace(facilitator):
+def test_facilitator_benign_early_returns_empty_routing_history(facilitator):
     """
-    ADR-073 Phase 4: BENIGN early-returns regardless of resume_trace presence.
+    BENIGN early-returns even with empty routing history.
 
     max_iterations_exceeded means the model was working. Facilitator clears
     the flag. Context was gathered on the first Facilitator pass and persists
@@ -257,7 +243,6 @@ def test_facilitator_benign_early_returns_even_without_resume_trace(facilitator)
         "artifacts": {
             "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
-            # NO resume_trace
         },
         "scratchpad": {},
         "routing_history": []
@@ -293,9 +278,6 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "resume_trace": [
-                {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
-            ],
             # Exit Interview result IS present - this is EI retry, not BENIGN
             "exit_interview_result": {
                 "is_complete": False,
@@ -345,10 +327,6 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
     state = {
         "artifacts": {
             "context_plan": plan.model_dump(),
-            "resume_trace": [
-                {"tool": "list_directory", "args": {"path": "/workspace/test"}, "success": True},
-                {"tool": "create_directory", "args": {"path": "/workspace/test/animals"}, "success": True},
-            ],
             "max_iterations_exceeded": True,
             "exit_interview_result": {
                 "is_complete": False,

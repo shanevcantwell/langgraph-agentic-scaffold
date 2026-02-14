@@ -264,7 +264,7 @@ def test_safe_executor_emits_trace_for_mcp_delegating_specialist(node_executor_i
     mock_specialist.specialist_name = "project_director"
     mock_specialist.specialist_config = {}  # type defaults to "llm"
     mock_specialist.execute.return_value = {
-        "artifacts": {"resume_trace": [{"tool_call": {"name": "read_file"}}]},
+        "artifacts": {},
         "scratchpad": {"specialist_activity": ["Read file.txt"]},
     }
 

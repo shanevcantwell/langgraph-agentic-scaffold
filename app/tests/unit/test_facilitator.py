@@ -357,8 +357,8 @@ def test_facilitator_handles_ask_user_action_via_interrupt(facilitator):
         mock_interrupt.assert_called_once()
         call_payload = mock_interrupt.call_args[0][0]
         assert call_payload["action_type"] == "ask_user"
-        # question_text uses action.description (or action.target if description is empty)
-        assert "clarify user preference" in call_payload["question"].lower()
+        # question_text uses action.target (the actual question to ask the user)
+        assert "what file format do you prefer?" in call_payload["question"].lower()
 
     # No MCP calls should have been made (ASK_USER uses interrupt, not MCP)
     facilitator.mcp_client.call.assert_not_called()

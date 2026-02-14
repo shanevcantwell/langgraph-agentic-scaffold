@@ -54,43 +54,6 @@ def generate_report(report_data: ErrorReport) -> str:
     ]
     return "\n\n".join(report_parts)
 
-def _format_trace(trace: list, trace_name: str) -> str:
-    """Format a resume_trace (or legacy research_trace_N) as a readable tool call log."""
-    if not trace or not isinstance(trace, list):
-        return f"```\n{trace}\n```"
-
-    lines = [f"**{len(trace)} tool calls:**\n"]
-    for i, entry in enumerate(trace):
-        if not isinstance(entry, dict):
-            lines.append(f"{i+1}. `{entry}`")
-            continue
-
-        iteration = entry.get("iteration", "?")
-        # Support both new format (tool_call.name) and legacy (tool)
-        tc = entry.get("tool_call", {})
-        tool = tc.get("name", entry.get("tool", "unknown"))
-        args = tc.get("args", entry.get("args", {}))
-        result = entry.get("observation", entry.get("result", ""))
-
-        # Summarize args (show key info only)
-        if isinstance(args, dict):
-            args_summary = ", ".join(f"{k}={repr(v)[:50]}" for k, v in list(args.items())[:3])
-            if len(args) > 3:
-                args_summary += ", ..."
-        else:
-            args_summary = str(args)[:80]
-
-        # Truncate result for display
-        result_preview = str(result)[:100].replace('\n', ' ')
-        if len(str(result)) > 100:
-            result_preview += "..."
-
-        lines.append(f"{i+1}. **[iter {iteration}]** `{tool}({args_summary})`")
-        if result_preview:
-            lines.append(f"   → {result_preview}")
-
-    return "\n".join(lines)
-
 
 def _format_exit_interview_result(result: dict) -> str:
     """Format exit_interview_result as structured fields."""
@@ -125,10 +88,6 @@ def _format_artifact(key: str, value) -> str:
     Intelligently format an artifact based on its type and key.
     Returns formatted markdown string.
     """
-    # resume_trace (or legacy research_trace_N) - format as tool call log
-    if (key == "resume_trace" or key.startswith("research_trace_")) and isinstance(value, list):
-        return _format_trace(value, key)
-
     # exit_interview_result - format as structured fields
     if key == "exit_interview_result" and isinstance(value, dict):
         return _format_exit_interview_result(value)

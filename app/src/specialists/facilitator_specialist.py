@@ -204,9 +204,8 @@ class FacilitatorSpecialist(BaseSpecialist):
         is_benign_continuation = max_exceeded and (not exit_interview_result or ei_incomplete)
 
         if is_benign_continuation:
-            # ADR-073 Phase 4: BENIGN continuation just clears the flag.
-            # PD starts fresh (trace=[]) and writes resume_trace directly via ior merge.
-            # No need to re-write resume_trace — it's already in artifacts.
+            # BENIGN continuation: PD hit max_iterations but was making progress.
+            # Clear the flag so PD gets another pass. PD starts fresh (trace=[]).
             logger.info(
                 f"Facilitator: BENIGN continuation "
                 f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
@@ -403,8 +402,6 @@ class FacilitatorSpecialist(BaseSpecialist):
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")
 
         # #170: Fresh rebuild — no accumulation across passes.
-        # resume_trace is already in artifacts from PD's write (ior merge) —
-        # Facilitator doesn't need to relay it.
         final_context = "\n\n".join(gathered_context)
 
         return {

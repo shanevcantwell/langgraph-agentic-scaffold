@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 73 | 700 |
+| Unit | 73 | 698 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **108** | **982** |
+| **Total** | **108** | **980** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1018,12 +1018,12 @@
   - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
 - **`test_facilitator_benign_continuation_with_ei_incomplete`**
   - *ADR-073 Phase 4: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
-- **`test_facilitator_benign_early_returns_without_trace`**
-  - *ADR-073 Phase 4: BENIGN always early-returns, even without resume_trace.*
+- **`test_facilitator_benign_early_returns_minimal_state`**
+  - *BENIGN always early-returns with minimal state.*
 - **`test_facilitator_benign_does_not_accumulate_context`**
   - *ADR-073 Phase 4: BENIGN early return avoids context pollution.*
-- **`test_facilitator_benign_early_returns_even_without_resume_trace`**
-  - *ADR-073 Phase 4: BENIGN early-returns regardless of resume_trace presence.*
+- **`test_facilitator_benign_early_returns_empty_routing_history`**
+  - *BENIGN early-returns even with empty routing history.*
 - **`test_facilitator_no_early_return_when_exit_interview_result_present`**
   - *Issue #114: When exit_interview_result is present (without max_iterations),*
 - **`test_facilitator_benign_continuation_after_ei_incomplete`**
@@ -1035,8 +1035,8 @@
   - *#170: Facilitator rebuilds gathered_context fresh each invocation.*
 - **`test_facilitator_fresh_context_when_no_existing`**
   - *Issue #96: First pass (no existing gathered_context) should work normally.*
-- **`test_facilitator_does_not_relay_resume_trace`**
-  - *#170: Facilitator does NOT relay resume_trace in non-BENIGN path.*
+- **`test_facilitator_first_pass_builds_gathered_context`**
+  - *#170: First pass (no EI result) builds gathered_context from plan actions.*
 - **`test_facilitator_surfaces_curated_exit_interview_feedback`**
   - *Issue #167 (revises #121): Curated EI feedback IS surfaced in gathered_context.*
 - **`test_facilitator_curated_feedback_excludes_routing_data`**
@@ -1271,10 +1271,6 @@
   - *PATHOLOGICAL: stagnation_detected flag → Interrupt Evaluator.*
 - **`test_tool_error_routes_to_interrupt_evaluator`**
   - *PATHOLOGICAL: tool_error flag → Interrupt Evaluator.*
-- **`test_trace_stutter_detected_routes_to_interrupt_evaluator`**
-  - *PATHOLOGICAL: trace stutter (via semantic-chunker drift) → Interrupt Evaluator.*
-- **`test_unrecovered_failure_routes_to_interrupt_evaluator`**
-  - *PATHOLOGICAL: unrecovered tool failure in trace → Interrupt Evaluator.*
 - **`test_artifacts_present_routes_to_exit_interview`**
   - *NORMAL: artifacts present → Exit Interview for semantic completion.*
 - **`test_no_artifacts_no_flags_routes_to_router`**
