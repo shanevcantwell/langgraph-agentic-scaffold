@@ -376,7 +376,9 @@ class FacilitatorSpecialist(BaseSpecialist):
                     # Human-in-the-loop: pause graph execution for user clarification
                     from langgraph.types import interrupt
 
-                    question_text = action.description or action.target or "Please clarify your request."
+                    # For ASK_USER: target = the question to show the user,
+                    # description = why this clarification is needed (meta)
+                    question_text = action.target or action.description or "Please clarify your request."
 
                     interrupt_payload = {
                         "question": question_text,
