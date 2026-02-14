@@ -600,11 +600,7 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
             if key.startswith("_") or key in excluded:
                 continue
 
-            # Special handling: resume_trace gets an operation inventory
-            if key == "resume_trace" and isinstance(value, list):
-                preview = self._build_trace_summary(value)
-            else:
-                preview = self._preview_artifact_value(value, max_preview)
+            preview = self._preview_artifact_value(value, max_preview)
             lines.append(f"- **{key}**: {preview}")
 
         return "\n".join(lines) if lines else "[No artifacts produced]"
@@ -640,53 +636,6 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
         if len(text) > max_len:
             return text[:max_len] + "..."
         return text
-
-    @staticmethod
-    def _build_trace_summary(trace: list) -> str:
-        """
-        Summarize resume_trace as an operation inventory for completion evaluation.
-
-        Used by the single-pass LLM fallback. The react_step path can call
-        browse_artifact("resume_trace") if needed.
-        """
-        if not trace:
-            return "(empty trace)"
-
-        tool_stats: dict = {}
-        for entry in trace:
-            if not isinstance(entry, dict):
-                continue
-            tc = entry.get("tool_call", {})
-            name = tc.get("name") or entry.get("tool", "unknown")
-            success = entry.get("success", True)
-
-            if name not in tool_stats:
-                tool_stats[name] = {"ok": 0, "fail": 0}
-            if success:
-                tool_stats[name]["ok"] += 1
-            else:
-                tool_stats[name]["fail"] += 1
-
-        total = len(trace)
-        lines = [f"(trace, {total} operations)"]
-        for tool, stats in tool_stats.items():
-            ok, fail = stats["ok"], stats["fail"]
-            status = f"{ok} ok" + (f", {fail} fail" if fail else "")
-            lines.append(f"  {tool}: {status}")
-
-        recent = trace[-min(5, total):]
-        lines.append("  Recent:")
-        for entry in recent:
-            tc = entry.get("tool_call", {})
-            name = tc.get("name") or entry.get("tool", "?")
-            args = tc.get("args") or entry.get("args", {})
-            ok_str = "ok" if entry.get("success", True) else "FAIL"
-            arg_preview = ", ".join(
-                f"{k}={v}" for k, v in list(args.items())[:2]
-            )
-            lines.append(f"    [{ok_str}] {name}({arg_preview})")
-
-        return "\n".join(lines)
 
     def _format_exit_plan(self, exit_plan: dict) -> str:
         """Format the exit_plan artifact for prompts."""
@@ -744,7 +693,7 @@ Evaluate whether:
 3. If specialists were recommended, have the appropriate ones executed?
 4. Are there meaningful artifacts or responses that answer the request?
 
-**IMPORTANT:** Do NOT trust claims of completed work in messages alone. For file operations, check the artifacts for concrete evidence — the `resume_trace` shows an operation inventory with tool counts and success/fail status. Operations may use dedicated tools (move_file, create_directory) OR shell commands via run_command (mv, mkdir -p). Both are equally valid. Count completed vs. expected operations.
+**IMPORTANT:** Do NOT trust claims of completed work in messages alone. Check the artifacts for concrete evidence of completed operations.
 
 Be CONSERVATIVE: If in doubt, mark as INCOMPLETE to give the system another chance.
 The only cost of being conservative is one more routing cycle.

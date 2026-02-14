@@ -72,9 +72,6 @@ class FacilitatorSpecialist(BaseSpecialist):
             logger.error(f"Facilitator: Filesystem MCP list_directory failed: {e}")
             raise
 
-    # #170: _assemble_resume_trace removed. PD writes resume_trace directly
-    # to artifacts via ior merge; Facilitator no longer relays it.
-
     def _format_exit_interview_feedback(self, result: dict) -> str:
         """
         Format Exit Interview feedback using prompt template (#100).
@@ -88,41 +85,6 @@ class FacilitatorSpecialist(BaseSpecialist):
             missing_elements=result.get("missing_elements", "Remaining work not specified"),
             recommended_specialists=", ".join(result.get("recommended_specialists", ["project_director"]))
         )
-
-    def _extract_trace_knowledge(self, artifacts: dict) -> Optional[str]:
-        """
-        #170: Extract knowledge of prior write operations from resume_trace.
-
-        On retry, PD starts with an empty trace. This method surfaces what
-        write operations (create_directory, move_file, write_file) succeeded
-        in prior invocations so the model doesn't redo them.
-
-        Read operations are omitted — they're cheap and re-reading ensures
-        the model sees current filesystem state.
-        """
-        trace = artifacts.get("resume_trace", [])
-        if not trace or not isinstance(trace, list):
-            return None
-
-        entries = []
-        for step in trace:
-            if not step.get("success"):
-                continue
-            tc = step.get("tool_call", {})
-            name = tc.get("name", "")
-            args = tc.get("args", {})
-
-            if name == "create_directory":
-                entries.append(f"Created directory {args.get('path', '?')}")
-            elif name == "move_file":
-                entries.append(f"Moved {args.get('source', '?')} → {args.get('destination', '?')}")
-            elif name == "write_file":
-                entries.append(f"Wrote {args.get('path', '?')}")
-
-        if not entries:
-            return None
-
-        return "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in entries)
 
     def _summarize_work_in_progress(self, artifacts: dict, routing_history: list) -> Optional[str]:
         """
@@ -241,24 +203,21 @@ class FacilitatorSpecialist(BaseSpecialist):
         is_benign_continuation = max_exceeded and (not exit_interview_result or ei_incomplete)
 
         if is_benign_continuation:
-            # #170: resume_trace is already in artifacts from PD's write (ior merge).
-            # Facilitator only needs to clear the flag so the next loop doesn't
-            # re-trigger BENIGN. PD starts fresh regardless (trace=[]).
-            resume_trace = artifacts.get("resume_trace")
-            if resume_trace and isinstance(resume_trace, list):
-                logger.info(
-                    f"Facilitator: BENIGN continuation - {len(resume_trace)} trace entries "
-                    f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
-                )
-                return {
-                    "artifacts": {
-                        "resume_trace": resume_trace,
-                        "max_iterations_exceeded": False,  # Clear the flag
-                    },
-                    "scratchpad": {
-                        "facilitator_complete": True
-                    }
+            # ADR-073 Phase 4: BENIGN continuation just clears the flag.
+            # PD starts fresh (trace=[]) and writes resume_trace directly via ior merge.
+            # No need to re-write resume_trace — it's already in artifacts.
+            logger.info(
+                f"Facilitator: BENIGN continuation "
+                f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
+            )
+            return {
+                "artifacts": {
+                    "max_iterations_exceeded": False,  # Clear the flag
+                },
+                "scratchpad": {
+                    "facilitator_complete": True
                 }
+            }
 
         # Load original plan
         context_plan_data = artifacts.get("context_plan")
@@ -290,9 +249,8 @@ class FacilitatorSpecialist(BaseSpecialist):
                 gathered_context.append(feedback)
                 logger.info("Facilitator: Added curated EI retry context")
 
-        # ADR-073 Phase 3: Surface prior work from scratchpad (replaces trace parsing).
+        # ADR-073 Phase 3: Surface prior work from scratchpad.
         # PD writes specialist_activity to scratchpad; Facilitator reads it directly.
-        # Falls back to _extract_trace_knowledge() if scratchpad is empty (pre-upgrade runs).
         if exit_interview_result and not exit_interview_result.get("is_complete", True):
             scratchpad = state.get("scratchpad", {})
             activity = scratchpad.get("specialist_activity", [])
@@ -300,12 +258,6 @@ class FacilitatorSpecialist(BaseSpecialist):
                 knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
                 gathered_context.append(knowledge)
                 logger.info("Facilitator: Added specialist_activity from scratchpad")
-            else:
-                # Fallback: parse resume_trace (for runs before PD writes scratchpad)
-                knowledge = self._extract_trace_knowledge(artifacts)
-                if knowledge:
-                    gathered_context.append(knowledge)
-                    logger.info("Facilitator: Added prior work knowledge from trace (legacy fallback)")
 
         # Issue #108: Surface work-in-progress for BENIGN interrupts
         # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN

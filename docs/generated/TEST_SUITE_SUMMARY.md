@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 70 | 698 |
+| Unit | 70 | 688 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **105** | **980** |
+| **Total** | **105** | **970** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -963,16 +963,6 @@
   - *Binary artifacts should show size, not content.*
 - **`test_artifact_preview_passed_to_llm_prompt`**
   - *#155: The LLM prompt should contain artifact value previews, not just keys.*
-- **`test_trace_summary_shows_operation_inventory`**
-  - *resume_trace should show tool counts with success/fail.*
-- **`test_trace_summary_handles_run_command`**
-  - *run_command operations should appear in trace summary.*
-- **`test_trace_summary_empty_trace`**
-  - *Empty trace should return placeholder.*
-- **`test_trace_summary_shows_recent_operations`**
-  - *Recent section should show last operations with args.*
-- **`test_artifact_summary_uses_trace_summary_for_resume_trace`**
-  - *_build_artifact_summary should special-case resume_trace.*
 - **`test_ei_does_not_clear_max_iterations_on_complete`**
   - *When EI says COMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
 - **`test_ei_does_not_clear_max_iterations_on_incomplete`**
@@ -1030,33 +1020,23 @@
 - **`test_context_plan_reasoning_in_gathered_context`**
   - *Issue #167: Triage reasoning should appear in gathered_context so PD*
 - **`test_facilitator_passes_trace_on_benign_interrupt`**
-  - *Issue #114 supersedes Issue #108: BENIGN interrupt passes trace, not WIP summary.*
+  - *ADR-073 Phase 4: BENIGN interrupt early-returns, clearing the flag.*
 - **`test_facilitator_no_wip_summary_without_max_iterations`**
   - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
 - **`test_facilitator_benign_continuation_with_ei_incomplete`**
-  - *Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
-- **`test_facilitator_no_wip_summary_without_trace`**
-  - *Issue #108: No work-in-progress summary if no research trace exists.*
-- **`test_facilitator_benign_passes_full_trace`**
-  - *Issue #114: BENIGN continuation passes full trace, not a summary.*
-- **`test_facilitator_benign_resume_passes_trace_without_context_accumulation`**
-  - *Issue #114: BENIGN resume should pass trace through without context pollution.*
-- **`test_facilitator_benign_resume_no_early_return_without_trace`**
-  - *Issue #114: Without prior trace, BENIGN path should NOT early return.*
+  - *ADR-073 Phase 4: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
+- **`test_facilitator_benign_early_returns_without_trace`**
+  - *ADR-073 Phase 4: BENIGN always early-returns, even without resume_trace.*
+- **`test_facilitator_benign_does_not_accumulate_context`**
+  - *ADR-073 Phase 4: BENIGN early return avoids context pollution.*
+- **`test_facilitator_benign_early_returns_even_without_resume_trace`**
+  - *ADR-073 Phase 4: BENIGN early-returns regardless of resume_trace presence.*
 - **`test_facilitator_no_early_return_when_exit_interview_result_present`**
   - *Issue #114: When exit_interview_result is present, NO early return.*
 - **`test_facilitator_benign_continuation_after_ei_incomplete`**
-  - *Issue #114: BENIGN continuation when EI says INCOMPLETE but max_iterations was the cause.*
-- **`test_extracts_write_operations`**
-  - *create_directory, move_file, write_file produce knowledge entries.*
-- **`test_skips_failed_operations`**
-  - *Only successful operations produce entries.*
-- **`test_returns_none_for_empty_trace`**
-  - *No trace = no knowledge.*
-- **`test_returns_none_for_read_only_trace`**
-  - *Trace with only reads produces no knowledge (reads are cheap to redo).*
-- **`test_integrated_in_retry_gathered_context`**
-  - *#170: On EI retry, gathered_context includes prior work knowledge.*
+  - *ADR-073 Phase 4: BENIGN+INCOMPLETE = continuation, not correction.*
+- **`test_facilitator_surfaces_specialist_activity_on_retry`**
+  - *ADR-073 Phase 3: On EI retry, Facilitator reads specialist_activity from*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1718,8 +1698,8 @@
   - *Tests that the tracing context is properly cleared after successful execution.*
 - **`test_safe_executor_emits_trace_for_procedural_specialist`**
   - *Tests that procedural specialists emit trace entries even without LLM calls.*
-- **`test_safe_executor_does_not_emit_trace_for_unknown_type_without_adapter_traces`**
-  - *Tests that specialists with unknown type and no adapter traces don't emit traces.*
+- **`test_safe_executor_emits_trace_for_mcp_delegating_specialist`**
+  - *ADR-073 Phase 1: All specialists emit traces unconditionally.*
 
 ## `app/tests/unit/test_parallel_reducer.py`
 

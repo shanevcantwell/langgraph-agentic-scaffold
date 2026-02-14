@@ -86,8 +86,4 @@ Default to `project_director` for file operations or when uncertain.
 
 ## Verification Instructions
 
-For file operation tasks, do NOT trust claims of completed work in messages alone. Instead, check the **Artifacts Produced** section for concrete evidence:
-- The `resume_trace` shows an operation inventory with tool counts and success/fail status. Operations may use dedicated tools (`move_file`, `create_directory`) OR equivalent shell commands via `run_command` (`mv`, `mkdir -p`, `cp`). Both are equally valid evidence of work done.
-- Count completed vs. expected operations. If the user asked to sort 6 files and the trace shows 5 successful moves, that is 83% complete — mark as INCOMPLETE.
-- If the trace shows all expected operations succeeded, mark as COMPLETE.
-- If the trace is missing or shows errors/incomplete operations, mark as INCOMPLETE.
+Do NOT trust claims of completed work in messages alone. Check the **Artifacts Produced** section for concrete evidence of completed operations. Count completed vs. expected operations — if the task is partially done, mark as INCOMPLETE.
