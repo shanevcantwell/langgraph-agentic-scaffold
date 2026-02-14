@@ -290,15 +290,22 @@ class FacilitatorSpecialist(BaseSpecialist):
                 gathered_context.append(feedback)
                 logger.info("Facilitator: Added curated EI retry context")
 
-        # #170: Extract knowledge of prior write operations from trace
-        # On retry, PD starts fresh (no trace resumption), so the model needs to
-        # know what directories were created and files were moved. Read operations
-        # are omitted — cheap to redo and ensures model sees current state.
+        # ADR-073 Phase 3: Surface prior work from scratchpad (replaces trace parsing).
+        # PD writes specialist_activity to scratchpad; Facilitator reads it directly.
+        # Falls back to _extract_trace_knowledge() if scratchpad is empty (pre-upgrade runs).
         if exit_interview_result and not exit_interview_result.get("is_complete", True):
-            knowledge = self._extract_trace_knowledge(artifacts)
-            if knowledge:
+            scratchpad = state.get("scratchpad", {})
+            activity = scratchpad.get("specialist_activity", [])
+            if activity:
+                knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
                 gathered_context.append(knowledge)
-                logger.info("Facilitator: Added prior work knowledge from trace")
+                logger.info("Facilitator: Added specialist_activity from scratchpad")
+            else:
+                # Fallback: parse resume_trace (for runs before PD writes scratchpad)
+                knowledge = self._extract_trace_knowledge(artifacts)
+                if knowledge:
+                    gathered_context.append(knowledge)
+                    logger.info("Facilitator: Added prior work knowledge from trace (legacy fallback)")
 
         # Issue #108: Surface work-in-progress for BENIGN interrupts
         # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN

@@ -369,6 +369,9 @@ class ProjectDirector(BaseSpecialist):
             "artifacts": {
                 "resume_trace": trace,
             },
+            "scratchpad": {
+                "specialist_activity": self._summarize_activity(trace),
+            },
         }
 
     def _build_error_result(
@@ -378,6 +381,9 @@ class ProjectDirector(BaseSpecialist):
             "messages": [AIMessage(content=error_msg)],
             "artifacts": {
                 "resume_trace": trace,
+            },
+            "scratchpad": {
+                "specialist_activity": self._summarize_activity(trace),
             },
         }
 
@@ -404,6 +410,9 @@ class ProjectDirector(BaseSpecialist):
                 "stagnation_tool": tool_name,
                 "stagnation_args": tool_args,
             },
+            "scratchpad": {
+                "specialist_activity": self._summarize_activity(trace),
+            },
         }
 
     def _build_partial_result(
@@ -416,7 +425,42 @@ class ProjectDirector(BaseSpecialist):
                 "resume_trace": trace,
                 "max_iterations_exceeded": True,
             },
+            "scratchpad": {
+                "specialist_activity": self._summarize_activity(trace),
+            },
         }
+
+    def _summarize_activity(self, trace: List[Dict[str, Any]]) -> List[str]:
+        """
+        ADR-073 Phase 3: Summarize trace as human-readable activity entries.
+
+        Written to scratchpad["specialist_activity"] so Facilitator can surface
+        prior work on retry without parsing resume_trace.
+        """
+        entries = []
+        for step in trace:
+            if not step.get("success"):
+                continue
+            tc = step.get("tool_call", {})
+            name = tc.get("name", "")
+            args = tc.get("args", {})
+
+            if name == "create_directory":
+                entries.append(f"Created directory {args.get('path', '?')}")
+            elif name == "move_file":
+                entries.append(f"Moved {args.get('source', '?')} → {args.get('destination', '?')}")
+            elif name == "write_file":
+                path = args.get("path", "?")
+                content = args.get("content", "")
+                size = f" ({len(content)} chars)" if content else ""
+                entries.append(f"Wrote {path}{size}")
+            elif name == "run_command":
+                cmd = args.get("command", "?")
+                # Truncate long commands (e.g., cat <<EOF writes)
+                if len(cmd) > 80:
+                    cmd = cmd[:77] + "..."
+                entries.append(f"Ran: {cmd}")
+        return entries
 
     def _synthesize_partial(
         self, trace: List[Dict[str, Any]], max_iter: int
