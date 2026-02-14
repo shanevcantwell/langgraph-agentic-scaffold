@@ -155,7 +155,7 @@ async def test_stream_graph_async(client, patched_api):
     # We check that the formatter correctly processed our mock dicts into status updates
     assert '"status": "Executing specialist: router_specialist..."' in response.text
     assert '"status": "Executing specialist: file_specialist..."' in response.text
-    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
+    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False, conversation_id=None, prior_messages=None)
 
 @pytest.mark.asyncio
 async def test_stream_graph_async_handles_runner_error(client, patched_api, mocker):
@@ -212,4 +212,4 @@ async def test_stream_graph_events_async(client, patched_api):
     assert found_router
     assert found_file
 
-    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test standard stream", text_to_process=None, image_to_process=None, use_simple_chat=False)
+    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test standard stream", text_to_process=None, image_to_process=None, use_simple_chat=False, conversation_id=None, prior_messages=None)

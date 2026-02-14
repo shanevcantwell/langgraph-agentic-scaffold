@@ -7,8 +7,8 @@ creating a single source of truth for the GraphState structure.
 
 Refactoring: Priority 1 from Task 2.7 post-purge cleanup
 """
-from typing import Dict, Any, Optional
-from langchain_core.messages import HumanMessage, BaseMessage
+from typing import Dict, Any, List, Optional
+from langchain_core.messages import AIMessage, HumanMessage, BaseMessage
 
 from app.src.graph.state import GraphState
 
@@ -23,6 +23,8 @@ def create_initial_state(
     additional_artifacts: Optional[Dict[str, Any]] = None,
     additional_scratchpad: Optional[Dict[str, Any]] = None,
     distillation_state: Optional[Dict[str, Any]] = None,
+    prior_messages: Optional[List[dict]] = None,
+    conversation_id: Optional[str] = None,
 ) -> GraphState:
     """
     Creates a properly initialized GraphState dictionary.
@@ -39,6 +41,8 @@ def create_initial_state(
         additional_artifacts: Optional dict to merge into artifacts
         additional_scratchpad: Optional dict to merge into scratchpad
         distillation_state: Optional distillation workflow state
+        prior_messages: Optional prior conversation turns [{role, content}] (ADR-CORE-075)
+        conversation_id: Optional conversation ID for multi-turn threading (ADR-CORE-075)
 
     Returns:
         GraphState: Properly structured initial state dictionary
@@ -51,9 +55,26 @@ def create_initial_state(
         ...     use_simple_chat=True
         ... )
     """
+    # ADR-CORE-075: Build message list with prior conversation context
+    messages = []
+    if prior_messages:
+        # Hard cap: last 3 user/assistant pairs (6 messages)
+        capped = prior_messages[-6:]
+        for msg in capped:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if not content:
+                continue
+            if role == "user":
+                messages.append(HumanMessage(content=content))
+            elif role == "assistant":
+                messages.append(AIMessage(content=content))
+    # Current turn is always appended last
+    messages.append(HumanMessage(content=goal, name=user_name))
+
     # Build core state structure
     initial_state: GraphState = {
-        "messages": [HumanMessage(content=goal, name=user_name)],
+        "messages": messages,
         "routing_history": [],
         "turn_count": 0,
         "task_is_complete": False,
@@ -68,6 +89,10 @@ def create_initial_state(
 
     # Store verbatim user request for specialists (distinct from specialist-internal *_goal fields)
     initial_state["artifacts"]["user_request"] = goal
+
+    # ADR-CORE-075: Track conversation_id for multi-turn continuity
+    if conversation_id:
+        initial_state["artifacts"]["conversation_id"] = conversation_id
 
     # Populate artifacts
     if text_to_process:

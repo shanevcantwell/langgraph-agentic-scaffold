@@ -36,6 +36,10 @@ class AgUiTranslator:
                 # Store for interrupt handling but don't emit an event
                 continue
 
+            # ADR-CORE-075: Handle conversation_id (metadata, not a node)
+            if "conversation_id" in chunk:
+                continue
+
             # 3. Handle Interrupt Events (ADR-CORE-018/042: HitL Clarification)
             if "__interrupt__" in chunk:
                 interrupt_data = chunk["__interrupt__"]

@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 print("Environment variables from .env file loaded.")
 
-from typing import Dict, Optional, Any
+from typing import Dict, List, Optional, Any
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -103,6 +103,15 @@ class InvokeRequest(BaseModel):
         False,
         description="If True, use simple chat mode (single ChatSpecialist). If False (default), use tiered chat mode (parallel progenitors)."
     )
+    # ADR-CORE-075: Conversation context continuity
+    conversation_id: Optional[str] = Field(
+        None,
+        description="Links turns in a multi-turn conversation. Returned by server on first turn."
+    )
+    prior_messages: Optional[List[dict]] = Field(
+        None,
+        description="Prior conversation turns as [{role: 'user'|'assistant', content: str}]. Last 3 pairs used."
+    )
 
 class InvokeResponse(BaseModel):
     final_output: Dict[str, Any] = Field(
@@ -188,6 +197,11 @@ async def _stream_formatter(generator):
         # Check for run_id chunk (emitted first)
         if "run_id" in chunk:
             yield f"data: {json.dumps({'run_id': chunk['run_id']})}\n\n"
+            continue
+
+        # ADR-CORE-075: Forward conversation_id to client for multi-turn threading
+        if "conversation_id" in chunk:
+            yield f"data: {json.dumps({'conversation_id': chunk['conversation_id']})}\n\n"
             continue
 
         # ADR-CORE-042: Capture thread_id for interrupt handling
@@ -556,7 +570,9 @@ async def stream_graph(request: InvokeRequest):
             goal=request.input_prompt,
             text_to_process=request.text_to_process,
             image_to_process=request.image_to_process,
-            use_simple_chat=request.use_simple_chat
+            use_simple_chat=request.use_simple_chat,
+            conversation_id=request.conversation_id,
+            prior_messages=request.prior_messages,
         )
         return StreamingResponse(
             _stream_formatter(raw_stream),
@@ -613,7 +629,9 @@ async def stream_graph_events(request: InvokeRequest):
             goal=request.input_prompt,
             text_to_process=request.text_to_process,
             image_to_process=request.image_to_process,
-            use_simple_chat=request.use_simple_chat
+            use_simple_chat=request.use_simple_chat,
+            conversation_id=request.conversation_id,
+            prior_messages=request.prior_messages,
         )
         return StreamingResponse(
             _standard_stream_formatter(raw_stream),

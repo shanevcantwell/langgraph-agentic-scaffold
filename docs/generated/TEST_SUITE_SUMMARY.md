@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 72 | 690 |
+| Unit | 73 | 700 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **107** | **972** |
+| **Total** | **108** | **982** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -2053,6 +2053,20 @@
   - *Tests that an AttributeError is raised if the module is found*
 - **`test_get_specialist_class_syntax_error`**
   - *Tests that the loader propagates a SyntaxError if the specialist*
+
+## `app/tests/unit/test_state_factory.py`
+
+- **`test_minimal_call`**
+- **`test_artifacts_include_user_request`**
+- **`test_prior_messages_prepended_to_current`**
+- **`test_hard_cap_last_six_messages`**
+  - *Only last 6 prior messages (3 user/assistant pairs) are kept.*
+- **`test_empty_content_skipped`**
+- **`test_unknown_role_skipped`**
+- **`test_none_prior_messages_no_effect`**
+- **`test_empty_list_prior_messages_no_effect`**
+- **`test_conversation_id_stored_in_artifacts`**
+- **`test_no_conversation_id_not_in_artifacts`**
 
 ## `app/tests/unit/test_state_pruner.py`
 
