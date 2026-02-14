@@ -177,6 +177,46 @@ async def test_translator_handles_interrupt_with_object_payload():
 
 
 @pytest.mark.asyncio
+async def test_translator_forwards_facilitator_ask_user_payload():
+    """
+    ADR-CORE-042: Facilitator ASK_USER sends {question, reason, action_type}
+    (singular), not {questions: [...]}.  The translator must forward the full
+    payload so the UI can render the question text.
+    """
+    async def facilitator_interrupt():
+        yield {"run_id": "ask-user-run"}
+        yield {
+            "__interrupt__": [
+                {
+                    "value": {
+                        "question": "What tone should the backronym have?",
+                        "reason": "Clarify desired tone",
+                        "action_type": "ask_user"
+                    },
+                    "resumable": True
+                }
+            ]
+        }
+
+    translator = AgUiTranslator()
+    events = []
+    async for event in translator.translate(facilitator_interrupt()):
+        events.append(event)
+
+    clarification_events = [e for e in events if e.type == EventType.CLARIFICATION_REQUIRED]
+    assert len(clarification_events) == 1
+
+    data = clarification_events[0].data
+    # Full payload forwarded — question (singular) is present
+    assert data["question"] == "What tone should the backronym have?"
+    assert data["reason"] == "Clarify desired tone"
+    assert data["action_type"] == "ask_user"
+    # thread_id and resumable injected by translator
+    assert data["thread_id"] == "ask-user-run"
+    assert data["resumable"] is True
+
+
+@pytest.mark.asyncio
 async def test_translator_skips_thread_id_metadata():
     """
     Regression test for Bug #52: thread_id chunk must not be processed as node.

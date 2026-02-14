@@ -47,15 +47,17 @@ class AgUiTranslator:
                     payload = interrupt_data[0]
                     # Handle both object (Interrupt namedtuple) and dict forms
                     value = payload.value if hasattr(payload, 'value') else payload.get("value", {})
+                    # Forward the full interrupt payload so the UI can handle both formats:
+                    #   Facilitator ASK_USER: {question: "...", reason: "...", action_type: "ask_user"}
+                    #   Future/Dialogue:      {questions: [{question, reason}, ...]}
+                    event_data = dict(value) if isinstance(value, dict) else {"question": str(value)}
+                    event_data["thread_id"] = self.run_id  # Use run_id as thread_id for resume
+                    event_data["resumable"] = True
                     yield AgUiEvent(
                         run_id=self.run_id,
                         type=EventType.CLARIFICATION_REQUIRED,
                         source="system",
-                        data={
-                            "questions": value.get("questions", []),
-                            "thread_id": self.run_id,  # Use run_id as thread_id for resume
-                            "resumable": True
-                        }
+                        data=event_data
                     )
                 # Don't emit WORKFLOW_END - workflow is paused, not complete
                 return
