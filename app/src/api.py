@@ -527,33 +527,27 @@ class ResumeRequest(BaseModel):
 @app.post("/v1/graph/resume")
 async def resume_workflow(request: ResumeRequest):
     """
-    ADR-CORE-018: Resume a workflow from an interrupt point.
+    ADR-CORE-042: Resume a workflow from an interrupt point via SSE stream.
 
-    When DialogueSpecialist triggers an interrupt(), this endpoint allows
-    the user to provide their clarification and continue the workflow.
-
-    The thread_id must match the one returned in the interrupt payload.
-    The user_input will be injected as the return value of interrupt().
+    Streams the resumed execution through the same SSE pipe as the initial
+    run, so the UI receives routing events, specialist execution, and
+    thought stream entries for the post-clarification portion of the graph.
     """
     if not workflow_runner:
         raise HTTPException(status_code=503, detail="Workflow runner not initialized")
 
-    logger.info(f"Received resume request for thread_id: {request.thread_id}")
+    logger.info(f"Received streaming resume request for thread_id: {request.thread_id}")
 
     try:
-        result = await workflow_runner.resume(
+        raw_stream = workflow_runner.resume_streaming(
             thread_id=request.thread_id,
             user_input=request.user_input
         )
-
-        if "error" in result:
-            logger.error(f"Resume failed: {result['error']}")
-            raise HTTPException(status_code=500, detail=result["error"])
-
-        return {"status": "Workflow resumed successfully", "final_state": result}
-
+        return StreamingResponse(
+            _standard_stream_formatter(raw_stream),
+            media_type="text/event-stream",
+        )
     except ValueError as e:
-        # Checkpointing not enabled
         logger.error(f"Resume failed - checkpointing disabled: {e}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:

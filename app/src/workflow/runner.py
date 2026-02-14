@@ -278,30 +278,20 @@ class WorkflowRunner:
             # Cleanup cancellation state
             CancellationManager.clear_cancellation(str(run_id))
 
-    async def resume(self, thread_id: str, user_input: str) -> Dict[str, Any]:
+    async def resume_streaming(self, thread_id: str, user_input: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        RECESS/ESM: Resume a workflow from a checkpointed interrupt point.
+        Resume a workflow from a checkpointed interrupt point, streaming events.
 
-        NOTE: This method is for STATELESS multi-request patterns where the client
-        disconnects between turns. For basic streaming with interrupt(), the client
-        stays connected and LangGraph manages state in-memory - no resume() needed.
-
-        Use cases requiring resume():
-        - RECESS "Subgraph as a Service" (client makes separate HTTP requests per turn)
-        - Long-running workflows where process may restart
-        - Load-balanced deployments where requests hit different servers
+        Uses astream (like run_streaming) so the UI receives the same SSE events
+        for the resumed portion of the graph — routing, specialist execution,
+        thought stream entries all visible.
 
         Args:
-            thread_id: The unique identifier for this conversation thread.
-                       Must match the thread_id used when the interrupt occurred.
-            user_input: The user's response to the clarification questions.
+            thread_id: The thread_id from the interrupt payload.
+            user_input: The user's response to the clarification.
 
-        Returns:
-            The final state after the graph completes.
-
-        Raises:
-            ValueError: If checkpointing is not enabled.
-            RuntimeError: If no interrupt is pending for the given thread_id.
+        Yields:
+            Same event dicts as run_streaming (node outputs from astream).
         """
         if not self.checkpointer:
             raise ValueError(
@@ -309,30 +299,21 @@ class WorkflowRunner:
                 "Set checkpointing.enabled=true in user_settings.yaml"
             )
 
-        logger.info(f"--- Resuming workflow for thread_id: '{thread_id}' with user input ---")
+        logger.info(f"--- Resuming streaming workflow for thread_id: '{thread_id}' ---")
+
+        resume_command = Command(resume=user_input)
+        config = {
+            "configurable": {"thread_id": thread_id},
+            "recursion_limit": self.recursion_limit
+        }
 
         try:
-            # Create a Command to resume with the user's input
-            # The user_input will be available as the return value of interrupt()
-            resume_command = Command(resume=user_input)
-
-            config = {
-                "configurable": {"thread_id": thread_id},
-                "recursion_limit": self.recursion_limit
-            }
-
-            # Resume the graph from the interrupt point
-            final_state = await self.app.ainvoke(resume_command, config=config)
-            logger.info(f"--- Workflow resumed and completed for thread_id: '{thread_id}' ---")
-
-            return _make_state_serializable(final_state)
-
+            async for event in self.app.astream(resume_command, config=config):
+                yield event
+            logger.info(f"--- Streaming resume complete for thread_id: '{thread_id}' ---")
         except Exception as e:
-            logger.error(f"--- Resume failed for thread_id '{thread_id}': {e} ---", exc_info=True)
-            return {
-                "error": f"Failed to resume workflow: {e}",
-                "thread_id": thread_id
-            }
+            logger.error(f"--- Streaming resume failed for thread_id '{thread_id}': {e} ---", exc_info=True)
+            yield {"error": f"Resume failed: {str(e)}"}
 
     def run_with_thread(
         self,

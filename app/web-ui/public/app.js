@@ -235,9 +235,10 @@ async function submitClarification() {
 
     clarificationModal.style.display = 'none';
     logStatus('► RESUMING WORKFLOW...');
-    addThoughtStreamEntry('SYSTEM', 'Resuming with user clarification', 'lifecycle');
+    addThoughtStreamEntry('SYSTEM', `User clarification: "${userInput.substring(0, 80)}${userInput.length > 80 ? '...' : ''}"`, 'lifecycle');
 
     try {
+        // Resume endpoint now streams SSE events (same format as initial run)
         const response = await fetch(`${API_BASE}/graph/resume`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -249,20 +250,34 @@ async function submitClarification() {
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        // /graph/resume returns JSON (not SSE stream)
-        const result = await response.json();
-
         pendingThreadId = null;
-        logStatus('► WORKFLOW RESUMED SUCCESSFULLY');
-        addThoughtStreamEntry('SYSTEM', 'Workflow completed after clarification', 'lifecycle');
 
-        // Update UI with final state if available
-        if (result.final_state) {
-            if (result.final_state.artifacts) {
-                updateArtifactsDisplay(result.final_state.artifacts);
+        // Consume SSE stream — same pattern as executeWorkflow
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n\n');
+            buffer = lines.pop();
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    try {
+                        const data = JSON.parse(line.slice(6));
+                        handleStreamEvent(data);
+                    } catch (e) {
+                        console.error("Error parsing resume SSE data:", e, line);
+                    }
+                }
             }
-            jsonOutputEl.textContent = JSON.stringify(result.final_state, null, 2);
         }
+
+        logStatus('► WORKFLOW RESUMED SUCCESSFULLY');
 
     } catch (error) {
         logStatus(`❌ RESUME ERROR: ${error.message}`);
