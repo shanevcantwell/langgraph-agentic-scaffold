@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 73 | 699 |
+| Unit | 73 | 705 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **108** | **981** |
+| **Total** | **108** | **987** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -774,8 +774,8 @@
 
 ## `app/tests/unit/test_clarification_workflow.py`
 
-- **`test_check_triage_outcome_routes_to_facilitator_on_ask_user`**
-  - *ADR-CORE-018: Tests that check_triage_outcome routes to Facilitator chain*
+- **`test_check_triage_outcome_rejects_ask_user_only_plan`**
+  - *#179: Ask-user-only plan = underspecified prompt. Routes to EndSpecialist*
 - **`test_check_triage_outcome_routes_to_facilitator_on_normal_actions`**
   - *Tests that check_triage_outcome routes to Facilitator for normal actions.*
 - **`test_end_specialist_generates_clarification_response`**
@@ -1130,6 +1130,18 @@
   - *Normal INCOMPLETE (no loop) should route to Facilitator for retry,*
 - **`test_after_exit_interview_complete_without_loop_normal_end`**
   - *Normal COMPLETE (no loop) should route to END without any special handling.*
+- **`test_ask_user_only_plan_routes_to_end`**
+  - *Ask-user-only plan = reject with cause via EndSpecialist.*
+- **`test_multiple_ask_user_actions_route_to_end`**
+  - *Multiple ask_user questions still reject.*
+- **`test_mixed_plan_routes_to_facilitator`**
+  - *Plan with context-gathering + ask_user routes to Facilitator (not END).*
+- **`test_context_only_plan_routes_to_facilitator`**
+  - *Normal context-gathering plan routes to Facilitator.*
+- **`test_empty_plan_routes_to_router`**
+  - *Empty plan (no actions) routes to Router.*
+- **`test_no_context_plan_routes_to_router`**
+  - *Missing context_plan routes to Router.*
 
 ## `app/tests/unit/test_heap_invariants.py`
 

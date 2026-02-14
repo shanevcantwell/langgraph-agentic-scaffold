@@ -17,13 +17,11 @@ def orchestrator_instance():
     orchestrator = GraphOrchestrator(config, specialists)
     return orchestrator
 
-def test_check_triage_outcome_routes_to_facilitator_on_ask_user(orchestrator_instance):
+def test_check_triage_outcome_rejects_ask_user_only_plan(orchestrator_instance):
     """
-    ADR-CORE-018: Tests that check_triage_outcome routes to Facilitator chain
-    when the ContextPlan contains an 'ask_user' action.
-
-    ASK_USER plans now flow through: Facilitator → Dialogue → Router
-    The DialogueSpecialist will interrupt() to pause for user clarification.
+    #179: Ask-user-only plan = underspecified prompt. Routes to EndSpecialist
+    which formats the questions as a rejection message in final_user_response.
+    No in-graph interrupt — reject with cause.
     """
     # Arrange
     plan = ContextPlan(
@@ -46,8 +44,8 @@ def test_check_triage_outcome_routes_to_facilitator_on_ask_user(orchestrator_ins
     # Act
     result = orchestrator_instance.check_triage_outcome(state)
 
-    # Assert - ASK_USER now routes through Facilitator chain for HitL interrupt
-    assert result == "facilitator_specialist"
+    # Assert - ask_user-only routes to EndSpecialist (reject with cause)
+    assert result == CoreSpecialist.END.value
 
 def test_check_triage_outcome_routes_to_facilitator_on_normal_actions(orchestrator_instance):
     """

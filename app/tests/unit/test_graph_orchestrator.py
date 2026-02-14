@@ -8,6 +8,7 @@ from app.src.specialists.base import BaseSpecialist
 from app.src.utils.errors import SpecialistError, WorkflowError
 from app.src.enums import CoreSpecialist
 from app.src.graph.state_factory import create_test_state
+from app.src.interface.context_schema import ContextPlan, ContextAction, ContextActionType
 
 @pytest.fixture
 def orchestrator_instance():
@@ -347,3 +348,96 @@ class TestDeferredTerminationReason:
         # Scratchpad should remain clean
         assert "termination_reason" not in state["scratchpad"]
         assert "loop_detected" not in state["scratchpad"]
+
+
+# =============================================================================
+# #179: Reject-with-cause for underspecified prompts
+# =============================================================================
+
+class TestCheckTriageOutcome:
+    """
+    #179: When Triage produces a plan with ONLY ask_user actions (no context-
+    gathering), the prompt is underspecified. Route to EndSpecialist which
+    formats the ask_user questions as a rejection message in final_user_response.
+    """
+
+    def test_ask_user_only_plan_routes_to_end(self, orchestrator_instance):
+        """Ask-user-only plan = reject with cause via EndSpecialist."""
+        plan = ContextPlan(
+            reasoning="Need clarification",
+            actions=[
+                ContextAction(type=ContextActionType.ASK_USER,
+                              target="What kind of website?",
+                              description="Clarify website type")
+            ]
+        )
+        state = {"artifacts": {"context_plan": plan.model_dump()}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == CoreSpecialist.END.value
+
+    def test_multiple_ask_user_actions_route_to_end(self, orchestrator_instance):
+        """Multiple ask_user questions still reject."""
+        plan = ContextPlan(
+            reasoning="Multiple clarifications needed",
+            actions=[
+                ContextAction(type=ContextActionType.ASK_USER,
+                              target="What kind of website?",
+                              description="Clarify type"),
+                ContextAction(type=ContextActionType.ASK_USER,
+                              target="What content should it include?",
+                              description="Clarify content"),
+            ]
+        )
+        state = {"artifacts": {"context_plan": plan.model_dump()}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == CoreSpecialist.END.value
+
+    def test_mixed_plan_routes_to_facilitator(self, orchestrator_instance):
+        """Plan with context-gathering + ask_user routes to Facilitator (not END)."""
+        plan = ContextPlan(
+            reasoning="Gather context and clarify",
+            actions=[
+                ContextAction(type=ContextActionType.LIST_DIRECTORY,
+                              target="/workspace",
+                              description="Check workspace"),
+                ContextAction(type=ContextActionType.ASK_USER,
+                              target="What style?",
+                              description="Clarify style"),
+            ]
+        )
+        state = {"artifacts": {"context_plan": plan.model_dump()}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == "facilitator_specialist"
+
+    def test_context_only_plan_routes_to_facilitator(self, orchestrator_instance):
+        """Normal context-gathering plan routes to Facilitator."""
+        plan = ContextPlan(
+            reasoning="Gather filesystem context",
+            actions=[
+                ContextAction(type=ContextActionType.LIST_DIRECTORY,
+                              target="/workspace",
+                              description="Check workspace"),
+            ]
+        )
+        state = {"artifacts": {"context_plan": plan.model_dump()}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == "facilitator_specialist"
+
+    def test_empty_plan_routes_to_router(self, orchestrator_instance):
+        """Empty plan (no actions) routes to Router."""
+        plan = ContextPlan(reasoning="Simple query, no context needed", actions=[])
+        state = {"artifacts": {"context_plan": plan.model_dump()}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == CoreSpecialist.ROUTER.value
+
+    def test_no_context_plan_routes_to_router(self, orchestrator_instance):
+        """Missing context_plan routes to Router."""
+        state = {"artifacts": {}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == CoreSpecialist.ROUTER.value

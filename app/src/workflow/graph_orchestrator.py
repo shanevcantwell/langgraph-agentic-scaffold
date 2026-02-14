@@ -44,15 +44,20 @@ class GraphOrchestrator:
             try:
                 plan = ContextPlan(**context_plan_data)
 
-                # ADR-CORE-018: Route ALL plans with actions through Facilitator chain
-                # Flow: Facilitator (autonomous) → Dialogue (interactive) → Router
-                # - Facilitator executes automated actions (READ_FILE, RESEARCH, etc.)
-                # - Facilitator ignores ASK_USER actions (passes context_plan through)
-                # - Dialogue checks for remaining ASK_USER actions and triggers interrupt()
-
                 if plan.actions:
                     ask_user_count = sum(1 for a in plan.actions if a.type == "ask_user")
                     other_count = len(plan.actions) - ask_user_count
+
+                    # #179: Ask-user-only plan = underspecified prompt. Reject with cause.
+                    # EndSpecialist formats ask_user actions as clarification questions
+                    # in final_user_response. No interrupt, no in-graph clarification.
+                    if other_count == 0 and ask_user_count > 0:
+                        logger.info(
+                            f"Triage: ask_user-only plan ({ask_user_count} questions). "
+                            "Rejecting with cause via EndSpecialist."
+                        )
+                        return CoreSpecialist.END.value
+
                     logger.info(
                         f"Triage produced plan with {other_count} context-gathering and "
                         f"{ask_user_count} ask_user actions. Routing to Facilitator chain."
