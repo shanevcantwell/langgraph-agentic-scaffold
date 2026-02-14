@@ -45,16 +45,17 @@ class LMStudioAdapter(BaseAdapter):
 
         self.context_window = self.config.get('context_window')  # None if not configured; let LMStudio handle limits
         self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
-        self.temperature = self.config.get('parameters', {}).get('temperature', 0.7)
-        self.max_tokens = self.config.get('parameters', {}).get('max_tokens') or 4096
+        # #159: Don't send defaults — let LM Studio use per-model library presets.
+        # Only send parameters explicitly configured in user_settings.yaml.
+        all_params = self.config.get('parameters') or {}
+        self.temperature = all_params.get('temperature')
+        self.max_tokens = all_params.get('max_tokens')
         self.max_image_size_bytes = self.config.get('max_image_size_mb', 10) * 1024 * 1024
         # Separate OpenAI-compatible params from non-standard ones
         # OpenAI SDK supports: top_p, frequency_penalty, presence_penalty, etc.
         # Non-standard params (like top_k) go via extra_body for LM Studio
         HANDLED_PARAMS = {'temperature', 'max_tokens'}
         NON_STANDARD_PARAMS = {'top_k'}  # LM Studio supports these, but OpenAI SDK doesn't
-
-        all_params = self.config.get('parameters', {})
         self.extra_params = {k: v for k, v in all_params.items()
                             if k not in HANDLED_PARAMS and k not in NON_STANDARD_PARAMS}
         self.extra_body = {k: v for k, v in all_params.items()
@@ -62,10 +63,13 @@ class LMStudioAdapter(BaseAdapter):
         extra_params_str = f", extra_params={self.extra_params}" if self.extra_params else ""
         extra_body_str = f", extra_body={self.extra_body}" if self.extra_body else ""
         context_window_display = self.context_window if self.context_window else "unlimited (LMStudio native)"
+        max_tokens_display = self.max_tokens if self.max_tokens else "server default"
+        temp_display = self.temperature if self.temperature is not None else "server default"
         logger.info(f"INITIALIZED LMStudioAdapter. Requests will be sent to '{base_url}' for model "
-                    f"'{self.model_name}' with a timeout of {self.timeout}s, max_tokens={self.max_tokens}, "
-                    f"and context_window={context_window_display}{extra_params_str}{extra_body_str}. "
-                    "Ensure this matches your LM Studio server setup."
+                    f"'{self.model_name}' with a timeout of {self.timeout}s, temperature={temp_display}, "
+                    f"max_tokens={max_tokens_display}, context_window={context_window_display}"
+                    f"{extra_params_str}{extra_body_str}. "
+                    "Unset params use LM Studio per-model library presets."
                    )
 
     @property
@@ -250,7 +254,9 @@ class LMStudioAdapter(BaseAdapter):
         )
 
         # Reserve space for the output and a buffer.
-        token_limit = self.context_window - self.max_tokens - (self.context_window // 10)
+        # Reserve space for output (use configured max_tokens or 20% of context window)
+        output_reserve = self.max_tokens if self.max_tokens else (self.context_window // 5)
+        token_limit = self.context_window - output_reserve - (self.context_window // 10)
 
         # Pruning logic: keep the first message and the most recent N messages
         first_message = messages[0]
@@ -403,13 +409,17 @@ class LMStudioAdapter(BaseAdapter):
 
         # Dynamically build arguments to avoid sending null values,
         # which can cause issues with some servers.
+        # #159: Only send parameters that are explicitly configured.
+        # Omitted params let LM Studio use per-model library presets.
         api_kwargs = {
             "model": self.model_name,
             "messages": api_messages,
-            "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
-            **self.extra_params,  # top_p, top_k, etc. from config
+            **self.extra_params,  # top_p, etc. from config
         }
+        if self.temperature is not None:
+            api_kwargs["temperature"] = self.temperature
+        if self.max_tokens is not None:
+            api_kwargs["max_tokens"] = self.max_tokens
 
         # --- Intent Detection: JSON schema enforcement for tools (#135) ---
         # Instead of native tool-calling (Harmony), use response_format with JSON schema.
