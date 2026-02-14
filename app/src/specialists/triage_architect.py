@@ -85,14 +85,11 @@ class TriageArchitect(BaseSpecialist):
 
             logger.info(f"TriageArchitect generated plan with {len(context_plan.actions)} actions.")
 
-            # 5. Return Artifact with recommendations
+            # 5. Return triage output to scratchpad (no artifact)
             return {
-                "artifacts": {
-                    "context_plan": context_plan.model_dump()
-                },
                 "scratchpad": {
                     "triage_reasoning": context_plan.reasoning,
-                    "recommended_specialists": context_plan.recommended_specialists
+                    "triage_actions": [a.model_dump() for a in context_plan.actions],
                 }
             }
 
@@ -105,11 +102,8 @@ class TriageArchitect(BaseSpecialist):
         fallback = ContextPlan(reasoning=f"Triage fallback: {reason}")
         return {
             "messages": [AIMessage(content=f"[Triage] {reason}")],
-            "artifacts": {
-                "context_plan": fallback.model_dump()
-            },
             "scratchpad": {
                 "triage_reasoning": fallback.reasoning,
-                "recommended_specialists": []
+                "triage_actions": [],
             }
         }

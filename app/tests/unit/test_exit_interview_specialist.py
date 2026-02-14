@@ -390,7 +390,6 @@ class TestArtifactSummary:
             "final_response": "Here is the analysis of your text...",
             "_internal_flag": True,  # Should be excluded (underscore prefix)
             "gathered_context": "large context blob",  # Should be excluded
-            "context_plan": {"reasoning": "..."},  # Should be excluded
         }
 
         summary = exit_interview._build_artifact_summary(artifacts)
@@ -404,7 +403,6 @@ class TestArtifactSummary:
         # Excluded artifacts should NOT appear
         assert "_internal_flag" not in summary
         assert "gathered_context" not in summary
-        assert "context_plan" not in summary
 
     def test_artifact_summary_handles_empty_artifacts(self, exit_interview):
         """Empty artifacts should return a placeholder."""

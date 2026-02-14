@@ -49,17 +49,6 @@ Example JSON Output:
 }}
 ```
 
-## Specialist Capabilities (for recommended_specialists)
-
-When marking INCOMPLETE, suggest which specialist(s) can address the missing work:
-- `project_director`: File operations (create, move, delete, read files), batch operations, iterative tasks
-- `systems_architect`: Planning complex multi-step tasks, creating system_plan artifacts
-- `web_specialist`: Web searches, fetching URLs
-- `chat_specialist`: Answering questions, explanations, conversational responses
-- `text_analysis_specialist`: Summarizing, analyzing text content
-
-Default to `project_director` for file operations or when uncertain.
-
 ---
 
 ## Current State
@@ -69,9 +58,6 @@ Default to `project_director` for file operations or when uncertain.
 
 **Success Criteria:**
 {exit_plan}
-
-**Planned Specialists (from Triage):**
-{recommended_specialists}
 
 **Specialists That Have Executed:**
 {routing_history}

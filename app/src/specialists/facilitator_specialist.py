@@ -2,7 +2,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from langgraph.errors import GraphInterrupt
 from .base import BaseSpecialist
-from ..interface.context_schema import ContextPlan, ContextActionType
+from ..interface.context_schema import ContextAction, ContextActionType
 from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
 from ..utils.prompt_loader import load_prompt
 
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 class FacilitatorSpecialist(BaseSpecialist):
     """
-    Orchestrates the execution of a ContextPlan by calling other specialists
+    Orchestrates triage actions by calling other specialists via MCP
     via MCP (Synchronous Service Invocation).
 
     Uses:
@@ -219,23 +219,27 @@ class FacilitatorSpecialist(BaseSpecialist):
                 }
             }
 
-        # Load original plan
-        context_plan_data = artifacts.get("context_plan")
-        if not context_plan_data:
-            logger.warning("Facilitator: No 'context_plan' artifact found.")
-            return {"error": "No context plan to execute."}
-        try:
-            context_plan = ContextPlan(**context_plan_data)
-        except Exception as e:
-            logger.error(f"Facilitator: Failed to parse ContextPlan: {e}")
-            return {"error": f"Invalid context plan: {e}"}
-            
-        gathered_context = []
-        logger.info(f"Facilitator: Executing plan with {len(context_plan.actions)} actions.")
+        # Load triage actions from scratchpad
+        scratchpad = state.get("scratchpad", {})
+        triage_actions_data = scratchpad.get("triage_actions", [])
+        if not triage_actions_data:
+            logger.warning("Facilitator: No 'triage_actions' in scratchpad.")
+            return {"error": "No triage actions to execute."}
 
-        # Surface triage reasoning so PD understands the strategic intent (#167)
-        if context_plan.reasoning:
-            gathered_context.append(f"### Task Strategy\n{context_plan.reasoning}")
+        triage_actions = []
+        for action_data in triage_actions_data:
+            try:
+                triage_actions.append(ContextAction(**action_data))
+            except Exception as e:
+                logger.warning(f"Facilitator: Skipping malformed action {action_data}: {e}")
+
+        gathered_context = []
+        logger.info(f"Facilitator: Executing plan with {len(triage_actions)} actions.")
+
+        # Surface task strategy from SA's task_plan (better source than triage reasoning)
+        task_plan = artifacts.get("task_plan", {})
+        if task_plan.get("plan_summary"):
+            gathered_context.append(f"### Task Strategy\n{task_plan['plan_summary']}")
 
         # Read routing_history early - needed for both EI feedback and WIP summary
         routing_history = state.get("routing_history", [])
@@ -252,7 +256,6 @@ class FacilitatorSpecialist(BaseSpecialist):
         # ADR-073 Phase 3: Surface prior work from scratchpad.
         # PD writes specialist_activity to scratchpad; Facilitator reads it directly.
         if exit_interview_result and not exit_interview_result.get("is_complete", True):
-            scratchpad = state.get("scratchpad", {})
             activity = scratchpad.get("specialist_activity", [])
             if activity:
                 knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
@@ -273,7 +276,7 @@ class FacilitatorSpecialist(BaseSpecialist):
             logger.error("Facilitator: MCP Client not initialized.")
             return {"error": "MCP Client not initialized."}
 
-        for action in context_plan.actions:
+        for action in triage_actions:
             try:
                 logger.info(f"Facilitator: Executing action {action.type} -> {action.target}")
                 

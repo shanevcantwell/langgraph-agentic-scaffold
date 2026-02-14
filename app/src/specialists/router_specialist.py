@@ -198,8 +198,7 @@ class RouterSpecialist(BaseSpecialist):
         if gathered_context:
             context_gathering_note = "\n\n**CONTEXT GATHERING COMPLETE**\nThe triage and facilitator specialists have finished gathering context. They are no longer available in the menu. Please choose a specialist to respond to the user's request based on the gathered context."
 
-        # Check for specialist recommendations (could be from triage or from another specialist)
-        # Task 2.7: recommended_specialists moved to scratchpad
+        # Check for specialist dependency routing (from node_executor when a specialist is blocked)
         recommended_specialists = state.get("scratchpad", {}).get("recommended_specialists")
         routing_history = state.get("routing_history", [])
         recommendation_context = ""
@@ -285,9 +284,9 @@ class RouterSpecialist(BaseSpecialist):
                     recommendation_context = f"\n\n**Dependency Requirement:**\n\nThe '{recommending_specialist}' specialist cannot proceed without artifacts from one of the following: {', '.join(recommended_specialists)}. Please route to one of these specialists to satisfy this dependency.\n\n(Note: Routing back to '{recommending_specialist}' before satisfying this dependency will result in the same failure.)"
                 logger.warning(f"Specialist '{recommending_specialist}' has dependency on: {recommended_specialists}")
             else:
-                # This is from triage - treat as advisory suggestion
-                recommendation_context = f"\n\n**TRIAGE SUGGESTIONS (ADVISORY, NOT MANDATORY)**:\nThe triage specialist recommends considering these specialists: {', '.join(recommended_specialists)}.\nThese are suggestions based on initial analysis. You may choose a different specialist if you have stronger reasoning."
-                logger.info(f"Triage provided advisory recommendations: {recommended_specialists}")
+                # No specialist dependency detected — Triage no longer writes recommended_specialists,
+                # so this branch should not fire. Log and ignore.
+                logger.warning(f"recommended_specialists present but no dependency source found: {recommended_specialists}")
 
         # Check for uploaded image (Blind Router Support)
         # If the router is text-only, it won't see the image. We must explicitly tell it.

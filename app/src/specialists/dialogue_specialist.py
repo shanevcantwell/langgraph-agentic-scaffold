@@ -26,7 +26,7 @@ from typing import Dict, Any, List
 from langgraph.types import interrupt
 
 from .base import BaseSpecialist
-from ..interface.context_schema import ContextPlan, ContextActionType
+from ..interface.context_schema import ContextAction, ContextActionType
 
 logger = logging.getLogger(__name__)
 
@@ -47,24 +47,18 @@ class DialogueSpecialist(BaseSpecialist):
 
         Returns empty dict (no-op) if no clarification needed.
         """
-        artifacts = state.get("artifacts", {})
-        context_plan_data = artifacts.get("context_plan")
+        # Read triage actions from scratchpad
+        triage_actions = state.get("scratchpad", {}).get("triage_actions", [])
 
-        # No plan to check - no-op
-        if not context_plan_data:
-            logger.debug("DialogueSpecialist: No context_plan in artifacts, passing through")
-            return {}
-
-        try:
-            context_plan = ContextPlan(**context_plan_data)
-        except Exception as e:
-            logger.error(f"DialogueSpecialist: Failed to parse ContextPlan: {e}")
+        # No actions to check - no-op
+        if not triage_actions:
+            logger.debug("DialogueSpecialist: No triage_actions in scratchpad, passing through")
             return {}
 
         # Extract ASK_USER actions
         ask_user_actions = [
-            action for action in context_plan.actions
-            if action.type == ContextActionType.ASK_USER
+            ContextAction(**a) for a in triage_actions
+            if a.get("type") == ContextActionType.ASK_USER.value
         ]
 
         # No ASK_USER actions - no-op
@@ -73,6 +67,7 @@ class DialogueSpecialist(BaseSpecialist):
             return {}
 
         # Format questions with any gathered context
+        artifacts = state.get("artifacts", {})
         gathered_context = artifacts.get("gathered_context", "")
         questions = self._format_questions(ask_user_actions, gathered_context)
 
@@ -80,12 +75,13 @@ class DialogueSpecialist(BaseSpecialist):
 
         # Dynamic interrupt - halts graph, sends payload to client
         # When graph.resume() is called with user input, execution continues here
+        triage_reasoning = state.get("scratchpad", {}).get("triage_reasoning", "")
         user_answer = interrupt({
             "clarification_required": True,
             "questions": questions,
             "question_count": len(ask_user_actions),
             "gathered_context_preview": gathered_context[:500] if gathered_context else None,
-            "triage_reasoning": context_plan.reasoning
+            "triage_reasoning": triage_reasoning
         })
 
         # Resume point - user_answer contains the response from /resume endpoint

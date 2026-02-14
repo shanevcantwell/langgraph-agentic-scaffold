@@ -7,7 +7,6 @@ from langchain_core.messages import AIMessage
 from app.src.workflow.graph_orchestrator import GraphOrchestrator
 from app.src.specialists.end_specialist import EndSpecialist
 from app.src.enums import CoreSpecialist
-from app.src.interface.context_schema import ContextPlan, ContextAction, ContextActionType
 
 @pytest.fixture
 def orchestrator_instance():
@@ -24,20 +23,13 @@ def test_check_triage_outcome_rejects_ask_user_only_plan(orchestrator_instance):
     No in-graph interrupt — reject with cause.
     """
     # Arrange
-    plan = ContextPlan(
-        reasoning="Need clarification",
-        actions=[
-            ContextAction(
-                type=ContextActionType.ASK_USER,
-                target="Which file?",
-                description="Ambiguous request"
-            )
-        ]
-    )
-
     state = {
-        "artifacts": {
-            "context_plan": plan.model_dump()
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "ask_user", "target": "Which file?",
+                 "description": "Ambiguous request"}
+            ],
+            "triage_reasoning": "Need clarification",
         }
     }
 
@@ -52,20 +44,13 @@ def test_check_triage_outcome_routes_to_facilitator_on_normal_actions(orchestrat
     Tests that check_triage_outcome routes to Facilitator for normal actions.
     """
     # Arrange
-    plan = ContextPlan(
-        reasoning="Need research",
-        actions=[
-            ContextAction(
-                type=ContextActionType.RESEARCH,
-                target="LangGraph docs",
-                description="Find docs"
-            )
-        ]
-    )
-    
     state = {
-        "artifacts": {
-            "context_plan": plan.model_dump()
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "LangGraph docs",
+                 "description": "Find docs"}
+            ],
+            "triage_reasoning": "Need research",
         }
     }
 
@@ -83,37 +68,27 @@ def test_end_specialist_generates_clarification_response():
     # Arrange
     mock_config = {"synthesis_prompt_file": "dummy.md"}
     end_specialist = EndSpecialist("end_specialist", mock_config)
-    
+
     # Mock the LLM adapter to ensure it's NOT called for synthesis
     end_specialist.llm_adapter = MagicMock()
     end_specialist.llm_adapter.invoke.return_value = {"text_response": "Synthesized response"}
-    
+
     # Mock the archiver to prevent actual file operations
     end_specialist.archiver = MagicMock()
     end_specialist.archiver._execute_logic.return_value = {}
 
-    plan = ContextPlan(
-        reasoning="Need clarification",
-        actions=[
-            ContextAction(
-                type=ContextActionType.ASK_USER,
-                target="Which file do you mean?",
-                description="Ambiguous"
-            ),
-            ContextAction(
-                type=ContextActionType.ASK_USER,
-                target="Is this for production?",
-                description="Context needed"
-            )
-        ]
-    )
-    
     state = {
-        "artifacts": {
-            "context_plan": plan.model_dump()
-        },
+        "artifacts": {},
         "messages": [],
-        "scratchpad": {}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "ask_user", "target": "Which file do you mean?",
+                 "description": "Ambiguous"},
+                {"type": "ask_user", "target": "Is this for production?",
+                 "description": "Context needed"},
+            ],
+            "triage_reasoning": "Need clarification",
+        }
     }
 
     # Act

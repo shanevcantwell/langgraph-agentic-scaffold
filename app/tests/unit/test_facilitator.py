@@ -7,7 +7,6 @@ BENIGN interrupt tests are in test_facilitator_benign.py.
 import pytest
 from unittest.mock import MagicMock, patch
 from app.src.specialists.facilitator_specialist import FacilitatorSpecialist
-from app.src.interface.context_schema import ContextPlan, ContextAction, ContextActionType
 
 
 def _make_mcp_result(text: str):
@@ -32,14 +31,14 @@ def facilitator():
 
 def test_facilitator_executes_research_action(facilitator):
     # Arrange
-    plan = ContextPlan(
-        reasoning="Need info",
-        actions=[
-            ContextAction(type=ContextActionType.RESEARCH, target="LangGraph", description="Search")
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "LangGraph", "description": "Search", "strategy": None}
+            ],
+            "triage_reasoning": "Need info",
+        },
+        "artifacts": {}
     }
 
     facilitator.mcp_client.call.return_value = [{"title": "Result", "url": "url", "snippet": "snippet"}]
@@ -60,14 +59,14 @@ def test_facilitator_executes_research_action(facilitator):
 
 def test_facilitator_executes_read_file_action(facilitator):
     # Arrange
-    plan = ContextPlan(
-        reasoning="Need file",
-        actions=[
-            ContextAction(type=ContextActionType.READ_FILE, target="/path/to/file", description="Read")
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "read_file", "target": "/path/to/file", "description": "Read", "strategy": None}
+            ],
+            "triage_reasoning": "Need file",
+        },
+        "artifacts": {}
     }
 
     # Act - Mock external MCP call (ADR-CORE-035: file ops via filesystem container)
@@ -80,19 +79,19 @@ def test_facilitator_executes_read_file_action(facilitator):
     assert "File content" in result["artifacts"]["gathered_context"]
 
 def test_facilitator_handles_missing_plan(facilitator):
-    state = {"artifacts": {}}
+    state = {"artifacts": {}, "scratchpad": {}}
     result = facilitator.execute(state)
     assert "error" in result
 
 def test_facilitator_handles_mcp_error(facilitator):
-    plan = ContextPlan(
-        reasoning="Need info",
-        actions=[
-            ContextAction(type=ContextActionType.RESEARCH, target="LangGraph", description="Search")
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "LangGraph", "description": "Search", "strategy": None}
+            ],
+            "triage_reasoning": "Need info",
+        },
+        "artifacts": {}
     }
 
     facilitator.mcp_client.call.side_effect = Exception("MCP Error")
@@ -104,16 +103,15 @@ def test_facilitator_handles_mcp_error(facilitator):
 def test_facilitator_reads_artifact_instead_of_file_for_uploaded_image(facilitator):
     """Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem."""
     # Arrange
-    plan = ContextPlan(
-        reasoning="Need to analyze uploaded image",
-        actions=[
-            ContextAction(type=ContextActionType.READ_FILE, target="/artifacts/image.png", description="Read image")
-        ]
-    )
     image_data = "data:image/png;base64,iVBORw0KGgoAAAANS..."
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "read_file", "target": "/artifacts/image.png", "description": "Read image", "strategy": None}
+            ],
+            "triage_reasoning": "Need to analyze uploaded image",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "image.png": image_data  # Image already in artifacts
         }
     }
@@ -131,16 +129,15 @@ def test_facilitator_reads_artifact_instead_of_file_for_uploaded_image(facilitat
 
 def test_facilitator_reads_artifact_for_uploaded_image_png_key(facilitator):
     """Test artifact retrieval with 'uploaded_image.png' key."""
-    plan = ContextPlan(
-        reasoning="Need to analyze uploaded image",
-        actions=[
-            ContextAction(type=ContextActionType.READ_FILE, target="uploaded_image.png", description="Read image")
-        ]
-    )
     image_data = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEA..."
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "read_file", "target": "uploaded_image.png", "description": "Read image", "strategy": None}
+            ],
+            "triage_reasoning": "Need to analyze uploaded image",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "uploaded_image.png": image_data
         }
     }
@@ -154,15 +151,14 @@ def test_facilitator_reads_artifact_for_uploaded_image_png_key(facilitator):
 
 def test_facilitator_reads_file_via_external_mcp_when_artifact_not_in_state(facilitator):
     """Test that Facilitator reads files via external filesystem MCP when not in artifacts."""
-    plan = ContextPlan(
-        reasoning="Need actual file from workspace",
-        actions=[
-            ContextAction(type=ContextActionType.READ_FILE, target="config.yaml", description="Read config")
-        ]
-    )
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "read_file", "target": "config.yaml", "description": "Read config", "strategy": None}
+            ],
+            "triage_reasoning": "Need actual file from workspace",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump()
             # No "config.yaml" in artifacts
         }
     }
@@ -188,18 +184,14 @@ def test_facilitator_directory_listing_includes_full_paths(facilitator):
     generate file operations with incomplete paths (e.g., "b.txt" instead
     of "subdir/b.txt").
     """
-    plan = ContextPlan(
-        reasoning="Need to see directory contents",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="sort_by_contents",
-                description="List files to sort"
-            )
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "sort_by_contents", "description": "List files to sort", "strategy": None}
+            ],
+            "triage_reasoning": "Need to see directory contents",
+        },
+        "artifacts": {}
     }
 
     # Mock the filesystem MCP to return directory contents
@@ -226,18 +218,14 @@ def test_facilitator_directory_listing_handles_subdirs(facilitator):
     """
     Test that [DIR] markers are properly formatted with full paths.
     """
-    plan = ContextPlan(
-        reasoning="Need to see directory contents",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="workspace",
-                description="List workspace"
-            )
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Need to see directory contents",
+        },
+        "artifacts": {}
     }
 
     with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
@@ -258,18 +246,14 @@ def test_facilitator_executes_summarize_action(facilitator):
     """
     Per FACILITATOR.md: SUMMARIZE action calls summarizer_specialist.summarize.
     """
-    plan = ContextPlan(
-        reasoning="Need summary",
-        actions=[
-            ContextAction(
-                type=ContextActionType.SUMMARIZE,
-                target="This is a very long document with many details...",
-                description="Summarize the content"
-            )
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "summarize", "target": "This is a very long document with many details...", "description": "Summarize the content", "strategy": None}
+            ],
+            "triage_reasoning": "Need summary",
+        },
+        "artifacts": {}
     }
 
     facilitator.mcp_client.call.return_value = "A concise summary of the document."
@@ -293,18 +277,14 @@ def test_facilitator_summarize_with_file_path_reads_file_first(facilitator):
     Per FACILITATOR.md: If SUMMARIZE target looks like a file path (starts with / or ./),
     Facilitator reads the file first, then summarizes the content.
     """
-    plan = ContextPlan(
-        reasoning="Summarize a file",
-        actions=[
-            ContextAction(
-                type=ContextActionType.SUMMARIZE,
-                target="/workspace/long_document.md",
-                description="Summarize the document"
-            )
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "summarize", "target": "/workspace/long_document.md", "description": "Summarize the document", "strategy": None}
+            ],
+            "triage_reasoning": "Summarize a file",
+        },
+        "artifacts": {}
     }
 
     # Mock file read to return document content
@@ -332,18 +312,14 @@ def test_facilitator_handles_ask_user_action_via_interrupt(facilitator):
     """
     from unittest.mock import patch
 
-    plan = ContextPlan(
-        reasoning="Need user clarification",
-        actions=[
-            ContextAction(
-                type=ContextActionType.ASK_USER,
-                target="What file format do you prefer?",
-                description="Clarify user preference"
-            )
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "ask_user", "target": "What file format do you prefer?", "description": "Clarify user preference", "strategy": None}
+            ],
+            "triage_reasoning": "Need user clarification",
+        },
+        "artifacts": {}
     }
 
     # Mock interrupt() to simulate user providing clarification
@@ -384,18 +360,14 @@ def test_facilitator_propagates_graph_interrupt_for_ask_user(facilitator):
     from unittest.mock import patch
     from langgraph.errors import GraphInterrupt
 
-    plan = ContextPlan(
-        reasoning="Need user clarification",
-        actions=[
-            ContextAction(
-                type=ContextActionType.ASK_USER,
-                target="What tone should the backronym have?",
-                description="Clarify desired tone"
-            )
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "ask_user", "target": "What tone should the backronym have?", "description": "Clarify desired tone", "strategy": None}
+            ],
+            "triage_reasoning": "Need user clarification",
+        },
+        "artifacts": {}
     }
 
     with patch("langgraph.types.interrupt", side_effect=GraphInterrupt(("test",))):
@@ -412,15 +384,15 @@ def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
     from unittest.mock import patch
     from langgraph.errors import GraphInterrupt
 
-    plan = ContextPlan(
-        reasoning="Research then ask user",
-        actions=[
-            ContextAction(type=ContextActionType.RESEARCH, target="topic", description="Research first"),
-            ContextAction(type=ContextActionType.ASK_USER, target="Clarify?", description="Need input"),
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "topic", "description": "Research first", "strategy": None},
+                {"type": "ask_user", "target": "Clarify?", "description": "Need input", "strategy": None},
+            ],
+            "triage_reasoning": "Research then ask user",
+        },
+        "artifacts": {}
     }
 
     facilitator.mcp_client.call.return_value = [{"title": "R", "url": "u", "snippet": "s"}]
@@ -442,24 +414,15 @@ def test_facilitator_skips_ask_user_on_ei_retry(facilitator):
     """
     from unittest.mock import patch
 
-    plan = ContextPlan(
-        reasoning="Need clarification",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            ),
-            ContextAction(
-                type=ContextActionType.ASK_USER,
-                target="What kind of website?",
-                description="Clarify website type"
-            )
-        ]
-    )
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None},
+                {"type": "ask_user", "target": "What kind of website?", "description": "Clarify website type", "strategy": None},
+            ],
+            "triage_reasoning": "Need clarification",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "exit_interview_result": {
                 "is_complete": False,
                 "reasoning": "www2 directory does not exist",
@@ -467,7 +430,6 @@ def test_facilitator_skips_ask_user_on_ei_retry(facilitator):
                 "recommended_specialists": ["project_director"],
             }
         },
-        "scratchpad": {},
         "routing_history": ["web_builder", "exit_interview_specialist"]
     }
 
@@ -490,15 +452,15 @@ def test_facilitator_executes_multiple_actions(facilitator):
     Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,
     joining results with double newlines.
     """
-    plan = ContextPlan(
-        reasoning="Need multiple context sources",
-        actions=[
-            ContextAction(type=ContextActionType.RESEARCH, target="topic1", description="Search topic1"),
-            ContextAction(type=ContextActionType.RESEARCH, target="topic2", description="Search topic2"),
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "topic1", "description": "Search topic1", "strategy": None},
+                {"type": "research", "target": "topic2", "description": "Search topic2", "strategy": None},
+            ],
+            "triage_reasoning": "Need multiple context sources",
+        },
+        "artifacts": {}
     }
 
     facilitator.mcp_client.call.side_effect = [
@@ -523,14 +485,14 @@ def test_facilitator_sets_completion_flag(facilitator):
     Per FACILITATOR.md: Facilitator sets scratchpad["facilitator_complete"] = True
     after processing all actions.
     """
-    plan = ContextPlan(
-        reasoning="Simple action",
-        actions=[
-            ContextAction(type=ContextActionType.RESEARCH, target="test", description="test")
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "test", "description": "test", "strategy": None}
+            ],
+            "triage_reasoning": "Simple action",
+        },
+        "artifacts": {}
     }
 
     facilitator.mcp_client.call.return_value = []
@@ -546,14 +508,14 @@ def test_facilitator_filesystem_unavailable_graceful_degradation(facilitator):
     Per FACILITATOR.md: If filesystem MCP is unavailable, Facilitator includes
     "[Filesystem service unavailable]" message and continues.
     """
-    plan = ContextPlan(
-        reasoning="Need file",
-        actions=[
-            ContextAction(type=ContextActionType.READ_FILE, target="/path/to/file", description="Read file")
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "read_file", "target": "/path/to/file", "description": "Read file", "strategy": None}
+            ],
+            "triage_reasoning": "Need file",
+        },
+        "artifacts": {}
     }
 
     # Mock filesystem as unavailable
@@ -574,14 +536,14 @@ def test_facilitator_directory_listing_filesystem_unavailable(facilitator):
     """
     Per FACILITATOR.md: LIST_DIRECTORY also gracefully handles filesystem unavailability.
     """
-    plan = ContextPlan(
-        reasoning="List directory",
-        actions=[
-            ContextAction(type=ContextActionType.LIST_DIRECTORY, target="/workspace", description="List")
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List", "strategy": None}
+            ],
+            "triage_reasoning": "List directory",
+        },
+        "artifacts": {}
     }
 
     facilitator.external_mcp_client.is_connected.return_value = False
@@ -593,20 +555,22 @@ def test_facilitator_directory_listing_filesystem_unavailable(facilitator):
     assert "[Filesystem service unavailable]" in gathered
 
 
-def test_facilitator_handles_invalid_context_plan(facilitator):
+def test_facilitator_handles_empty_triage_actions(facilitator):
     """
-    Per FACILITATOR.md: Invalid ContextPlan data returns an error.
+    When triage_actions is empty, Facilitator returns an error.
     """
     state = {
-        "artifacts": {
-            "context_plan": {"invalid": "structure"}  # Missing required fields
-        }
+        "scratchpad": {
+            "triage_actions": [],  # Empty actions list
+            "triage_reasoning": "No actions",
+        },
+        "artifacts": {}
     }
 
     result = facilitator.execute(state)
 
     assert "error" in result
-    assert "Invalid context plan" in result["error"]
+    assert "No triage actions" in result["error"]
 
 
 def test_facilitator_continues_after_action_error(facilitator):
@@ -614,15 +578,15 @@ def test_facilitator_continues_after_action_error(facilitator):
     Per FACILITATOR.md: Individual action failures don't halt the entire plan.
     Error is logged and next action continues.
     """
-    plan = ContextPlan(
-        reasoning="Multiple actions with one failing",
-        actions=[
-            ContextAction(type=ContextActionType.RESEARCH, target="failing_query", description="Will fail"),
-            ContextAction(type=ContextActionType.RESEARCH, target="success_query", description="Will succeed"),
-        ]
-    )
     state = {
-        "artifacts": {"context_plan": plan.model_dump()}
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "research", "target": "failing_query", "description": "Will fail", "strategy": None},
+                {"type": "research", "target": "success_query", "description": "Will succeed", "strategy": None},
+            ],
+            "triage_reasoning": "Multiple actions with one failing",
+        },
+        "artifacts": {}
     }
 
     # First call fails, second succeeds

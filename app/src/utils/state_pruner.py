@@ -92,10 +92,6 @@ def _format_artifact(key: str, value) -> str:
     if key == "exit_interview_result" and isinstance(value, dict):
         return _format_exit_interview_result(value)
 
-    # context_plan - pretty JSON
-    if key == "context_plan" and isinstance(value, dict):
-        return f"```json\n{json.dumps(value, indent=2, default=str)}\n```"
-
     # task_plan / system_plan - pretty JSON
     if key in ("task_plan", "system_plan") and isinstance(value, dict):
         return f"```json\n{json.dumps(value, indent=2, default=str)}\n```"

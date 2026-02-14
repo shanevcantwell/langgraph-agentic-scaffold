@@ -106,9 +106,9 @@ class TribeConductor(BaseSpecialist):
                     }
                 }
 
-            # Case B: Plan Exists -> Execute Plan
-            elif "context_plan" in artifacts:
-                logger.info("TribeConductor: Context plan found, routing to Facilitator")
+            # Case B: Triage actions exist -> Execute via Facilitator
+            elif state.get("scratchpad", {}).get("triage_actions"):
+                logger.info("TribeConductor: Triage actions found, routing to Facilitator")
                 return {
                     "scratchpad": {
                         "next_specialist": "facilitator_specialist",

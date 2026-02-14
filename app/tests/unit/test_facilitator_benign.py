@@ -6,7 +6,6 @@ Split from test_facilitator.py for maintainability.
 import pytest
 from unittest.mock import MagicMock, patch
 from app.src.specialists.facilitator_specialist import FacilitatorSpecialist
-from app.src.interface.context_schema import ContextPlan, ContextAction, ContextActionType
 
 
 @pytest.fixture
@@ -33,20 +32,14 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
     When max_iterations_exceeded is set (BENIGN interrupt), Facilitator should
     early return clearing the flag.
     """
-    plan = ContextPlan(
-        reasoning="Continue interrupted task",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Continue interrupted task",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
         },
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
@@ -68,20 +61,14 @@ def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
     """
     Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).
     """
-    plan = ContextPlan(
-        reasoning="Normal execution",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Normal execution",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             # NO max_iterations_exceeded - normal flow
         },
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
@@ -105,20 +92,14 @@ def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
     this is BENIGN continuation (model was working, ran out of runway), not correction.
     Facilitator early-returns clearing the flag.
     """
-    plan = ContextPlan(
-        reasoning="Retry after Exit Interview",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Retry after Exit Interview",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
             "exit_interview_result": {
                 "is_complete": False,
@@ -148,20 +129,14 @@ def test_facilitator_benign_early_returns_minimal_state(facilitator):
     flag. Context was already gathered in the first Facilitator pass and persists
     in artifacts via ior merge.
     """
-    plan = ContextPlan(
-        reasoning="Continue interrupted task",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Continue interrupted task",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
         },
         "routing_history": ["project_director"]
@@ -186,24 +161,17 @@ def test_facilitator_benign_does_not_accumulate_context(facilitator):
     When max_iterations fires, Facilitator early-returns without re-gathering
     context. gathered_context from the first pass persists via ior merge.
     """
-    plan = ContextPlan(
-        reasoning="Task interrupted mid-work",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace/test",
-                description="List directory"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
+            ],
+            "triage_reasoning": "Task interrupted mid-work",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "gathered_context": "### Directory: /workspace/test\n- [FILE] 1.txt",
             "max_iterations_exceeded": True,
         },
-        "scratchpad": {},
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
 
@@ -228,23 +196,16 @@ def test_facilitator_benign_early_returns_empty_routing_history(facilitator):
     the flag. Context was gathered on the first Facilitator pass and persists
     via ior merge — no need to re-gather.
     """
-    plan = ContextPlan(
-        reasoning="First run, no prior trace",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace/test",
-                description="List directory"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
+            ],
+            "triage_reasoning": "First run, no prior trace",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
         },
-        "scratchpad": {},
         "routing_history": []
     }
 
@@ -264,20 +225,14 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
     Issue #114: When exit_interview_result is present (without max_iterations),
     this is EI retry, NOT BENIGN. Facilitator re-gathers context normally.
     """
-    plan = ContextPlan(
-        reasoning="Exit Interview retry",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace/test",
-                description="List directory"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
+            ],
+            "triage_reasoning": "Exit Interview retry",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             # Exit Interview result IS present - this is EI retry, not BENIGN
             "exit_interview_result": {
                 "is_complete": False,
@@ -286,7 +241,6 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
                 "recommended_specialists": ["project_director"]
             }
         },
-        "scratchpad": {},
         "routing_history": ["exit_interview_specialist"]
     }
 
@@ -313,20 +267,14 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
     early-returns clearing the flag. This is continuation (model was working),
     not correction (model was wrong).
     """
-    plan = ContextPlan(
-        reasoning="Task interrupted mid-work",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace/test",
-                description="List directory"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
+            ],
+            "triage_reasoning": "Task interrupted mid-work",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "max_iterations_exceeded": True,
             "exit_interview_result": {
                 "is_complete": False,
@@ -335,7 +283,6 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
                 "recommended_specialists": ["project_director"],
             }
         },
-        "scratchpad": {},
         "routing_history": ["project_director", "exit_interview_specialist"]
     }
 

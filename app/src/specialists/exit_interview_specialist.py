@@ -124,7 +124,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
     Validates task completion before allowing workflow to terminate.
 
     This specialist acts as a gate before END, evaluating whether the accumulated
-    state (artifacts, messages, context_plan) satisfies the original user request.
+    state (artifacts, messages) satisfies the original user request.
 
     If complete: Sets task_is_complete=True, allowing standard edge to route to END
     If incomplete: Does NOT set task_is_complete, causing route back to Router
@@ -157,10 +157,6 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 elif hasattr(msg, 'content') and not hasattr(msg, 'type'):
                     user_request = msg.content
                     break
-
-        # Get context_plan if available (Triage's assessment)
-        context_plan = artifacts.get("context_plan", {})
-        recommended_specialists = context_plan.get("recommended_specialists", [])
 
         # Get routing history to see what has executed
         routing_history = state.get("routing_history", [])
@@ -211,7 +207,6 @@ Example verification steps:
             evaluation = self._evaluate_completion(
                 user_request=user_request,
                 exit_plan=exit_plan,
-                recommended_specialists=recommended_specialists,
                 routing_history=routing_history,
                 artifact_summary=artifact_summary,
                 recent_summary=recent_summary
@@ -349,7 +344,6 @@ Example verification steps:
         return self._evaluate_completion(
             user_request=user_request,
             exit_plan=exit_plan,
-            recommended_specialists=[],
             routing_history=routing_history,
             artifact_summary=artifact_summary,
             recent_summary=recent_summary,
@@ -502,7 +496,6 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
         self,
         user_request: str,
         exit_plan: dict,
-        recommended_specialists: list,
         routing_history: list,
         artifact_summary: str,
         recent_summary: str
@@ -534,7 +527,6 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
         prompt = prompt_template.format(
             user_request=user_request or "[Unable to extract original request]",
             exit_plan=exit_plan_summary,
-            recommended_specialists=", ".join(recommended_specialists) if recommended_specialists else "[No specific recommendations]",
             routing_history=", ".join(routing_history[-10:]) if routing_history else "[No routing history]",
             artifact_summary=artifact_summary or "[No artifacts produced]",
             recent_summary=recent_summary or "[No recent activity]"
@@ -593,7 +585,7 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
         Used by the single-pass LLM fallback path. The react_step path uses
         list_artifacts/browse_artifact tools instead.
         """
-        excluded = {"gathered_context", "context_plan"}
+        excluded = {"gathered_context"}
         lines = []
 
         for key, value in artifacts.items():
@@ -673,9 +665,6 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
 **Exit Plan (Success Criteria):**
 {exit_plan}
 
-**Planned Actions (from Triage):**
-{recommended_specialists}
-
 **What Has Executed:**
 {routing_history}
 
@@ -690,8 +679,7 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
 Evaluate whether:
 1. The user's core request has been addressed
 2. If an exit plan with success criteria exists, have those criteria been met?
-3. If specialists were recommended, have the appropriate ones executed?
-4. Are there meaningful artifacts or responses that answer the request?
+3. Are there meaningful artifacts or responses that answer the request?
 
 **IMPORTANT:** Do NOT trust claims of completed work in messages alone. Check the artifacts for concrete evidence of completed operations.
 

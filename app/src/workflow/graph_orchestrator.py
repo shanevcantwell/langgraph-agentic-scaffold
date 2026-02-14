@@ -12,7 +12,6 @@ from ..graph.state import GraphState, Scratchpad
 from ..enums import CoreSpecialist
 from ..utils.errors import WorkflowError
 
-from ..interface.context_schema import ContextPlan
 from .specialist_categories import SpecialistCategories
 
 logger = logging.getLogger(__name__)
@@ -34,41 +33,31 @@ class GraphOrchestrator:
     def check_triage_outcome(self, state: GraphState) -> str:
         """
         Decides next step after TriageArchitect.
-        If ContextPlan has actions -> Facilitator.
+        If triage produced actions -> Facilitator.
         Else -> Router.
         """
-        artifacts = state.get("artifacts", {})
-        context_plan_data = artifacts.get("context_plan")
-        
-        if context_plan_data:
-            try:
-                plan = ContextPlan(**context_plan_data)
+        triage_actions = state.get("scratchpad", {}).get("triage_actions", [])
 
-                if plan.actions:
-                    ask_user_count = sum(1 for a in plan.actions if a.type == "ask_user")
-                    other_count = len(plan.actions) - ask_user_count
+        if triage_actions:
+            ask_user_count = sum(1 for a in triage_actions if a.get("type") == "ask_user")
+            other_count = len(triage_actions) - ask_user_count
 
-                    # #179: Ask-user-only plan = underspecified prompt. Reject with cause.
-                    # EndSpecialist formats ask_user actions as clarification questions
-                    # in final_user_response. No interrupt, no in-graph clarification.
-                    if other_count == 0 and ask_user_count > 0:
-                        logger.info(
-                            f"Triage: ask_user-only plan ({ask_user_count} questions). "
-                            "Rejecting with cause via EndSpecialist."
-                        )
-                        return CoreSpecialist.END.value
+            # #179: Ask-user-only plan = underspecified prompt. Reject with cause.
+            # EndSpecialist formats ask_user actions as clarification questions
+            # in final_user_response. No interrupt, no in-graph clarification.
+            if other_count == 0 and ask_user_count > 0:
+                logger.info(
+                    f"Triage: ask_user-only plan ({ask_user_count} questions). "
+                    "Rejecting with cause via EndSpecialist."
+                )
+                return CoreSpecialist.END.value
 
-                    logger.info(
-                        f"Triage produced plan with {other_count} context-gathering and "
-                        f"{ask_user_count} ask_user actions. Routing to Facilitator chain."
-                    )
-                    return "facilitator_specialist"
+            logger.info(
+                f"Triage produced plan with {other_count} context-gathering and "
+                f"{ask_user_count} ask_user actions. Routing to Facilitator chain."
+            )
+            return "facilitator_specialist"
 
-                # Empty plan (no actions at all) - route to Router
-                logger.info("Triage produced empty plan. Routing to Router.")
-            except Exception as e:
-                logger.error(f"Failed to parse ContextPlan in check_triage_outcome: {e}")
-        
         logger.info("Triage produced no actions. Routing to Router.")
         return CoreSpecialist.ROUTER.value
 
@@ -405,7 +394,7 @@ class GraphOrchestrator:
             return CoreSpecialist.END.value
 
         # Normal incomplete - route through Facilitator to refresh context before retry
-        # Facilitator re-executes context_plan, updating gathered_context with current state
+        # Facilitator re-executes triage actions, updating gathered_context with current state
         if "facilitator_specialist" in self.specialists:
             logger.info("--- Exit Interview: Task INCOMPLETE. Routing to Facilitator to refresh context. ---")
             return "facilitator_specialist"

@@ -6,7 +6,6 @@ Split from test_facilitator.py for maintainability.
 import pytest
 from unittest.mock import MagicMock, patch
 from app.src.specialists.facilitator_specialist import FacilitatorSpecialist
-from app.src.interface.context_schema import ContextPlan, ContextAction, ContextActionType
 
 
 @pytest.fixture
@@ -34,25 +33,19 @@ def test_facilitator_rebuilds_context_fresh_on_retry(facilitator):
     tripling. Now each invocation builds from the current plan actions only.
     Stale prior context from artifacts is NOT carried forward.
     """
-    plan = ContextPlan(
-        reasoning="Re-check directory state on retry",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace/test",
-                description="List directory"
-            )
-        ]
-    )
-
     # Simulate RETRY state: gathered_context exists from first pass (should be ignored)
     existing_context = """### Directory: /workspace/test
 - [FILE] /workspace/test/1.txt
 - [FILE] /workspace/test/2.txt"""
 
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
+            ],
+            "triage_reasoning": "Re-check directory state on retry",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "gathered_context": existing_context  # Should NOT be preserved
         }
     }
@@ -81,21 +74,15 @@ def test_facilitator_fresh_context_when_no_existing(facilitator):
 
     This is the baseline case - just like before the fix.
     """
-    plan = ContextPlan(
-        reasoning="First pass context gathering",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace/test",
-                description="List directory"
-            )
-        ]
-    )
-
     # Fresh state: NO pre-existing gathered_context
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
+            ],
+            "triage_reasoning": "First pass context gathering",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump()
             # No gathered_context key
         }
     }
@@ -120,21 +107,14 @@ def test_facilitator_first_pass_builds_gathered_context(facilitator):
     """
     #170: First pass (no EI result) builds gathered_context from plan actions.
     """
-    plan = ContextPlan(
-        reasoning="Continue task after partial completion",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
-        "artifacts": {
-            "context_plan": plan.model_dump(),
-        }
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Continue task after partial completion",
+        },
+        "artifacts": {}
     }
 
     with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
@@ -152,20 +132,14 @@ def test_facilitator_surfaces_curated_exit_interview_feedback(facilitator):
     #121 removed raw EI dumps that polluted context. #167 re-enables a curated
     version: only missing_elements + reasoning, no routing data.
     """
-    plan = ContextPlan(
-        reasoning="Continue task after Exit Interview flagged incomplete",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Continue task after Exit Interview flagged incomplete",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             # Exit Interview marked task incomplete
             "exit_interview_result": {
                 "is_complete": False,
@@ -198,14 +172,14 @@ def test_facilitator_curated_feedback_excludes_routing_data(facilitator):
     Issue #167: Curated feedback should contain only missing_elements and reasoning,
     NOT recommended_specialists (that's for Router, not PD).
     """
-    plan = ContextPlan(
-        reasoning="Retry",
-        actions=[]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Retry",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "exit_interview_result": {
                 "is_complete": False,
                 "reasoning": "Files not moved",
@@ -215,7 +189,10 @@ def test_facilitator_curated_feedback_excludes_routing_data(facilitator):
         }
     }
 
-    result = facilitator.execute(state)
+    with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+        mock_list.return_value = ["file.txt"]
+        result = facilitator.execute(state)
+
     gathered = result["artifacts"]["gathered_context"]
 
     assert "Move remaining files" in gathered
@@ -228,20 +205,14 @@ def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
     """
     Issue #100: Facilitator should NOT add feedback when task was marked complete.
     """
-    plan = ContextPlan(
-        reasoning="Normal execution",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Normal execution",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             # Exit Interview marked task COMPLETE
             "exit_interview_result": {
                 "is_complete": True,
@@ -262,23 +233,25 @@ def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
 
 def test_context_plan_reasoning_in_gathered_context(facilitator):
     """
-    Issue #167: Triage reasoning should appear in gathered_context so PD
+    Issue #167: Task strategy should appear in gathered_context so PD
     understands the strategic intent behind the task.
-    """
-    plan = ContextPlan(
-        reasoning="User wants files sorted by content into category subfolders",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
 
+    Task Strategy now comes from artifacts["task_plan"]["plan_summary"]
+    (set by SA) instead of triage reasoning.
+    """
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Triage reasoning here (not used for Task Strategy)",
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
+            "task_plan": {
+                "plan_summary": "User wants files sorted by content into category subfolders",
+                "execution_steps": [],
+                "required_components": []
+            },
         }
     }
 
@@ -301,33 +274,30 @@ def test_facilitator_surfaces_specialist_activity_on_retry(facilitator):
     ADR-073 Phase 3: On EI retry, Facilitator reads specialist_activity from
     scratchpad (written by PD) and includes it in gathered_context.
     """
-    plan = ContextPlan(
-        reasoning="Sort files into categories",
-        actions=[
-            ContextAction(
-                type=ContextActionType.LIST_DIRECTORY,
-                target="/workspace",
-                description="List workspace"
-            )
-        ]
-    )
-
     state = {
+        "scratchpad": {
+            "triage_actions": [
+                {"type": "list_directory", "target": "/workspace", "description": "List workspace", "strategy": None}
+            ],
+            "triage_reasoning": "Sort files into categories",
+            "specialist_activity": [
+                "Created directory /workspace/animals",
+                "Moved /workspace/1.txt \u2192 /workspace/animals/1.txt",
+                "Moved /workspace/4.txt \u2192 /workspace/animals/4.txt",
+            ]
+        },
         "artifacts": {
-            "context_plan": plan.model_dump(),
             "exit_interview_result": {
                 "is_complete": False,
                 "reasoning": "Only 2 of 6 files moved",
                 "missing_elements": "4 files still need moving",
                 "recommended_specialists": ["project_director"]
             },
-        },
-        "scratchpad": {
-            "specialist_activity": [
-                "Created directory /workspace/animals",
-                "Moved /workspace/1.txt \u2192 /workspace/animals/1.txt",
-                "Moved /workspace/4.txt \u2192 /workspace/animals/4.txt",
-            ]
+            "task_plan": {
+                "plan_summary": "Sort files into categories",
+                "execution_steps": [],
+                "required_components": []
+            },
         }
     }
 

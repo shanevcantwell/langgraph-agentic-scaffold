@@ -94,18 +94,12 @@ class EndSpecialist(BaseSpecialist):
         # Check for explicit termination reason (e.g., from loop detection)
         termination_reason = current_state.get("scratchpad", {}).get("termination_reason")
         
-        # Check for clarification questions from Triage
-        context_plan_data = current_state.get("artifacts", {}).get("context_plan")
-        clarification_questions = []
-        if context_plan_data:
-            try:
-                from ..interface.context_schema import ContextPlan
-                plan = ContextPlan(**context_plan_data)
-                for action in plan.actions:
-                    if action.type == "ask_user":
-                        clarification_questions.append(f"- {action.target}")
-            except Exception as e:
-                logger.warning(f"EndSpecialist: Failed to parse ContextPlan: {e}")
+        # Check for clarification questions from Triage (#179 reject-with-cause)
+        triage_actions = current_state.get("scratchpad", {}).get("triage_actions", [])
+        clarification_questions = [
+            f"- {a['target']}" for a in triage_actions
+            if a.get("type") == "ask_user" and a.get("target")
+        ]
 
         if termination_reason:
             logger.warning(f"EndSpecialist: Using explicit termination reason: {termination_reason}")

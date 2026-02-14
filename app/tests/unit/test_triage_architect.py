@@ -27,7 +27,7 @@ def test_triage_architect_generates_plan(triage_architect, mock_llm_adapter):
     state = {
         "messages": [HumanMessage(content="Read the README file.")]
     }
-    
+
     expected_plan = {
         "reasoning": "User asked to read a file.",
         "actions": [
@@ -38,7 +38,7 @@ def test_triage_architect_generates_plan(triage_architect, mock_llm_adapter):
             }
         ]
     }
-    
+
     mock_llm_adapter.invoke.return_value = {
         "tool_calls": [
             {
@@ -47,18 +47,17 @@ def test_triage_architect_generates_plan(triage_architect, mock_llm_adapter):
             }
         ]
     }
-    
+
     # Act
     result = triage_architect.execute(state)
-    
-    # Assert
-    assert "artifacts" in result
-    assert "context_plan" in result["artifacts"]
-    plan = result["artifacts"]["context_plan"]
-    assert plan["reasoning"] == "User asked to read a file."
-    assert len(plan["actions"]) == 1
-    assert plan["actions"][0]["type"] == "read_file"
-    assert plan["actions"][0]["target"] == "README.md"
+
+    # Assert — triage writes to scratchpad, not artifacts
+    assert "scratchpad" in result
+    assert result["scratchpad"]["triage_reasoning"] == "User asked to read a file."
+    actions = result["scratchpad"]["triage_actions"]
+    assert len(actions) == 1
+    assert actions[0]["type"] == "read_file"
+    assert actions[0]["target"] == "README.md"
 
 def test_triage_architect_handles_no_messages(triage_architect):
     state = {"messages": []}
@@ -71,23 +70,20 @@ def test_triage_architect_handles_llm_error(triage_architect, mock_llm_adapter):
     mock_llm_adapter.invoke.side_effect = Exception("LLM Error")
 
     result = triage_architect.execute(state)
-    # Must return valid specialist result with artifacts + scratchpad
-    assert "artifacts" in result
-    assert "context_plan" in result["artifacts"]
-    plan = result["artifacts"]["context_plan"]
-    assert "LLM Error" in plan["reasoning"]
-    assert plan["actions"] == []
-    assert result["scratchpad"]["recommended_specialists"] == []
+    # Must return valid specialist result with scratchpad
+    assert "scratchpad" in result
+    assert "LLM Error" in result["scratchpad"]["triage_reasoning"]
+    assert result["scratchpad"]["triage_actions"] == []
 
 
-def test_triage_populates_recommended_specialists(triage_architect, mock_llm_adapter):
+def test_triage_populates_actions_in_scratchpad(triage_architect, mock_llm_adapter):
     """
-    Test that TriageArchitect populates recommended_specialists in scratchpad.
+    Test that TriageArchitect populates triage_actions in scratchpad.
 
     Scenario:
     - User asks for web research
-    - Triage recommends researcher_specialist
-    - Verify scratchpad.recommended_specialists is populated
+    - Triage produces a research action
+    - Verify scratchpad.triage_actions is populated
     """
     state = {
         "messages": [HumanMessage(content="Research winter weather in Colorado")]
@@ -101,8 +97,7 @@ def test_triage_populates_recommended_specialists(triage_architect, mock_llm_ada
                 "target": "winter weather Colorado",
                 "description": "Search for weather patterns"
             }
-        ],
-        "recommended_specialists": ["researcher_specialist", "chat_specialist"]
+        ]
     }
 
     mock_llm_adapter.invoke.return_value = {
@@ -117,25 +112,23 @@ def test_triage_populates_recommended_specialists(triage_architect, mock_llm_ada
     # Act
     result = triage_architect.execute(state)
 
-    # Assert - verify scratchpad contains recommendations
+    # Assert - verify scratchpad contains triage output
     assert "scratchpad" in result
-    assert "recommended_specialists" in result["scratchpad"]
-    assert result["scratchpad"]["recommended_specialists"] == ["researcher_specialist", "chat_specialist"]
-
-    # Also verify it's in the artifact
-    assert "artifacts" in result
-    assert "context_plan" in result["artifacts"]
-    assert result["artifacts"]["context_plan"]["recommended_specialists"] == ["researcher_specialist", "chat_specialist"]
+    assert result["scratchpad"]["triage_reasoning"] == "User needs web search for weather information"
+    actions = result["scratchpad"]["triage_actions"]
+    assert len(actions) == 1
+    assert actions[0]["type"] == "research"
+    assert actions[0]["target"] == "winter weather Colorado"
 
 
-def test_triage_empty_recommendations_for_greeting(triage_architect, mock_llm_adapter):
+def test_triage_empty_actions_for_greeting(triage_architect, mock_llm_adapter):
     """
-    Test TriageArchitect with empty actions still provides recommendations.
+    Test TriageArchitect with empty actions for a simple greeting.
 
     Scenario:
     - User sends greeting ("Hello!")
     - No context gathering needed (empty actions)
-    - But should still recommend chat_specialist for response
+    - Verify scratchpad has empty triage_actions
     """
     state = {
         "messages": [HumanMessage(content="Hello!")]
@@ -143,8 +136,7 @@ def test_triage_empty_recommendations_for_greeting(triage_architect, mock_llm_ad
 
     expected_plan = {
         "reasoning": "Simple greeting, no context needed",
-        "actions": [],
-        "recommended_specialists": ["chat_specialist"]
+        "actions": []
     }
 
     mock_llm_adapter.invoke.return_value = {
@@ -160,17 +152,17 @@ def test_triage_empty_recommendations_for_greeting(triage_architect, mock_llm_ad
     result = triage_architect.execute(state)
 
     # Assert
-    assert result["scratchpad"]["recommended_specialists"] == ["chat_specialist"]
-    assert len(result["artifacts"]["context_plan"]["actions"]) == 0
+    assert result["scratchpad"]["triage_reasoning"] == "Simple greeting, no context needed"
+    assert result["scratchpad"]["triage_actions"] == []
 
 
-def test_triage_multiple_recommendations(triage_architect, mock_llm_adapter):
+def test_triage_multiple_actions(triage_architect, mock_llm_adapter):
     """
-    Test TriageArchitect can recommend multiple specialists.
+    Test TriageArchitect can produce multiple actions.
 
     Scenario:
-    - Complex task could be handled by multiple specialists
-    - Triage recommends 3 specialists for router to choose from
+    - Complex task requires multiple context-gathering steps
+    - Triage produces multiple actions
     """
     state = {
         "messages": [HumanMessage(content="Analyze this code and fix any bugs")]
@@ -183,12 +175,17 @@ def test_triage_multiple_recommendations(triage_architect, mock_llm_adapter):
                 "type": "read_file",
                 "target": "src/main.py",
                 "description": "Read the code"
+            },
+            {
+                "type": "read_file",
+                "target": "src/utils.py",
+                "description": "Read utilities"
+            },
+            {
+                "type": "research",
+                "target": "common Python bugs",
+                "description": "Research common issues"
             }
-        ],
-        "recommended_specialists": [
-            "text_analysis_specialist",
-            "file_operations_specialist",
-            "chat_specialist"
         ]
     }
 
@@ -205,30 +202,30 @@ def test_triage_multiple_recommendations(triage_architect, mock_llm_adapter):
     result = triage_architect.execute(state)
 
     # Assert
-    assert len(result["scratchpad"]["recommended_specialists"]) == 3
-    assert "text_analysis_specialist" in result["scratchpad"]["recommended_specialists"]
-    assert "file_operations_specialist" in result["scratchpad"]["recommended_specialists"]
-    assert "chat_specialist" in result["scratchpad"]["recommended_specialists"]
+    actions = result["scratchpad"]["triage_actions"]
+    assert len(actions) == 3
+    assert actions[0]["type"] == "read_file"
+    assert actions[0]["target"] == "src/main.py"
+    assert actions[1]["type"] == "read_file"
+    assert actions[1]["target"] == "src/utils.py"
+    assert actions[2]["type"] == "research"
 
 
-def test_triage_default_empty_recommendations_if_not_provided(triage_architect, mock_llm_adapter):
+def test_triage_empty_actions_default(triage_architect, mock_llm_adapter):
     """
-    Test TriageArchitect handles LLM not providing recommended_specialists.
+    Test TriageArchitect handles LLM returning empty actions.
 
     Scenario:
-    - LLM returns plan without recommended_specialists field
-    - Pydantic default should provide empty list
-    - Should not crash
+    - LLM returns plan with empty actions list
+    - Should produce empty triage_actions, not crash
     """
     state = {
         "messages": [HumanMessage(content="Do something")]
     }
 
-    # LLM returns plan WITHOUT recommended_specialists
     expected_plan = {
         "reasoning": "User request is ambiguous",
         "actions": []
-        # No recommended_specialists field
     }
 
     mock_llm_adapter.invoke.return_value = {
@@ -243,10 +240,10 @@ def test_triage_default_empty_recommendations_if_not_provided(triage_architect, 
     # Act
     result = triage_architect.execute(state)
 
-    # Assert - should default to empty list, not crash
+    # Assert - should have empty actions list, not crash
     assert "scratchpad" in result
-    assert "recommended_specialists" in result["scratchpad"]
-    assert result["scratchpad"]["recommended_specialists"] == []
+    assert result["scratchpad"]["triage_reasoning"] == "User request is ambiguous"
+    assert result["scratchpad"]["triage_actions"] == []
 
 
 def test_triage_handles_malformed_actions_field(triage_architect, mock_llm_adapter):
@@ -258,17 +255,16 @@ def test_triage_handles_malformed_actions_field(triage_architect, mock_llm_adapt
             "name": "ContextPlan",
             "args": {
                 "reasoning": "A plan",
-                "actions": "not a list",  # Malformed
-                "recommended_specialists": ["chat_specialist"]
+                "actions": "not a list"  # Malformed
             }
         }]
     }
 
     result = triage_architect.execute(state)
-    assert "artifacts" in result
+    assert "scratchpad" in result
     # Malformed actions replaced with empty list
-    assert result["artifacts"]["context_plan"]["actions"] == []
-    assert result["scratchpad"]["recommended_specialists"] == ["chat_specialist"]
+    assert result["scratchpad"]["triage_actions"] == []
+    assert result["scratchpad"]["triage_reasoning"] == "A plan"
 
 
 def test_triage_handles_no_tool_calls(triage_architect, mock_llm_adapter):
@@ -278,13 +274,13 @@ def test_triage_handles_no_tool_calls(triage_architect, mock_llm_adapter):
     mock_llm_adapter.invoke.return_value = {"tool_calls": []}
 
     result = triage_architect.execute(state)
-    assert "artifacts" in result
-    assert "context_plan" in result["artifacts"]
-    assert "fallback" in result["artifacts"]["context_plan"]["reasoning"].lower()
+    assert "scratchpad" in result
+    assert "fallback" in result["scratchpad"]["triage_reasoning"].lower()
+    assert result["scratchpad"]["triage_actions"] == []
 
 
 def test_triage_handles_validation_error(triage_architect, mock_llm_adapter):
-    """#154: Pydantic rejects args — salvage what we can (recommended_specialists)."""
+    """#154: Pydantic rejects args — salvage what we can (reasoning preserved)."""
     state = {"messages": [HumanMessage(content="Do something")]}
 
     mock_llm_adapter.invoke.return_value = {
@@ -292,16 +288,16 @@ def test_triage_handles_validation_error(triage_architect, mock_llm_adapter):
             "name": "ContextPlan",
             "args": {
                 "reasoning": "A plan",
-                "actions": [{"type": "INVALID_TYPE", "target": "x"}],  # Will fail ContextAction validation
-                "recommended_specialists": ["researcher_specialist"]
+                "actions": [{"type": "INVALID_TYPE", "target": "x"}]  # Will fail ContextAction validation
             }
         }]
     }
 
     result = triage_architect.execute(state)
-    assert "artifacts" in result
-    # Salvage: recommended_specialists preserved despite validation failure
-    assert result["scratchpad"]["recommended_specialists"] == ["researcher_specialist"]
+    assert "scratchpad" in result
+    # Salvage: reasoning preserved despite validation failure, actions defaulted to empty
+    assert result["scratchpad"]["triage_reasoning"] == "A plan"
+    assert result["scratchpad"]["triage_actions"] == []
 
 
 # ==============================================================================
@@ -326,8 +322,7 @@ def test_triage_appends_system_note_for_text_to_process(triage_architect, mock_l
 
     expected_plan = {
         "reasoning": "Content already in artifacts, no READ_FILE needed",
-        "actions": [],  # Should NOT emit READ_FILE
-        "recommended_specialists": ["text_analysis_specialist"]
+        "actions": []  # Should NOT emit READ_FILE
     }
 
     mock_llm_adapter.invoke.return_value = {
@@ -367,8 +362,7 @@ def test_triage_no_system_note_without_text_to_process(triage_architect, mock_ll
 
     expected_plan = {
         "reasoning": "Simple greeting",
-        "actions": [],
-        "recommended_specialists": ["chat_specialist"]
+        "actions": []
     }
 
     mock_llm_adapter.invoke.return_value = {
@@ -400,8 +394,7 @@ def test_triage_appends_system_note_for_uploaded_image(triage_architect, mock_ll
 
     expected_plan = {
         "reasoning": "Image analysis needed",
-        "actions": [],
-        "recommended_specialists": ["vision_specialist"]
+        "actions": []
     }
 
     mock_llm_adapter.invoke.return_value = {
@@ -440,8 +433,7 @@ def test_triage_both_text_and_image_get_system_notes(triage_architect, mock_llm_
 
     expected_plan = {
         "reasoning": "Multi-modal analysis",
-        "actions": [],
-        "recommended_specialists": ["vision_specialist"]
+        "actions": []
     }
 
     mock_llm_adapter.invoke.return_value = {

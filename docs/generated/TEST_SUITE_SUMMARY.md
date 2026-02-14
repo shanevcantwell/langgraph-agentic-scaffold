@@ -6,8 +6,8 @@
 |----------|-------|-------|
 | Unit | 73 | 705 |
 | Integration | 28 | 191 |
-| Other | 7 | 91 |
-| **Total** | **108** | **987** |
+| Other | 7 | 92 |
+| **Total** | **108** | **988** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -662,20 +662,22 @@
 
 ## `app/tests/interface/test_context_schema.py`
 
-- **`test_context_plan_with_recommended_specialists`**
-  - *Test ContextPlan with recommended_specialists field populated.*
-- **`test_context_plan_default_empty_recommendations`**
-  - *Test ContextPlan defaults to empty list for recommended_specialists.*
+- **`test_context_plan_with_actions`**
+  - *ContextPlan with populated actions list.*
+- **`test_context_plan_default_empty_actions`**
+  - *ContextPlan defaults to empty list for actions.*
 - **`test_context_plan_validates_required_fields`**
-  - *Test ContextPlan requires reasoning field.*
-- **`test_context_plan_single_recommendation`**
-  - *Test ContextPlan with single specialist recommendation.*
+  - *ContextPlan requires reasoning field.*
 - **`test_context_plan_serialization`**
-  - *Test ContextPlan serializes to dict correctly (for state artifacts).*
-- **`test_context_plan_empty_actions_with_recommendations`**
-  - *Test ContextPlan with no actions but with recommendations.*
-- **`test_context_plan_multiple_actions_with_recommendations`**
-  - *Test ContextPlan with multiple actions and recommendations.*
+  - *ContextPlan serializes to dict for scratchpad transport.*
+- **`test_context_plan_empty_actions`**
+  - *ContextPlan with no actions (simple request, no prep needed).*
+- **`test_context_plan_multiple_actions`**
+  - *ContextPlan with multiple context-gathering actions.*
+- **`test_context_plan_ask_user_action`**
+  - *ContextPlan with ask_user action for clarification.*
+- **`test_context_action_strategy_optional`**
+  - *ContextAction strategy field is optional (defaults to None).*
 
 ## `app/tests/unit/test_adapter_contracts.py`
 
@@ -1007,8 +1009,8 @@
   - *Per FACILITATOR.md: If filesystem MCP is unavailable, Facilitator includes*
 - **`test_facilitator_directory_listing_filesystem_unavailable`**
   - *Per FACILITATOR.md: LIST_DIRECTORY also gracefully handles filesystem unavailability.*
-- **`test_facilitator_handles_invalid_context_plan`**
-  - *Per FACILITATOR.md: Invalid ContextPlan data returns an error.*
+- **`test_facilitator_handles_empty_triage_actions`**
+  - *When triage_actions is empty, Facilitator returns an error.*
 - **`test_facilitator_continues_after_action_error`**
   - *Per FACILITATOR.md: Individual action failures don't halt the entire plan.*
 
@@ -1046,7 +1048,7 @@
 - **`test_facilitator_skips_exit_interview_feedback_when_complete`**
   - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
 - **`test_context_plan_reasoning_in_gathered_context`**
-  - *Issue #167: Triage reasoning should appear in gathered_context so PD*
+  - *Issue #167: Task strategy should appear in gathered_context so PD*
 - **`test_facilitator_surfaces_specialist_activity_on_retry`**
   - *ADR-073 Phase 3: On EI retry, Facilitator reads specialist_activity from*
 
@@ -1139,9 +1141,9 @@
 - **`test_context_only_plan_routes_to_facilitator`**
   - *Normal context-gathering plan routes to Facilitator.*
 - **`test_empty_plan_routes_to_router`**
-  - *Empty plan (no actions) routes to Router.*
-- **`test_no_context_plan_routes_to_router`**
-  - *Missing context_plan routes to Router.*
+  - *Empty triage_actions routes to Router.*
+- **`test_no_triage_actions_routes_to_router`**
+  - *Missing triage_actions in scratchpad routes to Router.*
 
 ## `app/tests/unit/test_heap_invariants.py`
 
@@ -2223,20 +2225,20 @@
 - **`test_triage_architect_handles_no_messages`**
 - **`test_triage_architect_handles_llm_error`**
   - *#154: LLM errors should return a valid fallback ContextPlan, not bare {'error': ...}.*
-- **`test_triage_populates_recommended_specialists`**
-  - *Test that TriageArchitect populates recommended_specialists in scratchpad.*
-- **`test_triage_empty_recommendations_for_greeting`**
-  - *Test TriageArchitect with empty actions still provides recommendations.*
-- **`test_triage_multiple_recommendations`**
-  - *Test TriageArchitect can recommend multiple specialists.*
-- **`test_triage_default_empty_recommendations_if_not_provided`**
-  - *Test TriageArchitect handles LLM not providing recommended_specialists.*
+- **`test_triage_populates_actions_in_scratchpad`**
+  - *Test that TriageArchitect populates triage_actions in scratchpad.*
+- **`test_triage_empty_actions_for_greeting`**
+  - *Test TriageArchitect with empty actions for a simple greeting.*
+- **`test_triage_multiple_actions`**
+  - *Test TriageArchitect can produce multiple actions.*
+- **`test_triage_empty_actions_default`**
+  - *Test TriageArchitect handles LLM returning empty actions.*
 - **`test_triage_handles_malformed_actions_field`**
   - *#154: LLM returns actions as string instead of list — should not crash.*
 - **`test_triage_handles_no_tool_calls`**
   - *#154: LLM returns no tool calls — should return fallback, not crash.*
 - **`test_triage_handles_validation_error`**
-  - *#154: Pydantic rejects args — salvage what we can (recommended_specialists).*
+  - *#154: Pydantic rejects args — salvage what we can (reasoning preserved).*
 - **`test_triage_appends_system_note_for_text_to_process`**
   - *Test that TriageArchitect appends a system note when text_to_process is in artifacts.*
 - **`test_triage_no_system_note_without_text_to_process`**
