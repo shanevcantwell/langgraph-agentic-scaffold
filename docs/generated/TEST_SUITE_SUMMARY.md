@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 70 | 688 |
+| Unit | 72 | 688 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **105** | **970** |
+| **Total** | **107** | **970** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1005,6 +1005,28 @@
   - *Per FACILITATOR.md: Invalid ContextPlan data returns an error.*
 - **`test_facilitator_continues_after_action_error`**
   - *Per FACILITATOR.md: Individual action failures don't halt the entire plan.*
+
+## `app/tests/unit/test_facilitator_benign.py`
+
+- **`test_facilitator_passes_trace_on_benign_interrupt`**
+  - *ADR-073 Phase 4: BENIGN interrupt early-returns, clearing the flag.*
+- **`test_facilitator_no_wip_summary_without_max_iterations`**
+  - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
+- **`test_facilitator_benign_continuation_with_ei_incomplete`**
+  - *ADR-073 Phase 4: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
+- **`test_facilitator_benign_early_returns_without_trace`**
+  - *ADR-073 Phase 4: BENIGN always early-returns, even without resume_trace.*
+- **`test_facilitator_benign_does_not_accumulate_context`**
+  - *ADR-073 Phase 4: BENIGN early return avoids context pollution.*
+- **`test_facilitator_benign_early_returns_even_without_resume_trace`**
+  - *ADR-073 Phase 4: BENIGN early-returns regardless of resume_trace presence.*
+- **`test_facilitator_no_early_return_when_exit_interview_result_present`**
+  - *Issue #114: When exit_interview_result is present (without max_iterations),*
+- **`test_facilitator_benign_continuation_after_ei_incomplete`**
+  - *ADR-073 Phase 4: BENIGN+INCOMPLETE = continuation, not correction.*
+
+## `app/tests/unit/test_facilitator_retry.py`
+
 - **`test_facilitator_rebuilds_context_fresh_on_retry`**
   - *#170: Facilitator rebuilds gathered_context fresh each invocation.*
 - **`test_facilitator_fresh_context_when_no_existing`**
@@ -1019,22 +1041,6 @@
   - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
 - **`test_context_plan_reasoning_in_gathered_context`**
   - *Issue #167: Triage reasoning should appear in gathered_context so PD*
-- **`test_facilitator_passes_trace_on_benign_interrupt`**
-  - *ADR-073 Phase 4: BENIGN interrupt early-returns, clearing the flag.*
-- **`test_facilitator_no_wip_summary_without_max_iterations`**
-  - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
-- **`test_facilitator_benign_continuation_with_ei_incomplete`**
-  - *ADR-073 Phase 4: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
-- **`test_facilitator_benign_early_returns_without_trace`**
-  - *ADR-073 Phase 4: BENIGN always early-returns, even without resume_trace.*
-- **`test_facilitator_benign_does_not_accumulate_context`**
-  - *ADR-073 Phase 4: BENIGN early return avoids context pollution.*
-- **`test_facilitator_benign_early_returns_even_without_resume_trace`**
-  - *ADR-073 Phase 4: BENIGN early-returns regardless of resume_trace presence.*
-- **`test_facilitator_no_early_return_when_exit_interview_result_present`**
-  - *Issue #114: When exit_interview_result is present, NO early return.*
-- **`test_facilitator_benign_continuation_after_ei_incomplete`**
-  - *ADR-073 Phase 4: BENIGN+INCOMPLETE = continuation, not correction.*
 - **`test_facilitator_surfaces_specialist_activity_on_retry`**
   - *ADR-073 Phase 3: On EI retry, Facilitator reads specialist_activity from*
 
