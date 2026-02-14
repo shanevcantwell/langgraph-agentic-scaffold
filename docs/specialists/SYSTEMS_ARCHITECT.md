@@ -100,7 +100,7 @@ The same schema serves all plan variants — `task_plan`, `exit_plan`, `system_p
 ```
 SA (entry point) → task_plan
     |
-Triage → context_plan / triage ticket (classification + routing, not a SystemPlan)
+Triage → triage_actions / triage_reasoning in scratchpad (context-gathering, not a SystemPlan)
     |
     ├── PD calls SA MCP → project_plan (filesystem execution steps)
     ├── EI calls SA MCP → exit_plan (verification of task_plan completion)
@@ -285,13 +285,13 @@ SA, Triage, and Facilitator serve complementary roles in the entry pipeline:
 
 | | SA | Triage | Facilitator |
 |---|---|---|---|
-| **What** | Strategy (steps, components, criteria) | Classification (routing, prep actions) | Context (facts, observations, prior work) |
-| **Schema** | `SystemPlan` | `ContextPlan` (triage ticket) | `gathered_context` (string) |
+| **What** | Strategy (steps, components, criteria) | Classification (context-gathering actions) | Context (facts, observations, prior work) |
+| **Schema** | `SystemPlan` | `ContextPlan` (wire format -> scratchpad) | `gathered_context` (string) |
 | **When** | Once (entry point; once per specialist via MCP) | Once (second in pipeline) | Before every specialist invocation |
 | **How** | LLM call → structured JSON | LLM call → forced tool call | Procedural MCP orchestrator (no LLM) |
 | **On retry** | Plan persists, no re-planning | Ticket persists, no re-triage | Rebuilds fresh from current state |
 
-Together they give a specialist **what to do** (SA), **who should do it** (Triage), and **what is known** (Facilitator).
+Together they give a specialist **what to do** (SA), **what background context to gather** (Triage), and **what is known** (Facilitator).
 
 ---
 
@@ -314,7 +314,7 @@ This means:
 - SA **is the entry point** — `config.yaml: entry_point: "systems_architect"`
 - SA → Triage is an unconditional edge ([context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py))
 - SA **is excluded from Router's menu** — it's infrastructure, not a task-execution specialist
-- SA **is excluded from Triage's roster** — can't be recommended by Triage
+- SA **is excluded from Triage's scope** — Triage doesn't recommend specialists
 - SA **is excluded from hub-and-spoke edges** — has dedicated subgraph wiring
 - SA **is also registered in MCP** — specialists can still call `create_plan()` for narrower plans
 

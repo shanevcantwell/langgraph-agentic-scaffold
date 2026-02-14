@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-12 (#170 context entity cleanup)
+**Updated:** 2026-02-12 (context_plan artifact eliminated — reads triage_actions from scratchpad)
 
 ---
 
@@ -26,11 +26,12 @@ Key characteristics:
 ```
 User Request
     |
-TriageArchitect (LLM: classifies intent, creates ContextPlan)
+TriageArchitect (LLM: classifies intent, writes triage_actions to scratchpad)
     |
-    [Does ContextPlan have actions?]
-    |-- YES --> Facilitator --> Router --> Specialist
-    '-- NO  --> Router (direct)
+    [Does scratchpad have triage_actions?]
+    |-- YES (context actions) --> Facilitator --> Router --> Specialist
+    |-- YES (ask_user only)  --> EndSpecialist (reject with cause, #179)
+    '-- NO                   --> Router (direct)
 ```
 
 ### Retry Path (EI says INCOMPLETE)
@@ -63,30 +64,30 @@ The routing decision is made in `check_triage_outcome()` ([graph_orchestrator.py
 
 ```python
 def check_triage_outcome(self, state: GraphState) -> str:
-    context_plan_data = state.get("artifacts", {}).get("context_plan")
-
-    if context_plan_data:
-        plan = ContextPlan(**context_plan_data)
-        if plan.actions:  # Any actions at all trigger Facilitator
-            return "facilitator_specialist"
-
-    return "router_specialist"  # No context needed
+    triage_actions = state.get("scratchpad", {}).get("triage_actions", [])
+    if triage_actions:
+        ask_user_count = sum(1 for a in triage_actions if a.get("type") == "ask_user")
+        other_count = len(triage_actions) - ask_user_count
+        if other_count == 0 and ask_user_count > 0:
+            return CoreSpecialist.END.value   # Reject with cause (#179)
+        return "facilitator_specialist"
+    return CoreSpecialist.ROUTER.value
 ```
 
 ---
 
 ## What the Facilitator Actually Does
 
-### Input: ContextPlan Artifact
+### Input: Triage Actions from Scratchpad
 
-TriageArchitect produces a `context_plan` artifact in GraphState:
+TriageArchitect writes context-gathering actions to `scratchpad["triage_actions"]`:
 
 ```python
-# From context_schema.py
-class ContextPlan(BaseModel):
-    actions: List[ContextAction]           # What to gather
-    reasoning: str                         # Why (for observability)
-    recommended_specialists: List[str]     # Hint for Router after context gathered
+# Facilitator reads actions from scratchpad (not artifacts)
+triage_actions_data = state.get("scratchpad", {}).get("triage_actions", [])
+
+# Each action dict is parsed into a ContextAction for type-safe dispatch
+from app.src.interface.context_schema import ContextAction
 
 class ContextAction(BaseModel):
     type: ContextActionType   # RESEARCH | READ_FILE | SUMMARIZE | LIST_DIRECTORY | ASK_USER
@@ -99,7 +100,7 @@ class ContextAction(BaseModel):
 
 Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
 
-1. **Task Strategy** — `context_plan.reasoning` from Triage (#167)
+1. **Task Strategy** — `task_plan.plan_summary` from SA (switched from Triage reasoning — SA reasons about the full request, Triage's reasoning only explains context-gathering choices)
 2. **EI Retry Feedback** — curated `missing_elements` + `reasoning` (only on retry, #167)
 3. **Prior Work Knowledge** — extracted write operations from `resume_trace` (only on retry, #170)
 4. **WIP Summary** — work-in-progress for BENIGN interrupts (only when `max_iterations_exceeded` without EI, #108)
@@ -355,8 +356,8 @@ mcp:
 
 The Facilitator is a **procedural MCP orchestrator** that:
 
-1. Receives a `ContextPlan` from TriageArchitect
-2. Rebuilds `gathered_context` fresh each invocation (Task Strategy + EI feedback + trace knowledge + plan action results)
+1. Reads `triage_actions` from scratchpad (written by TriageArchitect)
+2. Rebuilds `gathered_context` fresh each invocation (Task Strategy from SA's task_plan + EI feedback + trace knowledge + triage action results)
 3. Produces a unified `gathered_context` artifact for downstream specialists
 4. On BENIGN continuation (model was working, hit max_iterations), early returns with flag cleared
 5. Does NOT accumulate across invocations, relay resume_trace, or invoke LLMs
