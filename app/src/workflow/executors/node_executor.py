@@ -161,36 +161,37 @@ class NodeExecutor:
                 specialist_type = specialist_config.get("type", "llm")
                 execution_latency_ms = int((time.perf_counter() - start_time) * 1000)
 
-                # Emit traces for LLM specialists (have adapter traces) AND procedural specialists
-                if adapter_traces or specialist_type == "procedural":
-                    # Compute artifacts produced (new keys in update)
-                    artifacts_after = list(update.get("artifacts", {}).keys())
-                    artifacts_produced = [a for a in artifacts_after if a not in artifacts_before]
+                # ADR-073 Phase 1: Emit traces for ALL specialists unconditionally.
+                # MCP-delegating specialists (PD, TA react mode) have no adapter_traces
+                # but still produce artifacts and scratchpad signals worth tracing.
+                # Compute artifacts produced (new keys in update)
+                artifacts_after = list(update.get("artifacts", {}).keys())
+                artifacts_produced = [a for a in artifacts_after if a not in artifacts_before]
 
-                    # Extract scratchpad signals written
-                    scratchpad_signals = update.get("scratchpad", {})
+                # Extract scratchpad signals written
+                scratchpad_signals = update.get("scratchpad", {})
 
-                    # Extract routing decision (for router specialist)
-                    routing_decision = update.get("next_specialist")
+                # Extract routing decision (for router specialist)
+                routing_decision = update.get("next_specialist")
 
-                    # Build complete trace
-                    turn_trace = build_specialist_turn_trace(
-                        adapter_traces=adapter_traces,
-                        step=step,
-                        specialist_name=specialist_name,
-                        specialist_type=specialist_type,
-                        from_source=from_source,
-                        system_prompt=system_prompt,
-                        context_artifacts_before=artifacts_before,
-                        artifacts_produced=artifacts_produced,
-                        scratchpad_signals=scratchpad_signals,
-                        routing_decision=routing_decision,
-                        execution_latency_ms=execution_latency_ms,
-                    )
+                # Build complete trace
+                turn_trace = build_specialist_turn_trace(
+                    adapter_traces=adapter_traces,
+                    step=step,
+                    specialist_name=specialist_name,
+                    specialist_type=specialist_type,
+                    from_source=from_source,
+                    system_prompt=system_prompt,
+                    context_artifacts_before=artifacts_before,
+                    artifacts_produced=artifacts_produced,
+                    scratchpad_signals=scratchpad_signals,
+                    routing_decision=routing_decision,
+                    execution_latency_ms=execution_latency_ms,
+                )
 
-                    # Add trace to state
-                    update["llm_traces"] = [turn_trace.model_dump()]
-                    logger.debug(f"Captured specialist turn trace for '{specialist_name}' (step {step}, type={specialist_type})")
+                # Add trace to state
+                update["llm_traces"] = [turn_trace.model_dump()]
+                logger.debug(f"Captured specialist turn trace for '{specialist_name}' (step {step}, type={specialist_type})")
 
                 # CENTRALIZED ROUTING HISTORY TRACKING (post-execution)
                 # Remove any routing_history that specialist tried to add (enforces centralization)

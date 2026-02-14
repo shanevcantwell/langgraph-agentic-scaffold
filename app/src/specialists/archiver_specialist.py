@@ -129,25 +129,36 @@ class ArchiverSpecialist(BaseSpecialist):
             artifact_manifests = []
             
             for key, content in artifacts.items():
-                # Skip if content is not string/bytes (e.g. dicts)
-                if not isinstance(content, (str, bytes)):
+                # #175: Serialize dict/list artifacts as JSON files
+                if isinstance(content, (dict, list)):
+                    import json as _json
+                    content = _json.dumps(content, indent=2, default=str)
+                    content_type = "application/json"
+                elif isinstance(content, bytes):
+                    content_type = "application/octet-stream"
+                elif isinstance(content, str):
+                    content_type = "text/plain"
+                else:
                     logger.warning(f"Skipping artifact '{key}' - unsupported type {type(content)}")
                     continue
-                
+
                 # Sanitize filename
                 safe_filename = "".join(c for c in key if c.isalnum() or c in "._- ")
+                # Add .json extension for serialized dict/list artifacts
+                if content_type == "application/json" and not safe_filename.endswith(".json"):
+                    safe_filename += ".json"
                 file_path = os.path.join(package_dir, safe_filename)
-                
+
                 mode = "wb" if isinstance(content, bytes) else "w"
                 encoding = None if isinstance(content, bytes) else "utf-8"
-                
+
                 with open(file_path, mode, encoding=encoding) as f:
                     f.write(content)
-                
+
                 artifact_manifests.append(ArtifactManifest(
                     filename=safe_filename,
                     original_key=key,
-                    content_type="application/octet-stream" if isinstance(content, bytes) else "text/plain",
+                    content_type=content_type,
                     size_bytes=os.path.getsize(file_path)
                 ))
 

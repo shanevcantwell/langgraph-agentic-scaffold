@@ -252,18 +252,21 @@ def test_safe_executor_emits_trace_for_procedural_specialist(node_executor_insta
         assert len(result["llm_traces"]) == 1
 
 
-def test_safe_executor_does_not_emit_trace_for_unknown_type_without_adapter_traces(node_executor_instance):
+def test_safe_executor_emits_trace_for_mcp_delegating_specialist(node_executor_instance):
     """
-    Tests that specialists with unknown type and no adapter traces don't emit traces.
+    ADR-073 Phase 1: All specialists emit traces unconditionally.
 
-    This preserves backwards compatibility - only explicitly "procedural" specialists
-    or specialists with actual LLM calls emit traces.
+    MCP-delegating specialists (e.g., PD via react_step) have type "llm" but no
+    adapter_traces. They still produce artifacts and scratchpad signals worth tracing.
     """
     # Arrange
     mock_specialist = MagicMock(spec=BaseSpecialist)
-    mock_specialist.specialist_name = "mystery_specialist"
-    mock_specialist.specialist_config = {}  # No type specified, defaults to "llm"
-    mock_specialist.execute.return_value = {"artifacts": {}}
+    mock_specialist.specialist_name = "project_director"
+    mock_specialist.specialist_config = {}  # type defaults to "llm"
+    mock_specialist.execute.return_value = {
+        "artifacts": {"resume_trace": [{"tool_call": {"name": "read_file"}}]},
+        "scratchpad": {"specialist_activity": ["Read file.txt"]},
+    }
 
     safe_executor = node_executor_instance.create_safe_executor(mock_specialist)
     initial_state = create_test_state()
@@ -272,10 +275,11 @@ def test_safe_executor_does_not_emit_trace_for_unknown_type_without_adapter_trac
     with patch('app.src.workflow.executors.node_executor.flush_adapter_traces') as mock_flush, \
          patch('app.src.workflow.executors.node_executor.build_specialist_turn_trace') as mock_build:
 
-        mock_flush.return_value = []  # No adapter traces
+        mock_flush.return_value = []  # No adapter traces (MCP-delegating)
+        mock_build.return_value = MagicMock(model_dump=MagicMock(return_value={"specialist": "project_director"}))
 
         result = safe_executor(initial_state)
 
-        # Assert: build_specialist_turn_trace was NOT called (no traces, not procedural)
-        mock_build.assert_not_called()
-        assert "llm_traces" not in result or result.get("llm_traces") is None
+        # Assert: trace IS emitted even without adapter_traces
+        mock_build.assert_called_once()
+        assert "llm_traces" in result
