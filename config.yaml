@@ -442,8 +442,10 @@ specialists:
       - triage_architect
       - router_specialist
     # Issue #115: EI calls SA via MCP on-demand to produce exit_plan
-    # (removed dead requires_artifacts/artifact_providers - never enforced for graph-wired specialists)
+    # #173: react_step for tool-based verification (filesystem + artifact inspection)
     tools:
+      prompt-prix:
+        - react_step
       systems_architect:
         - create_plan
       semantic-chunker:
