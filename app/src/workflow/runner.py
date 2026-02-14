@@ -301,6 +301,10 @@ class WorkflowRunner:
 
         logger.info(f"--- Resuming streaming workflow for thread_id: '{thread_id}' ---")
 
+        # Emit thread_id metadata so _standard_stream_formatter can attach it
+        # to interrupt events (same pattern as run_streaming)
+        yield {"thread_id": thread_id}
+
         resume_command = Command(resume=user_input)
         config = {
             "configurable": {"thread_id": thread_id},

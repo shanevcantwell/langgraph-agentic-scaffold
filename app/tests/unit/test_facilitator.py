@@ -433,6 +433,58 @@ def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
     facilitator.mcp_client.call.assert_called_once()
 
 
+def test_facilitator_skips_ask_user_on_ei_retry(facilitator):
+    """
+    On EI retry (exit_interview_result present), Facilitator skips ask_user actions.
+
+    The user already clarified in the first pass. Re-asking the same question is
+    wrong — EI feedback guides the retry, not a repeated clarification request.
+    """
+    from unittest.mock import patch
+
+    plan = ContextPlan(
+        reasoning="Need clarification",
+        actions=[
+            ContextAction(
+                type=ContextActionType.LIST_DIRECTORY,
+                target="/workspace",
+                description="List workspace"
+            ),
+            ContextAction(
+                type=ContextActionType.ASK_USER,
+                target="What kind of website?",
+                description="Clarify website type"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {
+            "context_plan": plan.model_dump(),
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "www2 directory does not exist",
+                "missing_elements": "www2 directory and required files",
+                "recommended_specialists": ["project_director"],
+            }
+        },
+        "scratchpad": {},
+        "routing_history": ["web_builder", "exit_interview_specialist"]
+    }
+
+    # interrupt should NOT be called — ask_user is skipped on retry
+    with patch("langgraph.types.interrupt") as mock_interrupt:
+        with patch.object(facilitator, '_list_directory_via_filesystem_mcp') as mock_list:
+            mock_list.return_value = ["file.txt"]
+            result = facilitator.execute(state)
+
+        mock_interrupt.assert_not_called()
+
+    # Directory listing should still execute (non-ask_user actions run normally)
+    assert "file.txt" in result["artifacts"]["gathered_context"]
+    # No user clarification section (ask_user was skipped)
+    assert "User Clarification" not in result["artifacts"]["gathered_context"]
+
+
 def test_facilitator_executes_multiple_actions(facilitator):
     """
     Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,

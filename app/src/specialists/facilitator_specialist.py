@@ -372,6 +372,14 @@ class FacilitatorSpecialist(BaseSpecialist):
                         gathered_context.append(f"### Directory: {action.target}\n{str(items)}")
 
                 elif action.type == ContextActionType.ASK_USER:
+                    # On retry (EI result present), skip — stale trigger guard.
+                    # ASK_USER is on hold pending ADR-032 (capability-based routing).
+                    # See #179 for the architectural direction: clarification becomes
+                    # reject-with-cause via final_user_response, not in-graph interrupt.
+                    if exit_interview_result:
+                        logger.info("Facilitator: Skipping ask_user on retry (user already clarified)")
+                        continue
+
                     # Human-in-the-loop: pause graph execution for user clarification
                     from langgraph.types import interrupt
 

@@ -250,7 +250,8 @@ async function submitClarification() {
 
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        pendingThreadId = null;
+        // Don't clear pendingThreadId yet — a second interrupt may set it
+        // during the stream. Only clear after stream completes without interrupt.
 
         // Consume SSE stream — same pattern as executeWorkflow
         const reader = response.body.getReader();
@@ -277,7 +278,12 @@ async function submitClarification() {
             }
         }
 
-        logStatus('► WORKFLOW RESUMED SUCCESSFULLY');
+        // If a new interrupt was set during the stream, don't overwrite status
+        if (pendingThreadId) {
+            logStatus('► AWAITING CLARIFICATION...');
+        } else {
+            logStatus('► WORKFLOW RESUMED SUCCESSFULLY');
+        }
 
     } catch (error) {
         logStatus(`❌ RESUME ERROR: ${error.message}`);

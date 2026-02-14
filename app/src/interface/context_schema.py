@@ -7,7 +7,7 @@ class ContextActionType(str, Enum):
     READ_FILE = "read_file"
     SUMMARIZE = "summarize"
     LIST_DIRECTORY = "list_directory"
-    ASK_USER = "ask_user"
+    ASK_USER = "ask_user"  # On hold — ADR-032 replaces with help_needed[type="clarification"]
 
 class ContextAction(BaseModel):
     type: ContextActionType

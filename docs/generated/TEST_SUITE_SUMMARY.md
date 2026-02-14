@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 73 | 698 |
+| Unit | 73 | 699 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **108** | **980** |
+| **Total** | **108** | **981** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -997,6 +997,8 @@
   - *BUG FIX: GraphInterrupt raised by interrupt() must NOT be caught by*
 - **`test_facilitator_interrupt_propagates_with_prior_actions`**
   - *When a plan has RESEARCH then ASK_USER, the interrupt must still propagate.*
+- **`test_facilitator_skips_ask_user_on_ei_retry`**
+  - *On EI retry (exit_interview_result present), Facilitator skips ask_user actions.*
 - **`test_facilitator_executes_multiple_actions`**
   - *Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,*
 - **`test_facilitator_sets_completion_flag`**
