@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 72 | 688 |
+| Unit | 72 | 690 |
 | Integration | 28 | 191 |
 | Other | 7 | 91 |
-| **Total** | **107** | **970** |
+| **Total** | **107** | **972** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -993,6 +993,10 @@
   - *Per FACILITATOR.md: If SUMMARIZE target looks like a file path (starts with / or ./),*
 - **`test_facilitator_handles_ask_user_action_via_interrupt`**
   - *ADR-CORE-059: Facilitator handles ASK_USER inline via LangGraph interrupt().*
+- **`test_facilitator_propagates_graph_interrupt_for_ask_user`**
+  - *BUG FIX: GraphInterrupt raised by interrupt() must NOT be caught by*
+- **`test_facilitator_interrupt_propagates_with_prior_actions`**
+  - *When a plan has RESEARCH then ASK_USER, the interrupt must still propagate.*
 - **`test_facilitator_executes_multiple_actions`**
   - *Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,*
 - **`test_facilitator_sets_completion_flag`**

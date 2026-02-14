@@ -371,6 +371,68 @@ def test_facilitator_handles_ask_user_action_via_interrupt(facilitator):
     assert result["scratchpad"]["facilitator_complete"] is True
 
 
+def test_facilitator_propagates_graph_interrupt_for_ask_user(facilitator):
+    """
+    BUG FIX: GraphInterrupt raised by interrupt() must NOT be caught by
+    the except Exception handler. It must propagate to the LangGraph runner
+    for the pause/resume mechanism to work.
+
+    The existing test (test_facilitator_handles_ask_user_action_via_interrupt)
+    simulates the RESUME path where interrupt() returns a value.
+    This test simulates the FIRST invocation where interrupt() raises.
+    """
+    from unittest.mock import patch
+    from langgraph.errors import GraphInterrupt
+
+    plan = ContextPlan(
+        reasoning="Need user clarification",
+        actions=[
+            ContextAction(
+                type=ContextActionType.ASK_USER,
+                target="What tone should the backronym have?",
+                description="Clarify desired tone"
+            )
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    with patch("langgraph.types.interrupt", side_effect=GraphInterrupt(("test",))):
+        with pytest.raises(GraphInterrupt):
+            facilitator.execute(state)
+
+
+def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
+    """
+    When a plan has RESEARCH then ASK_USER, the interrupt must still propagate.
+    The RESEARCH action executes normally, but when ASK_USER raises
+    GraphInterrupt, it must bubble up rather than being caught as an error.
+    """
+    from unittest.mock import patch
+    from langgraph.errors import GraphInterrupt
+
+    plan = ContextPlan(
+        reasoning="Research then ask user",
+        actions=[
+            ContextAction(type=ContextActionType.RESEARCH, target="topic", description="Research first"),
+            ContextAction(type=ContextActionType.ASK_USER, target="Clarify?", description="Need input"),
+        ]
+    )
+    state = {
+        "artifacts": {"context_plan": plan.model_dump()}
+    }
+
+    facilitator.mcp_client.call.return_value = [{"title": "R", "url": "u", "snippet": "s"}]
+
+    with patch("langgraph.types.interrupt", side_effect=GraphInterrupt(("test",))):
+        with pytest.raises(GraphInterrupt):
+            facilitator.execute(state)
+
+    # Research action should have been called before the interrupt
+    facilitator.mcp_client.call.assert_called_once()
+
+
 def test_facilitator_executes_multiple_actions(facilitator):
     """
     Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,

@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Any, Optional, List
+from langgraph.errors import GraphInterrupt
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan, ContextActionType
 from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
@@ -390,6 +391,11 @@ class FacilitatorSpecialist(BaseSpecialist):
                     gathered_context.append(f"### User Clarification\n{user_answer}")
                     logger.info(f"Facilitator: Received clarification, added to gathered_context")
 
+            except GraphInterrupt:
+                # ASK_USER interrupt MUST propagate to LangGraph runner.
+                # Unlike MCP errors (recoverable), GraphInterrupt is flow control.
+                logger.info(f"Facilitator: GraphInterrupt raised for {action.type}, propagating")
+                raise
             except Exception as e:
                 logger.error(f"Failed to execute action {action}: {e}")
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")
