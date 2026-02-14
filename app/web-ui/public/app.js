@@ -730,19 +730,31 @@ function handleStreamEvent(event) {
     if (event.interrupt || data.interrupt) {
         const interruptData = event.interrupt || data.interrupt;
         pendingThreadId = event.thread_id || data.thread_id;
-        const questions = interruptData.questions || [];
 
-        let questionsHtml = '<ul style="list-style: none; padding: 0;">';
-        questions.forEach(q => {
-            if (typeof q === 'object') {
-                questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q.reason || String(q)}`;
-                if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
-                questionsHtml += '</li>';
-            } else {
-                questionsHtml += `<li style="margin: 10px 0;">• ${q}</li>`;
+        // Build question display — handle both formats:
+        //   Facilitator sends: {question: "...", reason: "...", action_type: "ask_user"}
+        //   Future/DialogueSpecialist may send: {questions: [{question, reason}, ...]}
+        let questionsHtml = '';
+        const questions = interruptData.questions || [];
+        if (questions.length > 0) {
+            questionsHtml = '<ul style="list-style: none; padding: 0;">';
+            questions.forEach(q => {
+                if (typeof q === 'object') {
+                    questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q.reason || String(q)}`;
+                    if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
+                    questionsHtml += '</li>';
+                } else {
+                    questionsHtml += `<li style="margin: 10px 0;">• ${q}</li>`;
+                }
+            });
+            questionsHtml += '</ul>';
+        } else if (interruptData.question) {
+            // Single question from Facilitator ASK_USER action
+            questionsHtml = `<p style="margin: 10px 0; color: var(--primary-color);">${interruptData.question}</p>`;
+            if (interruptData.reason && interruptData.reason !== interruptData.question) {
+                questionsHtml += `<p style="opacity: 0.7; font-size: 0.9em;">${interruptData.reason}</p>`;
             }
-        });
-        questionsHtml += '</ul>';
+        }
 
         clarificationQuestions.innerHTML = questionsHtml;
         clarificationInput.value = '';
@@ -910,21 +922,29 @@ function handleStreamEvent(event) {
         case 'clarification_required':
             // ADR-CORE-042: Handle wrapped interrupt event (AgUiEvent type)
             pendingThreadId = event.thread_id || data.thread_id;
-            const questions = data.questions || [];
+            const crQuestions = data.questions || [];
 
-            let questionsHtml = '<ul style="list-style: none; padding: 0;">';
-            questions.forEach(q => {
-                if (typeof q === 'object') {
-                    questionsHtml += `<li style="margin: 10px 0;">• ${q.question || q.reason || String(q)}`;
-                    if (q.reason) questionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
-                    questionsHtml += '</li>';
-                } else {
-                    questionsHtml += `<li style="margin: 10px 0;">• ${q}</li>`;
+            let crQuestionsHtml = '';
+            if (crQuestions.length > 0) {
+                crQuestionsHtml = '<ul style="list-style: none; padding: 0;">';
+                crQuestions.forEach(q => {
+                    if (typeof q === 'object') {
+                        crQuestionsHtml += `<li style="margin: 10px 0;">• ${q.question || q.reason || String(q)}`;
+                        if (q.reason) crQuestionsHtml += `<br><span style="opacity: 0.7; font-size: 0.9em;">  (${q.reason})</span>`;
+                        crQuestionsHtml += '</li>';
+                    } else {
+                        crQuestionsHtml += `<li style="margin: 10px 0;">• ${q}</li>`;
+                    }
+                });
+                crQuestionsHtml += '</ul>';
+            } else if (data.question) {
+                crQuestionsHtml = `<p style="margin: 10px 0; color: var(--primary-color);">${data.question}</p>`;
+                if (data.reason && data.reason !== data.question) {
+                    crQuestionsHtml += `<p style="opacity: 0.7; font-size: 0.9em;">${data.reason}</p>`;
                 }
-            });
-            questionsHtml += '</ul>';
+            }
 
-            clarificationQuestions.innerHTML = questionsHtml;
+            clarificationQuestions.innerHTML = crQuestionsHtml;
             clarificationInput.value = '';
             clarificationModal.style.display = 'block';
             clarificationInput.focus();
