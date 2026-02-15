@@ -84,18 +84,32 @@ class SystemsArchitect(BaseSpecialist):
         })
         logger.info(f"SystemsArchitect: Registered MCP service with create_plan method")
 
-    def create_plan(self, context: str, artifact_key: str) -> dict:
+    def create_plan(self, context: str, artifact_key: str, available_tools: list = None) -> dict:
         """
         MCP-callable planning service.
 
         Args:
             context: What to plan for (user request, gathered context)
             artifact_key: Artifact slot to write the plan to
+            available_tools: Optional list of {"name", "description"} dicts describing
+                the caller's tool capabilities. When provided, execution_steps are
+                constrained to only use these tools.
 
         Returns:
             Update dict with artifacts[artifact_key] = plan
         """
         logger.info(f"SystemsArchitect.create_plan called: artifact_key={artifact_key}")
+
+        if available_tools:
+            tool_lines = "\n".join(
+                f"- **{t['name']}**: {t['description']}" for t in available_tools
+            )
+            context += (
+                f"\n\nThe executor has ONLY these tools:\n{tool_lines}\n\n"
+                "All execution_steps MUST be achievable using only these tools. "
+                "Do not assume shell commands, checksums, hashing, or other capabilities."
+            )
+
         messages = [HumanMessage(content=context)]
         plan = self._generate_plan(messages)
         logger.info(f"SystemsArchitect.create_plan produced: {plan.plan_summary}")

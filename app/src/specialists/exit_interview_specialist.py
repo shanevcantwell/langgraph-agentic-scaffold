@@ -169,21 +169,22 @@ class ExitInterviewSpecialist(BaseSpecialist):
             verification_context = f"""User request: {user_request}
 
 Generate a VERIFICATION PLAN with steps to CHECK that this work was completed correctly.
-Each step should be a verification action (list directory, count files, check file contents, verify artifact exists).
-These are steps to VERIFY completion, NOT steps to implement the task.
+These are steps to VERIFY completion, NOT steps to implement the task."""
 
-Example verification steps:
-- "List source directory to confirm it is empty (all files moved)"
-- "Count files in each category folder"
-- "Verify total file count matches expected count"
-- "Check that artifact X exists in state"
-"""
+            # Pass EI's actual tool inventory so SA constrains steps accordingly
+            verification_tools = [
+                {"name": name, "description": tool_def.description}
+                for name, tool_def in self._build_verification_tools().items()
+                if name != "DONE"
+            ]
+
             try:
                 result = self.mcp_client.call(
                     "systems_architect",
                     "create_plan",
                     context=verification_context,
-                    artifact_key="exit_plan"
+                    artifact_key="exit_plan",
+                    available_tools=verification_tools,
                 )
                 exit_plan = result.get("artifacts", {}).get("exit_plan", {})
                 logger.info(f"ExitInterviewSpecialist: SA produced exit_plan: {exit_plan.get('plan_summary', '?')}")
