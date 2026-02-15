@@ -15,6 +15,8 @@ class EventType(str, Enum):
     LOG = "log"
     # ADR-CORE-042: Interrupt events for "Raise Hand" pattern
     CLARIFICATION_REQUIRED = "clarification_required"
+    # State timeline: full accumulated state at each specialist boundary
+    STATE_SNAPSHOT = "state_snapshot"
 
 class AgUiEvent(BaseModel):
     """

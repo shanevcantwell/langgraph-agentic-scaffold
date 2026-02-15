@@ -128,7 +128,14 @@ class GraphState(TypedDict):
     # Accumulates raw LLM prompt/response traces for fine-tuning datasets.
     # Written to llm_traces.jsonl in the archive by ArchiverSpecialist.
     llm_traces: Annotated[List[Dict[str, Any]], operator.add]
-    
+
+    # --- State Timeline (Observability) ---
+    # Accumulates full state snapshots at each specialist boundary.
+    # Write-only: no specialist reads this back. Emitted via SSE as
+    # STATE_SNAPSHOT events and written to state_timeline.jsonl in archive.
+    # Includes prompts, IM decisions, and react traces for debugging.
+    state_timeline: Annotated[List[Dict[str, Any]], operator.add]
+
     # --- Parallel Execution State (Task 3.3) ---
     # Tracks currently active parallel tasks for scatter-gather synchronization.
     parallel_tasks: Annotated[List[str], reduce_parallel_tasks]

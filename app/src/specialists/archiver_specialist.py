@@ -177,6 +177,21 @@ class ArchiverSpecialist(BaseSpecialist):
                     size_bytes=os.path.getsize(traces_path)
                 ))
 
+            # 3b. Write State Timeline (observability snapshots at each specialist boundary)
+            state_timeline = state.get("state_timeline", [])
+            if state_timeline:
+                timeline_path = os.path.join(package_dir, "state_timeline.jsonl")
+                with open(timeline_path, "w", encoding="utf-8") as f:
+                    for entry in state_timeline:
+                        f.write(json.dumps(entry, default=str) + "\n")
+                logger.info(f"Wrote {len(state_timeline)} state timeline entries to state_timeline.jsonl")
+                artifact_manifests.append(ArtifactManifest(
+                    filename="state_timeline.jsonl",
+                    original_key="state_timeline",
+                    content_type="application/jsonl",
+                    size_bytes=os.path.getsize(timeline_path)
+                ))
+
             # 4. Write Final State (Issue #39)
             final_state_path = os.path.join(package_dir, "final_state.json")
             with open(final_state_path, "w", encoding="utf-8") as f:

@@ -261,7 +261,7 @@ async def _stream_formatter(generator):
                 else:
                     # Merge node_output into accumulated_state following GraphState reducers
                     for key, value in node_output.items():
-                        if key in ["messages", "routing_history"]:
+                        if key in ["messages", "routing_history", "llm_traces", "state_timeline"]:
                             # operator.add: append to lists
                             accumulated_state.setdefault(key, []).extend(value if isinstance(value, list) else [value])
                         elif key in ["artifacts", "scratchpad"]:
@@ -270,6 +270,10 @@ async def _stream_formatter(generator):
                         else:
                             # No annotation: overwrite with latest value
                             accumulated_state[key] = value
+
+                # Emit state_snapshot events for timeline entries
+                for timeline_entry in node_output.get("state_timeline", []):
+                    yield f"data: {json.dumps({'state_snapshot': timeline_entry})}\n\n"
 
     # After the main loop, send the accumulated final state with artifacts
     if accumulated_state:

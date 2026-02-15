@@ -10,6 +10,7 @@ from langgraph.errors import GraphInterrupt
 from ...specialists.base import BaseSpecialist
 from ...graph.state import GraphState
 from ...utils import state_pruner
+from ...utils.state_serializer import build_timeline_entry
 from ...utils.errors import SpecialistError, WorkflowError, RateLimitError, CircuitBreakerTriggered
 from ...utils.report_schema import ErrorReport
 from ...resilience.monitor import InvariantMonitor
@@ -192,6 +193,26 @@ class NodeExecutor:
                 # Add trace to state
                 update["llm_traces"] = [turn_trace.model_dump()]
                 logger.debug(f"Captured specialist turn trace for '{specialist_name}' (step {step}, type={specialist_type})")
+
+                # State timeline snapshot for observability (follows llm_traces pattern)
+                timeline_entry = build_timeline_entry(
+                    state=state,
+                    update=update,
+                    specialist_name=specialist_name,
+                    step=step,
+                    latency_ms=execution_latency_ms,
+                    system_prompt=system_prompt,
+                    assembled_prompt=turn_trace.assembled_prompt,
+                    model_id=turn_trace.model_id,
+                )
+                update["state_timeline"] = [timeline_entry]
+
+                # Clear im_decision after consuming it for the timeline entry
+                # (prevents stale decisions persisting across specialist boundaries)
+                scratchpad_in_update = update.get("scratchpad", {})
+                if state.get("scratchpad", {}).get("im_decision") or scratchpad_in_update.get("im_decision"):
+                    scratchpad_in_update["im_decision"] = None
+                    update["scratchpad"] = scratchpad_in_update
 
                 # CENTRALIZED ROUTING HISTORY TRACKING (post-execution)
                 # Remove any routing_history that specialist tried to add (enforces centralization)

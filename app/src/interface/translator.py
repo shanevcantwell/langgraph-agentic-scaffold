@@ -106,6 +106,15 @@ class AgUiTranslator:
                     # 4. Accumulate State (Reducer Logic)
                     self._update_accumulated_state(node_output)
 
+                    # 5. Emit STATE_SNAPSHOT events for timeline entries
+                    for timeline_entry in node_output.get("state_timeline", []):
+                        yield AgUiEvent(
+                            run_id=self.run_id,
+                            type=EventType.STATE_SNAPSHOT,
+                            source=node_name,
+                            data=timeline_entry,
+                        )
+
                     # Emit NODE_END event with output data
                     yield AgUiEvent(
                         run_id=self.run_id,
@@ -136,7 +145,7 @@ class AgUiTranslator:
                     self.accumulated_state[key] = value
         else:
             for key, value in node_output.items():
-                if key in ["messages", "routing_history"]:
+                if key in ["messages", "routing_history", "llm_traces", "state_timeline"]:
                     # operator.add: append to lists
                     self.accumulated_state.setdefault(key, []).extend(value if isinstance(value, list) else [value])
                 elif key in ["artifacts", "scratchpad"]:

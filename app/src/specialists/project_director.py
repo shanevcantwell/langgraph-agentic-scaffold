@@ -369,6 +369,7 @@ class ProjectDirector(BaseSpecialist):
             "artifacts": {},
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
+                "react_trace": trace,
             },
         }
 
@@ -380,6 +381,7 @@ class ProjectDirector(BaseSpecialist):
             "artifacts": {},
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
+                "react_trace": trace,
             },
         }
 
@@ -407,6 +409,7 @@ class ProjectDirector(BaseSpecialist):
             },
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
+                "react_trace": trace,
             },
         }
 
@@ -421,6 +424,7 @@ class ProjectDirector(BaseSpecialist):
             },
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
+                "react_trace": trace,
             },
         }
 

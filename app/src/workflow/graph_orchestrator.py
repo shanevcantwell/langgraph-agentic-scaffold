@@ -50,15 +50,21 @@ class GraphOrchestrator:
                     f"Triage: ask_user-only plan ({ask_user_count} questions). "
                     "Rejecting with cause via EndSpecialist."
                 )
+                self._record_im_decision(state, "check_triage_outcome", CoreSpecialist.END.value,
+                                         f"ask_user-only plan ({ask_user_count} questions), rejecting")
                 return CoreSpecialist.END.value
 
             logger.info(
                 f"Triage produced plan with {other_count} context-gathering and "
                 f"{ask_user_count} ask_user actions. Routing to Facilitator chain."
             )
+            self._record_im_decision(state, "check_triage_outcome", "facilitator_specialist",
+                                     f"{other_count} context-gathering + {ask_user_count} ask_user actions")
             return "facilitator_specialist"
 
         logger.info("Triage produced no actions. Routing to Router.")
+        self._record_im_decision(state, "check_triage_outcome", CoreSpecialist.ROUTER.value,
+                                 "no triage actions")
         return CoreSpecialist.ROUTER.value
 
     def _check_stabilization_action(self, state: GraphState) -> str | None:
@@ -94,6 +100,14 @@ class GraphOrchestrator:
         logger.warning(f"classify_interrupt: PATHOLOGICAL ({reason}) → Router (no IE, no EI)")
         return CoreSpecialist.ROUTER.value
 
+    def _record_im_decision(self, state: GraphState, function: str, result: str, reason: str) -> None:
+        """Record an IM routing decision in scratchpad for state timeline visibility."""
+        state.setdefault("scratchpad", {})["im_decision"] = {
+            "function": function,
+            "result": result,
+            "reason": reason,
+        }
+
     def check_task_completion(self, state: GraphState) -> str:
         if state.get("task_is_complete"):
             # ADR-ROADMAP-001: Gate task_is_complete through exit_interview
@@ -102,21 +116,29 @@ class GraphOrchestrator:
             if routing_history and routing_history[-1] == CoreSpecialist.EXIT_INTERVIEW.value:
                 # Exit interview validated - proceed to END
                 logger.info(f"--- GraphOrchestrator: Task validated by exit_interview. Routing to {CoreSpecialist.END.value}. ---")
+                self._record_im_decision(state, "check_task_completion", CoreSpecialist.END.value,
+                                         "validated by exit_interview")
                 return CoreSpecialist.END.value
 
             # Skip EI for conversational specialists with no success criteria
             last_specialist = routing_history[-1] if routing_history else None
             if last_specialist in SpecialistCategories.SKIP_EXIT_INTERVIEW:
                 logger.info(f"--- GraphOrchestrator: {last_specialist} complete, skipping exit_interview (no criteria). ---")
+                self._record_im_decision(state, "check_task_completion", CoreSpecialist.END.value,
+                                         f"{last_specialist} complete, skipping EI (no criteria)")
                 return CoreSpecialist.END.value
 
             # Specialist claimed complete - validate via exit_interview first
             logger.info(f"--- GraphOrchestrator: task_is_complete set by specialist. Routing to exit_interview for validation. ---")
+            self._record_im_decision(state, "check_task_completion", CoreSpecialist.EXIT_INTERVIEW.value,
+                                     "specialist claimed complete, validating via EI")
             return CoreSpecialist.EXIT_INTERVIEW.value
 
         if self._is_unproductive_loop(state):
             # ADR-ROADMAP-001: Route loops through exit_interview for validation
             logger.info("Unproductive loop in check_task_completion - routing to exit_interview")
+            self._record_im_decision(state, "check_task_completion", CoreSpecialist.EXIT_INTERVIEW.value,
+                                     "unproductive loop detected")
             return CoreSpecialist.EXIT_INTERVIEW.value
 
         # TASK 3.3: Result Aggregation (Barrier Logic)
@@ -126,12 +148,16 @@ class GraphOrchestrator:
         parallel_tasks = state.get("parallel_tasks", [])
         if parallel_tasks:
             logger.info(f"--- GraphOrchestrator: Parallel tasks pending {parallel_tasks}. Terminating branch to wait for completion. ---")
+            self._record_im_decision(state, "check_task_completion", CoreSpecialist.END.value,
+                                     f"parallel tasks pending: {parallel_tasks}")
             # We return END to terminate this specific branch of execution.
             # LangGraph will keep the workflow alive as long as other branches are running.
             # When the LAST branch finishes, parallel_tasks will be empty, and it will route to ROUTER.
             return CoreSpecialist.END.value
 
         logger.info("--- GraphOrchestrator: Task not complete. Returning to Router. ---")
+        self._record_im_decision(state, "check_task_completion", CoreSpecialist.ROUTER.value,
+                                 "task not complete")
         return CoreSpecialist.ROUTER.value
 
     def _is_unproductive_loop(self, state: GraphState) -> bool:
@@ -375,6 +401,8 @@ class GraphOrchestrator:
                 logger.info("Exit Interview: COMPLETE despite loop pattern - clearing loop_detected")
                 scratchpad.pop("loop_detected", None)
             logger.info("--- Exit Interview: Task validated as COMPLETE. Routing to END. ---")
+            self._record_im_decision(state, "after_exit_interview", CoreSpecialist.END.value,
+                                     "COMPLETE (validated)")
             return CoreSpecialist.END.value
 
         # Task incomplete
@@ -391,16 +419,22 @@ class GraphOrchestrator:
             scratchpad["termination_reason"] = termination_reason
             scratchpad.pop("loop_detected", None)  # Consumed
             logger.info("--- Exit Interview: INCOMPLETE + loop confirmed. Aborting. ---")
+            self._record_im_decision(state, "after_exit_interview", CoreSpecialist.END.value,
+                                     f"INCOMPLETE + loop confirmed ({sequence} x{cycles}), aborting")
             return CoreSpecialist.END.value
 
         # Normal incomplete - route through Facilitator to refresh context before retry
         # Facilitator re-executes triage actions, updating gathered_context with current state
         if "facilitator_specialist" in self.specialists:
             logger.info("--- Exit Interview: Task INCOMPLETE. Routing to Facilitator to refresh context. ---")
+            self._record_im_decision(state, "after_exit_interview", "facilitator_specialist",
+                                     "INCOMPLETE, refreshing context via Facilitator")
             return "facilitator_specialist"
 
         # Fallback if no facilitator (shouldn't happen in normal config)
         logger.info("--- Exit Interview: Task INCOMPLETE. Routing back to Router. ---")
+        self._record_im_decision(state, "after_exit_interview", CoreSpecialist.ROUTER.value,
+                                 "INCOMPLETE, no facilitator available")
         return CoreSpecialist.ROUTER.value
 
     # =========================================================================
@@ -427,6 +461,8 @@ class GraphOrchestrator:
         # Issue #161: Check for circuit breaker stabilization action first
         stabilization_target = self._check_stabilization_action(state)
         if stabilization_target:
+            self._record_im_decision(state, "classify_interrupt", stabilization_target,
+                                     "circuit breaker stabilization")
             return stabilization_target
 
         scratchpad = state.get("scratchpad", {})
@@ -435,6 +471,8 @@ class GraphOrchestrator:
         # === TERMINAL: Immediate end, no evaluation ===
         if scratchpad.get("user_abort"):
             logger.info("classify_interrupt: TERMINAL (user_abort) → End")
+            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.END.value,
+                                     "TERMINAL: user_abort")
             return CoreSpecialist.END.value
 
         # === BENIGN: Route through Exit Interview for feedback ===
@@ -443,31 +481,47 @@ class GraphOrchestrator:
         # Flow: EI → after_exit_interview → facilitator → router → back to specialist
         if artifacts.get("max_iterations_exceeded") or scratchpad.get("max_iterations_exceeded"):
             logger.info("classify_interrupt: BENIGN (max_iterations) → Exit Interview for feedback")
+            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.EXIT_INTERVIEW.value,
+                                     "BENIGN: max_iterations_exceeded")
             return CoreSpecialist.EXIT_INTERVIEW.value
 
         # context_overflow: Context bloat - compress and continue
         if scratchpad.get("context_overflow"):
             if "facilitator_specialist" in self.specialists:
                 logger.info("classify_interrupt: BENIGN (context_overflow) → Facilitator (compress and continue)")
+                self._record_im_decision(state, "classify_interrupt", "facilitator_specialist",
+                                         "BENIGN: context_overflow")
                 return "facilitator_specialist"
             logger.info("classify_interrupt: BENIGN (context_overflow) → Router (no facilitator)")
+            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.ROUTER.value,
+                                     "BENIGN: context_overflow, no facilitator")
             return CoreSpecialist.ROUTER.value
 
         # === PATHOLOGICAL: Needs LLM judgment on recoverability ===
         # Issue #161: All pathological paths use guarded routing with fallback chain
         if scratchpad.get("stagnation_detected"):
-            return self._route_pathological("stagnation_detected")
+            result = self._route_pathological("stagnation_detected")
+            self._record_im_decision(state, "classify_interrupt", result,
+                                     "PATHOLOGICAL: stagnation_detected")
+            return result
 
         if scratchpad.get("tool_error"):
-            return self._route_pathological("tool_error")
+            result = self._route_pathological("tool_error")
+            self._record_im_decision(state, "classify_interrupt", result,
+                                     "PATHOLOGICAL: tool_error")
+            return result
 
         # === NORMAL FLOW: No interrupt ===
         # Produced artifacts? Exit Interview evaluates semantic completion
         if artifacts:
             logger.info("classify_interrupt: Normal flow, artifacts present → Exit Interview")
+            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.EXIT_INTERVIEW.value,
+                                     "normal flow, artifacts present")
             return CoreSpecialist.EXIT_INTERVIEW.value
 
         # No artifacts, no interrupt → Router picks next specialist
         logger.info("classify_interrupt: Normal flow, no artifacts → Router")
+        self._record_im_decision(state, "classify_interrupt", CoreSpecialist.ROUTER.value,
+                                 "normal flow, no artifacts")
         return CoreSpecialist.ROUTER.value
 

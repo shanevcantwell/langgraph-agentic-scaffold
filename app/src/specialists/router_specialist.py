@@ -15,6 +15,7 @@ from ..llm.tracing import (
     flush_adapter_traces,
     build_specialist_turn_trace,
 )
+from ..utils.state_serializer import build_timeline_entry
 
 logger = logging.getLogger(__name__)
 
@@ -476,7 +477,9 @@ class RouterSpecialist(BaseSpecialist):
                 routing_decision=str(next_specialist_name) if not isinstance(next_specialist_name, str) else next_specialist_name,
             )
 
-        return {
+        # Build state timeline entry (Router bypasses SafeExecutor, so builds its own)
+        routing_history = state.get("routing_history", [])
+        update_dict = {
             "messages": [ai_message],
             "next_specialist": next_specialist_name,
             "turn_count": turn_count,
@@ -485,3 +488,20 @@ class RouterSpecialist(BaseSpecialist):
             "routing_history": [self.specialist_name],  # Issue #41: Router now visible in history
             "llm_traces": [turn_trace.model_dump()] if turn_trace else [],  # Issue #41: Capture LLM traces
         }
+
+        timeline_entry = build_timeline_entry(
+            state=state,
+            update=update_dict,
+            specialist_name=self.specialist_name,
+            step=len(routing_history),
+            system_prompt=getattr(self.llm_adapter, 'system_prompt', None),
+            assembled_prompt=turn_trace.assembled_prompt if turn_trace else None,
+            model_id=turn_trace.model_id if turn_trace else None,
+        )
+        update_dict["state_timeline"] = [timeline_entry]
+
+        # Clear im_decision after consuming it for the timeline entry
+        if state.get("scratchpad", {}).get("im_decision"):
+            scratchpad_update["im_decision"] = None
+
+        return update_dict

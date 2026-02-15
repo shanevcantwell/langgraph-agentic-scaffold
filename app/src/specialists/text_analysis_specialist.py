@@ -362,6 +362,9 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 }),
                 "gathered_context": self._append_to_gathered_context(state, summary_blurb),
             },
+            "scratchpad": {
+                "react_trace": trace,
+            },
         }
 
     def _build_error_result(
@@ -380,6 +383,9 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 }),
                 "gathered_context": self._append_to_gathered_context(state, summary_blurb),
             },
+            "scratchpad": {
+                "react_trace": trace,
+            },
         }
 
     def _build_partial_result(
@@ -397,6 +403,9 @@ class TextAnalysisSpecialist(BaseSpecialist):
                     "iterations": max_iter,
                 }),
                 "gathered_context": self._append_to_gathered_context(state, summary_blurb),
+            },
+            "scratchpad": {
+                "react_trace": trace,
             },
         }
 
