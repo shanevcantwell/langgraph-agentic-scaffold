@@ -77,7 +77,7 @@ def _browse_artifact_tool(captured_artifacts: dict, key: str) -> str:
     if key not in captured_artifacts:
         return f"Error: Artifact '{key}' not found. Use list_artifacts to see available keys."
     value = captured_artifacts[key]
-    return ExitInterviewSpecialist._preview_artifact_value(value, max_len=2000)
+    return ExitInterviewSpecialist._format_artifact_value(value)
 
 
 # ─── Tool parameter schemas ───────────────────────────────────────────────────
@@ -610,9 +610,9 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
             summaries.append(f"[{msg_type}]: {content}")
         return "\n".join(summaries)
 
-    def _build_artifact_summary(self, artifacts: dict, max_preview: int = 300) -> str:
+    def _build_artifact_summary(self, artifacts: dict) -> str:
         """
-        Build artifact summary with value previews for completion evaluation (#155).
+        Build artifact summary for completion evaluation (#155, #183).
 
         Used by the single-pass LLM fallback path. The react_step path uses
         list_artifacts/browse_artifact tools instead.
@@ -624,45 +624,34 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
             if key.startswith("_") or key in excluded:
                 continue
 
-            preview = self._preview_artifact_value(value, max_preview)
-            lines.append(f"- **{key}**: {preview}")
+            formatted = self._format_artifact_value(value)
+            lines.append(f"- **{key}**: {formatted}")
 
         return "\n".join(lines) if lines else "[No artifacts produced]"
 
     @staticmethod
-    def _preview_artifact_value(value, max_len: int = 300) -> str:
-        """Produce a truncated text preview of an artifact value."""
+    def _format_artifact_value(value) -> str:
+        """Format an artifact value for evaluation. No truncation (#183)."""
         if value is None:
             return "(empty)"
         if isinstance(value, bytes):
             return f"(binary, {len(value)} bytes)"
         if isinstance(value, str):
-            if len(value) <= max_len:
-                return value
-            return value[:max_len] + "..."
+            return value
         if isinstance(value, dict):
             try:
-                text = _json.dumps(value, default=str)
-                if len(text) <= max_len:
-                    return text
-                return text[:max_len] + "..."
+                return _json.dumps(value, indent=2, default=str)
             except (TypeError, ValueError):
-                return str(value)[:max_len] + "..."
+                return str(value)
         if isinstance(value, list):
-            text = f"(list, {len(value)} items)"
-            if value:
-                first = str(value[0])
-                if len(first) > 80:
-                    first = first[:80] + "..."
-                text += f" first: {first}"
-            return text
-        text = str(value)
-        if len(text) > max_len:
-            return text[:max_len] + "..."
-        return text
+            try:
+                return _json.dumps(value, indent=2, default=str)
+            except (TypeError, ValueError):
+                return str(value)
+        return str(value)
 
     def _format_exit_plan(self, exit_plan: dict) -> str:
-        """Format the exit_plan artifact for prompts."""
+        """Format the exit_plan artifact for prompts. No truncation (#183)."""
         parts = []
         if "plan_summary" in exit_plan:
             parts.append(f"**Plan Summary:** {exit_plan['plan_summary']}")
@@ -671,20 +660,20 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
         if "execution_steps" in exit_plan:
             steps = exit_plan["execution_steps"]
             if isinstance(steps, list):
-                steps_str = "\n".join(f"  - {s}" for s in steps[:10])
+                steps_str = "\n".join(f"  - {s}" for s in steps)
                 parts.append(f"**Verification Steps:**\n{steps_str}")
         if "steps" in exit_plan:
             steps = exit_plan["steps"]
             if isinstance(steps, list):
-                steps_str = "\n".join(f"  - {s}" for s in steps[:10])
+                steps_str = "\n".join(f"  - {s}" for s in steps)
                 parts.append(f"**Planned Steps:**\n{steps_str}")
         if "expected_artifacts" in exit_plan:
             parts.append(f"**Expected Artifacts:** {exit_plan['expected_artifacts']}")
         if not parts:
             try:
-                parts.append(f"**Full Plan:**\n{_json.dumps(exit_plan, indent=2, default=str)[:2000]}")
+                parts.append(f"**Full Plan:**\n{_json.dumps(exit_plan, indent=2, default=str)}")
             except (TypeError, ValueError):
-                parts.append(f"**Full Plan:** {str(exit_plan)[:2000]}")
+                parts.append(f"**Full Plan:** {str(exit_plan)}")
         return "\n\n".join(parts)
 
     def _get_default_prompt(self) -> str:

@@ -206,18 +206,46 @@ class FacilitatorSpecialist(BaseSpecialist):
         if is_benign_continuation:
             # BENIGN continuation: PD hit max_iterations but was making progress.
             # Clear the flag so PD gets another pass. PD starts fresh (trace=[]).
+            # Surface prior work so Router has context for correct routing
+            # and PD knows what it already did (without this, Router routes
+            # to wrong specialist because gathered_context has no PD info).
             logger.info(
                 f"Facilitator: BENIGN continuation "
                 f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
             )
-            return {
+
+            scratchpad = state.get("scratchpad", {})
+            context_parts = []
+
+            task_plan = artifacts.get("task_plan", {})
+            if task_plan.get("plan_summary"):
+                context_parts.append(f"### Task Strategy\n{task_plan['plan_summary']}")
+
+            if exit_interview_result and not exit_interview_result.get("is_complete", True):
+                missing = exit_interview_result.get("missing_elements", "")
+                if missing:
+                    feedback = self._format_exit_interview_feedback(exit_interview_result)
+                    context_parts.append(feedback)
+
+            activity = scratchpad.get("specialist_activity", [])
+            if activity:
+                knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
+                context_parts.append(knowledge)
+
+            result = {
                 "artifacts": {
-                    "max_iterations_exceeded": False,  # Clear the flag
+                    "max_iterations_exceeded": False,
                 },
                 "scratchpad": {
                     "facilitator_complete": True
                 }
             }
+
+            if context_parts:
+                result["artifacts"]["gathered_context"] = "\n\n".join(context_parts)
+                logger.info("Facilitator: Added continuation context to BENIGN return")
+
+            return result
 
         # Load triage actions from scratchpad
         scratchpad = state.get("scratchpad", {})

@@ -409,15 +409,14 @@ class TestArtifactSummary:
         summary = exit_interview._build_artifact_summary({})
         assert summary == "[No artifacts produced]"
 
-    def test_artifact_summary_truncates_long_values(self, exit_interview):
-        """Long artifact values should be truncated."""
+    def test_artifact_summary_preserves_full_values(self, exit_interview):
+        """Artifact values must not be truncated (#183)."""
         artifacts = {
             "big_result": "x" * 1000,
         }
 
-        summary = exit_interview._build_artifact_summary(artifacts, max_preview=100)
-        assert len(summary) < 200  # Truncated, not 1000 chars
-        assert "..." in summary
+        summary = exit_interview._build_artifact_summary(artifacts)
+        assert "x" * 1000 in summary  # Full value preserved
 
     def test_artifact_summary_handles_binary(self, exit_interview):
         """Binary artifacts should show size, not content."""

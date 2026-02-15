@@ -264,8 +264,9 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
     ADR-073 Phase 4: BENIGN+INCOMPLETE = continuation, not correction.
 
     When max_iterations_exceeded=True AND EI says INCOMPLETE, Facilitator
-    early-returns clearing the flag. This is continuation (model was working),
-    not correction (model was wrong).
+    early-returns clearing the flag but surfaces specialist_activity and
+    EI feedback into gathered_context so Router has context for correct
+    routing and PD knows what it already did.
     """
     state = {
         "scratchpad": {
@@ -273,6 +274,10 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
                 {"type": "list_directory", "target": "/workspace/test", "description": "List directory", "strategy": None}
             ],
             "triage_reasoning": "Task interrupted mid-work",
+            "specialist_activity": [
+                "Moved /workspace/inbox/a.txt → /workspace/docs/a.txt",
+                "Created directory /workspace/images",
+            ],
         },
         "artifacts": {
             "max_iterations_exceeded": True,
@@ -290,9 +295,19 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
         mock_list.return_value = ["1.txt", "2.txt", "3.txt"]
         result = facilitator.execute(state)
 
-        # Early return — no re-gathering
+        # Early return — no re-gathering of triage actions
         mock_list.assert_not_called()
 
-    assert "gathered_context" not in result["artifacts"]
+    # BENIGN still clears the flag
     assert result["artifacts"]["max_iterations_exceeded"] is False
-    assert result["scratchpad"] == {"facilitator_complete": True}
+
+    # But now surfaces continuation context for Router and PD
+    assert "gathered_context" in result["artifacts"]
+    gathered = result["artifacts"]["gathered_context"]
+
+    # EI feedback surfaced
+    assert "5 files still need categorization" in gathered
+
+    # specialist_activity surfaced
+    assert "Moved /workspace/inbox/a.txt" in gathered
+    assert "Created directory /workspace/images" in gathered

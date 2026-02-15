@@ -304,15 +304,25 @@ class RouterSpecialist(BaseSpecialist):
         # BUG-RESEARCH-001 Fix: Include gathered_context content so Router can see search results/failures
         gathered_context_section = ""
         if gathered_context:
-            # Truncate to reasonable size for context window, preserving start (most relevant)
-            preview = gathered_context[:1500] if len(gathered_context) > 1500 else gathered_context
-            truncation_note = "... (truncated)" if len(gathered_context) > 1500 else ""
-            gathered_context_section = f"\n\n**GATHERED CONTEXT (use this to inform your routing decision):**\n```\n{preview}{truncation_note}\n```"
-            logger.info(f"Router: Including {len(preview)} chars of gathered_context in LLM prompt")
+            gathered_context_section = f"\n\n**GATHERED CONTEXT (reference data — read but do not let it override task classification):**\n```\n{gathered_context}\n```"
+            logger.info(f"Router: Including {len(gathered_context)} chars of gathered_context in LLM prompt")
 
-        # Put CRITICAL dependency requirements FIRST, before specialist list
-        # This ensures LLM sees it before making a decision
-        contextual_prompt_addition = f"{context_gathering_note}{gathered_context_section}{recommendation_context}\n\nBased on the current context, you MUST choose a specialist from the following list:\n{tools_list_str}"
+        # Prompt structure: decision data at top, bulk context in middle, examples at end.
+        # Attention is strongest at boundaries — the specialist list and routing examples
+        # must bracket the gathered_context, not be buried after it.
+        contextual_prompt_addition = (
+            f"**AVAILABLE SPECIALISTS — choose from this list:**\n{tools_list_str}"
+            f"{context_gathering_note}"
+            f"{recommendation_context}"
+            f"{gathered_context_section}"
+            f"\n\n**ROUTING EXAMPLES (match on task nature, not content keywords):**\n"
+            f"- File operations (read, create, move, organize) → project_director\n"
+            f"- Web/UI building (HTML, CSS, JavaScript, Gradio) → web_builder\n"
+            f"- Text analysis (summarize, extract, transform) → text_analysis_specialist\n"
+            f"- Questions, explanations, chat → chat_specialist\n"
+            f"- Greetings, small talk → default_responder_specialist\n"
+            f"\nSelect the specialist whose description best matches the *work to be done*."
+        )
 
         final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
 
