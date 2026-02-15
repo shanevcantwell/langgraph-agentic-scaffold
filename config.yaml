@@ -451,8 +451,6 @@ specialists:
         - react_step
       systems_architect:
         - create_plan
-      semantic-chunker:
-        - calculate_drift
       filesystem:
         - list_directory
         - read_file

@@ -410,6 +410,13 @@ class GraphBuilder:
         excluded_from_router = SpecialistCategories.get_router_exclusions(subgraph_exclusions, config_exclusions)
         available_specialists = {name: conf for name, conf in configs.items() if name not in excluded_from_router}
         router_instance.set_specialist_map(available_specialists)
+
+        # Inject routable specialist names into EI for DONE schema enum
+        ei_name = CoreSpecialist.EXIT_INTERVIEW.value
+        if ei_name in self.specialists and hasattr(self.specialists[ei_name], 'set_routable_specialists'):
+            self.specialists[ei_name].set_routable_specialists(list(available_specialists.keys()))
+            logger.info(f"ExitInterview: injected {len(available_specialists)} routable specialist names")
+
         standup_report = "\n\n--- AVAILABLE SPECIALISTS ---\n" + "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])
         feedback_instruction = (
             "\nIMPORTANT ROUTING INSTRUCTIONS:\n"

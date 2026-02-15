@@ -10,7 +10,7 @@ Respond with a JSON object:
 - `is_complete`: boolean
 - `reasoning`: string (1-2 sentences)
 - `missing_elements`: string (empty if complete)
-- `recommended_specialists`: list of strings (empty if complete)
+- `recommended_specialists`: list from [{routable_specialists}] (empty if complete)
 - `return_control`: "accumulate" | "delta" | "reset"
 
 Return control modes (for INCOMPLETE only):

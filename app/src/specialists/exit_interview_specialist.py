@@ -133,6 +133,12 @@ class ExitInterviewSpecialist(BaseSpecialist):
     and artifact tools directly instead of inferring from trace data.
     """
 
+    _routable_specialists: List[str] = []
+
+    def set_routable_specialists(self, names: List[str]) -> None:
+        """Inject the list of routable specialist names (from graph_builder)."""
+        self._routable_specialists = list(names)
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         """
         Evaluate if the task is semantically complete.
@@ -285,7 +291,8 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
         inspect workflow state. When satisfied, it calls DONE with its evaluation.
         """
         tools = self._build_verification_tools()
-        tool_schemas = build_tool_schemas(tools, _EI_TOOL_PARAMS)
+        tool_params = self._build_tool_params()
+        tool_schemas = build_tool_schemas(tools, tool_params)
         model_id = getattr(self.llm_adapter, 'model_name', "default") if self.llm_adapter else "default"
 
         system_prompt = self._build_verification_system_prompt()
@@ -312,6 +319,17 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
             call_counter = result.get("call_counter", call_counter + 1)
 
             if result.get("completed"):
+                required = exit_plan.get("required_components", [])
+                if not trace and required:
+                    components_str = ", ".join(required)
+                    logger.warning("ExitInterviewSpecialist: Model completed without calling any tools — retrying")
+                    trace.append({
+                        "iteration": iteration,
+                        "tool_call": {"id": "system", "name": "SYSTEM", "args": {}},
+                        "observation": f"You must first use at least one of: {components_str}",
+                        "success": False,
+                    })
+                    continue
                 return self._parse_verification_result(result)
 
             pending = result.get("pending_tool_calls", [])
@@ -382,6 +400,24 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
             ),
         }
 
+    def _build_tool_params(self) -> Dict[str, Dict[str, Any]]:
+        """Build tool param schemas, with dynamic enum for recommended_specialists."""
+        params = dict(_EI_TOOL_PARAMS)
+        if self._routable_specialists:
+            done_schema = dict(params["DONE"])
+            done_props = dict(done_schema["properties"])
+            done_props["recommended_specialists"] = {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": self._routable_specialists,
+                },
+                "description": "Which specialist(s) should handle missing work",
+            }
+            done_schema["properties"] = done_props
+            params["DONE"] = done_schema
+        return params
+
     def _dispatch_verification_tool(
         self, tool_name: str, tool_args: dict, tools: Dict[str, ToolDef]
     ) -> str:
@@ -403,7 +439,12 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
 
     def _build_verification_system_prompt(self) -> str:
         """System prompt for react_step verification mode."""
-        return """You are a verification evaluator. Follow the execution_steps in the Success Criteria below — they are your checklist.
+        specialist_note = ""
+        if self._routable_specialists:
+            names = ", ".join(self._routable_specialists)
+            specialist_note = f"\n  recommended_specialists must be from: {names}"
+
+        return f"""You are a verification evaluator. Follow the execution_steps in the Success Criteria below — they are your checklist.
 
 Execute the steps using your tools, then call DONE with your evaluation. You MUST call at least one tool before calling DONE.
 
@@ -413,7 +454,7 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
 - **read_file(path)** — Read file contents
 - **list_artifacts()** — List all workflow artifacts
 - **browse_artifact(key)** — Read a specific artifact
-- **DONE(is_complete, reasoning, missing_elements, recommended_specialists)** — Report your evaluation"""
+- **DONE(is_complete, reasoning, missing_elements, recommended_specialists)** — Report your evaluation.{specialist_note}"""
 
     def _build_verification_task_prompt(
         self,
@@ -519,7 +560,8 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
             exit_plan=exit_plan_summary,
             routing_history=", ".join(routing_history[-10:]) if routing_history else "[No routing history]",
             artifact_summary=artifact_summary or "[No artifacts produced]",
-            recent_summary=recent_summary or "[No recent activity]"
+            recent_summary=recent_summary or "[No recent activity]",
+            routable_specialists=", ".join(self._routable_specialists) if self._routable_specialists else "project_director, web_builder, text_analysis_specialist, chat_specialist",
         )
 
         request = StandardizedLLMRequest(
@@ -681,5 +723,5 @@ Return your evaluation as JSON with:
 - is_complete: boolean
 - reasoning: brief explanation (1-2 sentences)
 - missing_elements: what's still needed if incomplete (empty string if complete)
-- recommended_specialists: list of specialist(s) that should handle the missing work (e.g., ["project_director"] for file operations)
+- recommended_specialists: list from [{routable_specialists}] (empty if complete)
 """

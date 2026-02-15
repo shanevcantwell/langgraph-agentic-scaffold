@@ -13,7 +13,7 @@ class TriageRecommendations(BaseModel):
 class SystemPlan(BaseModel):
     """A model for the Systems Architect's technical plan."""
     plan_summary: str = Field(..., description="A concise, one-sentence summary of the plan.")
-    required_components: List[str] = Field(..., description="A list of technologies, libraries, or assets needed.")
+    required_components: List[str] = Field(default_factory=list, description="A list of technologies, libraries, or assets needed.")
     execution_steps: List[str] = Field(..., description="A list of detailed, sequential steps to implement the plan.")
 
 class CodeExecutionParams(BaseModel):
