@@ -67,6 +67,7 @@ def call_react_step(
     - pending_tool_calls (list): Tool calls to dispatch when not completed
     - call_counter (int): Updated counter for next call
     - thought (str|None): Model reasoning text
+    - done_args (dict|None): Raw DONE tool arguments when DONE was normalized
 
     On error, returns a dict with completed=True and final_response=error message.
     """
@@ -85,7 +86,8 @@ def call_react_step(
         },
         timeout=timeout,
     )
-    return parse_react_step_result(raw_result)
+    result = parse_react_step_result(raw_result)
+    return _normalize_done(result)
 
 
 def parse_react_step_result(raw_result) -> Any:
@@ -114,6 +116,38 @@ def parse_react_step_result(raw_result) -> Any:
     except json.JSONDecodeError:
         # Non-JSON text = plain text completion
         return {"completed": True, "final_response": text}
+
+
+def _normalize_done(result: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Normalize DONE tool calls so specialists never see them as pending.
+
+    prompt-prix adds DONE to tool schemas and may return it as a pending_tool_call
+    instead of setting completed=True. This extracts DONE, marks the result as
+    completed, and stores the raw args in done_args for specialist-specific parsing.
+
+    Specialists that need structured DONE data (e.g., EI's is_complete/reasoning)
+    read from done_args. Specialists that just need a final message get it from
+    final_response (hoisted from done_args if present).
+    """
+    if result.get("completed"):
+        return result
+
+    pending = result.get("pending_tool_calls", [])
+    for i, tc in enumerate(pending):
+        if tc.get("name") == "DONE":
+            args = tc.get("args", {})
+            result["completed"] = True
+            result["done_args"] = args
+            # Hoist final_response for backward compat (PD, TA use this)
+            if "final_response" in args:
+                result["final_response"] = args["final_response"]
+            # Remove DONE from pending (other tool calls in same batch are unlikely but safe)
+            result["pending_tool_calls"] = pending[:i] + pending[i+1:]
+            logger.info(f"Normalized DONE tool call to completed=True (args: {list(args.keys())})")
+            break
+
+    return result
 
 
 def build_tool_schemas(

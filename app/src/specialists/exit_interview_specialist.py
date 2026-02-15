@@ -402,33 +402,17 @@ Example verification steps:
 
     def _build_verification_system_prompt(self) -> str:
         """System prompt for react_step verification mode."""
-        return """You are a verification evaluator for an agentic workflow system.
+        return """You are a verification evaluator. Follow the execution_steps in the Success Criteria below — they are your checklist.
 
-Your job is to VERIFY whether the workflow actually completed the user's task by inspecting real outcomes — not by reading claims in messages or trace data.
+Execute the steps using your tools, then call DONE with your evaluation. You MUST call at least one tool before calling DONE.
 
-## Available Tools
+## Tools
 
-- **list_directory(path)** — List files in a directory to verify file operations
-- **read_file(path)** — Read file contents to verify content correctness
-- **list_artifacts()** — List all artifacts in the workflow state
-- **browse_artifact(key)** — Read the content of a specific artifact
-- **DONE(is_complete, reasoning, missing_elements, recommended_specialists)** — Signal your verification is complete
-
-## Verification Process
-
-1. Review the user request and success criteria below
-2. Use tools to verify outcomes:
-   - For file operations: list directories, read files to check content
-   - For analysis tasks: browse artifacts to check results
-   - For research tasks: browse artifacts to check gathered information
-3. Call DONE with your evaluation when verification is complete
-
-## Rules
-
-- VERIFY, don't trust. Check the actual filesystem state for file operations.
-- Be efficient. You typically need 2-4 tool calls to verify.
-- Call DONE as soon as you have enough evidence to decide.
-- Default to project_director in recommended_specialists for file operation gaps."""
+- **list_directory(path)** — List files in a directory
+- **read_file(path)** — Read file contents
+- **list_artifacts()** — List all workflow artifacts
+- **browse_artifact(key)** — Read a specific artifact
+- **DONE(is_complete, reasoning, missing_elements, recommended_specialists)** — Report your evaluation"""
 
     def _build_verification_task_prompt(
         self,
@@ -466,6 +450,11 @@ Your job is to VERIFY whether the workflow actually completed the user's task by
 
     def _parse_verification_result(self, result: dict) -> CompletionEvaluation:
         """Parse a completed react_step result into CompletionEvaluation."""
+        # Normalized DONE args take priority (structured data from DONE tool call)
+        done_args = result.get("done_args")
+        if done_args and "is_complete" in done_args:
+            return self._parse_done_tool(done_args)
+
         final_response = result.get("final_response", "")
         if not final_response:
             return CompletionEvaluation(
