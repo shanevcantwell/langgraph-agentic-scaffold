@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Project Director's role as the autonomous ReAct agent in LAS.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-12 (#170 context entity cleanup, #162 react_step migration)
+**Updated:** 2026-02-15 (resume_trace → specialist_activity/react_trace, ADR-073 Phase 4, #184 state_timeline)
 
 ---
 
@@ -14,7 +14,7 @@ Key characteristics:
 - **ReAct loop via prompt-prix MCP** — PD owns the loop and tool dispatch; prompt-prix owns the LLM call (#162)
 - **Context consumer, not producer** — receives all context via `gathered_context` from Facilitator (#170)
 - **Fresh trace each invocation** — no resumption of prior traces on retry (#170)
-- **Writes resume_trace** — the sole artifact PD produces for downstream consumption (EI, Facilitator)
+- **Writes `specialist_activity` + `react_trace` to scratchpad** — observability signals for Facilitator (retry context) and state_timeline (archive/SSE)
 - **Stagnation detection** — cycle detection catches repeating tool call patterns
 - **Filesystem enrichment** — error hints and path disambiguation for model self-correction
 
@@ -43,15 +43,15 @@ classify_interrupt --> ExitInterview
 ### Retry Path
 
 ```
-PD writes resume_trace to artifacts
+PD writes specialist_activity to scratchpad
     |
-classify_interrupt --> ExitInterview (reads resume_trace for operation inventory)
+classify_interrupt --> ExitInterview
     |
     [INCOMPLETE]
     |
 Facilitator:
   1. Rebuilds gathered_context fresh
-  2. Extracts write operations from resume_trace (_extract_trace_knowledge)
+  2. Reads specialist_activity list from scratchpad (human-readable write operations)
   3. Adds EI feedback (missing_elements + reasoning)
     |
 Router --> PD:
@@ -81,11 +81,12 @@ PD and Facilitator have a strict division of responsibility (#170):
 | Data | Writer | Reader | Mechanism |
 |------|--------|--------|-----------|
 | `gathered_context` | Facilitator | PD | `artifacts["gathered_context"]` injected into task prompt |
-| `resume_trace` | PD | EI, Facilitator | `artifacts["resume_trace"]` via `operator.ior` merge |
+| `specialist_activity` | PD | Facilitator | `scratchpad["specialist_activity"]` — human-readable write operation summary |
+| `react_trace` | PD | state_timeline | `scratchpad["react_trace"]` — full tool call + observation history (observability only) |
 | `user_request` | Triage | PD | `artifacts["user_request"]` — the original goal |
 | `max_iterations_exceeded` | PD | Facilitator | `artifacts["max_iterations_exceeded"]` — triggers BENIGN path |
 
-**PD never reads its own prior `resume_trace`.** Facilitator reads it and distills write operations into `gathered_context` as "Prior Work Completed." This prevents the stale-trace problem where the model re-feeds its prior conversation and thinks it already finished.
+**PD never reads its own prior output.** Facilitator reads `specialist_activity` from scratchpad and surfaces it in `gathered_context` as "Prior Work Completed." This prevents the stale-trace problem where the model re-feeds its prior conversation and thinks it already finished.
 
 **PD never writes to `gathered_context`.** This is Facilitator's exclusive domain.
 
@@ -429,13 +430,18 @@ period, _pattern = detect_cycle_with_pattern(
 
 If a repeating pattern of length N is found repeated 3+ times, PD exits with `_build_stagnation_result()`. The stagnation message includes the repeated tool name, args, and a trace summary.
 
-Stagnation artifacts:
+Stagnation output:
 ```python
+# artifacts (state-visible signals):
 {
-    "resume_trace": trace,
     "stagnation_detected": True,
     "stagnation_tool": "read_file",
     "stagnation_args": {"path": "/workspace/test/1.txt"},
+}
+# scratchpad (observability):
+{
+    "specialist_activity": ["Read /workspace/test/1.txt", ...],
+    "react_trace": [{"tool_call": {...}, "observation": "...", "success": True}, ...],
 }
 ```
 
@@ -445,14 +451,14 @@ Stagnation artifacts:
 
 Every PD invocation ends via exactly one of four result builders:
 
-| Exit Path | Trigger | Key Artifacts | Message |
-|-----------|---------|---------------|---------|
-| **Success** | Model chooses `DONE` | `resume_trace` | Model's `final_response` |
-| **Error** | Exception or infra failure | `resume_trace` | Error description |
-| **Stagnation** | Cycle detected in trace | `resume_trace`, `stagnation_detected`, `stagnation_tool`, `stagnation_args` | Repeated pattern + trace summary |
-| **Partial** | `max_iterations` exceeded | `resume_trace`, `max_iterations_exceeded: True` | Tool counts + last 10 actions |
+| Exit Path | Trigger | Artifacts | Scratchpad | Message |
+|-----------|---------|-----------|------------|---------|
+| **Success** | Model chooses `DONE` | — | `specialist_activity`, `react_trace` | Model's `final_response` |
+| **Error** | Exception or infra failure | — | `specialist_activity`, `react_trace` | Error description |
+| **Stagnation** | Cycle detected in trace | `stagnation_detected`, `stagnation_tool`, `stagnation_args` | `specialist_activity`, `react_trace` | Repeated pattern + trace summary |
+| **Partial** | `max_iterations` exceeded | `max_iterations_exceeded: True` | `specialist_activity`, `react_trace` | Tool counts + last 10 actions |
 
-All four paths write `resume_trace` to artifacts. This is PD's primary output — it's the operation inventory that EI evaluates and Facilitator distills.
+All four paths write `specialist_activity` (human-readable) and `react_trace` (full tool history) to scratchpad. `specialist_activity` is PD's primary output for downstream consumption — Facilitator reads it to build "Prior Work Completed" context on retry. `react_trace` is observability-only (state_timeline, archive).
 
 ### Partial Result and BENIGN Continuation
 
@@ -491,14 +497,14 @@ In practice, PD results flow through the standard hub-and-spoke: PD -> classify_
 specialists:
   project_director:
     is_enabled: true
-    type: "hybrid"
+    type: "llm"
     prompt_file: "project_director_prompt.md"
-    description: "Emergent Deep Research Director"
-    max_iterations: 15
+    description: "Executes multi-step tasks autonomously..."
+    max_iterations: 50
     llm_config: "model_name_here"
 ```
 
-`max_iterations` controls the react_step loop budget. Default is 15 if not specified.
+`max_iterations` controls the react_step loop budget. Currently set to 50 in config.yaml.
 
 ### Dependency Injection
 
@@ -512,12 +518,13 @@ specialists:
 
 Before #170, PD maintained its own `ProjectContext` with `knowledge_base`, `open_questions`, and `project_state`. It also resumed prior traces via `_load_resume_trace()`.
 
-| Before (#170) | After (#170) |
-|----------------|--------------|
+| Before (#170) | After (#170 + ADR-073) |
+|----------------|------------------------|
 | `ProjectContext` with `knowledge_base` list | Deleted — Facilitator curates all context |
 | `_get_or_init_context()` from artifacts | Goal from `artifacts["user_request"]` |
-| `_update_context_from_trace()` duplicated entries | `Facilitator._extract_trace_knowledge()` — write ops only |
+| `_update_context_from_trace()` duplicated entries | `specialist_activity` in scratchpad — write ops only |
 | `_load_resume_trace()` resumed stale trace | `trace = []` fresh start |
+| `resume_trace` artifact in state | `specialist_activity` + `react_trace` in scratchpad (ADR-073 Phase 3-4) |
 | `project_context` artifact in state | No private context artifacts |
 | `research_status`, `iterations_used` artifacts | Removed — cosmetic, not consumed |
 | `gathered_context` tripled on retry | Facilitator rebuilds fresh each invocation |
@@ -530,18 +537,25 @@ Before #170, PD maintained its own `ProjectContext` with `knowledge_base`, `open
 # Check PD execution in routing history
 unzip -p ./logs/archive/run_*.zip manifest.json | jq '.routing_history'
 
-# Check resume_trace (PD's tool call log)
-unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.resume_trace'
+# Check specialist_activity (human-readable work summary)
+unzip -p ./logs/archive/run_*.zip final_state.json | jq '.scratchpad.specialist_activity'
+
+# Check react_trace (full tool call + observation history)
+unzip -p ./logs/archive/run_*.zip final_state.json | jq '.scratchpad.react_trace'
+
+# Check state_timeline for PD's entry (includes react_trace + prompts)
+unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep project_director | jq .
 
 # Check what context PD received
 unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_context'
 ```
 
-**Key things to check post-#170:**
+**Key things to check:**
 - No `project_context` artifact in final state
-- `resume_trace` is a single-invocation trace (iteration numbers start at 0)
+- `specialist_activity` is a list of human-readable strings (write operations)
+- `react_trace` captures full tool call history with observations
 - `gathered_context` contains "Prior Work Completed" section on retry (not tripled)
-- PD appears in `llm_traces.jsonl` (unlike Facilitator, PD triggers LLM calls via react_step)
+- PD appears in `llm_traces.jsonl` and `state_timeline.jsonl`
 
 ---
 
@@ -568,7 +582,7 @@ The Project Director is a **ReAct loop controller** that:
 3. Dispatches tool calls to filesystem, terminal, and web MCP services
 4. Applies filesystem enrichments (error hints, path disambiguation) to help the model self-correct
 5. Detects stagnation via cycle detection on tool call signatures
-6. Writes `resume_trace` as its primary output artifact for EI and Facilitator consumption
+6. Writes `specialist_activity` (human-readable) and `react_trace` (full tool history) to scratchpad
 7. Starts fresh each invocation (`trace = []`) — Facilitator provides retry knowledge via `gathered_context`
 
-PD is a **context consumer** (#170). It reads `gathered_context` and writes `resume_trace`. Facilitator is the sole writer of context; PD is the sole writer of execution traces.
+PD is a **context consumer** (#170). It reads `gathered_context` and writes execution activity to scratchpad. Facilitator is the sole writer of context; PD is the sole writer of execution activity.

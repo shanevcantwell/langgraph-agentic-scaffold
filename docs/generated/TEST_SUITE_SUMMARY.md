@@ -399,8 +399,8 @@
   - *Verify ProgenitorBravo writes to artifacts, not messages.*
 - **`test_synthesizer_combines_progenitor_responses`**
   - *Verify TieredSynthesizer combines alpha and bravo responses.*
-- **`test_triage_architect_creates_context_plan`**
-  - *Verify TriageArchitect creates context_plan artifact.*
+- **`test_triage_architect_writes_scratchpad`**
+  - *Verify TriageArchitect writes triage_actions and triage_reasoning to scratchpad.*
 - **`test_router_produces_routing_decision`**
   - *Verify RouterSpecialist produces routing decision.*
 - **`test_archiver_creates_archive_package`**
@@ -959,8 +959,8 @@
   - *Artifact summary should include truncated value previews.*
 - **`test_artifact_summary_handles_empty_artifacts`**
   - *Empty artifacts should return a placeholder.*
-- **`test_artifact_summary_truncates_long_values`**
-  - *Long artifact values should be truncated.*
+- **`test_artifact_summary_preserves_full_values`**
+  - *Artifact values must not be truncated (#183).*
 - **`test_artifact_summary_handles_binary`**
   - *Binary artifacts should show size, not content.*
 - **`test_artifact_preview_passed_to_llm_prompt`**
@@ -1047,7 +1047,7 @@
   - *Issue #167: Curated feedback should contain only missing_elements and reasoning,*
 - **`test_facilitator_skips_exit_interview_feedback_when_complete`**
   - *Issue #100: Facilitator should NOT add feedback when task was marked complete.*
-- **`test_context_plan_reasoning_in_gathered_context`**
+- **`test_task_plan_strategy_in_gathered_context`**
   - *Issue #167: Task strategy should appear in gathered_context so PD*
 - **`test_facilitator_surfaces_specialist_activity_on_retry`**
   - *ADR-073 Phase 3: On EI retry, Facilitator reads specialist_activity from*

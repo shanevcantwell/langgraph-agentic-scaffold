@@ -231,7 +231,7 @@ def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):
     assert "Retry Context" not in gathered
 
 
-def test_context_plan_reasoning_in_gathered_context(facilitator):
+def test_task_plan_strategy_in_gathered_context(facilitator):
     """
     Issue #167: Task strategy should appear in gathered_context so PD
     understands the strategic intent behind the task.

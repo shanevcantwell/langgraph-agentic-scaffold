@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-12 (context_plan artifact eliminated — reads triage_actions from scratchpad)
+**Updated:** 2026-02-15 (resume_trace → specialist_activity, BENIGN path updated, ADR-073 trace notes)
 
 ---
 
@@ -102,7 +102,7 @@ Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
 
 1. **Task Strategy** — `task_plan.plan_summary` from SA (switched from Triage reasoning — SA reasons about the full request, Triage's reasoning only explains context-gathering choices)
 2. **EI Retry Feedback** — curated `missing_elements` + `reasoning` (only on retry, #167)
-3. **Prior Work Knowledge** — extracted write operations from `resume_trace` (only on retry, #170)
+3. **Prior Work Knowledge** — extracted from `specialist_activity` in scratchpad (only on retry, #170)
 4. **WIP Summary** — work-in-progress for BENIGN interrupts (only when `max_iterations_exceeded` without EI, #108)
 5. **Plan Action Results** — RESEARCH, READ_FILE, SUMMARIZE, LIST_DIRECTORY, ASK_USER
 
@@ -162,20 +162,22 @@ Before #170, Facilitator accumulated context: `existing_context + "\n\n---\n\n" 
 
 Each invocation rebuilds `gathered_context` from scratch using current plan actions and current state. No reading of prior `gathered_context` from artifacts.
 
-### Trace Knowledge Extraction
+### Prior Work from Scratchpad
 
-On retry (EI said INCOMPLETE), Facilitator reads `resume_trace` from artifacts and extracts a knowledge summary of **write operations only** (create_directory, move_file, write_file). Read operations are omitted because they're cheap to redo and re-reading ensures the model sees current filesystem state.
+On retry (EI said INCOMPLETE), Facilitator reads `specialist_activity` from scratchpad — a list of human-readable strings summarizing write operations (create_directory, move_file, etc.). PD produces this list via `_summarize_activity()` (ADR-073 Phase 3). No extraction or parsing needed — it's already formatted.
 
 ```python
-def _extract_trace_knowledge(self, artifacts: dict) -> Optional[str]:
-    trace = artifacts.get("resume_trace", [])
-    # Only successful write operations
-    # Returns: "### Prior Work Completed\n- Created directory ...\n- Moved ..."
+# facilitator_specialist.py
+activity = scratchpad.get("specialist_activity", [])
+if activity:
+    knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
 ```
 
 ### Why Not Pass the Full Trace?
 
 PD starts with `trace = []` each invocation (#170 Step 3). The model gets a fresh start but knows what write operations already succeeded via `gathered_context`. This avoids the stale-trace problem where the model re-feeds its prior conversation and thinks it already finished.
+
+The full react trace is captured separately to `scratchpad["react_trace"]` for observability (state_timeline, archive) — but Facilitator never reads it. Only the human-readable activity summary enters `gathered_context`.
 
 ---
 
@@ -187,12 +189,13 @@ When `max_iterations_exceeded` is True, the model was working correctly but ran 
 if is_benign_continuation:
     return {
         "artifacts": {
-            "resume_trace": resume_trace,          # Already in artifacts from PD
             "max_iterations_exceeded": False,       # Clear the flag
         },
         "scratchpad": {"facilitator_complete": True}
     }
 ```
+
+On BENIGN, Facilitator also surfaces prior work context (specialist_activity, WIP summary) so Router can make an informed continuation decision.
 
 Two scenarios qualify as BENIGN:
 1. **Pure BENIGN:** `max_exceeded` + no EI result (interrupted before EI ran)
@@ -282,7 +285,7 @@ except Exception as e:
 | Task completion loops | No | Graph: EI -> Facilitator -> Router -> PD |
 | Direct GraphState mutation | No | SafeExecutor/NodeExecutor |
 | Accumulate private context | No (#170) | Specialists produce artifacts; Facilitator curates |
-| Relay resume_trace | No (#170) | PD writes resume_trace directly via ior merge |
+| Write execution traces | No | PD writes `specialist_activity` to scratchpad; Facilitator reads it directly |
 
 ---
 
@@ -303,9 +306,9 @@ unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_con
 **Key things to check post-#170:**
 - `gathered_context` is NOT tripled (no `---` separators between duplicated blocks)
 - No `project_context` artifact in final state
-- `resume_trace` is written by PD, not Facilitator
+- `specialist_activity` is written by PD to scratchpad, not Facilitator
 
-**Note:** Facilitator is procedural, so `llm_traces.jsonl` will NOT contain Facilitator entries (no LLM calls).
+**Note:** Facilitator is procedural (no LLM calls), but SafeExecutor still emits traces for it in `llm_traces.jsonl` (ADR-073 Phase 1: traces for ALL specialists). The trace captures artifacts produced and scratchpad signals, not LLM request/response.
 
 ---
 
@@ -360,6 +363,6 @@ The Facilitator is a **procedural MCP orchestrator** that:
 2. Rebuilds `gathered_context` fresh each invocation (Task Strategy from SA's task_plan + EI feedback + trace knowledge + triage action results)
 3. Produces a unified `gathered_context` artifact for downstream specialists
 4. On BENIGN continuation (model was working, hit max_iterations), early returns with flag cleared
-5. Does NOT accumulate across invocations, relay resume_trace, or invoke LLMs
+5. Does NOT accumulate across invocations, write execution traces, or invoke LLMs
 
 Facilitator is the **sole writer of context** (#170). Specialists produce output artifacts; Facilitator curates them into `gathered_context`.

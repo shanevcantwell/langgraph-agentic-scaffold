@@ -381,7 +381,6 @@ specialists:
   facilitator_specialist:
     type: "procedural"
     description: "Orchestrates the execution of a ContextPlan by calling Researcher, FileSpecialist, and Summarizer via MCP."
-    requires_artifacts: ["context_plan"]
     tags: ["planning", "context_engineering"]
     # ADR-CORE-051: Read-only filesystem access for context gathering
     tools:

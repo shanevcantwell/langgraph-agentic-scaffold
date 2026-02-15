@@ -77,10 +77,8 @@ class TriageArchitect(BaseSpecialist):
                 context_plan = ContextPlan(**plan_args)
             except ValidationError as ve:
                 logger.warning(f"TriageArchitect: ContextPlan validation failed: {ve}")
-                # Salvage what we can — keep recommended_specialists if present
                 context_plan = ContextPlan(
                     reasoning=plan_args.get("reasoning", "Validation fallback"),
-                    recommended_specialists=plan_args.get("recommended_specialists", [])
                 )
 
             logger.info(f"TriageArchitect generated plan with {len(context_plan.actions)} actions.")

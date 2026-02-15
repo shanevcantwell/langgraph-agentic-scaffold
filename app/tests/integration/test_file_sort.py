@@ -118,15 +118,12 @@ def test_triage_recommends_chat_for_counting(initialized_app):
         result = response.json()
         final_state = result.get("final_output", {})
         artifacts = final_state.get("artifacts", {})
-        context_plan = artifacts.get("context_plan", {})
-
-        # Triage recommendations persist in the context_plan artifact
-        recommended = context_plan.get("recommended_specialists", [])
+        scratchpad = final_state.get("scratchpad", {})
 
         # Debug output
         print(f"\n=== TEST: triage_recommends_chat_for_counting ===")
-        print(f"Context plan: {context_plan}")
-        print(f"Recommended specialists: {recommended}")
+        print(f"Triage actions: {scratchpad.get('triage_actions', [])}")
+        print(f"Triage reasoning: {scratchpad.get('triage_reasoning', '')}")
         print(f"Routing history: {final_state.get('routing_history', [])}")
 
         # Primary assertion: Router should route to chat subgraph for counting
@@ -173,15 +170,12 @@ def test_triage_recommends_project_director_for_listing(initialized_app):
         result = response.json()
         final_state = result.get("final_output", {})
         artifacts = final_state.get("artifacts", {})
-        context_plan = artifacts.get("context_plan", {})
-
-        # Triage recommendations persist in the context_plan artifact
-        recommended = context_plan.get("recommended_specialists", [])
+        scratchpad = final_state.get("scratchpad", {})
 
         # Debug output
         print(f"\n=== TEST: triage_recommends_project_director_for_listing ===")
-        print(f"Context plan: {context_plan}")
-        print(f"Recommended specialists: {recommended}")
+        print(f"Triage actions: {scratchpad.get('triage_actions', [])}")
+        print(f"Triage reasoning: {scratchpad.get('triage_reasoning', '')}")
         print(f"Routing history: {final_state.get('routing_history', [])}")
 
         # Primary assertion: Router should route to project_director for file listing

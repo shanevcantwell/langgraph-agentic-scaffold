@@ -40,7 +40,8 @@ async def mock_image_workflow_stream() -> AsyncGenerator[Dict[str, Any], None]:
         "triage_architect": {
             "scratchpad": {
                 "query_type": "image_analysis",
-                "context_plan": {"requires_image_specialist": True}
+                "triage_reasoning": "Image detected, routing to image specialist",
+                "triage_actions": []
             },
             "next_specialist": "image_specialist"
         }
@@ -469,7 +470,8 @@ class TestStreamFormatterEventCompleteness:
                 "triage_architect": {
                     "scratchpad": {
                         "routing_reasoning": "Image detected, routing to image_specialist",
-                        "context_plan": {"key": "value"}
+                        "triage_reasoning": "Image analysis required",
+                        "triage_actions": []
                     }
                 }
             }

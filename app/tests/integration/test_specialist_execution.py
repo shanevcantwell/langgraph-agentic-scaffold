@@ -355,25 +355,26 @@ class TestTieredSynthesizerExecution:
 class TestTriageArchitectExecution:
     """Test TriageArchitect execution."""
 
-    def test_triage_architect_creates_context_plan(
+    def test_triage_architect_writes_scratchpad(
         self, initialized_specialist_factory, mock_llm_response, base_state
     ):
-        """Verify TriageArchitect creates context_plan artifact."""
+        """Verify TriageArchitect writes triage_actions and triage_reasoning to scratchpad."""
         triage = initialized_specialist_factory("TriageArchitect")
 
         plan_response = json.dumps({
-            "steps": [
-                {"action": "research", "query": "Python 3.12 features"},
-                {"action": "summarize", "source": "research_results"}
+            "actions": [
+                {"type": "research", "target": "Python 3.12 features", "description": "Research latest features"}
             ],
-            "recommended_specialists": ["researcher_specialist", "chat_specialist"]
+            "reasoning": "User wants to know about Python 3.12 features"
         })
         triage.llm_adapter.invoke.return_value = mock_llm_response(plan_response)
 
         result = triage.execute(base_state)
 
-        # Should produce context_plan or similar planning artifact
         assert result is not None
+        scratchpad = result.get("scratchpad", {})
+        assert "triage_reasoning" in scratchpad
+        assert "triage_actions" in scratchpad
 
 
 # =============================================================================
