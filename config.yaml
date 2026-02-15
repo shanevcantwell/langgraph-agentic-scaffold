@@ -152,14 +152,14 @@ specialists:
   systems_architect:
     type: "llm"
     prompt_file: "systems_architect_prompt.md"
-    description: "Creates plans and designs implementation strategies. Use when user asks to 'plan', 'design', or 'architect' something. Produces a 'system_plan' artifact."
+    description: "Plans and designs implementation strategies. Produces a 'system_plan' artifact for other specialists to execute."
     tags: ["planning"]
 
   # --- Core Capabilities ---
   web_builder:
     type: "llm"
     prompt_file: "web_builder_prompt.md"
-    description: "Builds or modifies web UIs (HTML/CSS/JS or Gradio Python). Can work from a 'system_plan' artifact OR from attached code files. Use this for creating new UIs, rewriting UI themes, or modifying existing web applications."
+    description: "Generates or modifies web UIs: HTML, CSS, JavaScript, or Gradio Python applications."
     tags: ["vision_capable"]
     # SA MCP integration: calls create_plan() directly instead of requiring artifact redirect
     tools:
@@ -181,7 +181,7 @@ specialists:
   navigator_browser_specialist:
     type: "hybrid"
     prompt_file: "navigator_browser_specialist_prompt.md"
-    description: "Web browsing with visual grounding. Navigates URLs, clicks elements by natural language description, fills forms, and extracts page content. Use for 'go to example.com', 'click the Submit button', 'type hello in the search box'."
+    description: "Browses live websites. Navigates URLs, clicks elements, fills forms, reads page content."
     # ADR-CORE-051: surf-mcp browser tools
     tools:
       navigator:
@@ -221,7 +221,7 @@ specialists:
   text_analysis_specialist:
     type: "llm"
     prompt_file: "text_analysis_prompt.md"
-    description: "Analyzes, summarizes, extracts, or transforms text and structured data. Handles analytical tasks (summarize, extract key points, analyze structure), data operations (extract JSON, format/convert data), and semantic measurement (calculate drift between texts, compare embeddings, analyze variants). For conversational questions, use chat_specialist instead."
+    description: "Processes text and structured data: summarize, extract, transform, format, or measure semantic similarity."
     # Tool permissions — optional use; simple analysis doesn't require tools
     tools:
       prompt-prix:
@@ -275,9 +275,10 @@ specialists:
     type: "llm"
     prompt_file: "progenitor_alpha_prompt.md"
     description: "Alpha perspective in the tiered chat system. Provides analytical, structured, and methodical responses. Part of the parallel fan-out pattern for multi-perspective answers."
-    # ADR-CORE-053: Internal execution engine - not user-routable
+    # ADR-CORE-053: Internal subgraph node (tiered chat) — triggered via chat_specialist fanout
     excluded_from:
       - triage_architect
+      - router_specialist
     # SYSTEM PROMPT: This specialist's LLM receives progenitor_alpha_prompt.md as its
     # system prompt. Edit this file to define Alpha's personality, expertise, tone,
     # and approach. Default: analytical/structured/methodical.
@@ -291,9 +292,10 @@ specialists:
     type: "llm"
     prompt_file: "progenitor_bravo_prompt.md"
     description: "Bravo perspective in the tiered chat system. Provides intuitive, contextual, and human-centered responses. Part of the parallel fan-out pattern for multi-perspective answers."
-    # ADR-CORE-053: Internal execution engine - not user-routable
+    # ADR-CORE-053: Internal subgraph node (tiered chat) — triggered via chat_specialist fanout
     excluded_from:
       - triage_architect
+      - router_specialist
     # SYSTEM PROMPT: This specialist's LLM receives progenitor_bravo_prompt.md as its
     # system prompt. Edit this file to define Bravo's personality, expertise, tone,
     # and approach. Default: intuitive/contextual/human-centered.
@@ -309,14 +311,15 @@ specialists:
     # SYSTEM PROMPT: None - this is procedural (no LLM call).
     # It performs simple markdown formatting of the two progenitor responses.
     # No prompt file or model binding needed.
-    # ADR-CORE-053: Internal subgraph node (tiered chat)
+    # ADR-CORE-053: Internal subgraph node (tiered chat) — triggered via chat_specialist fanout
     excluded_from:
       - triage_architect
+      - router_specialist
 
   chat_specialist:
     type: "llm"
     prompt_file: "chat_prompt.md"
-    description: "Handles conversational questions, informational queries, and reasoning about gathered context. Use for explanations, dialogue, counting, comparing, summarizing observations. Examples: 'What is Python?', 'How many files?', 'Compare these results'. When tiered chat subgraph is enabled, routing here triggers parallel multi-perspective responses."
+    description: "Answers questions, explains concepts, and reasons about gathered context. General-purpose conversational responses."
     # SYSTEM PROMPT BEHAVIOR:
     # - TIERED CHAT ENABLED: This specialist is NEVER directly executed.
     #   Routing to 'chat_specialist' triggers progenitor fan-out instead.
@@ -338,7 +341,7 @@ specialists:
   project_director:
     type: "llm"
     prompt_file: "project_director_prompt.md"
-    description: "Manages complex, open-ended goals that require iterative investigation and state tracking. Batch or recursive processes or deep agents to gather information, refine understanding, and generate actionable solutions."
+    description: "Executes multi-step tasks requiring filesystem access, terminal commands, or iterative tool use. Reads, creates, moves, and organizes files and directories."
     tags: ["planning", "research", "complex_tasks"]
     # Tool permissions (enables external_mcp_client injection)
     max_iterations: 50 
@@ -358,7 +361,7 @@ specialists:
 
   web_specialist:
     type: "procedural"
-    description: "A primitive worker that executes a single web task from the scratchpad (search or browse) and returns the raw result. Does not manage plans or state."
+    description: "Executes a single web search or page fetch. Returns raw results without interpretation."
     tags: ["vision_capable"]
     # Optional: Enable Fara+Playwright visual browsing
     # visual_browser:
@@ -406,7 +409,7 @@ specialists:
   image_specialist:
     type: "llm"
     prompt_file: "image_specialist_prompt.md"
-    description: "Analyzes images using vision models. Provides detailed descriptions via MCP. Call with describe(base64_image, prompt)."
+    description: "Analyzes images using vision models. Describes visual content, extracts text from screenshots."
     tags: ["vision_capable"]
 
   # --- General & Fallback ---
@@ -418,7 +421,7 @@ specialists:
   default_responder_specialist:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
-    description: "SYSTEM FALLBACK - NOT FOR TRIAGE RECOMMENDATION. Handles edge cases like greetings ('hello', 'ping') or genuinely ambiguous inputs. The triage specialist should NEVER recommend this - let the router select it automatically when no other specialist fits."
+    description: "Handles greetings, small talk, and inputs that don't match any specialist above."
     # ADR-CORE-053: System fallback - router-selected, not triage-recommended
     excluded_from:
       - triage_architect
