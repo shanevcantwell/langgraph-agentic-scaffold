@@ -199,6 +199,8 @@ class ProjectDirector(BaseSpecialist):
                     )
 
                 for tc in pending:
+                    tool_name = tc.get("name", "unknown")
+                    tool_args = tc.get("args", {})
                     observation = self._dispatch_tool_call(tc, tools, successful_paths)
 
                     trace.append({
