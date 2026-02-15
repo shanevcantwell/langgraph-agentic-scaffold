@@ -130,7 +130,14 @@
 
                 <!-- MISSION REPORT: Consolidated final output with tabs -->
                 <section class="panel trace-panel">
-                    <h3>📜 MISSION REPORT</h3>
+                    <div class="mission-report-header">
+                        <button id="pagePrev" class="page-btn" disabled>◄</button>
+                        <span class="mission-report-title">📋 MISSION REPORT</span>
+                        <span id="pageTimestamp" class="page-timestamp"></span>
+                        <input type="checkbox" id="selectAllContext" class="context-checkbox"
+                               title="Select all for context" style="display:none">
+                        <button id="pageNext" class="page-btn" disabled>►</button>
+                    </div>
                     <div class="tabs">
                         <button class="tab-btn active" data-tab="report">📋 FINAL RESPONSE</button>
                         <button class="tab-btn" data-tab="artifacts">📦 ARTIFACTS</button>

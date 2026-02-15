@@ -40,6 +40,17 @@ let abortController = null; // Controller for the fetch request
 let thoughtStreamEntries = []; // Track thought stream entries
 let currentArtifacts = {}; // Track artifacts as they're generated
 
+// ADR-UI-001 / #181: Run history for Mission Report paging + context selection
+let runHistory = [];        // [{timestamp, conversationId, finalResponse, artifacts}]
+let currentPageIndex = -1;  // -1 = no history yet
+let checkedItems = {};      // {pageIndex: {key: bool, _finalResponse: bool}}
+
+// Paging DOM refs
+const pagePrevBtn = document.getElementById('pagePrev');
+const pageNextBtn = document.getElementById('pageNext');
+const pageTimestampEl = document.getElementById('pageTimestamp');
+const selectAllCheckbox = document.getElementById('selectAllContext');
+
 // ADR-CORE-042: Clarification state and DOM refs
 let pendingThreadId = null;
 const clarificationModal = document.getElementById('clarificationModal');
@@ -207,6 +218,45 @@ tabBtns.forEach(btn => {
     });
 });
 
+// #181: Mission Report paging handlers
+pagePrevBtn.addEventListener('click', () => {
+    if (currentPageIndex > 0) {
+        currentPageIndex--;
+        renderPage(currentPageIndex);
+    }
+});
+pageNextBtn.addEventListener('click', () => {
+    if (currentPageIndex < runHistory.length - 1) {
+        currentPageIndex++;
+        renderPage(currentPageIndex);
+    }
+});
+selectAllCheckbox.addEventListener('change', (e) => {
+    const checked = e.target.checked;
+    if (currentPageIndex < 0) return;
+    if (!checkedItems[currentPageIndex]) checkedItems[currentPageIndex] = {};
+    // Toggle all checkboxes on current page
+    document.querySelectorAll('.artifact-row .context-checkbox, .context-select-row .context-checkbox')
+        .forEach(cb => {
+            cb.checked = checked;
+            cb.dispatchEvent(new Event('change', { bubbles: false }));
+        });
+});
+
+// Restore run history from sessionStorage on page load
+try {
+    const saved = sessionStorage.getItem('runHistory');
+    if (saved) {
+        runHistory = JSON.parse(saved);
+        if (runHistory.length > 0) {
+            currentPageIndex = runHistory.length - 1;
+            updatePagingControls();
+        }
+    }
+} catch (e) {
+    console.warn('Failed to restore run history:', e);
+}
+
 // ADR-CORE-042: Clarification submission handlers
 if (clarificationSubmitBtn) {
     clarificationSubmitBtn.addEventListener('click', submitClarification);
@@ -341,6 +391,47 @@ async function executeWorkflow() {
             payload.text_to_process = loadedFile.content;
             logStatus(`► INJECTING TEXT DATA...`);
         }
+    }
+
+    // #181: Collect checked context from prior runs
+    const priorMessages = [];
+    let latestConversationId = null;
+
+    for (let i = 0; i < runHistory.length; i++) {
+        const page = runHistory[i];
+        const checks = checkedItems[i];
+        if (!checks) continue;
+
+        if (page.conversationId) latestConversationId = page.conversationId;
+
+        const parts = [];
+        for (const [key, isChecked] of Object.entries(checks)) {
+            if (!isChecked) continue;
+            if (key === '_finalResponse') {
+                if (page.finalResponse) parts.push(`final_response:\n${page.finalResponse}`);
+            } else if (page.artifacts[key] !== undefined) {
+                const val = typeof page.artifacts[key] === 'object'
+                    ? JSON.stringify(page.artifacts[key], null, 2)
+                    : String(page.artifacts[key]);
+                parts.push(`${key}:\n${val}`);
+            }
+        }
+
+        if (parts.length > 0) {
+            const ts = new Date(page.timestamp).toLocaleTimeString();
+            priorMessages.push({
+                role: 'assistant',
+                content: `[Prior Run ${ts}]\n\n${parts.join('\n\n')}`
+            });
+        }
+    }
+
+    if (priorMessages.length > 0) {
+        payload.prior_messages = priorMessages;
+        logStatus(`► ATTACHING CONTEXT FROM ${priorMessages.length} PRIOR RUN(S)...`);
+    }
+    if (latestConversationId) {
+        payload.conversation_id = latestConversationId;
     }
 
     // Create new AbortController for this request
@@ -634,6 +725,164 @@ function updateArtifactsDisplay(artifacts) {
     artifactsOutputEl.innerHTML = marked.parse(artifactsMarkdown);
 }
 
+// ============================================================================
+// #181: MISSION REPORT PAGING & CONTEXT SELECTION
+// ============================================================================
+
+function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function updatePagingControls() {
+    pagePrevBtn.disabled = currentPageIndex <= 0;
+    pageNextBtn.disabled = currentPageIndex >= runHistory.length - 1;
+
+    if (currentPageIndex >= 0 && runHistory[currentPageIndex]) {
+        const ts = new Date(runHistory[currentPageIndex].timestamp);
+        pageTimestampEl.textContent = ts.toLocaleTimeString();
+        selectAllCheckbox.style.display = '';
+    } else {
+        pageTimestampEl.textContent = '';
+        selectAllCheckbox.style.display = 'none';
+    }
+
+    // Sync select-all state with current page's checkboxes
+    syncSelectAllState();
+}
+
+function syncSelectAllState() {
+    if (currentPageIndex < 0) return;
+    const checks = checkedItems[currentPageIndex];
+    if (!checks) {
+        selectAllCheckbox.checked = false;
+        return;
+    }
+    const values = Object.values(checks);
+    selectAllCheckbox.checked = values.length > 0 && values.every(v => v);
+}
+
+function renderPage(index) {
+    if (index < 0 || index >= runHistory.length) return;
+    const page = runHistory[index];
+
+    updatePagingControls();
+
+    // Render artifacts with checkboxes
+    renderArtifactsWithCheckboxes(page.artifacts, index);
+
+    // Render final response with checkbox
+    renderFinalResponseWithCheckbox(page.finalResponse, index);
+}
+
+function renderArtifactsWithCheckboxes(artifacts, pageIndex) {
+    artifactsOutputEl.innerHTML = '';
+
+    if (!artifacts || Object.keys(artifacts).length === 0) {
+        artifactsOutputEl.innerHTML = '<div class="placeholder">NO ARTIFACTS</div>';
+        return;
+    }
+
+    for (const [key, value] of Object.entries(artifacts)) {
+        // Skip internal/display-only artifacts
+        if (key === 'archive_report.md' || key === 'conversation_id') continue;
+
+        const row = document.createElement('div');
+        row.className = 'artifact-row';
+
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'context-checkbox';
+        cb.checked = checkedItems[pageIndex]?.[key] || false;
+        cb.addEventListener('change', () => {
+            if (!checkedItems[pageIndex]) checkedItems[pageIndex] = {};
+            checkedItems[pageIndex][key] = cb.checked;
+            syncSelectAllState();
+        });
+
+        const contentWrapper = document.createElement('div');
+        contentWrapper.className = 'artifact-row-content';
+
+        const label = document.createElement('div');
+        label.className = 'artifact-label';
+        const size = JSON.stringify(value).length;
+        label.innerHTML = `${key} <span class="artifact-size">(${formatBytes(size)})</span>`;
+
+        // Add RENDER + SAVE buttons for HTML artifacts
+        const strVal = typeof value === 'string' ? value : '';
+        if (key.endsWith('.html') || strVal.startsWith('<!DOCTYPE') || strVal.startsWith('<html')) {
+            const renderBtn = document.createElement('button');
+            renderBtn.className = 'toolbar-btn';
+            renderBtn.textContent = 'RENDER';
+            renderBtn.style.marginLeft = '8px';
+            renderBtn.onclick = (e) => {
+                e.stopPropagation();
+                const blob = new Blob([strVal], { type: 'text/html' });
+                window.open(URL.createObjectURL(blob), '_blank');
+            };
+            label.appendChild(renderBtn);
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'toolbar-btn';
+            saveBtn.textContent = 'SAVE';
+            saveBtn.onclick = (e) => {
+                e.stopPropagation();
+                const blob = new Blob([strVal], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = key;
+                a.click();
+                URL.revokeObjectURL(a.href);
+            };
+            label.appendChild(saveBtn);
+        }
+
+        const content = document.createElement('div');
+        content.className = 'artifact-content';
+        if (typeof value === 'object') {
+            content.innerHTML = `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+        } else {
+            const decoded = decodeHtmlEntities(String(value));
+            content.innerHTML = `<pre>${decoded}</pre>`;
+        }
+
+        // Click label to toggle content visibility
+        label.addEventListener('click', () => {
+            content.classList.toggle('expanded');
+        });
+
+        contentWrapper.appendChild(label);
+        contentWrapper.appendChild(content);
+        row.appendChild(cb);
+        row.appendChild(contentWrapper);
+        artifactsOutputEl.appendChild(row);
+    }
+}
+
+function renderFinalResponseWithCheckbox(archive, pageIndex) {
+    // Render the archive markdown normally first
+    renderMissionReport(archive);
+
+    // Prepend a checkbox row for context selection
+    const header = document.createElement('div');
+    header.className = 'context-select-row';
+
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'context-checkbox';
+    cb.checked = checkedItems[pageIndex]?.['_finalResponse'] || false;
+    cb.addEventListener('change', () => {
+        if (!checkedItems[pageIndex]) checkedItems[pageIndex] = {};
+        checkedItems[pageIndex]['_finalResponse'] = cb.checked;
+        syncSelectAllState();
+    });
+
+    header.appendChild(cb);
+    header.appendChild(document.createTextNode(' Include Final Response in next run'));
+    archiveOutputEl.prepend(header);
+}
+
 function renderMissionReport(markdown) {
     if (!markdown) return;
 
@@ -919,25 +1168,26 @@ function handleStreamEvent(event) {
             logStatus(`► WORKFLOW COMPLETE`);
             addThoughtStreamEntry('SYSTEM', 'Workflow completed successfully', 'lifecycle');
 
-            console.log('[workflow_end] Received data:', data);
-            console.log('[workflow_end] Archive exists:', !!data.archive);
-            console.log('[workflow_end] Archive length:', data.archive ? data.archive.length : 0);
-
             if (data.final_state) {
                 jsonOutputEl.textContent = JSON.stringify(data.final_state, null, 2);
-
-                // Final artifacts update
-                if (data.final_state.artifacts) {
-                    updateArtifactsDisplay(data.final_state.artifacts);
-                }
             }
 
-            if (data.archive) {
-                console.log('[workflow_end] Rendering mission report...');
-                renderMissionReport(data.archive);
-            } else {
-                console.warn('[workflow_end] No archive data found!');
+            // #181: Snapshot completed run into history
+            runHistory.push({
+                timestamp: new Date().toISOString(),
+                conversationId: data.conversation_id || null,
+                finalResponse: data.archive || '',
+                artifacts: { ...currentArtifacts }
+            });
+            currentPageIndex = runHistory.length - 1;
+            try {
+                sessionStorage.setItem('runHistory', JSON.stringify(runHistory));
+            } catch (e) {
+                console.warn('Failed to save run history (storage full?):', e);
             }
+            updatePagingControls();
+            // Re-render with checkboxes now that the run is complete
+            renderPage(currentPageIndex);
             break;
 
         case 'clarification_required':
@@ -1285,6 +1535,24 @@ function addToolbarsToPreBlocks() {
                 window.open(url, '_blank');
             };
             toolbar.appendChild(renderBtn);
+
+            const saveBtn = document.createElement('button');
+            saveBtn.className = 'toolbar-btn';
+            saveBtn.textContent = 'SAVE';
+            saveBtn.onclick = () => {
+                let htmlContent = getCleanContent();
+                const ta = document.createElement('textarea');
+                ta.innerHTML = htmlContent;
+                htmlContent = ta.value;
+
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'artifact.html';
+                a.click();
+                URL.revokeObjectURL(a.href);
+            };
+            toolbar.appendChild(saveBtn);
         }
 
         pre.appendChild(toolbar);

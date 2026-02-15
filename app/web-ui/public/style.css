@@ -273,6 +273,86 @@ button:hover { background: var(--primary-color); color: var(--bg-color); box-sha
 .trace-node.expanded > .trace-details { display: block; }
 .trace-type { font-weight: bold; color: var(--alert-color); }
 
+/* Mission Report Header (paging + context selection) */
+.mission-report-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    margin-bottom: 5px;
+}
+.mission-report-title {
+    font-family: var(--font-header);
+    font-size: 1.2em;
+    color: var(--primary-color);
+}
+.page-btn {
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    padding: 2px 8px;
+    font-family: var(--font-main);
+    font-size: 1em;
+}
+.page-btn:disabled { opacity: 0.3; cursor: default; }
+.page-btn:hover:not(:disabled) { color: var(--primary-color); border-color: var(--primary-color); }
+.page-timestamp {
+    font-size: 0.8em;
+    color: var(--text-dim);
+    flex: 1;
+    text-align: right;
+    font-family: var(--font-main);
+}
+.context-checkbox { cursor: pointer; accent-color: var(--primary-color); }
+
+/* Artifact rows with checkboxes */
+.artifact-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 8px 0;
+    border-bottom: 1px dashed var(--secondary-color);
+}
+.artifact-row:last-child { border-bottom: none; }
+.artifact-row .context-checkbox { margin-top: 3px; flex-shrink: 0; }
+.artifact-row-content { flex: 1; min-width: 0; }
+.artifact-label {
+    cursor: pointer;
+    color: var(--primary-color);
+    font-weight: bold;
+    font-size: 0.95em;
+    margin-bottom: 4px;
+}
+.artifact-label:hover { text-decoration: underline; }
+.artifact-size { font-weight: normal; color: var(--text-dim); font-size: 0.85em; }
+.artifact-content {
+    display: none;
+    overflow-x: auto;
+    margin-top: 4px;
+}
+.artifact-content.expanded { display: block; }
+.artifact-content pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 0.85em;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+/* Final Response context checkbox row */
+.context-select-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 8px;
+    border: 1px dashed var(--secondary-color);
+    font-size: 0.85em;
+    color: var(--text-dim);
+}
+
 /* Artifacts */
 .artifacts-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .tabs { display: flex; gap: 5px; margin-bottom: 10px; }
