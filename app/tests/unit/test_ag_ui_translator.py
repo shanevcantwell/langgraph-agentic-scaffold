@@ -64,6 +64,8 @@ async def test_translator_flow():
     assert last_event.type == EventType.WORKFLOW_END
     assert last_event.data["final_state"]["task_is_complete"] is True
     assert last_event.data["archive"] == "# Report"
+    # ADR-CORE-075: conversation_id defaults to None when not in stream
+    assert last_event.data["conversation_id"] is None
 
 @pytest.mark.asyncio
 async def test_translator_error_handling():
@@ -214,6 +216,36 @@ async def test_translator_forwards_facilitator_ask_user_payload():
     # thread_id and resumable injected by translator
     assert data["thread_id"] == "ask-user-run"
     assert data["resumable"] is True
+
+
+@pytest.mark.asyncio
+async def test_translator_forwards_conversation_id_in_workflow_end():
+    """
+    ADR-CORE-075: conversation_id from runner must appear in the workflow_end
+    event data so the UI can store it for multi-turn threading (#181).
+    """
+    async def stream_with_conversation_id():
+        yield {"run_id": "conv-run"}
+        yield {"conversation_id": "conv-abc-123"}
+        yield {
+            "router_specialist": {
+                "messages": ["routed"],
+                "scratchpad": {}
+            }
+        }
+
+    translator = AgUiTranslator()
+    events = []
+    async for event in translator.translate(stream_with_conversation_id()):
+        events.append(event)
+
+    # conversation_id should NOT appear as a node
+    node_sources = [e.source for e in events if e.type == EventType.NODE_START]
+    assert "conversation_id" not in node_sources
+
+    # conversation_id should appear in workflow_end data
+    end_event = [e for e in events if e.type == EventType.WORKFLOW_END][0]
+    assert end_event.data["conversation_id"] == "conv-abc-123"
 
 
 @pytest.mark.asyncio

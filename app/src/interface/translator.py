@@ -14,6 +14,7 @@ class AgUiTranslator:
     def __init__(self):
         self.accumulated_state = {}
         self.run_id = None
+        self.conversation_id = None  # ADR-CORE-075: captured for workflow_end
 
     async def translate(self, raw_stream: AsyncGenerator[Dict[str, Any], None]) -> AsyncGenerator[AgUiEvent, None]:
         """
@@ -36,8 +37,9 @@ class AgUiTranslator:
                 # Store for interrupt handling but don't emit an event
                 continue
 
-            # ADR-CORE-075: Handle conversation_id (metadata, not a node)
+            # ADR-CORE-075: Capture conversation_id for workflow_end event
             if "conversation_id" in chunk:
+                self.conversation_id = chunk["conversation_id"]
                 continue
 
             # 3. Handle Interrupt Events (ADR-CORE-018/042: HitL Clarification)
@@ -196,6 +198,7 @@ class AgUiTranslator:
                 "status": "Workflow complete.",
                 "final_state": final_state_summary,
                 "archive": archive_report,
-                "html": html_content
+                "html": html_content,
+                "conversation_id": self.conversation_id,
             }
         )
