@@ -426,6 +426,9 @@ class GraphOrchestrator:
         # Normal incomplete - route through Facilitator to refresh context before retry
         # Facilitator re-executes triage actions, updating gathered_context with current state
         if "facilitator_specialist" in self.specialists:
+            # #188: Clear stale error from prior specialist failure — system recovered
+            scratchpad.pop("error", None)
+            scratchpad.pop("error_report", None)
             logger.info("--- Exit Interview: Task INCOMPLETE. Routing to Facilitator to refresh context. ---")
             self._record_im_decision(state, "after_exit_interview", "facilitator_specialist",
                                      "INCOMPLETE, refreshing context via Facilitator")
