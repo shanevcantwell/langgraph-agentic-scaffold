@@ -1,8 +1,8 @@
 # Systems Architect Briefing: Intent Capture and Plan-First Execution in LAS
 
-**Purpose:** Technical briefing on the Systems Architect's dual role as graph entry point and MCP planning service.
+**Purpose:** Technical briefing on the Systems Architect's dual role as planning node and MCP planning service.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-12 (#171 SA as entry point, #115 MCP tool)
+**Updated:** 2026-02-16 (#199: Triage→SA pipeline flip, #173: acceptance_criteria on SystemPlan)
 
 ---
 
@@ -10,14 +10,14 @@
 
 The **Systems Architect (SA)** is an LLM-based planning specialist with a **dual role**:
 
-1. **Graph entry point** — first node in the pipeline. Receives every user request, produces `task_plan` (the system's theory of user intent), then hands off to Triage.
+1. **Planning node** — second in the entry pipeline (after Triage PASS). Produces `task_plan` (the system's theory of user intent), then hands off to Facilitator.
 2. **MCP planning service** — called by other specialists to produce narrower, purpose-specific plans (exit verification, web implementation, etc.).
 
 Key characteristics:
-- **LLM-based planner** — calls the model once to produce a structured `SystemPlan`
-- **Entry point (#171)** — `config.yaml: entry_point: "systems_architect"`. SA → Triage → [Facilitator] → Router → Specialist
+- **LLM-based planner** — calls the model once to produce a structured `SystemPlan` (with `acceptance_criteria`, #173)
+- **Second in pipeline (#199)** — Triage → SA → Facilitator → Router → Specialist. SA only runs after Triage PASS.
 - **MCP service** — also accessible via `mcp_client.call("systems_architect", "create_plan", ...)`
-- **Shared `_generate_plan()` core** — same logic serves both entry point execution and MCP interface
+- **Shared `_generate_plan()` core** — same logic serves both pipeline execution and MCP interface
 - **Plan-first principle** — specialists that do multi-step work should call SA before starting tool loops
 
 ---
@@ -26,39 +26,38 @@ Key characteristics:
 
 ### Why Both?
 
-SA was originally MCP-only (#129): specialists called it when they needed a plan, Router never saw it. This worked for specialist-specific plans but missed the master plan — the system had no structured theory of what the user wanted before Triage started classifying.
+SA was originally MCP-only (#129): specialists called it when they needed a plan, Router never saw it. #171 added SA as the entry point. #199 then flipped the pipeline: Triage runs first as an ACCEPT/REJECT gate, SA runs second only after Triage PASS. This means rejection happens before SA invests an LLM call on planning.
 
-Issue #171 added SA as the entry point. Now **every request gets a `task_plan` before any classification or routing happens**. Triage, Router, and all downstream specialists benefit from this intent capture.
+Now **every accepted request gets a `task_plan` before context gathering or routing happens**. Facilitator, Router, and all downstream specialists benefit from this intent capture.
 
 The MCP service remains for **specialist-specific plans** that need narrower focus:
 
-| Role | Entry Point | MCP Service |
+| Role | Pipeline Node | MCP Service |
 |------|-------------|-------------|
-| **Trigger** | Every request (first graph node) | On-demand by specialists |
+| **Trigger** | Every accepted request (after Triage PASS) | On-demand by specialists |
 | **Context** | User request + gathered_context | Specialist-tailored context string |
 | **Output** | `artifacts["task_plan"]` | `artifacts[caller_specified_key]` |
 | **Purpose** | System's theory of user intent | Specialist's execution/verification plan |
 | **Runs** | Once per request (guard: `if not task_plan`) | Once per specialist (guard: `if not plan`) |
 
-### Entry Point Flow
+### Pipeline Node Flow (#199)
 
 ```
-User submits request
+TriageArchitect (ACCEPT/REJECT gate)
     |
-state_factory.py: artifacts["user_request"] = goal
-    |
+    [PASS]
     ▼
 SystemsArchitect._execute_logic()
     |
     ├── Guard: if task_plan already exists → pass through (retry path)
     ├── _get_enriched_messages(state) → includes gathered_context if available
-    └── _generate_plan(messages) → SystemPlan
+    └── _generate_plan(messages) → SystemPlan (with acceptance_criteria)
     |
     ▼
 artifacts["task_plan"] = plan.model_dump()
     |
     ▼
-TriageArchitect (classifies with task_plan already in state)
+Facilitator (assembles gathered_context) → Router → Specialist
 ```
 
 ### MCP Service Flow
@@ -82,10 +81,13 @@ artifacts["exit_plan"] = plan.model_dump()
 ```python
 # From schemas/_orchestration.py
 class SystemPlan(BaseModel):
-    plan_summary: str         # Concise one-sentence summary
-    required_components: List[str]  # Technologies, libraries, assets needed
-    execution_steps: List[str]      # Detailed sequential steps
+    plan_summary: str                    # Concise one-sentence summary
+    required_components: List[str]       # Technologies, libraries, assets needed
+    execution_steps: List[str]           # Detailed sequential steps
+    acceptance_criteria: str = ""        # Observable outcomes defining "done" (#173)
 ```
+
+The `acceptance_criteria` field (#173) provides externally observable outcomes — what the completed end state looks like. SA's prompt distinguishes observable outcomes ("all files are in category subdirectories") from internal process state ("all file movements are logged"). EI feeds `acceptance_criteria` to SA when generating `exit_plan` for verification.
 
 SA's system prompt ([systems_architect_prompt.md](../../app/prompts/systems_architect_prompt.md)) instructs the model to produce this exact structure. The prompt includes an example JSON output to ground the format.
 
@@ -98,12 +100,12 @@ The same schema serves all plan variants — `task_plan`, `exit_plan`, `system_p
 `task_plan` is the master plan — the system's best understanding of what the user wants. Specialist-specific plans derive from it:
 
 ```
-SA (entry point) → task_plan
+Triage (entry gate) → triage_actions / triage_reasoning in scratchpad (ACCEPT/REJECT, not a SystemPlan)
     |
-Triage → triage_actions / triage_reasoning in scratchpad (context-gathering, not a SystemPlan)
+SA (planning) → task_plan (with acceptance_criteria, #173)
     |
     ├── PD calls SA MCP → project_plan (filesystem execution steps)
-    ├── EI calls SA MCP → exit_plan (verification of task_plan completion)
+    ├── EI calls SA MCP → exit_plan (verification of task_plan + acceptance_criteria)
     └── WebBuilder calls SA MCP → system_plan (web implementation, #172)
 ```
 
@@ -165,13 +167,13 @@ def register_mcp_services(self, registry: 'McpRegistry'):
 
 ## Current Consumers
 
-### Entry Point: task_plan (Every Request)
+### Pipeline Node: task_plan (Every Accepted Request)
 
-SA runs as the first graph node on every request. It:
+SA runs as the second graph node (after Triage PASS) on every accepted request. It:
 1. Reads user messages (enriched with gathered_context if available)
-2. Produces a `task_plan` capturing the system's theory of user intent
+2. Produces a `task_plan` capturing the system's theory of user intent (with `acceptance_criteria`)
 3. Writes `artifacts["task_plan"]`
-4. Hands off unconditionally to Triage
+4. Hands off unconditionally to Facilitator
 
 ```python
 # systems_architect.py:47-76
@@ -283,13 +285,13 @@ The plan is:
 
 SA, Triage, and Facilitator serve complementary roles in the entry pipeline:
 
-| | SA | Triage | Facilitator |
+| | Triage | SA | Facilitator |
 |---|---|---|---|
-| **What** | Strategy (steps, components, criteria) | Classification (context-gathering actions) | Context (facts, observations, prior work) |
-| **Schema** | `SystemPlan` | `ContextPlan` (wire format -> scratchpad) | `gathered_context` (string) |
-| **When** | Once (entry point; once per specialist via MCP) | Once (second in pipeline) | Before every specialist invocation |
-| **How** | LLM call → structured JSON | LLM call → forced tool call | Procedural MCP orchestrator (no LLM) |
-| **On retry** | Plan persists, no re-planning | Ticket persists, no re-triage | Rebuilds fresh from current state |
+| **What** | Gate (ACCEPT/REJECT) | Strategy (steps, components, criteria) | Context (facts, observations, prior work) |
+| **Schema** | `ContextPlan` (wire format -> scratchpad) | `SystemPlan` (with `acceptance_criteria`) | `gathered_context` (string) + `accumulated_work` (list) |
+| **When** | Once (first in pipeline, #199) | Once (second, after Triage PASS; once per specialist via MCP) | Before every specialist invocation |
+| **How** | LLM call → structured output (`output_model_class`) | LLM call → structured JSON | Procedural MCP orchestrator (no LLM) |
+| **On retry** | Ticket persists, no re-triage | Plan persists, no re-planning | Rebuilds fresh from current state |
 
 Together they give a specialist **what to do** (SA), **what background context to gather** (Triage), and **what is known** (Facilitator).
 
@@ -311,10 +313,9 @@ CORE_INFRASTRUCTURE: frozenset = frozenset([
 
 This means:
 - SA **is a graph node** — added by the ContextEngineeringSubgraph
-- SA **is the entry point** — `config.yaml: entry_point: "systems_architect"`
-- SA → Triage is an unconditional edge ([context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py))
+- Triage → SA is a conditional edge (only on PASS) via `check_triage_outcome()` (#199)
+- SA → Facilitator is an unconditional edge ([context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py))
 - SA **is excluded from Router's menu** — it's infrastructure, not a task-execution specialist
-- SA **is excluded from Triage's scope** — Triage doesn't recommend specialists
 - SA **is excluded from hub-and-spoke edges** — has dedicated subgraph wiring
 - SA **is also registered in MCP** — specialists can still call `create_plan()` for narrower plans
 
@@ -354,7 +355,7 @@ SA needs an `llm_config` because it makes LLM calls (unlike Facilitator which is
 | [systems_architect_prompt.md](../../app/prompts/systems_architect_prompt.md) | System prompt with SystemPlan JSON example |
 | [_orchestration.py](../../app/src/specialists/schemas/_orchestration.py) | `SystemPlan` Pydantic schema |
 | [specialist_categories.py](../../app/src/workflow/specialist_categories.py) | `CORE_INFRASTRUCTURE` classification (#171) |
-| [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | SA → Triage edge wiring (#171) |
+| [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | Triage → SA → Facilitator → Router edge wiring (#199) |
 | [web_builder.py](../../app/src/specialists/web_builder.py) | Consumer: implementation plan (lines 32-51) |
 | [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) | Consumer: verification plan (lines 97-128) |
 | [project_director.py](../../app/src/specialists/project_director.py) | NOT YET a consumer — missing SA call is the root cause of aimless tool chaining |
@@ -365,11 +366,11 @@ SA needs an `llm_config` because it makes LLM calls (unlike Facilitator which is
 
 The Systems Architect has a **dual role** in LAS:
 
-1. **Entry point** — first graph node, captures intent as `task_plan` before any classification or routing. This is the system's theory of what the user wants.
+1. **Planning node** — second in pipeline (after Triage PASS, #199). Captures intent as `task_plan` with `acceptance_criteria` (#173) before context gathering or routing. This is the system's theory of what the user wants.
 2. **MCP service** — called by specialists for narrower, purpose-specific plans (`exit_plan`, `system_plan`, `project_plan`). Planning is procedurally enforced, not routed.
 
-All plans use the same `SystemPlan` schema and share the `_generate_plan()` core. Plans are write-once, read-many artifacts that persist across retries.
+All plans use the same `SystemPlan` schema (with `acceptance_criteria`) and share the `_generate_plan()` core. Plans are write-once, read-many artifacts that persist across retries.
 
-**Architectural principle:** SA captures intent at the entrance (task_plan) and provides specialist-specific strategy on demand (MCP). Every specialist with ReAct capability should call SA before starting its tool loop.
+**Architectural principle:** SA captures intent after Triage validation (task_plan) and provides specialist-specific strategy on demand (MCP). Every specialist with ReAct capability should call SA before starting its tool loop.
 
 See [TRIAGE.md](./TRIAGE.md) for how the triage ticket relates to task_plan, and [FACILITATOR.md](./FACILITATOR.md) for how context complements strategy.

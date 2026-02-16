@@ -67,14 +67,14 @@ result = sync_call_external_mcp(client, "navigator", "goto", {"url": "..."})
 Router is the central hub. All specialists return to router after execution.
 
 ```
-User → Triage → Router → Specialist → Router → ... → End
+User → Triage → SA → Facilitator → Router → Specialist → Router → ... → End
 ```
 
 ### 3.2 Subgraphs
 Encapsulated multi-specialist workflows that appear as single nodes to the router:
 - **Tiered Chat:** Alpha ∥ Bravo → Synthesizer
 - **Critic Loop:** Builder ↔ Critic (configurable max iterations)
-- **Context Engineering:** Triage → Facilitate → Router
+- **Context Engineering:** Triage → SA → Facilitator → Router (#199)
 - **Distillation:** Coordinator → Expander → Collector → Aggregator
 
 ### 3.3 Routing Decisions
@@ -87,18 +87,20 @@ Three routing modes:
 
 ## 4. Core Flows
 
-### 4.1 Context Engineering (Pre-flight)
+### 4.1 Context Engineering (Pre-flight, #199)
 ```
 User Request
     ↓
-TriageArchitect ──→ Analyzes request, creates ContextPlan
+TriageArchitect ──→ ACCEPT/REJECT gate (classifier)
+    ↓ [PASS]
+SystemsArchitect ──→ Produces task_plan (with acceptance_criteria)
     ↓
-Facilitator ──→ Executes plan (READ_FILE, LIST_DIR, RESEARCH)
+Facilitator ──→ Assembles gathered_context (always runs)
     ↓
 Router ──→ Routes with gathered_context available
 ```
 
-**Purpose:** Gather context before routing so specialists have what they need.
+**Purpose:** Gate, plan, and gather context before routing so specialists have what they need.
 
 ### 4.2 Tiered Chat (CORE-CHAT-002)
 ```
@@ -127,30 +129,29 @@ Critic ──→ Reviews, returns ACCEPT or REVISE
 
 **Purpose:** Self-improvement loop with explicit termination.
 
-### 4.4 ReAct Tool Use (ReActMixin)
+### 4.4 ReAct Tool Use (react_step MCP)
 ```
-Specialist with react: enabled: true
+Specialist with tools: config
     ↓
-┌─────────────────────────────┐
-│ Loop until done:            │
-│   1. Decide action(s) (LLM) │
-│   2. Execute tools (MCP)    │
-│   3. Observe results        │
-│   4. Check stagnation       │
-└─────────────────────────────┘
+┌─────────────────────────────────────────┐
+│ Loop until DONE (via call_react_step):  │
+│   1. call_react_step() → prompt-prix    │
+│   2. prompt-prix makes LLM call         │
+│   3. Specialist dispatches tool calls   │
+│   4. Append observations to trace       │
+│   5. Check max_iterations               │
+└─────────────────────────────────────────┘
     ↓
 Specialist writes artifacts + signals task_is_complete
 ```
 
 **Purpose:** Iterative tool use with LLM-in-the-loop control.
 
-**Current consumers:** ProjectDirector (filesystem/terminal), TextAnalysisSpecialist (data ops).
+**Current consumers:** ProjectDirector (filesystem/terminal), TextAnalysisSpecialist (semantic-chunker/it-tools), ExitInterview (filesystem/artifact tools).
 
-**Config-driven injection:** `ReactEnabledSpecialist` (react_wrapper.py) wraps any specialist with `react: enabled: true` in config.yaml. No base class change needed — methods injected via `types.MethodType`.
+**Shared helper pattern:** `app/src/mcp/react_step.py` provides `ToolDef` + `call_react_step` + `build_tool_schemas` + `dispatch_external_tool`. Any specialist becomes ReAct-capable by defining a tool routing table and looping on `call_react_step()`. No config flag, no wrapper, no mixin.
 
-**Concurrent dispatch:** Models can return multiple tool calls per response (Phase 0.9). `actions` array in JSON schema, dispatched via ThreadPoolExecutor.
-
-**Deprecation direction:** ReActMixin (~500 lines) is marked for migration to prompt-prix MCP's `react_step()` primitive. Tool-forwarding pattern: prompt-prix handles inference/parsing, LAS handles tool execution locally. See `docs/proposals/PROPOSAL_Eval-Architecture-And-Sleeptime-Subgraph.md`.
+**ReActMixin deleted:** The former ~1700-line `ReActMixin` / `ReactEnabledSpecialist` / `react_wrapper.py` was replaced by prompt-prix MCP's `react_step()` primitive (Phase 5, #162). -1720 lines net.
 
 ---
 
@@ -211,7 +212,7 @@ Factory pattern with provider abstraction:
 - **surf-mcp:** Browser automation with Fara visual grounding
 - **semantic-chunker:** Embedding analysis — embeddinggemma-300m (768-d) default, NV-Embed-v2 (4096-d) available (calculate_drift, classify_document, analyze_variants)
 - **it-tools-mcp:** 119 IT utility tools (format_json, convert_json_to_csv, etc.)
-- **prompt-prix-mcp:** Eval primitives (react_step, complete, list_models) — Phase 2b, not yet implemented
+- **prompt-prix-mcp:** Eval primitives (react_step, complete, list_models) — operational, 9 tools via FastMCP
 
 ### 7.3 prompt-prix Integration (Eval)
 Two containers from the same image, different purposes:

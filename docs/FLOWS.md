@@ -10,12 +10,14 @@ Each flow shows: **Prompt** → **Specialists Called** → **Expected Output**
 
 | Category | Entry Pattern | Key Specialists |
 |----------|---------------|-----------------|
-| [Chat](#1-chat) | Conversational query | Triage → Router → Alpha∥Bravo → Synthesizer |
-| [File](#2-file-operations) | "read/write/list file" | Triage → Facilitate → Router → Response |
-| [Browser](#3-browser) | "go to / click / fill" | Triage → Router → NavigatorBrowser |
-| [Research](#4-research) | "research / investigate" | Triage → Router → ResearchOrchestrator |
-| [Generation](#5-generation) | "create / build / generate" | Triage → Router → Builder → Exit Interview |
-| [Analysis](#6-analysis) | "analyze / extract / summarize" | Triage → Router → Analyst |
+| [Chat](#1-chat) | Conversational query | Triage → SA → Facilitator → Router → Alpha∥Bravo → Synthesizer |
+| [File](#2-file-operations) | "read/write/list file" | Triage → SA → Facilitator → Router → PD |
+| [Browser](#3-browser) | "go to / click / fill" | Triage → SA → Facilitator → Router → NavigatorBrowser |
+| [Research](#4-research) | "research / investigate" | Triage → SA → Facilitator → Router → ResearchOrchestrator |
+| [Generation](#5-generation) | "create / build / generate" | Triage → SA → Facilitator → Router → Builder → Exit Interview |
+| [Analysis](#6-analysis) | "analyze / extract / summarize" | Triage → SA → Facilitator → Router → Analyst |
+
+> **Entry pipeline (#199):** Every flow passes through Triage (ACCEPT/REJECT gate) → SA (task_plan) → Facilitator (gathered_context) → Router. Diagrams below abbreviate this as "Entry Pipeline" where the pre-Router steps are not the focus.
 
 ---
 
@@ -26,7 +28,9 @@ Each flow shows: **Prompt** → **Specialists Called** → **Expected Output**
 PROMPT: "What is the capital of France?"
 
 FLOW:
-  TriageArchitect     → No context needed, ready to route
+  TriageArchitect     → PASS (no actions)
+  SystemsArchitect    → task_plan: "Answer factual question about France's capital"
+  Facilitator         → Context assembly (no triage actions to execute)
   Router              → Routes to tiered_chat_entrypoint
   ProgenitorAlpha     → "Paris is the capital..."
   ProgenitorBravo     → "The capital of France is Paris..."
@@ -39,7 +43,9 @@ OUTPUT: "Paris is the capital of France."
 ```mermaid
 flowchart LR
     User([User]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
     Router --> TC{Tiered Chat}
 
     subgraph TC[Tiered Chat Subgraph]
@@ -92,7 +98,9 @@ flowchart LR
 PROMPT: "Hello"
 
 FLOW:
-  TriageArchitect     → Simple greeting detected
+  TriageArchitect     → PASS (simple greeting, no actions)
+  SystemsArchitect    → task_plan: "Respond to user greeting"
+  Facilitator         → Context assembly (minimal)
   Router              → Routes to default_responder
   DefaultResponder    → "Hello! How can I help you today?"
   EndSpecialist       → Archives
@@ -103,7 +111,9 @@ OUTPUT: Greeting response (no progenitors needed)
 ```mermaid
 flowchart LR
     User(["Hello"]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
     Router --> Default[DefaultResponder]
     Default --> End[EndSpecialist]
     End --> Response(["Hello! How can<br/>I help you?"])
@@ -120,10 +130,11 @@ flowchart LR
 PROMPT: "Read the contents of README.md"
 
 FLOW:
-  TriageArchitect     → Detects file read, creates ContextPlan
+  TriageArchitect     → PASS — detects file read, creates ContextPlan
                         actions: [READ_FILE("README.md")]
-  Facilitator         → MCP: file_specialist.read_file("README.md")
-                        gathered_context: {README.md: "...content..."}
+  SystemsArchitect    → task_plan: "Read and display README.md contents"
+  Facilitator         → MCP: filesystem.read_file("README.md")
+                        gathered_context includes file contents
   Router              → Context available, routes to chat
   ChatSpecialist      → Presents file content
   EndSpecialist       → Archives
@@ -134,7 +145,8 @@ OUTPUT: File contents displayed to user
 ```mermaid
 flowchart LR
     User([User]) --> Triage[TriageArchitect<br/>ContextPlan]
-    Triage --> Fac[Facilitator]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
 
     subgraph Fac[Facilitator - Context Gathering]
         direction TB
@@ -464,35 +476,20 @@ flowchart TB
 PROMPT: "Design an authentication system for my app"
 
 FLOW:
-  TriageArchitect     → Detects architecture/planning intent
-  Router              → Routes to systems_architect
-  SystemsArchitect    → Generates technical plan
-                        - Requirements analysis
-                        - Component design
-                        - Implementation steps
+  TriageArchitect     → PASS (architecture/planning intent)
+  SystemsArchitect    → task_plan: detailed authentication design
+                        (SA captures full intent as task_plan — planning IS its pipeline role)
+  Facilitator         → Context assembly
+  Router              → Routes to tiered_chat_entrypoint (for elaboration)
+  ProgenitorAlpha/Bravo → Expand on plan details
+  TieredSynthesizer   → Combines perspectives
   EndSpecialist       → Archives plan
 
 OUTPUT: Structured technical plan document
-```
 
-```mermaid
-flowchart LR
-    User([User]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
-    Router --> SA[SystemsArchitect]
-
-    subgraph SA[Technical Planning]
-        direction TB
-        Req[Requirements Analysis]
-        Comp[Component Design]
-        Impl[Implementation Steps]
-        Req --> Comp --> Impl
-    end
-
-    SA --> End[EndSpecialist]
-    End --> Response([Technical Plan])
-
-    style SA fill:#E6E6FA
+NOTE: SA is CORE_INFRASTRUCTURE (#171), not routable by Router.
+The task_plan itself contains the architectural design. For elaboration,
+Router selects a chat or analysis specialist.
 ```
 
 ---
@@ -578,8 +575,8 @@ flowchart LR
 For the hub-and-spoke architecture diagram and routing concepts, see [ARCHITECTURE.md § 3.1](ARCHITECTURE.md#31-hub-and-spoke).
 
 **Key points:**
-- All flows enter via TriageArchitect
-- Router is the central hub - specialists return to router after execution
+- All flows enter via TriageArchitect → SystemsArchitect → Facilitator → Router (#199)
+- Router is the central hub — specialists return to router after execution
 - All flows exit via EndSpecialist → ArchiverSpecialist
 
 ---
@@ -588,11 +585,12 @@ For the hub-and-spoke architecture diagram and routing concepts, see [ARCHITECTU
 
 Every flow satisfies:
 
-1. **Entry:** Always starts at TriageArchitect
+1. **Entry:** Always starts at TriageArchitect → SystemsArchitect → Facilitator → Router (#199)
 2. **Exit:** Always ends at EndSpecialist (archives result)
 3. **Safety:** All specialist execution wrapped by NodeExecutor
 4. **State:** Specialists return dicts, never mutate GraphState directly
 5. **Failover:** Errors route to error handling, not silent failure
+6. **Gate before investment:** Triage rejects underspecified prompts (ask_user only → END) before SA invests an LLM call
 
 ```mermaid
 flowchart LR

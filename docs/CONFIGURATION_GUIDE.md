@@ -283,9 +283,11 @@ CYCLE_MIN_REPETITIONS = 3  # Pattern must repeat this many times to trigger stag
 2. Returns a message explaining what happened (`research_status: "stagnated"`)
 3. Includes artifacts showing the tool history and the repeating pattern
 
-### 6.3 Trace Persistence
+### 6.3 Activity Tracking
 
-All tool calls are recorded in a single `resume_trace` artifact — a list of dicts with `{iteration, tool_call, observation, success}`. On re-invocation (e.g., after EI returns incomplete), Facilitator passes the existing `resume_trace` back so PD can see its prior work and continue from where it left off.
+PD writes `specialist_activity` to scratchpad — a list of human-readable strings summarizing filesystem mutations (create_directory, move_file, write_file, run_command). Facilitator curates this into an `accumulated_work` artifact that persists across passes, so PD on pass N sees operations from passes 1 through N-1.
+
+The full react trace is captured to `scratchpad["react_trace"]` for observability (state_timeline, archive) but is NOT passed back to PD on retry. PD starts with a fresh trace each invocation (#170).
 
 ### 6.4 Tool Permissions
 

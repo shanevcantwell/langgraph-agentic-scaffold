@@ -234,7 +234,7 @@ Begin verification. Use tools to check real outcomes, then call DONE.
 ```
 
 Key data sources:
-- `user_request` — from `artifacts["user_request"]` (written by Triage)
+- `user_request` — from `artifacts["user_request"]` (written by state_factory.py at initialization)
 - `exit_plan` — from `artifacts["exit_plan"]` (written by SA via MCP, see below)
 - `routing_history` — which specialists have executed
 - `artifact_keys` — what artifacts are available for inspection
