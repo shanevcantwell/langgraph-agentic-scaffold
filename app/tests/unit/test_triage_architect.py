@@ -40,12 +40,7 @@ def test_triage_architect_generates_plan(triage_architect, mock_llm_adapter):
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [
-            {
-                "name": "ContextPlan",
-                "args": expected_plan
-            }
-        ]
+        "json_response": expected_plan
     }
 
     # Act
@@ -101,12 +96,7 @@ def test_triage_populates_actions_in_scratchpad(triage_architect, mock_llm_adapt
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [
-            {
-                "name": "ContextPlan",
-                "args": expected_plan
-            }
-        ]
+        "json_response": expected_plan
     }
 
     # Act
@@ -140,12 +130,7 @@ def test_triage_empty_actions_for_greeting(triage_architect, mock_llm_adapter):
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [
-            {
-                "name": "ContextPlan",
-                "args": expected_plan
-            }
-        ]
+        "json_response": expected_plan
     }
 
     # Act
@@ -190,12 +175,7 @@ def test_triage_multiple_actions(triage_architect, mock_llm_adapter):
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [
-            {
-                "name": "ContextPlan",
-                "args": expected_plan
-            }
-        ]
+        "json_response": expected_plan
     }
 
     # Act
@@ -229,12 +209,7 @@ def test_triage_empty_actions_default(triage_architect, mock_llm_adapter):
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [
-            {
-                "name": "ContextPlan",
-                "args": expected_plan
-            }
-        ]
+        "json_response": expected_plan
     }
 
     # Act
@@ -251,13 +226,10 @@ def test_triage_handles_malformed_actions_field(triage_architect, mock_llm_adapt
     state = {"messages": [HumanMessage(content="Do something")]}
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [{
-            "name": "ContextPlan",
-            "args": {
-                "reasoning": "A plan",
-                "actions": "not a list"  # Malformed
-            }
-        }]
+        "json_response": {
+            "reasoning": "A plan",
+            "actions": "not a list"  # Malformed
+        }
     }
 
     result = triage_architect.execute(state)
@@ -267,11 +239,11 @@ def test_triage_handles_malformed_actions_field(triage_architect, mock_llm_adapt
     assert result["scratchpad"]["triage_reasoning"] == "A plan"
 
 
-def test_triage_handles_no_tool_calls(triage_architect, mock_llm_adapter):
-    """#154: LLM returns no tool calls — should return fallback, not crash."""
+def test_triage_handles_empty_json_response(triage_architect, mock_llm_adapter):
+    """#154: LLM returns empty JSON — should return fallback, not crash."""
     state = {"messages": [HumanMessage(content="Hello")]}
 
-    mock_llm_adapter.invoke.return_value = {"tool_calls": []}
+    mock_llm_adapter.invoke.return_value = {"json_response": {}}
 
     result = triage_architect.execute(state)
     assert "scratchpad" in result
@@ -284,13 +256,10 @@ def test_triage_handles_validation_error(triage_architect, mock_llm_adapter):
     state = {"messages": [HumanMessage(content="Do something")]}
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [{
-            "name": "ContextPlan",
-            "args": {
-                "reasoning": "A plan",
-                "actions": [{"type": "INVALID_TYPE", "target": "x"}]  # Will fail ContextAction validation
-            }
-        }]
+        "json_response": {
+            "reasoning": "A plan",
+            "actions": [{"type": "INVALID_TYPE", "target": "x"}]  # Will fail ContextAction validation
+        }
     }
 
     result = triage_architect.execute(state)
@@ -326,7 +295,7 @@ def test_triage_appends_system_note_for_text_to_process(triage_architect, mock_l
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+        "json_response": expected_plan
     }
 
     # Act
@@ -366,7 +335,7 @@ def test_triage_no_system_note_without_text_to_process(triage_architect, mock_ll
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+        "json_response": expected_plan
     }
 
     # Act
@@ -398,7 +367,7 @@ def test_triage_appends_system_note_for_uploaded_image(triage_architect, mock_ll
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+        "json_response": expected_plan
     }
 
     # Act
@@ -437,7 +406,7 @@ def test_triage_both_text_and_image_get_system_notes(triage_architect, mock_llm_
     }
 
     mock_llm_adapter.invoke.return_value = {
-        "tool_calls": [{"name": "ContextPlan", "args": expected_plan}]
+        "json_response": expected_plan
     }
 
     # Act

@@ -33,8 +33,8 @@ class GraphOrchestrator:
     def check_triage_outcome(self, state: GraphState) -> str:
         """
         Decides next step after TriageArchitect.
-        If triage produced actions -> Facilitator.
-        Else -> Router.
+        PASS (no actions or non-ask_user actions) -> SystemsArchitect for planning.
+        CLARIFY (ask_user only) -> END (reject with cause).
         """
         triage_actions = state.get("scratchpad", {}).get("triage_actions", [])
 
@@ -47,25 +47,27 @@ class GraphOrchestrator:
             # in final_user_response. No interrupt, no in-graph clarification.
             if other_count == 0 and ask_user_count > 0:
                 logger.info(
-                    f"Triage: ask_user-only plan ({ask_user_count} questions). "
+                    f"Triage: CLARIFY — ask_user ({ask_user_count} questions). "
                     "Rejecting with cause via EndSpecialist."
                 )
                 self._record_im_decision(state, "check_triage_outcome", CoreSpecialist.END.value,
-                                         f"ask_user-only plan ({ask_user_count} questions), rejecting")
+                                         f"ask_user-only ({ask_user_count} questions), rejecting")
                 return CoreSpecialist.END.value
 
+            # Non-ask_user actions present — treat as PASS (vestigial action types
+            # from before classifier rewrite; route to SA regardless)
             logger.info(
-                f"Triage produced plan with {other_count} context-gathering and "
-                f"{ask_user_count} ask_user actions. Routing to Facilitator chain."
+                f"Triage: PASS (with {other_count} legacy actions). "
+                "Routing to SystemsArchitect for planning."
             )
-            self._record_im_decision(state, "check_triage_outcome", "facilitator_specialist",
-                                     f"{other_count} context-gathering + {ask_user_count} ask_user actions")
-            return "facilitator_specialist"
+            self._record_im_decision(state, "check_triage_outcome", "systems_architect",
+                                     f"PASS with {other_count} legacy actions")
+            return "systems_architect"
 
-        logger.info("Triage produced no actions. Routing to Router.")
-        self._record_im_decision(state, "check_triage_outcome", CoreSpecialist.ROUTER.value,
-                                 "no triage actions")
-        return CoreSpecialist.ROUTER.value
+        logger.info("Triage: PASS (no actions). Routing to SystemsArchitect for planning.")
+        self._record_im_decision(state, "check_triage_outcome", "systems_architect",
+                                 "PASS, no actions")
+        return "systems_architect"
 
     def _check_stabilization_action(self, state: GraphState) -> str | None:
         """

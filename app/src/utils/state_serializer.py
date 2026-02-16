@@ -69,8 +69,9 @@ def build_timeline_entry(
     merged_routing = list(state.get("routing_history", []))
     merged_routing.extend(update.get("routing_history", []))
 
-    # Extract react_trace if a react-step specialist wrote it
-    react_trace = merged_scratchpad.pop("react_trace", None)
+    # Extract react_trace only if the CURRENT specialist wrote it
+    # (not stale from a previous specialist's scratchpad contribution)
+    react_trace = update.get("scratchpad", {}).get("react_trace")
 
     # Extract and consume im_decision so it doesn't go stale
     im_decision = merged_scratchpad.get("im_decision")

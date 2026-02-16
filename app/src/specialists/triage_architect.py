@@ -25,7 +25,8 @@ class TriageArchitect(BaseSpecialist):
             logger.warning("TriageArchitect received no messages.")
             return {}
 
-        # Check for uploaded content (Blind Triage Support)
+        # Triage runs BEFORE SA — no task_plan exists yet.
+        # Triage judges prompt completeness from the raw user request + ecosystem awareness.
         from langchain_core.messages import HumanMessage as HM
 
         # Handle uploaded text (Data Injection)
@@ -46,26 +47,22 @@ class TriageArchitect(BaseSpecialist):
                     HM(content=last_content + "\n\n[SYSTEM NOTE: The user has uploaded an image. You cannot see it, but it is available in the artifacts. Do not ask for the image.]")
                 ]
 
-        # 2. Create Request - use adapter's system prompt (configured by GraphBuilder with dynamic specialist roster)
-        # NOTE: Do NOT reload prompt file here - GraphBuilder._configure_triage() already assembled
-        # the dynamic prompt with specialist descriptions and set it on the adapter.
+        # 2. Create Request - use output_model_class for direct schema enforcement.
+        # NOT tools=[ContextPlan] — that wraps ContextPlan in a nested tool-call envelope
+        # with duplicate reasoning/actions fields, confusing the model into producing "...".
+        # output_model_class enforces ContextPlan's flat schema directly via logit masking.
         request = StandardizedLLMRequest(
-            messages=messages,  # No SystemMessage - adapter handles system prompt
-            tools=[ContextPlan],
-            force_tool_call=True
+            messages=messages,
+            output_model_class=ContextPlan,
         )
-        
-        # 4. Invoke LLM
+
         try:
             response_data = self.llm_adapter.invoke(request)
-            tool_calls = response_data.get("tool_calls", [])
+            plan_args = response_data.get("json_response", {})
 
-            if not tool_calls:
-                logger.warning("TriageArchitect LLM did not return a tool call.")
-                return self._fallback_plan("LLM did not return a tool call")
-
-            # Extract the first tool call (ContextPlan)
-            plan_args = tool_calls[0].get('args', {})
+            if not plan_args:
+                logger.warning("TriageArchitect LLM did not return valid JSON.")
+                return self._fallback_plan("LLM did not return valid JSON")
 
             # Guard malformed fields before Pydantic validation (#154)
             if not isinstance(plan_args.get("actions"), list):
@@ -83,7 +80,6 @@ class TriageArchitect(BaseSpecialist):
 
             logger.info(f"TriageArchitect generated plan with {len(context_plan.actions)} actions.")
 
-            # 5. Return triage output to scratchpad (no artifact)
             return {
                 "scratchpad": {
                     "triage_reasoning": context_plan.reasoning,

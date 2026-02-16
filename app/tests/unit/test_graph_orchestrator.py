@@ -392,8 +392,8 @@ class TestCheckTriageOutcome:
         result = orchestrator_instance.check_triage_outcome(state)
         assert result == CoreSpecialist.END.value
 
-    def test_mixed_plan_routes_to_facilitator(self, orchestrator_instance):
-        """Plan with context-gathering + ask_user routes to Facilitator (not END)."""
+    def test_mixed_plan_routes_to_sa(self, orchestrator_instance):
+        """Plan with context-gathering + ask_user routes to SA for planning (not END)."""
         state = {
             "scratchpad": {
                 "triage_actions": [
@@ -407,10 +407,10 @@ class TestCheckTriageOutcome:
         }
 
         result = orchestrator_instance.check_triage_outcome(state)
-        assert result == "facilitator_specialist"
+        assert result == "systems_architect"
 
-    def test_context_only_plan_routes_to_facilitator(self, orchestrator_instance):
-        """Normal context-gathering plan routes to Facilitator."""
+    def test_context_only_plan_routes_to_sa(self, orchestrator_instance):
+        """Normal context-gathering plan routes to SA for planning."""
         state = {
             "scratchpad": {
                 "triage_actions": [
@@ -422,10 +422,10 @@ class TestCheckTriageOutcome:
         }
 
         result = orchestrator_instance.check_triage_outcome(state)
-        assert result == "facilitator_specialist"
+        assert result == "systems_architect"
 
-    def test_empty_plan_routes_to_router(self, orchestrator_instance):
-        """Empty triage_actions routes to Router."""
+    def test_empty_plan_routes_to_sa(self, orchestrator_instance):
+        """Empty triage_actions routes to SA for planning."""
         state = {
             "scratchpad": {
                 "triage_actions": [],
@@ -434,11 +434,11 @@ class TestCheckTriageOutcome:
         }
 
         result = orchestrator_instance.check_triage_outcome(state)
-        assert result == CoreSpecialist.ROUTER.value
+        assert result == "systems_architect"
 
-    def test_no_triage_actions_routes_to_router(self, orchestrator_instance):
-        """Missing triage_actions in scratchpad routes to Router."""
+    def test_no_triage_actions_routes_to_sa(self, orchestrator_instance):
+        """Missing triage_actions in scratchpad routes to SA for planning."""
         state = {"scratchpad": {}}
 
         result = orchestrator_instance.check_triage_outcome(state)
-        assert result == CoreSpecialist.ROUTER.value
+        assert result == "systems_architect"

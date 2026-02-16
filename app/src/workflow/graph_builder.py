@@ -434,10 +434,11 @@ class GraphBuilder:
         logger.info("RouterSpecialist adapter attached with dynamic, context-aware prompt.")
 
     def _configure_triage(self, specialists: Dict[str, BaseSpecialist], configs: Dict, specialist_name: str = None):
-        """Configure a triage specialist with its base prompt.
+        """Configure a triage specialist with dynamic ecosystem awareness.
 
-        Triage no longer needs a specialist roster — SA captures intent (task_plan),
-        Router handles specialist selection. Triage's sole job is context-gathering actions.
+        Triage is a pass/fail classifier: does the user's request need clarification
+        (ask_user) or can the system proceed? It needs to know what specialists exist
+        so it can judge whether the system can handle the request.
 
         Args:
             specialists: Dict of loaded specialist instances
@@ -450,7 +451,25 @@ class GraphBuilder:
 
         triage_instance = specialists[specialist_name]
         triage_config = configs.get(specialist_name, {})
-        system_prompt = load_prompt(triage_config.get("prompt_file", ""))
+        base_prompt = load_prompt(triage_config.get("prompt_file", ""))
+
+        # Build ecosystem awareness: what specialists can the system route to?
+        # Uses config-driven exclusions (exclusion_index built at line 312).
+        # Subgraph exclusions aren't available yet but config.yaml excluded_from covers them.
+        config_exclusions = list(self.exclusion_index.get(specialist_name, set()))
+        triage_exclusions = SpecialistCategories.get_triage_exclusions(
+            config_exclusions=config_exclusions,
+            current_triage_name=specialist_name
+        )
+        available_specialists = {
+            name: conf for name, conf in configs.items()
+            if name not in triage_exclusions
+        }
+
+        ecosystem_report = "\n\n--- SYSTEM CAPABILITIES ---\nThe following specialists are available to handle tasks:\n" + "\n".join(
+            [f"- **{name}**: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()]
+        )
+        dynamic_system_prompt = f"{base_prompt}{ecosystem_report}"
 
         logger.debug(f"Attempting to configure adapter for '{triage_instance.specialist_name}'.")
         binding_key = triage_config.get("llm_config")
@@ -458,11 +477,11 @@ class GraphBuilder:
             raise WorkflowError(f"Could not resolve LLM binding for '{specialist_name}'. Ensure it is bound in 'user_settings.yaml' or a 'default_llm_config' is set.")
 
         try:
-            adapter = self.adapter_factory.create_adapter(specialist_name, system_prompt)
+            adapter = self.adapter_factory.create_adapter(specialist_name, dynamic_system_prompt)
             if adapter is None:
                 logger.error(f"CRITICAL: AdapterFactory returned None for '{triage_instance.specialist_name}' with binding key '{binding_key}'.")
             triage_instance.llm_adapter = adapter
-            logger.info(f"Triage specialist '{specialist_name}' adapter attached. Adapter is {'present' if adapter else 'MISSING'}.")
+            logger.info(f"Triage specialist '{specialist_name}' adapter attached with {len(available_specialists)} specialists in ecosystem report.")
         except Exception as e:
             logger.error(f"CRITICAL: An unexpected error occurred while creating the adapter for '{triage_instance.specialist_name}': {e}", exc_info=True)
             triage_instance.llm_adapter = None

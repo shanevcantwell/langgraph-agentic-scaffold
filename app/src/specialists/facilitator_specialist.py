@@ -247,12 +247,10 @@ class FacilitatorSpecialist(BaseSpecialist):
 
             return result
 
-        # Load triage actions from scratchpad
+        # Load triage actions from scratchpad (may be empty — Triage is a classifier,
+        # not a context planner. Empty actions = PASS, which is the common case.)
         scratchpad = state.get("scratchpad", {})
         triage_actions_data = scratchpad.get("triage_actions", [])
-        if not triage_actions_data:
-            logger.warning("Facilitator: No 'triage_actions' in scratchpad.")
-            return {"error": "No triage actions to execute."}
 
         triage_actions = []
         for action_data in triage_actions_data:
@@ -262,7 +260,7 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.warning(f"Facilitator: Skipping malformed action {action_data}: {e}")
 
         gathered_context = []
-        logger.info(f"Facilitator: Executing plan with {len(triage_actions)} actions.")
+        logger.info(f"Facilitator: Assembling context ({len(triage_actions)} triage actions).")
 
         # Surface task strategy from SA's task_plan (better source than triage reasoning)
         task_plan = artifacts.get("task_plan", {})
@@ -300,7 +298,8 @@ class FacilitatorSpecialist(BaseSpecialist):
                 gathered_context.append(wip_summary)
                 logger.info("Facilitator: Added work-in-progress summary to gathered_context")
 
-        if not self.mcp_client:
+        # Execute triage actions via MCP (only if Triage produced any)
+        if triage_actions and not self.mcp_client:
             logger.error("Facilitator: MCP Client not initialized.")
             return {"error": "MCP Client not initialized."}
 

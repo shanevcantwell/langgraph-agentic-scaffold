@@ -7,34 +7,34 @@ logger = logging.getLogger(__name__)
 
 class ContextEngineeringSubgraph(BaseSubgraph):
     def build(self, workflow: StateGraph) -> None:
-        # CONTEXT ENGINEERING SUBGRAPH (Issue #171: SA added as entry point)
-        # SystemsArchitect -> TriageArchitect -> [Facilitator | Router]
-        # Facilitator -> Router
-
-        # Issue #171: SA is the entry point — produces task_plan, then hands off to Triage
-        if "systems_architect" in self.specialists and "triage_architect" in self.specialists:
-            workflow.add_edge("systems_architect", "triage_architect")
-            logger.info("Graph Edge: Added SystemsArchitect -> TriageArchitect edge (#171)")
+        # CONTEXT ENGINEERING SUBGRAPH
+        # Triage (entry point, gate) -> [SA | END]
+        # SA (planning) -> Facilitator (context assembly) -> Router
+        #
+        # Triage runs first as a pass/fail classifier on the user's prompt.
+        # Rejection via ask_user happens before SA invests an LLM call on planning.
+        # SA plans from a validated prompt, then Facilitator assembles gathered_context.
 
         if "triage_architect" in self.specialists:
-            # ADR-CORE-018: Simplified routing - all plans with actions go through Facilitator chain
-            # Facilitator → Dialogue → Router handles both context-gathering and ask_user actions
+            # Triage conditional: PASS -> SA, CLARIFY -> END (reject with cause)
             workflow.add_conditional_edges(
                 "triage_architect",
                 self.orchestrator.check_triage_outcome,
                 {
-                    "facilitator_specialist": "facilitator_specialist",
-                    CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
+                    "systems_architect": "systems_architect",
                     CoreSpecialist.END.value: CoreSpecialist.END.value
                 }
             )
-            logger.info("Graph Edge: Added TriageArchitect conditional edge (ADR-CORE-018)")
+            logger.info("Graph Edge: Added TriageArchitect conditional edge (PASS->SA, CLARIFY->END)")
+
+        if "systems_architect" in self.specialists and "facilitator_specialist" in self.specialists:
+            # SA produces task_plan, then Facilitator assembles gathered_context
+            workflow.add_edge("systems_architect", "facilitator_specialist")
+            logger.info("Graph Edge: Added SystemsArchitect -> Facilitator edge")
 
         if "facilitator_specialist" in self.specialists:
-            # ADR-CORE-059: DialogueSpecialist deprecated - Facilitator handles ASK_USER inline via interrupt()
-            # All context actions (READ_FILE, LIST_DIRECTORY, RESEARCH, ASK_USER) are handled uniformly
             workflow.add_edge("facilitator_specialist", CoreSpecialist.ROUTER.value)
-            logger.info("Graph Edge: Added Facilitator -> Router edge (ADR-CORE-059)")
+            logger.info("Graph Edge: Added Facilitator -> Router edge")
 
     def get_excluded_specialists(self) -> list[str]:
         """Return specialists that have dedicated edges and shouldn't be in the general router menu."""
@@ -45,6 +45,4 @@ class ContextEngineeringSubgraph(BaseSubgraph):
             excluded.append("triage_architect")
         if "facilitator_specialist" in self.specialists:
             excluded.append("facilitator_specialist")
-        # Note: dialogue_specialist removed from chain per ADR-CORE-059
-        # It's excluded via config.yaml excluded_from instead
         return excluded

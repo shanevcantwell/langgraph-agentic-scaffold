@@ -39,9 +39,10 @@ def test_check_triage_outcome_rejects_ask_user_only_plan(orchestrator_instance):
     # Assert - ask_user-only routes to EndSpecialist (reject with cause)
     assert result == CoreSpecialist.END.value
 
-def test_check_triage_outcome_routes_to_facilitator_on_normal_actions(orchestrator_instance):
+def test_check_triage_outcome_routes_to_sa_on_normal_actions(orchestrator_instance):
     """
-    Tests that check_triage_outcome routes to Facilitator for normal actions.
+    Tests that check_triage_outcome routes to SystemsArchitect for normal
+    (non-ask_user) actions. SA plans before Facilitator assembles context.
     """
     # Arrange
     state = {
@@ -57,8 +58,8 @@ def test_check_triage_outcome_routes_to_facilitator_on_normal_actions(orchestrat
     # Act
     result = orchestrator_instance.check_triage_outcome(state)
 
-    # Assert
-    assert result == "facilitator_specialist"
+    # Assert — Triage PASS routes to SA (not Facilitator)
+    assert result == "systems_architect"
 
 def test_end_specialist_generates_clarification_response():
     """

@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 733 |
+| Unit | 74 | 736 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1016** |
+| **Total** | **109** | **1019** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -809,8 +809,8 @@
 
 - **`test_check_triage_outcome_rejects_ask_user_only_plan`**
   - *#179: Ask-user-only plan = underspecified prompt. Routes to EndSpecialist*
-- **`test_check_triage_outcome_routes_to_facilitator_on_normal_actions`**
-  - *Tests that check_triage_outcome routes to Facilitator for normal actions.*
+- **`test_check_triage_outcome_routes_to_sa_on_normal_actions`**
+  - *Tests that check_triage_outcome routes to SystemsArchitect for normal*
 - **`test_end_specialist_generates_clarification_response`**
   - *Tests that EndSpecialist generates a clarification response instead of*
 
@@ -972,6 +972,8 @@
   - *When react_step loop exhausts iterations without DONE, result is incomplete.*
 - **`test_done_before_tool_use_triggers_nudge`**
   - *DONE on first call (no prior tool use) → nudge → model retries with tool use.*
+- **`test_repeated_done_without_real_tool_keeps_nudging`**
+  - *DONE twice in a row (no real tool use between) → nudge fires both times.*
 - **`test_unavailable_returns_complete_with_message`**
   - *No external_mcp_client → cannot verify → defaults to complete.*
 - **`test_disconnected_returns_complete_with_message`**
@@ -1004,6 +1006,10 @@
   - *When routable_specialists set, DONE schema has enum constraint.*
 - **`test_build_tool_params_no_enum_without_routable`**
   - *Without routable_specialists, DONE schema has no enum.*
+- **`test_default_max_iterations`**
+  - *Without config, uses DEFAULT_MAX_ITERATIONS (8).*
+- **`test_config_overrides_default`**
+  - *config.yaml max_iterations overrides the class default.*
 
 ## `app/tests/unit/test_external_mcp_config.py`
 
@@ -1013,6 +1019,7 @@
 - **`test_facilitator_executes_research_action`**
 - **`test_facilitator_executes_read_file_action`**
 - **`test_facilitator_handles_missing_plan`**
+  - *No triage_actions and no artifacts — Facilitator still returns gathered_context.*
 - **`test_facilitator_handles_mcp_error`**
 - **`test_facilitator_reads_artifact_instead_of_file_for_uploaded_image`**
   - *Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem.*
@@ -1045,7 +1052,7 @@
 - **`test_facilitator_directory_listing_filesystem_unavailable`**
   - *Per FACILITATOR.md: LIST_DIRECTORY also gracefully handles filesystem unavailability.*
 - **`test_facilitator_handles_empty_triage_actions`**
-  - *When triage_actions is empty, Facilitator returns an error.*
+  - *When triage_actions is empty (Triage PASS), Facilitator assembles context*
 - **`test_facilitator_continues_after_action_error`**
   - *Per FACILITATOR.md: Individual action failures don't halt the entire plan.*
 
@@ -1171,14 +1178,14 @@
   - *Ask-user-only plan = reject with cause via EndSpecialist.*
 - **`test_multiple_ask_user_actions_route_to_end`**
   - *Multiple ask_user questions still reject.*
-- **`test_mixed_plan_routes_to_facilitator`**
-  - *Plan with context-gathering + ask_user routes to Facilitator (not END).*
-- **`test_context_only_plan_routes_to_facilitator`**
-  - *Normal context-gathering plan routes to Facilitator.*
-- **`test_empty_plan_routes_to_router`**
-  - *Empty triage_actions routes to Router.*
-- **`test_no_triage_actions_routes_to_router`**
-  - *Missing triage_actions in scratchpad routes to Router.*
+- **`test_mixed_plan_routes_to_sa`**
+  - *Plan with context-gathering + ask_user routes to SA for planning (not END).*
+- **`test_context_only_plan_routes_to_sa`**
+  - *Normal context-gathering plan routes to SA for planning.*
+- **`test_empty_plan_routes_to_sa`**
+  - *Empty triage_actions routes to SA for planning.*
+- **`test_no_triage_actions_routes_to_sa`**
+  - *Missing triage_actions in scratchpad routes to SA for planning.*
 
 ## `app/tests/unit/test_heap_invariants.py`
 
@@ -2270,8 +2277,8 @@
   - *Test TriageArchitect handles LLM returning empty actions.*
 - **`test_triage_handles_malformed_actions_field`**
   - *#154: LLM returns actions as string instead of list — should not crash.*
-- **`test_triage_handles_no_tool_calls`**
-  - *#154: LLM returns no tool calls — should return fallback, not crash.*
+- **`test_triage_handles_empty_json_response`**
+  - *#154: LLM returns empty JSON — should return fallback, not crash.*
 - **`test_triage_handles_validation_error`**
   - *#154: Pydantic rejects args — salvage what we can (reasoning preserved).*
 - **`test_triage_appends_system_note_for_text_to_process`**

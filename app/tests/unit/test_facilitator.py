@@ -79,9 +79,11 @@ def test_facilitator_executes_read_file_action(facilitator):
     assert "File content" in result["artifacts"]["gathered_context"]
 
 def test_facilitator_handles_missing_plan(facilitator):
+    """No triage_actions and no artifacts — Facilitator still returns gathered_context."""
     state = {"artifacts": {}, "scratchpad": {}}
     result = facilitator.execute(state)
-    assert "error" in result
+    assert "gathered_context" in result.get("artifacts", {})
+    assert result["scratchpad"]["facilitator_complete"] is True
 
 def test_facilitator_handles_mcp_error(facilitator):
     state = {
@@ -557,20 +559,24 @@ def test_facilitator_directory_listing_filesystem_unavailable(facilitator):
 
 def test_facilitator_handles_empty_triage_actions(facilitator):
     """
-    When triage_actions is empty, Facilitator returns an error.
+    When triage_actions is empty (Triage PASS), Facilitator assembles context
+    from available artifacts without executing MCP actions.
     """
     state = {
         "scratchpad": {
-            "triage_actions": [],  # Empty actions list
+            "triage_actions": [],  # Empty = Triage PASS
             "triage_reasoning": "No actions",
         },
-        "artifacts": {}
+        "artifacts": {
+            "task_plan": {"plan_summary": "Test strategy", "execution_steps": ["Step 1"]}
+        }
     }
 
     result = facilitator.execute(state)
 
-    assert "error" in result
-    assert "No triage actions" in result["error"]
+    assert "gathered_context" in result.get("artifacts", {})
+    assert "Test strategy" in result["artifacts"]["gathered_context"]
+    assert result["scratchpad"]["facilitator_complete"] is True
 
 
 def test_facilitator_continues_after_action_error(facilitator):

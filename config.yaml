@@ -17,7 +17,7 @@
 # Define the entry point for the graph. Defaults to 'router_specialist'.
 # ==============================================================================
 workflow:
-  entry_point: "systems_architect"
+  entry_point: "triage_architect"
   # The number of times a short sequence of specialists can repeat before the
   # workflow is halted to prevent unproductive loops.
   max_loop_cycles: 3
@@ -218,30 +218,33 @@ specialists:
   # text_analysis_specialist absorbs both roles as a ReAct-enabled specialist
   # with tools for structured data operations. See Phase 1b of absorption plan.
 
-  text_analysis_specialist:
-    type: "llm"
-    prompt_file: "text_analysis_prompt.md"
-    description: "Processes text and structured data: summarize, extract, transform, format, or measure semantic similarity."
-    # Tool permissions — optional use; simple analysis doesn't require tools
-    tools:
-      prompt-prix:
-        - react_step
-      filesystem:
-        - read_file
-        - list_directory
-      semantic-chunker:
-        - calculate_drift
-        - analyze_variants
-        - analyze_trajectory
-      it-tools:
-        - format_json
-        - minify_json
-        - compare_json
-        - convert_json_to_csv
-        - convert_json_to_yaml
-        - format_yaml
-        - format_xml
-        - convert_html_to_markdown
+  # DISABLED: TA not ready for routing — reads files but can't mutate filesystem,
+  # confuses EI by reporting moved files as "missing". Re-enable after TA redesign.
+  # text_analysis_specialist:
+  #   type: "llm"
+  #   prompt_file: "text_analysis_prompt.md"
+  #   description: "Processes text and structured data: summarize, extract, transform, format, or measure semantic similarity."
+  #   max_iterations: 10
+  #   # Tool permissions — optional use; simple analysis doesn't require tools
+  #   tools:
+  #     prompt-prix:
+  #       - react_step
+  #     filesystem:
+  #       - read_file
+  #       - list_directory
+  #     semantic-chunker:
+  #       - calculate_drift
+  #       - analyze_variants
+  #       - analyze_trajectory
+  #     it-tools:
+  #       - format_json
+  #       - minify_json
+  #       - compare_json
+  #       - convert_json_to_csv
+  #       - convert_json_to_yaml
+  #       - format_yaml
+  #       - format_xml
+  #       - convert_html_to_markdown
 
   # --- Conversational & Chat ---
 
@@ -440,7 +443,7 @@ specialists:
     description: "Gates the END node by validating task completion. Evaluates whether accumulated state satisfies the user's original request before allowing termination."
     # ADR-ROADMAP-001 Phase 1: LLM-backed completion check
     # Not user-routable - invoked automatically when Router decides END
-    max_iterations: 8  # Read-only verification; shouldn't need many steps
+    max_iterations: 50  # Read-only verification; shouldn't need many steps
     excluded_from:
       - triage_architect
       - router_specialist

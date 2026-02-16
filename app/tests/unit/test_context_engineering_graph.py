@@ -14,13 +14,15 @@ def test_context_engineering_graph_wiring(
     Tests that the Context Engineering subgraph is correctly wired:
     1. TriageArchitect and Facilitator are nodes.
     2. Researcher and Summarizer are NOT nodes (MCP only).
-    3. TriageArchitect routes to Facilitator or Router.
-    4. Facilitator routes to Router.
+    3. TriageArchitect routes to SystemsArchitect or END.
+    4. SystemsArchitect -> Facilitator (unconditional).
+    5. Facilitator -> Router (unconditional).
     """
     # --- Arrange ---
     specialist_configs = {
         "router_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "router.md"},
         "triage_architect": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "triage.md"},
+        "systems_architect": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "sa.md"},
         "facilitator_specialist": {"type": "procedural", "description": "Facilitator"},
         # "researcher_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "researcher.md"},
         "summarizer_specialist": {"type": "llm", "llm_config": "gemini-test", "prompt_file": "summarizer.md"},
@@ -54,27 +56,30 @@ def test_context_engineering_graph_wiring(
     assert "summarizer_specialist" not in added_nodes
     
     # 2. Verify Edges
-    # Triage -> [Facilitator | Router | End]
+    # Triage -> [SystemsArchitect | END]
     mock_workflow.add_conditional_edges.assert_any_call(
         "triage_architect",
         builder.orchestrator.check_triage_outcome,
         {
-            "facilitator_specialist": "facilitator_specialist",
-            "router_specialist": "router_specialist",
+            "systems_architect": "systems_architect",
             "end_specialist": "end_specialist"
         }
     )
-    
-    # Facilitator -> Router (Direct edge)
+
+    # SystemsArchitect -> Facilitator (unconditional)
+    mock_workflow.add_edge.assert_any_call("systems_architect", "facilitator_specialist")
+
+    # Facilitator -> Router (unconditional)
     mock_workflow.add_edge.assert_any_call("facilitator_specialist", "router_specialist")
     
     # 3. Verify Exclusions from Hub-and-Spoke
-    # Triage and Facilitator should NOT have the standard check_task_completion edge
+    # Triage, SA, and Facilitator should NOT have the standard check_task_completion edge
     # We check all calls to add_conditional_edges with check_task_completion
     for call in mock_workflow.add_conditional_edges.call_args_list:
         source_node = call.args[0]
         condition = call.args[1]
         if condition == builder.orchestrator.check_task_completion:
             assert source_node != "triage_architect"
+            assert source_node != "systems_architect"
             assert source_node != "facilitator_specialist"
 
