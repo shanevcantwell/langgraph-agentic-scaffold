@@ -183,13 +183,79 @@ class FacilitatorSpecialist(BaseSpecialist):
         logger.info(f"Facilitator: Generated work-in-progress summary for {last_working_specialist} ({total_ops} ops)")
         return summary
 
+    def _accumulate_prior_work(self, artifacts: dict, scratchpad: dict) -> list:
+        """
+        Accumulate specialist_activity across passes.
+
+        Each PD pass writes a fresh specialist_activity to scratchpad (overwriting
+        the previous via ior merge). Without accumulation, retry PD only sees the
+        LATEST pass's operations — all prior work knowledge is lost.
+
+        Facilitator curates the accumulation in an artifact so PD on pass N sees
+        the work from passes 1 through N-1.
+        """
+        existing = artifacts.get("accumulated_work", [])
+        new_activity = scratchpad.get("specialist_activity", [])
+        if new_activity:
+            combined = existing + new_activity
+            logger.info(
+                f"Facilitator: Accumulated work: {len(existing)} existing + "
+                f"{len(new_activity)} new = {len(combined)} total entries"
+            )
+            return combined
+        return existing
+
+    def _build_task_context(self, artifacts: dict) -> list:
+        """
+        Build the task strategy section with full plan context.
+
+        Includes plan_summary, execution_steps, and acceptance_criteria so that
+        retry specialists have the complete plan — not just a one-line summary.
+        """
+        task_plan = artifacts.get("task_plan", {})
+        parts = []
+
+        summary = task_plan.get("plan_summary", "")
+        if summary:
+            section = f"### Task Strategy\n{summary}"
+
+            steps = task_plan.get("execution_steps", [])
+            if steps:
+                section += "\n\n**Execution steps:**\n" + "\n".join(f"- {s}" for s in steps)
+
+            criteria = task_plan.get("acceptance_criteria", "")
+            if criteria:
+                section += f"\n\n**Acceptance criteria:** {criteria}"
+
+            parts.append(section)
+
+        return parts
+
+    def _build_prior_work_section(self, accumulated_work: list, exit_interview_result: dict = None) -> str:
+        """
+        Build the Prior Work section with accumulated operations and EI guidance.
+
+        Includes EI's recommended next steps so the retry specialist knows
+        both what was done AND what EI says should happen next.
+        """
+        lines = []
+
+        if accumulated_work:
+            lines.append("### Prior Work Completed")
+            lines.extend(f"- {entry}" for entry in accumulated_work)
+
+        # Append EI's recommended next steps so PD has actionable guidance
+        if exit_interview_result and not exit_interview_result.get("is_complete", True):
+            missing = exit_interview_result.get("missing_elements", "")
+            if missing:
+                lines.append("")
+                lines.append("**EI recommended next steps:** " + missing)
+
+        return "\n".join(lines) if lines else ""
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
         artifacts = state.get("artifacts", {})
         exit_interview_result = artifacts.get("exit_interview_result")
-
-        # #170: gathered_context is rebuilt fresh each invocation.
-        # return_control modes (ACCUMULATE/RESET) are no longer needed —
-        # every invocation rebuilds from current plan actions + trace knowledge.
 
         # Issue #114: BENIGN continuation - pass trace when model was working but ran out of runway
         # Key signal: max_iterations_exceeded must be True (model hit runway limit)
@@ -215,11 +281,7 @@ class FacilitatorSpecialist(BaseSpecialist):
             )
 
             scratchpad = state.get("scratchpad", {})
-            context_parts = []
-
-            task_plan = artifacts.get("task_plan", {})
-            if task_plan.get("plan_summary"):
-                context_parts.append(f"### Task Strategy\n{task_plan['plan_summary']}")
+            context_parts = self._build_task_context(artifacts)
 
             if exit_interview_result and not exit_interview_result.get("is_complete", True):
                 missing = exit_interview_result.get("missing_elements", "")
@@ -227,14 +289,15 @@ class FacilitatorSpecialist(BaseSpecialist):
                     feedback = self._format_exit_interview_feedback(exit_interview_result)
                     context_parts.append(feedback)
 
-            activity = scratchpad.get("specialist_activity", [])
-            if activity:
-                knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
-                context_parts.append(knowledge)
+            accumulated_work = self._accumulate_prior_work(artifacts, scratchpad)
+            prior_work_section = self._build_prior_work_section(accumulated_work, exit_interview_result)
+            if prior_work_section:
+                context_parts.append(prior_work_section)
 
             result = {
                 "artifacts": {
                     "max_iterations_exceeded": False,
+                    "accumulated_work": accumulated_work,
                 },
                 "scratchpad": {
                     "facilitator_complete": True
@@ -259,15 +322,10 @@ class FacilitatorSpecialist(BaseSpecialist):
             except Exception as e:
                 logger.warning(f"Facilitator: Skipping malformed action {action_data}: {e}")
 
-        gathered_context = []
+        gathered_context = self._build_task_context(artifacts)
         logger.info(f"Facilitator: Assembling context ({len(triage_actions)} triage actions).")
 
-        # Surface task strategy from SA's task_plan (better source than triage reasoning)
-        task_plan = artifacts.get("task_plan", {})
-        if task_plan.get("plan_summary"):
-            gathered_context.append(f"### Task Strategy\n{task_plan['plan_summary']}")
-
-        # Read routing_history early - needed for both EI feedback and WIP summary
+        # Read routing_history early - needed for WIP summary
         routing_history = state.get("routing_history", [])
 
         # Issue #167 (revises #121): Curated EI feedback for retry guidance.
@@ -279,14 +337,15 @@ class FacilitatorSpecialist(BaseSpecialist):
                 gathered_context.append(feedback)
                 logger.info("Facilitator: Added curated EI retry context")
 
-        # ADR-073 Phase 3: Surface prior work from scratchpad.
-        # PD writes specialist_activity to scratchpad; Facilitator reads it directly.
+        # Accumulate prior work across passes.
+        # PD writes specialist_activity per pass; Facilitator accumulates in artifact
+        # so retry PD sees work from ALL passes, not just the latest.
+        accumulated_work = self._accumulate_prior_work(artifacts, scratchpad)
         if exit_interview_result and not exit_interview_result.get("is_complete", True):
-            activity = scratchpad.get("specialist_activity", [])
-            if activity:
-                knowledge = "### Prior Work Completed\n" + "\n".join(f"- {e}" for e in activity)
-                gathered_context.append(knowledge)
-                logger.info("Facilitator: Added specialist_activity from scratchpad")
+            prior_work_section = self._build_prior_work_section(accumulated_work, exit_interview_result)
+            if prior_work_section:
+                gathered_context.append(prior_work_section)
+                logger.info("Facilitator: Added accumulated prior work from scratchpad")
 
         # Issue #108: Surface work-in-progress for BENIGN interrupts
         # When max_iterations_exceeded WITHOUT exit_interview_result, this is a BENIGN
@@ -439,12 +498,12 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.error(f"Failed to execute action {action}: {e}")
                 gathered_context.append(f"### Error: {action.target}\nFailed to execute: {e}")
 
-        # #170: Fresh rebuild — no accumulation across passes.
         final_context = "\n\n".join(gathered_context)
 
         return {
             "artifacts": {
-                "gathered_context": final_context
+                "gathered_context": final_context,
+                "accumulated_work": accumulated_work,
             },
             "scratchpad": {
                 "facilitator_complete": True

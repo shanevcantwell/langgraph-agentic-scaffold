@@ -316,3 +316,123 @@ def test_facilitator_surfaces_specialist_activity_on_retry(facilitator):
     assert "Created directory /workspace/animals" in gathered
     assert "Moved /workspace/1.txt" in gathered
     assert "Moved /workspace/4.txt" in gathered
+    # accumulated_work artifact persisted for next pass
+    assert result["artifacts"]["accumulated_work"] == [
+        "Created directory /workspace/animals",
+        "Moved /workspace/1.txt \u2192 /workspace/animals/1.txt",
+        "Moved /workspace/4.txt \u2192 /workspace/animals/4.txt",
+    ]
+
+
+def test_facilitator_accumulates_work_across_passes(facilitator):
+    """
+    Prior Work accumulates across passes. Pass 2 PD sees pass 1's work
+    combined with pass 2's new activity, not just the latest.
+    """
+    state = {
+        "scratchpad": {
+            "triage_actions": [],
+            "specialist_activity": [
+                "Moved /workspace/5.txt \u2192 /workspace/animals/5.txt",
+                "Created directory /workspace/plants",
+            ]
+        },
+        "artifacts": {
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "Still incomplete",
+                "missing_elements": "2 files remain",
+                "recommended_specialists": ["project_director"]
+            },
+            "task_plan": {
+                "plan_summary": "Sort files into categories",
+            },
+            # Pass 1's work already accumulated
+            "accumulated_work": [
+                "Created directory /workspace/animals",
+                "Moved /workspace/1.txt \u2192 /workspace/animals/1.txt",
+                "Moved /workspace/4.txt \u2192 /workspace/animals/4.txt",
+            ],
+        }
+    }
+
+    result = facilitator.execute(state)
+    gathered = result["artifacts"]["gathered_context"]
+
+    # All 5 entries present: 3 from pass 1 + 2 from pass 2
+    assert "Created directory /workspace/animals" in gathered
+    assert "Moved /workspace/1.txt" in gathered
+    assert "Moved /workspace/4.txt" in gathered
+    assert "Moved /workspace/5.txt" in gathered
+    assert "Created directory /workspace/plants" in gathered
+
+    # Accumulated artifact has all 5 entries
+    assert len(result["artifacts"]["accumulated_work"]) == 5
+
+    # EI recommended steps in prior work section
+    assert "2 files remain" in gathered
+
+
+def test_facilitator_task_plan_execution_steps_in_context(facilitator):
+    """
+    Task strategy includes execution_steps and acceptance_criteria from
+    task_plan so retry specialists have the complete plan.
+    """
+    state = {
+        "scratchpad": {"triage_actions": []},
+        "artifacts": {
+            "task_plan": {
+                "plan_summary": "Categorize files by content",
+                "execution_steps": [
+                    "Read all files to determine content",
+                    "Create category subdirectories",
+                    "Move files into categories with at least 2 per folder",
+                ],
+                "acceptance_criteria": "Each folder has at least 2 files, no files in root",
+            },
+        }
+    }
+
+    result = facilitator.execute(state)
+    gathered = result["artifacts"]["gathered_context"]
+
+    assert "### Task Strategy" in gathered
+    assert "Categorize files by content" in gathered
+    assert "**Execution steps:**" in gathered
+    assert "Read all files to determine content" in gathered
+    assert "Create category subdirectories" in gathered
+    assert "Move files into categories" in gathered
+    assert "**Acceptance criteria:**" in gathered
+    assert "Each folder has at least 2 files" in gathered
+
+
+def test_facilitator_ei_recommended_steps_in_prior_work(facilitator):
+    """
+    EI's missing_elements appear in Prior Work section as recommended
+    next steps, giving PD actionable guidance alongside accumulated work.
+    """
+    state = {
+        "scratchpad": {
+            "triage_actions": [],
+            "specialist_activity": [
+                "Created directory /workspace/animals",
+            ]
+        },
+        "artifacts": {
+            "exit_interview_result": {
+                "is_complete": False,
+                "reasoning": "Partially done",
+                "missing_elements": "Music folder needs 1 more file. 3 files still in root.",
+                "recommended_specialists": ["project_director"]
+            },
+            "task_plan": {"plan_summary": "Sort files"},
+        }
+    }
+
+    result = facilitator.execute(state)
+    gathered = result["artifacts"]["gathered_context"]
+
+    assert "### Prior Work Completed" in gathered
+    assert "Created directory /workspace/animals" in gathered
+    assert "EI recommended next steps" in gathered
+    assert "Music folder needs 1 more file" in gathered
