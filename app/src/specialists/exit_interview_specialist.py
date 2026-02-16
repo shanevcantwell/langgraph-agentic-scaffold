@@ -327,32 +327,21 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
 
             call_counter = result.get("call_counter", call_counter + 1)
 
+            # Check both completion signals — converge into single guard
+            evaluation = None
+
             if result.get("completed"):
-                required = exit_plan.get("required_components", [])
-                if not trace and required:
-                    components_str = ", ".join(required)
-                    logger.warning("ExitInterviewSpecialist: Model completed without calling any tools — retrying")
-                    trace.append({
-                        "iteration": iteration,
-                        "tool_call": {"id": "system", "name": "SYSTEM", "args": {}},
-                        "observation": f"You must first use at least one of: {components_str}",
-                        "success": False,
-                    })
-                    continue
-                return self._parse_verification_result(result)
+                evaluation = self._parse_verification_result(result)
 
+            # Dispatch pending tool calls (non-DONE tools add to trace)
             pending = result.get("pending_tool_calls", [])
-            if not pending:
-                logger.warning("ExitInterviewSpecialist: react_step returned no tool calls and not completed")
-                break
-
             for tc in pending:
                 tool_name = tc.get("name", "")
                 tool_args = tc.get("args", {})
 
-                # Check for DONE tool — immediate return
                 if tool_name == "DONE":
-                    return self._parse_done_tool(tool_args)
+                    evaluation = self._parse_done_tool(tool_args)
+                    break
 
                 observation = self._dispatch_verification_tool(tool_name, tool_args, tools)
                 trace.append({
@@ -361,6 +350,23 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
                     "observation": observation,
                     "success": not observation.startswith("Error:"),
                 })
+
+            if not pending and not result.get("completed"):
+                logger.warning("ExitInterviewSpecialist: react_step returned no tool calls and not completed")
+                break
+
+            # Single guard: must call at least one verification tool before evaluating
+            if evaluation is not None:
+                if not trace:
+                    logger.warning("ExitInterviewSpecialist: Evaluation before any tool use — nudging")
+                    trace.append({
+                        "iteration": iteration,
+                        "tool_call": {"id": "system", "name": "SYSTEM", "args": {}},
+                        "observation": "You must call at least one verification tool (list_directory, read_file, list_artifacts, browse_artifact) before calling DONE. Verify real outcomes first.",
+                        "success": False,
+                    })
+                    continue
+                return evaluation
 
         # Max iterations without DONE — fall back to single-pass
         logger.warning(
