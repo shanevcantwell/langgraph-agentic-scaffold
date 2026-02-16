@@ -13,6 +13,15 @@ const archiveOutputEl = document.getElementById('archiveOutput');
 const artifactsOutputEl = document.getElementById('artifactsOutput');
 const jsonOutputEl = document.getElementById('jsonOutput');
 
+// STATE tab sub-view elements
+const stateSubBtns = document.querySelectorAll('.state-sub-btn');
+const stateViews = document.querySelectorAll('.state-view');
+const snapshotPrevBtn = document.getElementById('snapshotPrev');
+const snapshotNextBtn = document.getElementById('snapshotNext');
+const snapshotLabelEl = document.getElementById('snapshotLabel');
+const snapshotTimestampEl = document.getElementById('snapshotTimestamp');
+const snapshotContentEl = document.getElementById('snapshotContent');
+
 // File Upload Elements
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
@@ -39,6 +48,10 @@ let loadedFile = null; // { content: string, type: 'text' | 'image' }
 let abortController = null; // Controller for the fetch request
 let thoughtStreamEntries = []; // Track thought stream entries
 let currentArtifacts = {}; // Track artifacts as they're generated
+
+// STATE tab: snapshot accumulator and intra-run paging
+let stateSnapshots = [];       // Accumulates state_snapshot events within current run
+let snapshotPageIndex = -1;    // Current snapshot being viewed (-1 = none)
 
 // ADR-UI-001 / #181: Run history for Mission Report paging + context selection
 let runHistory = [];        // [{timestamp, conversationId, finalResponse, artifacts}]
@@ -218,6 +231,30 @@ tabBtns.forEach(btn => {
     });
 });
 
+// STATE tab sub-view switching (Inspector vs Raw)
+stateSubBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        stateSubBtns.forEach(b => b.classList.remove('active'));
+        stateViews.forEach(v => v.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`state-${btn.dataset.view}`).classList.add('active');
+    });
+});
+
+// STATE tab snapshot paging
+snapshotPrevBtn.addEventListener('click', () => {
+    if (snapshotPageIndex > 0) {
+        snapshotPageIndex--;
+        renderSnapshot(snapshotPageIndex);
+    }
+});
+snapshotNextBtn.addEventListener('click', () => {
+    if (snapshotPageIndex < stateSnapshots.length - 1) {
+        snapshotPageIndex++;
+        renderSnapshot(snapshotPageIndex);
+    }
+});
+
 // #181: Mission Report paging handlers
 pagePrevBtn.addEventListener('click', () => {
     if (currentPageIndex > 0) {
@@ -364,7 +401,15 @@ async function executeWorkflow() {
     // Reset state trackers
     thoughtStreamEntries = [];
     currentArtifacts = {};
-    
+
+    // Reset state snapshots for new run
+    stateSnapshots = [];
+    snapshotPageIndex = -1;
+    snapshotContentEl.innerHTML = '<div class="placeholder">WAITING FOR STATE SNAPSHOTS...</div>';
+    snapshotLabelEl.textContent = 'NO SNAPSHOTS';
+    snapshotTimestampEl.textContent = '';
+    updateSnapshotPagingControls();
+
     // Reset Specialist Grid
     document.querySelectorAll('.spec-node').forEach(el => el.classList.remove('active'));
     
@@ -709,20 +754,241 @@ function updateArtifactsDisplay(artifacts) {
 
     currentArtifacts = { ...currentArtifacts, ...artifacts };
 
-    // Build markdown display of all artifacts
-    let artifactsMarkdown = '# Artifacts\n\n';
+    // #198: Build display with textContent to prevent HTML artifact CSS bleed.
+    // Previously used marked.parse() with code blocks, but artifact content
+    // containing triple backticks or <style> tags could escape into parent CSS.
+    artifactsOutputEl.innerHTML = '';
     for (const [key, value] of Object.entries(currentArtifacts)) {
-        artifactsMarkdown += `## ${key}\n\n`;
+        const heading = document.createElement('h3');
+        heading.textContent = key;
+        heading.className = 'artifact-heading';
+        artifactsOutputEl.appendChild(heading);
+
+        const pre = document.createElement('pre');
+        pre.className = 'artifact-pre';
         if (typeof value === 'object') {
-            artifactsMarkdown += `\`\`\`json\n${JSON.stringify(value, null, 2)}\n\`\`\`\n\n`;
+            pre.textContent = JSON.stringify(value, null, 2);
         } else {
-            // Decode HTML entities before displaying (fixes &#x27; -> ' etc.)
-            const decodedValue = decodeHtmlEntities(String(value));
-            artifactsMarkdown += `\`\`\`\n${decodedValue}\n\`\`\`\n\n`;
+            pre.textContent = decodeHtmlEntities(String(value));
+        }
+        artifactsOutputEl.appendChild(pre);
+    }
+}
+
+// ============================================================================
+// STATE TAB: SNAPSHOT PAGING & RENDERING
+// ============================================================================
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function updateSnapshotPagingControls() {
+    snapshotPrevBtn.disabled = snapshotPageIndex <= 0;
+    snapshotNextBtn.disabled = snapshotPageIndex >= stateSnapshots.length - 1;
+
+    if (snapshotPageIndex >= 0 && stateSnapshots[snapshotPageIndex]) {
+        const snap = stateSnapshots[snapshotPageIndex];
+        const name = snap.specialist
+            ? snap.specialist.replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase()
+            : 'UNKNOWN';
+        snapshotLabelEl.textContent = `STEP ${snapshotPageIndex + 1} / ${stateSnapshots.length} : ${name}`;
+        if (snap.timestamp) {
+            const ts = new Date(snap.timestamp);
+            snapshotTimestampEl.textContent = ts.toLocaleTimeString();
+        }
+    } else {
+        snapshotLabelEl.textContent = stateSnapshots.length > 0
+            ? `${stateSnapshots.length} SNAPSHOTS`
+            : 'NO SNAPSHOTS';
+        snapshotTimestampEl.textContent = '';
+    }
+}
+
+function renderSnapshot(index) {
+    if (index < 0 || index >= stateSnapshots.length) return;
+    const snap = stateSnapshots[index];
+    updateSnapshotPagingControls();
+
+    const specialistName = snap.specialist
+        ? snap.specialist.replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase()
+        : 'UNKNOWN';
+    const prompts = snap.prompts || {};
+    const reactTrace = prompts.react_trace;
+    const hasReactTrace = reactTrace && Array.isArray(reactTrace) && reactTrace.length > 0;
+
+    let html = '';
+
+    // --- Header: specialist name, model, latency ---
+    html += '<div class="snapshot-header">';
+    html += `<span class="snapshot-specialist-name">${escapeHtml(specialistName)}</span>`;
+    if (prompts.model_id) {
+        html += `<span class="snapshot-model-badge">${escapeHtml(prompts.model_id)}</span>`;
+    }
+    if (snap.latency_ms != null) {
+        html += `<span class="snapshot-latency">${snap.latency_ms}ms</span>`;
+    }
+    html += '</div>';
+
+    // --- Routing breadcrumb ---
+    if (snap.routing_history && snap.routing_history.length > 0) {
+        const breadcrumb = snap.routing_history.map(r =>
+            r.replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase()
+        ).join(' \u2192 ');
+        html += `<div class="snapshot-breadcrumb">${escapeHtml(breadcrumb)}</div>`;
+    }
+
+    // --- Prompt Inspector ---
+    html += '<div class="prompt-inspector">';
+    html += '<h4 class="inspector-section-title">PROMPT INSPECTOR</h4>';
+
+    if (prompts.system_prompt) {
+        html += '<div class="prompt-block">';
+        html += '<div class="prompt-block-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+        html += '<span class="prompt-block-label">SYSTEM PROMPT</span>';
+        html += `<span class="prompt-block-size">${prompts.system_prompt.length} chars</span>`;
+        html += '<span class="toggle-arrow">&#x25B6;</span>';
+        html += '</div>';
+        html += `<pre class="prompt-block-content">${escapeHtml(prompts.system_prompt)}</pre>`;
+        html += '</div>';
+    }
+
+    if (prompts.assembled_prompt) {
+        html += '<div class="prompt-block expanded">';  // Default open
+        html += '<div class="prompt-block-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+        html += '<span class="prompt-block-label">ASSEMBLED PROMPT</span>';
+        html += `<span class="prompt-block-size">${prompts.assembled_prompt.length} chars</span>`;
+        html += '<span class="toggle-arrow">&#x25B6;</span>';
+        html += '</div>';
+        html += `<pre class="prompt-block-content">${escapeHtml(prompts.assembled_prompt)}</pre>`;
+        html += '</div>';
+    }
+
+    if (!prompts.system_prompt && !prompts.assembled_prompt && !hasReactTrace) {
+        // For Facilitator: show the gathered_context it assembled
+        const gatheredContext = (snap.artifacts || {}).gathered_context;
+        if (gatheredContext) {
+            html += '<div class="prompt-block expanded">';
+            html += '<div class="prompt-block-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+            html += '<span class="prompt-block-label">GATHERED CONTEXT</span>';
+            html += `<span class="prompt-block-size">${gatheredContext.length} chars</span>`;
+            html += '<span class="toggle-arrow">&#x25B6;</span>';
+            html += '</div>';
+            html += `<pre class="prompt-block-content">${escapeHtml(gatheredContext)}</pre>`;
+            html += '</div>';
+        } else {
+            html += '<div class="prompt-block-empty">No prompt data captured (procedural specialist)</div>';
         }
     }
 
-    artifactsOutputEl.innerHTML = marked.parse(artifactsMarkdown);
+    html += '</div>'; // end prompt-inspector
+
+    // --- Tool Chain Viewer (for ReAct specialists) ---
+    if (hasReactTrace) {
+        html += '<div class="tool-chain-viewer">';
+        html += '<h4 class="inspector-section-title">TOOL CHAIN</h4>';
+        html += '<div class="tool-chain-timeline">';
+
+        reactTrace.forEach((entry) => {
+            const tc = entry.tool_call || {};
+            const isSuccess = entry.success !== false;
+            const statusClass = isSuccess ? 'tool-success' : 'tool-error';
+            const statusIcon = isSuccess ? '\u2713' : '\u2717';
+
+            html += `<div class="tool-chain-entry ${statusClass}">`;
+
+            // Step header
+            html += '<div class="tool-chain-step">';
+            html += `<span class="tool-chain-iteration">iter ${entry.iteration != null ? entry.iteration : '?'}</span>`;
+            html += `<span class="tool-chain-status">${statusIcon}</span>`;
+            html += '</div>';
+
+            html += '<div class="tool-chain-details">';
+
+            // Tool call header
+            html += '<div class="tool-call-header">';
+            html += `<span class="tool-call-name">${escapeHtml(tc.name || 'unknown')}</span>`;
+            if (tc.id) {
+                html += `<span class="tool-call-id">${escapeHtml(tc.id)}</span>`;
+            }
+            html += '</div>';
+
+            // Tool arguments
+            if (tc.args && Object.keys(tc.args).length > 0) {
+                html += '<div class="tool-call-args">';
+                html += `<pre>${escapeHtml(JSON.stringify(tc.args, null, 2))}</pre>`;
+                html += '</div>';
+            }
+
+            // Observation (collapsible for long content)
+            if (entry.observation) {
+                const obsLength = entry.observation.length;
+                const isLong = obsLength > 200;
+                html += `<div class="tool-observation ${isLong ? '' : 'expanded'}">`;
+                html += '<div class="tool-observation-header" onclick="this.parentElement.classList.toggle(\'expanded\')">';
+                html += '<span class="tool-observation-label">OBSERVATION</span>';
+                html += `<span class="prompt-block-size">${obsLength} chars</span>`;
+                if (isLong) html += '<span class="toggle-arrow">&#x25B6;</span>';
+                html += '</div>';
+                html += `<pre class="tool-observation-content">${escapeHtml(entry.observation)}</pre>`;
+                html += '</div>';
+            }
+
+            // Thought (future: when react_step persists thought field)
+            if (entry.thought) {
+                html += '<div class="tool-thought">';
+                html += '<span class="tool-thought-label">THOUGHT:</span> ';
+                html += `<span>${escapeHtml(entry.thought)}</span>`;
+                html += '</div>';
+            }
+
+            html += '</div>'; // end tool-chain-details
+            html += '</div>'; // end tool-chain-entry
+        });
+
+        html += '</div>'; // end tool-chain-timeline
+        html += '</div>'; // end tool-chain-viewer
+    }
+
+    // --- Scratchpad viewer ---
+    const scratchpad = snap.scratchpad || {};
+    const scratchpadKeys = Object.keys(scratchpad).filter(k => scratchpad[k] != null);
+    if (scratchpadKeys.length > 0) {
+        html += '<div class="scratchpad-viewer">';
+        html += '<h4 class="inspector-section-title">SCRATCHPAD</h4>';
+        scratchpadKeys.forEach(key => {
+            const val = scratchpad[key];
+            const valStr = typeof val === 'object' ? JSON.stringify(val, null, 2) : String(val);
+            const isLong = valStr.length > 200;
+            html += `<div class="prompt-block ${isLong ? '' : 'expanded'}">`;
+            html += `<div class="prompt-block-header" onclick="this.parentElement.classList.toggle('expanded')">`;
+            html += `<span class="prompt-block-label">${escapeHtml(key)}</span>`;
+            html += `<span class="prompt-block-size">${valStr.length} chars</span>`;
+            html += '<span class="toggle-arrow">&#x25B6;</span>';
+            html += '</div>';
+            html += `<pre class="prompt-block-content">${escapeHtml(valStr)}</pre>`;
+            html += '</div>';
+        });
+        html += '</div>';
+    }
+
+    // --- Metadata footer ---
+    html += '<div class="snapshot-meta">';
+    html += `<span>Turn: ${snap.turn_count || 0}</span>`;
+    html += `<span>Messages: ${snap.messages_count || 0}</span>`;
+    html += `<span>Artifacts: ${(snap.artifact_keys || []).join(', ') || 'none'}</span>`;
+    html += `<span>Complete: ${snap.task_is_complete ? 'YES' : 'NO'}</span>`;
+    if (snap.im_decision) {
+        html += `<span class="snapshot-im-decision">IM: ${escapeHtml(snap.im_decision)}</span>`;
+    }
+    html += '</div>';
+
+    snapshotContentEl.innerHTML = html;
+
+    // Re-apply code toolbars for any pre blocks we just created
+    addToolbarsToPreBlocks();
 }
 
 // ============================================================================
@@ -840,12 +1106,15 @@ function renderArtifactsWithCheckboxes(artifacts, pageIndex) {
 
         const content = document.createElement('div');
         content.className = 'artifact-content';
+        // #198: Use textContent to prevent HTML artifact CSS from bleeding into parent UI.
+        // HTML artifacts have RENDER/SAVE buttons for viewing; display shows safe source text.
+        const pre = document.createElement('pre');
         if (typeof value === 'object') {
-            content.innerHTML = `<pre>${JSON.stringify(value, null, 2)}</pre>`;
+            pre.textContent = JSON.stringify(value, null, 2);
         } else {
-            const decoded = decodeHtmlEntities(String(value));
-            content.innerHTML = `<pre>${decoded}</pre>`;
+            pre.textContent = decodeHtmlEntities(String(value));
         }
+        content.appendChild(pre);
 
         // Click label to toggle content visibility
         label.addEventListener('click', () => {
@@ -1222,6 +1491,15 @@ function handleStreamEvent(event) {
 
             addThoughtStreamEntry('SYSTEM', 'Clarification requested - awaiting user input', 'lifecycle');
             logStatus('► AWAITING CLARIFICATION...');
+            break;
+
+        case 'state_snapshot':
+            // Accumulate snapshot in memory for intra-run paging
+            stateSnapshots.push(data);
+            // Auto-advance to latest snapshot during live run
+            snapshotPageIndex = stateSnapshots.length - 1;
+            renderSnapshot(snapshotPageIndex);
+            updateSnapshotPagingControls();
             break;
 
         default:

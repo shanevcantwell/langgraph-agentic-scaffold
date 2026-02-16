@@ -158,7 +158,29 @@
                         </div>
                     </div>
                     <div class="tab-content" id="tab-json">
-                        <pre id="jsonOutput">{}</pre>
+                        <!-- Sub-view switcher: Inspector vs Raw State -->
+                        <div class="state-sub-tabs">
+                            <button class="state-sub-btn active" data-view="inspector">INSPECTOR</button>
+                            <button class="state-sub-btn" data-view="raw">RAW STATE</button>
+                        </div>
+
+                        <!-- Prompt Inspector + Tool Chain view -->
+                        <div class="state-view active" id="state-inspector">
+                            <div class="snapshot-paging">
+                                <button id="snapshotPrev" class="page-btn" disabled>&#x25C4;</button>
+                                <span id="snapshotLabel" class="snapshot-label">NO SNAPSHOTS</span>
+                                <span id="snapshotTimestamp" class="page-timestamp"></span>
+                                <button id="snapshotNext" class="page-btn" disabled>&#x25BA;</button>
+                            </div>
+                            <div id="snapshotContent" class="snapshot-content">
+                                <div class="placeholder">WAITING FOR STATE SNAPSHOTS...</div>
+                            </div>
+                        </div>
+
+                        <!-- Raw State JSON (existing behavior, preserved) -->
+                        <div class="state-view" id="state-raw">
+                            <pre id="jsonOutput">{}</pre>
+                        </div>
                     </div>
                 </section>
             </div>
