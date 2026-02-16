@@ -172,7 +172,16 @@ class ExitInterviewSpecialist(BaseSpecialist):
         exit_plan = artifacts.get("exit_plan", {})
         if not exit_plan and self.mcp_client:
             logger.info("ExitInterviewSpecialist: No exit_plan found, calling SA via MCP")
-            verification_context = f"""User request: {user_request}
+            # #173: Include acceptance_criteria from task_plan so SA generates
+            # verifiable exit_plan steps (outcomes, not process)
+            task_plan = artifacts.get("task_plan", {})
+            acceptance_criteria = task_plan.get("acceptance_criteria", "")
+            criteria_section = (
+                f"\n\nAcceptance criteria (what the completed work looks like):\n{acceptance_criteria}"
+                if acceptance_criteria else ""
+            )
+
+            verification_context = f"""User request: {user_request}{criteria_section}
 
 Generate a VERIFICATION PLAN with steps to CHECK that this work was completed correctly.
 These are steps to VERIFY completion, NOT steps to implement the task."""
