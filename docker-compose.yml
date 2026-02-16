@@ -198,6 +198,8 @@ services:
     environment:
       - LM_STUDIO_SERVER_1=${LM_STUDIO_SERVER_1}
       - LM_STUDIO_SERVER_2=${LM_STUDIO_SERVER_2}
+    volumes:
+      - ./tests/prompt-prix:/app/las-tests:ro  # LAS-specific eval test files
     extra_hosts:
       - "host.docker.internal:host-gateway"
     restart: unless-stopped
