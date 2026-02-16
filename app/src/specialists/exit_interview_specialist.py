@@ -1,88 +1,40 @@
 # app/src/specialists/exit_interview_specialist.py
 """
-Exit Interview Specialist - ADR-ROADMAP-001 Phase 1 + #173 react_step verification
+Exit Interview Specialist — verification gate before END (#195).
 
-Gates the END node by validating that the accumulated state actually satisfies
-the user's original request. This prevents premature termination when Router
-decides to end but the task isn't truly complete.
+Gates the END node by verifying that accumulated state satisfies the user's
+original request. Uses react_step tool loop to inspect the filesystem and
+artifacts directly — no inference from summaries.
 
 Flow:
     Router decides END → exit_interview_specialist → {complete → END, incomplete → Router}
 
-#173: When react_step is available (prompt-prix connected), EI verifies outcomes
-by directly inspecting the filesystem and artifacts via tool calls. Falls back
-to single-pass LLM evaluation when react_step is unavailable.
+Tools: list_directory, read_file (filesystem MCP), list_artifacts, retrieve_artifact
+(shared artifact tools), DONE (structured evaluation signal).
+
+Requires prompt-prix MCP for react_step. When unavailable, returns an honest
+"cannot verify" signal rather than a degraded evaluation (#195).
 """
 
 import json as _json
 import logging
 from typing import Dict, Any, List
+
 from pydantic import BaseModel, Field
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
-from .schemas import ReturnControlMode
-from ..llm.adapter import StandardizedLLMRequest
-from ..utils.prompt_loader import load_prompt
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
-    dispatch_external_tool,
+    dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
+    ARTIFACT_TOOL_PARAMS,
 )
 
 logger = logging.getLogger(__name__)
 
+# ─── Tool parameter schemas ─────────────────────────────────────────────────
 
-class CompletionEvaluation(BaseModel):
-    """Structured output for completion evaluation."""
-    is_complete: bool = Field(..., description="Whether the task is complete")
-    reasoning: str = Field(..., description="Brief explanation of the evaluation")
-    missing_elements: str = Field(
-        default="",
-        description="What's still needed if incomplete (empty if complete)"
-    )
-    recommended_specialists: List[str] = Field(
-        default_factory=list,
-        description="Which specialist(s) should handle the missing work (e.g., ['project_director'] for file operations)"
-    )
-    return_control: str = Field(
-        default="accumulate",
-        description="How Facilitator handles retry: 'accumulate', 'reset', or 'delta'"
-    )
-
-
-# ─── Local artifact tools (#174) ──────────────────────────────────────────────
-
-def _list_artifacts_tool(captured_artifacts: dict) -> str:
-    """Local tool: list available artifact keys with type/size hints."""
-    if not captured_artifacts:
-        return "No artifacts available."
-    lines = []
-    for key in sorted(captured_artifacts.keys()):
-        value = captured_artifacts[key]
-        if isinstance(value, dict):
-            lines.append(f"  {key}: dict ({len(value)} keys)")
-        elif isinstance(value, list):
-            lines.append(f"  {key}: list ({len(value)} items)")
-        elif isinstance(value, str):
-            lines.append(f"  {key}: str ({len(value)} chars)")
-        elif isinstance(value, bytes):
-            lines.append(f"  {key}: bytes ({len(value)} bytes)")
-        else:
-            lines.append(f"  {key}: {type(value).__name__}")
-    return "Artifacts:\n" + "\n".join(lines)
-
-
-def _browse_artifact_tool(captured_artifacts: dict, key: str) -> str:
-    """Local tool: browse a specific artifact's content."""
-    if key not in captured_artifacts:
-        return f"Error: Artifact '{key}' not found. Use list_artifacts to see available keys."
-    value = captured_artifacts[key]
-    return ExitInterviewSpecialist._format_artifact_value(value)
-
-
-# ─── Tool parameter schemas ───────────────────────────────────────────────────
-
-_EI_TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
+_TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
     "list_directory": {
         "type": "object",
         "properties": {"path": {"type": "string", "description": "Directory path to list"}},
@@ -93,15 +45,7 @@ _EI_TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
         "properties": {"path": {"type": "string", "description": "File path to read"}},
         "required": ["path"],
     },
-    "list_artifacts": {
-        "type": "object",
-        "properties": {},
-    },
-    "browse_artifact": {
-        "type": "object",
-        "properties": {"key": {"type": "string", "description": "Artifact key to browse"}},
-        "required": ["key"],
-    },
+    **ARTIFACT_TOOL_PARAMS,
     "DONE": {
         "type": "object",
         "properties": {
@@ -119,199 +63,95 @@ _EI_TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
 }
 
 
+# ─── Evaluation schema ──────────────────────────────────────────────────────
+
+class CompletionEvaluation(BaseModel):
+    """Structured output from the DONE tool call."""
+    is_complete: bool = Field(..., description="Whether the task is complete")
+    reasoning: str = Field(..., description="Brief explanation of the evaluation")
+    missing_elements: str = Field(
+        default="",
+        description="What's still needed if incomplete (empty if complete)"
+    )
+    recommended_specialists: List[str] = Field(
+        default_factory=list,
+        description="Which specialist(s) should handle the missing work"
+    )
+
+
+# ─── Specialist ─────────────────────────────────────────────────────────────
+
 class ExitInterviewSpecialist(BaseSpecialist):
     """
-    Validates task completion before allowing workflow to terminate.
+    Verification gate before END.
 
-    This specialist acts as a gate before END, evaluating whether the accumulated
-    state (artifacts, messages) satisfies the original user request.
+    Runs a react_step tool loop to inspect the filesystem and artifacts,
+    then calls DONE with a structured CompletionEvaluation.
 
-    If complete: Sets task_is_complete=True, allowing standard edge to route to END
-    If incomplete: Does NOT set task_is_complete, causing route back to Router
-
-    #173: When react_step is available, EI verifies outcomes by calling filesystem
-    and artifact tools directly instead of inferring from trace data.
+    If complete:   task_is_complete=True  → END
+    If incomplete:  task_is_complete=False → Facilitator → Router → specialist
     """
+
+    DEFAULT_MAX_ITERATIONS = 8  # Read-only verification; shouldn't need many steps
 
     _routable_specialists: List[str] = []
 
     def set_routable_specialists(self, names: List[str]) -> None:
-        """Inject the list of routable specialist names (from graph_builder)."""
+        """Inject routable specialist names (from graph_builder) for DONE schema enum."""
         self._routable_specialists = list(names)
 
+    # ─── Main execution ──────────────────────────────────────────────────
+
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
-        """
-        Evaluate if the task is semantically complete.
-
-        #173: Two-mode evaluation:
-        1. react_step mode: Verify outcomes via tool calls (filesystem, artifacts)
-        2. Fallback mode: Single-pass LLM evaluation from artifact summaries
-        """
         artifacts = state.get("artifacts", {})
-        messages = state.get("messages", [])
-
-        # Capture artifacts for local tool dispatch (#174)
-        self._captured_artifacts = artifacts.copy()
-
-        # Get original user request
         user_request = artifacts.get("user_request", "")
-        if not user_request and messages:
-            for msg in messages:
-                if hasattr(msg, 'type') and msg.type == 'human':
-                    user_request = msg.content
-                    break
-                elif hasattr(msg, 'content') and not hasattr(msg, 'type'):
-                    user_request = msg.content
-                    break
-
-        # Get routing history to see what has executed
         routing_history = state.get("routing_history", [])
 
-        # Issue #115: Lazy initialization of exit_plan via SA MCP tool
-        # Issue #129: Request a VERIFICATION plan, not an implementation plan
-        exit_plan = artifacts.get("exit_plan", {})
-        if not exit_plan and self.mcp_client:
-            logger.info("ExitInterviewSpecialist: No exit_plan found, calling SA via MCP")
-            # #173: Include acceptance_criteria from task_plan so SA generates
-            # verifiable exit_plan steps (outcomes, not process)
-            task_plan = artifacts.get("task_plan", {})
-            acceptance_criteria = task_plan.get("acceptance_criteria", "")
-            criteria_section = (
-                f"\n\nAcceptance criteria (what the completed work looks like):\n{acceptance_criteria}"
-                if acceptance_criteria else ""
-            )
+        # Snapshot artifacts for local tool dispatch
+        captured_artifacts = artifacts.copy()
 
-            verification_context = f"""User request: {user_request}{criteria_section}
+        # Lazy exit_plan via SA MCP (#115, #129)
+        exit_plan = self._ensure_exit_plan(artifacts, user_request)
 
-Generate a VERIFICATION PLAN with steps to CHECK that this work was completed correctly.
-These are steps to VERIFY completion, NOT steps to implement the task."""
+        # Require react_step — no degraded evaluation (#195)
+        if not is_react_available(getattr(self, 'external_mcp_client', None)):
+            logger.warning("ExitInterviewSpecialist: prompt-prix unavailable — cannot verify")
+            return self._build_unavailable_result(exit_plan)
 
-            # Pass EI's actual tool inventory so SA constrains steps accordingly
-            verification_tools = [
-                {"name": name, "description": tool_def.description}
-                for name, tool_def in self._build_verification_tools().items()
-                if name != "DONE"
-            ]
-
-            try:
-                result = self.mcp_client.call(
-                    "systems_architect",
-                    "create_plan",
-                    context=verification_context,
-                    artifact_key="exit_plan",
-                    available_tools=verification_tools,
-                )
-                exit_plan = result.get("artifacts", {}).get("exit_plan", {})
-                logger.info(f"ExitInterviewSpecialist: SA produced exit_plan: {exit_plan.get('plan_summary', '?')}")
-            except Exception as e:
-                logger.warning(f"ExitInterviewSpecialist: SA MCP call failed: {e}")
-                exit_plan = {}
-        elif exit_plan:
-            logger.info(f"ExitInterviewSpecialist: Using existing exit_plan for verification")
-
-        # #173: Choose evaluation mode based on react_step availability
-        if self._has_react_capability():
-            logger.info("ExitInterviewSpecialist: Using react_step verification mode")
-            evaluation = self._evaluate_via_react_step(
-                user_request, exit_plan, routing_history, artifacts, messages
-            )
-        else:
-            logger.info("ExitInterviewSpecialist: Using single-pass LLM fallback")
-            artifact_summary = self._build_artifact_summary(artifacts)
-            recent_messages = messages[-5:] if len(messages) > 5 else messages
-            recent_summary = self._summarize_messages(recent_messages)
-            evaluation = self._evaluate_completion(
-                user_request=user_request,
-                exit_plan=exit_plan,
-                routing_history=routing_history,
-                artifact_summary=artifact_summary,
-                recent_summary=recent_summary
-            )
+        evaluation = self._verify(
+            user_request, exit_plan, routing_history, artifacts, captured_artifacts
+        )
 
         logger.info(
             f"ExitInterviewSpecialist: {'COMPLETE' if evaluation.is_complete else 'INCOMPLETE'} "
-            f"- {evaluation.reasoning}"
+            f"— {evaluation.reasoning}"
         )
 
-        # Build return dict (same for both modes)
         if evaluation.is_complete:
-            return {
-                "messages": [AIMessage(content=f"[Exit Interview] Task verified complete: {evaluation.reasoning}")],
-                "task_is_complete": True,
-                "artifacts": {
-                    "exit_plan": exit_plan,
-                    "exit_interview_result": {
-                        "is_complete": True,
-                        "reasoning": evaluation.reasoning
-                    }
-                }
-            }
-        else:
-            recommended = evaluation.recommended_specialists or ["project_director"]
-            specialists_str = ", ".join(recommended)
-            guidance_msg = (
-                f"[Exit Interview] Task not complete: {evaluation.reasoning}\n\n"
-                f"**Dependency Requirement:** The following work is still needed: {evaluation.missing_elements}. "
-                f"Route to one of: `{specialists_str}` to complete this work."
-            )
-            return {
-                "messages": [AIMessage(content=guidance_msg)],
-                "task_is_complete": False,
-                "artifacts": {
-                    "exit_plan": exit_plan,
-                    "exit_interview_result": {
-                        "is_complete": False,
-                        "reasoning": evaluation.reasoning,
-                        "missing_elements": evaluation.missing_elements,
-                        "recommended_specialists": recommended,
-                        "return_control": evaluation.return_control
-                    }
-                },
-                "scratchpad": {
-                    "recommended_specialists": recommended,
-                    "exit_interview_incomplete": True
-                }
-            }
+            return self._build_complete_result(evaluation, exit_plan)
+        return self._build_incomplete_result(evaluation, exit_plan)
 
-    # ─── react_step verification (#173) ────────────────────────────────────────
+    # ─── react_step verification loop ────────────────────────────────────
 
-    def _has_react_capability(self) -> bool:
-        """Check if prompt-prix MCP is available for react_step verification."""
-        return (
-            hasattr(self, 'external_mcp_client')
-            and self.external_mcp_client is not None
-            and hasattr(self.external_mcp_client, 'is_connected')
-            and self.external_mcp_client.is_connected("prompt-prix")
-        )
-
-    def _evaluate_via_react_step(
+    def _verify(
         self,
         user_request: str,
         exit_plan: dict,
         routing_history: list,
         artifacts: dict,
-        messages: list,
+        captured_artifacts: dict,
     ) -> CompletionEvaluation:
-        """
-        #173: Verify task completion via react_step tool loop.
-
-        The model can call filesystem tools (list_directory, read_file) to check
-        real outcomes, and artifact tools (list_artifacts, browse_artifact) to
-        inspect workflow state. When satisfied, it calls DONE with its evaluation.
-        """
-        tools = self._build_verification_tools()
+        """Run the react_step verification loop."""
+        tools = self._build_tools()
         tool_params = self._build_tool_params()
         tool_schemas = build_tool_schemas(tools, tool_params)
         model_id = getattr(self.llm_adapter, 'model_name', "default") if self.llm_adapter else "default"
+        system_prompt = getattr(self.llm_adapter, 'system_prompt', "") or ""
+        task_prompt = self._build_task_prompt(user_request, exit_plan, routing_history, artifacts)
 
-        system_prompt = self._build_verification_system_prompt()
-        task_prompt = self._build_verification_task_prompt(
-            user_request, exit_plan, routing_history, artifacts
-        )
-
-        trace = []
+        max_iterations = self._get_max_iterations()
+        trace: List[Dict[str, Any]] = []
         call_counter = 0
-        max_iterations = 8  # Read-only verification, shouldn't need many steps
 
         for iteration in range(max_iterations):
             result = call_react_step(
@@ -326,24 +166,22 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
             )
 
             call_counter = result.get("call_counter", call_counter + 1)
-
-            # Check both completion signals — converge into single guard
             evaluation = None
 
+            # completed=True means DONE was normalized by _normalize_done
             if result.get("completed"):
-                evaluation = self._parse_verification_result(result)
+                evaluation = self._parse_completed_result(result)
 
-            # Dispatch pending tool calls (non-DONE tools add to trace)
-            pending = result.get("pending_tool_calls", [])
-            for tc in pending:
+            # Dispatch non-DONE pending tool calls
+            for tc in result.get("pending_tool_calls", []):
                 tool_name = tc.get("name", "")
                 tool_args = tc.get("args", {})
 
                 if tool_name == "DONE":
-                    evaluation = self._parse_done_tool(tool_args)
+                    evaluation = self._parse_done_args(tool_args)
                     break
 
-                observation = self._dispatch_verification_tool(tool_name, tool_args, tools)
+                observation = self._dispatch_tool(tool_name, tool_args, tools, captured_artifacts)
                 trace.append({
                     "iteration": iteration,
                     "tool_call": {"id": tc.get("id", ""), "name": tool_name, "args": tool_args},
@@ -351,41 +189,47 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
                     "success": not observation.startswith("Error:"),
                 })
 
-            if not pending and not result.get("completed"):
+            if not result.get("pending_tool_calls") and not result.get("completed"):
                 logger.warning("ExitInterviewSpecialist: react_step returned no tool calls and not completed")
                 break
 
-            # Single guard: must call at least one verification tool before evaluating
+            # Tool-use-before-DONE guard (#193)
             if evaluation is not None:
-                if not trace:
-                    logger.warning("ExitInterviewSpecialist: Evaluation before any tool use — nudging")
+                has_real_verification = any(
+                    entry.get("tool_call", {}).get("name") not in ("SYSTEM", "DONE")
+                    for entry in trace
+                )
+                if not has_real_verification:
+                    logger.warning("ExitInterviewSpecialist: DONE before any real tool use — nudging")
                     trace.append({
                         "iteration": iteration,
                         "tool_call": {"id": "system", "name": "SYSTEM", "args": {}},
-                        "observation": "You must call at least one verification tool (list_directory, read_file, list_artifacts, browse_artifact) before calling DONE. Verify real outcomes first.",
+                        "observation": (
+                            "You must call at least one verification tool "
+                            "(list_directory, read_file, list_artifacts, retrieve_artifact) "
+                            "before calling DONE. Verify real outcomes first."
+                        ),
                         "success": False,
                     })
                     continue
                 return evaluation
 
-        # Max iterations without DONE — fall back to single-pass
+        # Max iterations without DONE — honest "couldn't verify"
         logger.warning(
-            f"ExitInterviewSpecialist: react_step verification hit {max_iterations} iterations, "
-            f"falling back to single-pass LLM"
+            f"ExitInterviewSpecialist: hit {max_iterations} iterations without DONE"
         )
-        artifact_summary = self._build_artifact_summary(artifacts)
-        recent_summary = self._summarize_messages(messages[-5:] if len(messages) > 5 else messages)
-        return self._evaluate_completion(
-            user_request=user_request,
-            exit_plan=exit_plan,
-            routing_history=routing_history,
-            artifact_summary=artifact_summary,
-            recent_summary=recent_summary,
+        return CompletionEvaluation(
+            is_complete=False,
+            reasoning=f"Verification did not complete within {max_iterations} iterations — defaulting to incomplete",
+            missing_elements="EI verification loop exhausted without reaching a conclusion",
         )
 
-    def _build_verification_tools(self) -> Dict[str, ToolDef]:
+    # ─── Tool definitions ────────────────────────────────────────────────
+
+    def _build_tools(self) -> Dict[str, ToolDef]:
         """Build the tool routing table for verification."""
-        return {
+        tools = {
+            # Filesystem (external MCP)
             "list_directory": ToolDef(
                 service="filesystem", function="list_directory",
                 description="List files and directories at a path.",
@@ -394,16 +238,9 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
                 service="filesystem", function="read_file",
                 description="Read file contents at a path.",
             ),
-            "list_artifacts": ToolDef(
-                service="local", function="list_artifacts",
-                description="List all artifacts in the workflow state with type hints.",
-                is_external=False,
-            ),
-            "browse_artifact": ToolDef(
-                service="local", function="browse_artifact",
-                description="Browse a specific artifact's content by key.",
-                is_external=False,
-            ),
+            # Artifact inspection (shared local tools)
+            **artifact_tool_defs(),
+            # Termination signal
             "DONE": ToolDef(
                 service="local", function="DONE",
                 description=(
@@ -414,71 +251,50 @@ These are steps to VERIFY completion, NOT steps to implement the task."""
                 is_external=False,
             ),
         }
+        return tools
 
     def _build_tool_params(self) -> Dict[str, Dict[str, Any]]:
-        """Build tool param schemas, with dynamic enum for recommended_specialists."""
-        params = dict(_EI_TOOL_PARAMS)
+        """Build tool param schemas. Adds dynamic enum for recommended_specialists."""
+        params = dict(_TOOL_PARAMS)
         if self._routable_specialists:
             done_schema = dict(params["DONE"])
             done_props = dict(done_schema["properties"])
             done_props["recommended_specialists"] = {
                 "type": "array",
-                "items": {
-                    "type": "string",
-                    "enum": self._routable_specialists,
-                },
+                "items": {"type": "string", "enum": self._routable_specialists},
                 "description": "Which specialist(s) should handle missing work",
             }
             done_schema["properties"] = done_props
             params["DONE"] = done_schema
         return params
 
-    def _dispatch_verification_tool(
-        self, tool_name: str, tool_args: dict, tools: Dict[str, ToolDef]
+    def _get_max_iterations(self) -> int:
+        """Get max iterations from specialist config."""
+        return self.specialist_config.get("max_iterations", self.DEFAULT_MAX_ITERATIONS)
+
+    def _dispatch_tool(
+        self, tool_name: str, tool_args: dict,
+        tools: Dict[str, ToolDef], captured_artifacts: dict,
     ) -> str:
-        """Route a verification tool call to the appropriate handler."""
+        """Route a tool call to the appropriate handler."""
         tool_def = tools.get(tool_name)
         if not tool_def:
             return f"Error: Unknown tool '{tool_name}'"
 
-        # Local dispatch for artifact tools
+        # Local artifact tools
         if not tool_def.is_external:
-            if tool_name == "list_artifacts":
-                return _list_artifacts_tool(self._captured_artifacts)
-            elif tool_name == "browse_artifact":
-                return _browse_artifact_tool(self._captured_artifacts, tool_args.get("key", ""))
-            return f"Error: Unknown local tool '{tool_name}'"
+            return dispatch_artifact_tool(tool_name, tool_args, captured_artifacts)
 
-        # External dispatch for filesystem tools
+        # External filesystem tools
         return dispatch_external_tool(self.external_mcp_client, tool_def, tool_args)
 
-    def _build_verification_system_prompt(self) -> str:
-        """System prompt for react_step verification mode."""
-        specialist_note = ""
-        if self._routable_specialists:
-            names = ", ".join(self._routable_specialists)
-            specialist_note = f"\n  recommended_specialists must be from: {names}"
+    # ─── Prompt helpers ──────────────────────────────────────────────────
 
-        return f"""You are a verification evaluator. Follow the execution_steps in the Success Criteria below — they are your checklist.
-
-Execute the steps using your tools, then call DONE with your evaluation. You MUST call at least one tool before calling DONE.
-
-## Tools
-
-- **list_directory(path)** — List files in a directory
-- **read_file(path)** — Read file contents
-- **list_artifacts()** — List all workflow artifacts
-- **browse_artifact(key)** — Read a specific artifact
-- **DONE(is_complete, reasoning, missing_elements, recommended_specialists)** — Report your evaluation.{specialist_note}"""
-
-    def _build_verification_task_prompt(
-        self,
-        user_request: str,
-        exit_plan: dict,
-        routing_history: list,
-        artifacts: dict,
+    def _build_task_prompt(
+        self, user_request: str, exit_plan: dict,
+        routing_history: list, artifacts: dict,
     ) -> str:
-        """Build the task prompt with context for verification."""
+        """Build the task-specific prompt (Layer 2, like PD's _build_task_prompt)."""
         parts = [f"**Original User Request:**\n{user_request or '[Unknown]'}"]
 
         if exit_plan:
@@ -489,181 +305,63 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
             f"{', '.join(routing_history[-10:]) if routing_history else '[None]'}"
         )
 
-        # Provide artifact keys so model knows what's available
         artifact_keys = sorted(k for k in artifacts.keys() if not k.startswith("_"))
-        parts.append(f"**Artifact Keys Available:**\n{', '.join(artifact_keys) if artifact_keys else '[None]'}")
+        parts.append(
+            f"**Artifact Keys Available:**\n"
+            f"{', '.join(artifact_keys) if artifact_keys else '[None]'}"
+        )
 
         parts.append("Begin verification. Use tools to check real outcomes, then call DONE.")
         return "\n\n".join(parts)
 
-    def _parse_done_tool(self, args: dict) -> CompletionEvaluation:
-        """Parse DONE tool call args into CompletionEvaluation."""
-        return CompletionEvaluation(
-            is_complete=args.get("is_complete", False),
-            reasoning=args.get("reasoning", "Verification complete"),
-            missing_elements=args.get("missing_elements", ""),
-            recommended_specialists=args.get("recommended_specialists", []),
-        )
+    # ─── Exit plan helpers ───────────────────────────────────────────────
 
-    def _parse_verification_result(self, result: dict) -> CompletionEvaluation:
-        """Parse a completed react_step result into CompletionEvaluation."""
-        # Normalized DONE args take priority (structured data from DONE tool call)
-        done_args = result.get("done_args")
-        if done_args and "is_complete" in done_args:
-            return self._parse_done_tool(done_args)
-
-        final_response = result.get("final_response", "")
-        if not final_response:
-            return CompletionEvaluation(
-                is_complete=False,
-                reasoning="Verification produced no final response — defaulting to incomplete",
-                missing_elements="EI verification returned empty result",
-            )
-
-        # Try to parse as JSON (model may return DONE-like JSON as final text)
-        try:
-            data = _json.loads(final_response) if isinstance(final_response, str) else final_response
-            if isinstance(data, dict) and "is_complete" in data:
-                return CompletionEvaluation(**data)
-        except (ValueError, TypeError):
-            pass
-
-        # Couldn't parse — default to incomplete
-        logger.warning(f"ExitInterviewSpecialist: Could not parse verification result: {final_response[:200]}")
-        return CompletionEvaluation(
-            is_complete=False,
-            reasoning="Could not parse verification result — defaulting to incomplete",
-            missing_elements="EI verification produced unparseable response",
-        )
-
-    # ─── Single-pass LLM fallback ─────────────────────────────────────────────
-
-    def _evaluate_completion(
-        self,
-        user_request: str,
-        exit_plan: dict,
-        routing_history: list,
-        artifact_summary: str,
-        recent_summary: str
-    ) -> CompletionEvaluation:
-        """
-        Fallback: single-pass LLM evaluation when react_step is unavailable.
-
-        This is the original EI evaluation path — reads artifact summaries
-        injected into the prompt and makes a judgment call.
-        """
-        if not self.llm_adapter:
-            logger.warning("ExitInterviewSpecialist: No LLM adapter, defaulting to complete")
-            return CompletionEvaluation(
-                is_complete=True,
-                reasoning="No LLM adapter available for evaluation - defaulting to complete",
-                missing_elements=""
-            )
-
-        try:
-            prompt_template = load_prompt("exit_interview_prompt.md")
-        except (FileNotFoundError, IOError):
-            prompt_template = self._get_default_prompt()
-
+    def _ensure_exit_plan(self, artifacts: dict, user_request: str) -> dict:
+        """Lazy-create exit_plan via SA MCP if needed (#115, #129)."""
+        exit_plan = artifacts.get("exit_plan", {})
         if exit_plan:
-            exit_plan_summary = self._format_exit_plan(exit_plan)
-        else:
-            exit_plan_summary = "[No exit plan available - verify based on user request only]"
+            logger.info("ExitInterviewSpecialist: Using existing exit_plan")
+            return exit_plan
 
-        prompt = prompt_template.format(
-            user_request=user_request or "[Unable to extract original request]",
-            exit_plan=exit_plan_summary,
-            routing_history=", ".join(routing_history[-10:]) if routing_history else "[No routing history]",
-            artifact_summary=artifact_summary or "[No artifacts produced]",
-            recent_summary=recent_summary or "[No recent activity]",
-            routable_specialists=", ".join(self._routable_specialists) if self._routable_specialists else "project_director, web_builder, text_analysis_specialist, chat_specialist",
+        if not self.mcp_client:
+            logger.info("ExitInterviewSpecialist: No MCP client — proceeding without exit_plan")
+            return {}
+
+        logger.info("ExitInterviewSpecialist: No exit_plan found, calling SA via MCP")
+
+        task_plan = artifacts.get("task_plan", {})
+        acceptance_criteria = task_plan.get("acceptance_criteria", "")
+        criteria_section = (
+            f"\n\nAcceptance criteria (what the completed work looks like):\n{acceptance_criteria}"
+            if acceptance_criteria else ""
         )
 
-        request = StandardizedLLMRequest(
-            messages=[HumanMessage(content=prompt)]
+        verification_context = (
+            f"User request: {user_request}{criteria_section}\n\n"
+            f"Generate a VERIFICATION PLAN with steps to CHECK that this work was completed correctly.\n"
+            f"These are steps to VERIFY completion, NOT steps to implement the task."
         )
+
+        # Pass EI's tool inventory so SA constrains steps accordingly
+        verification_tools = [
+            {"name": name, "description": tool_def.description}
+            for name, tool_def in self._build_tools().items()
+            if name != "DONE"
+        ]
 
         try:
-            response = self.llm_adapter.invoke(request)
-            json_data = response.get("json_response")
-            if json_data:
-                if "is_complete" not in json_data:
-                    logger.warning(
-                        f"ExitInterviewSpecialist: JSON response missing 'is_complete' "
-                        f"(got keys: {list(json_data.keys())}), defaulting to incomplete"
-                    )
-                    return CompletionEvaluation(
-                        is_complete=False,
-                        reasoning="LLM returned unrelated JSON - defaulting to incomplete (circuit breaker handles loop prevention)",
-                        missing_elements="EI could not evaluate — model produced wrong JSON schema"
-                    )
-                return CompletionEvaluation(**json_data)
-
-            text_response = response.get("text_response", "")
-            logger.warning(f"ExitInterviewSpecialist: No JSON in response: {text_response[:200]}")
-            return CompletionEvaluation(
-                is_complete=False,
-                reasoning="Could not parse LLM response - defaulting to incomplete (circuit breaker handles loop prevention)",
-                missing_elements="EI could not evaluate — model produced no parseable JSON"
+            result = self.mcp_client.call(
+                "systems_architect", "create_plan",
+                context=verification_context,
+                artifact_key="exit_plan",
+                available_tools=verification_tools,
             )
+            exit_plan = result.get("artifacts", {}).get("exit_plan", {})
+            logger.info(f"ExitInterviewSpecialist: SA produced exit_plan: {exit_plan.get('plan_summary', '?')}")
+            return exit_plan
         except Exception as e:
-            logger.error(f"ExitInterviewSpecialist: LLM evaluation failed: {e}")
-            return CompletionEvaluation(
-                is_complete=True,
-                reasoning=f"Evaluation error ({e}) - defaulting to complete to avoid loops",
-                missing_elements=""
-            )
-
-    # ─── Shared helpers ────────────────────────────────────────────────────────
-
-    def _summarize_messages(self, messages: list) -> str:
-        """Create a brief summary of recent messages for the evaluation prompt."""
-        summaries = []
-        for msg in messages:
-            msg_type = getattr(msg, 'type', 'unknown')
-            content = getattr(msg, 'content', str(msg))
-            summaries.append(f"[{msg_type}]: {content}")
-        return "\n".join(summaries)
-
-    def _build_artifact_summary(self, artifacts: dict) -> str:
-        """
-        Build artifact summary for completion evaluation (#155, #183).
-
-        Used by the single-pass LLM fallback path. The react_step path uses
-        list_artifacts/browse_artifact tools instead.
-        """
-        excluded = {"gathered_context"}
-        lines = []
-
-        for key, value in artifacts.items():
-            if key.startswith("_") or key in excluded:
-                continue
-
-            formatted = self._format_artifact_value(value)
-            lines.append(f"- **{key}**: {formatted}")
-
-        return "\n".join(lines) if lines else "[No artifacts produced]"
-
-    @staticmethod
-    def _format_artifact_value(value) -> str:
-        """Format an artifact value for evaluation. No truncation (#183)."""
-        if value is None:
-            return "(empty)"
-        if isinstance(value, bytes):
-            return f"(binary, {len(value)} bytes)"
-        if isinstance(value, str):
-            return value
-        if isinstance(value, dict):
-            try:
-                return _json.dumps(value, indent=2, default=str)
-            except (TypeError, ValueError):
-                return str(value)
-        if isinstance(value, list):
-            try:
-                return _json.dumps(value, indent=2, default=str)
-            except (TypeError, ValueError):
-                return str(value)
-        return str(value)
+            logger.warning(f"ExitInterviewSpecialist: SA MCP call failed: {e}")
+            return {}
 
     def _format_exit_plan(self, exit_plan: dict) -> str:
         """Format the exit_plan artifact for prompts. No truncation (#183)."""
@@ -691,41 +389,108 @@ Execute the steps using your tools, then call DONE with your evaluation. You MUS
                 parts.append(f"**Full Plan:** {str(exit_plan)}")
         return "\n\n".join(parts)
 
-    def _get_default_prompt(self) -> str:
-        """Default prompt if exit_interview_prompt.md is not found."""
-        return """You are evaluating whether a task is complete.
+    # ─── Result parsing ──────────────────────────────────────────────────
 
-**Original User Request:**
-{user_request}
+    def _parse_done_args(self, args: dict) -> CompletionEvaluation:
+        """Parse DONE tool call args into CompletionEvaluation."""
+        return CompletionEvaluation(
+            is_complete=args.get("is_complete", False),
+            reasoning=args.get("reasoning", "Verification complete"),
+            missing_elements=args.get("missing_elements", ""),
+            recommended_specialists=args.get("recommended_specialists", []),
+        )
 
-**Exit Plan (Success Criteria):**
-{exit_plan}
+    def _parse_completed_result(self, result: dict) -> CompletionEvaluation:
+        """Parse a completed react_step result (DONE normalized by _normalize_done)."""
+        done_args = result.get("done_args")
+        if done_args and "is_complete" in done_args:
+            return self._parse_done_args(done_args)
 
-**What Has Executed:**
-{routing_history}
+        final_response = result.get("final_response", "")
+        if not final_response:
+            return CompletionEvaluation(
+                is_complete=False,
+                reasoning="Verification produced no final response — defaulting to incomplete",
+                missing_elements="EI verification returned empty result",
+            )
 
-**Current Artifacts (with value previews):**
-{artifact_summary}
+        # Model may return DONE-like JSON as final text
+        try:
+            data = _json.loads(final_response) if isinstance(final_response, str) else final_response
+            if isinstance(data, dict) and "is_complete" in data:
+                return CompletionEvaluation(**data)
+        except (ValueError, TypeError):
+            pass
 
-**Recent Activity:**
-{recent_summary}
+        logger.warning(f"ExitInterviewSpecialist: Could not parse verification result")
+        return CompletionEvaluation(
+            is_complete=False,
+            reasoning="Could not parse verification result — defaulting to incomplete",
+            missing_elements="EI verification produced unparseable response",
+        )
 
-**Question:** Based on the above, can we provide a satisfying response to the user's original request?
+    # ─── Result builders ─────────────────────────────────────────────────
 
-Evaluate whether:
-1. The user's core request has been addressed
-2. If an exit plan with success criteria exists, have those criteria been met?
-3. Are there meaningful artifacts or responses that answer the request?
+    def _build_complete_result(
+        self, evaluation: CompletionEvaluation, exit_plan: dict,
+    ) -> Dict[str, Any]:
+        return {
+            "messages": [AIMessage(
+                content=f"[Exit Interview] Task verified complete: {evaluation.reasoning}"
+            )],
+            "task_is_complete": True,
+            "artifacts": {
+                "exit_plan": exit_plan,
+                "exit_interview_result": {
+                    "is_complete": True,
+                    "reasoning": evaluation.reasoning,
+                },
+            },
+        }
 
-**IMPORTANT:** Do NOT trust claims of completed work in messages alone. Check the artifacts for concrete evidence of completed operations.
+    def _build_incomplete_result(
+        self, evaluation: CompletionEvaluation, exit_plan: dict,
+    ) -> Dict[str, Any]:
+        recommended = evaluation.recommended_specialists or ["project_director"]
+        specialists_str = ", ".join(recommended)
+        return {
+            "messages": [AIMessage(content=(
+                f"[Exit Interview] Task not complete: {evaluation.reasoning}\n\n"
+                f"**Dependency Requirement:** The following work is still needed: "
+                f"{evaluation.missing_elements}. "
+                f"Route to one of: `{specialists_str}` to complete this work."
+            ))],
+            "task_is_complete": False,
+            "artifacts": {
+                "exit_plan": exit_plan,
+                "exit_interview_result": {
+                    "is_complete": False,
+                    "reasoning": evaluation.reasoning,
+                    "missing_elements": evaluation.missing_elements,
+                    "recommended_specialists": recommended,
+                },
+            },
+            "scratchpad": {
+                "recommended_specialists": recommended,
+                "exit_interview_incomplete": True,
+            },
+        }
 
-Be CONSERVATIVE: If in doubt, mark as INCOMPLETE to give the system another chance.
-The only cost of being conservative is one more routing cycle.
-The cost of premature completion is an unsatisfied user.
-
-Return your evaluation as JSON with:
-- is_complete: boolean
-- reasoning: brief explanation (1-2 sentences)
-- missing_elements: what's still needed if incomplete (empty string if complete)
-- recommended_specialists: list from [{routable_specialists}] (empty if complete)
-"""
+    def _build_unavailable_result(self, exit_plan: dict) -> Dict[str, Any]:
+        """Honest signal when prompt-prix is unavailable (#195)."""
+        return {
+            "messages": [AIMessage(
+                content=(
+                    "[Exit Interview] Cannot verify task completion — "
+                    "prompt-prix MCP unavailable. Defaulting to complete."
+                )
+            )],
+            "task_is_complete": True,
+            "artifacts": {
+                "exit_plan": exit_plan,
+                "exit_interview_result": {
+                    "is_complete": True,
+                    "reasoning": "prompt-prix unavailable — cannot verify, defaulting to complete",
+                },
+            },
+        }

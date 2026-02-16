@@ -440,6 +440,7 @@ specialists:
     description: "Gates the END node by validating task completion. Evaluates whether accumulated state satisfies the user's original request before allowing termination."
     # ADR-ROADMAP-001 Phase 1: LLM-backed completion check
     # Not user-routable - invoked automatically when Router decides END
+    max_iterations: 8  # Read-only verification; shouldn't need many steps
     excluded_from:
       - triage_architect
       - router_specialist

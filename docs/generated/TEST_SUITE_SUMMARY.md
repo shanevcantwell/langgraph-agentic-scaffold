@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 73 | 705 |
+| Unit | 74 | 733 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **108** | **988** |
+| **Total** | **109** | **1016** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -720,6 +720,37 @@
 - **`test_archiver_includes_html_artifact_in_safe_artifacts`**
   - *Verifies that HTML artifacts are included in the returned safe_artifacts.*
 
+## `app/tests/unit/test_artifact_tools.py`
+
+- **`test_empty_artifacts`**
+- **`test_dict_artifact`**
+- **`test_list_artifact`**
+- **`test_string_artifact`**
+- **`test_bytes_artifact`**
+- **`test_other_type`**
+- **`test_sorted_keys`**
+- **`test_retrieve_string`**
+- **`test_retrieve_dict`**
+- **`test_retrieve_missing_key`**
+- **`test_retrieve_none_value`**
+- **`test_retrieve_binary`**
+- **`test_none_value`**
+- **`test_string_value_preserved_fully`**
+  - *String values must not be truncated (#183).*
+- **`test_dict_to_json`**
+- **`test_list_to_json`**
+- **`test_binary_shows_size`**
+- **`test_other_type_str`**
+- **`test_tool_defs_are_local`**
+  - *Artifact tools should be marked as local (not external MCP).*
+- **`test_tool_defs_service_is_local`**
+- **`test_param_schemas_present`**
+- **`test_retrieve_artifact_requires_key`**
+- **`test_dispatch_list_artifacts`**
+- **`test_dispatch_retrieve_artifact`**
+- **`test_dispatch_unknown_tool`**
+- **`test_dispatch_retrieve_missing_key`**
+
 ## `app/tests/unit/test_base_schemas.py`
 
 - **`test_specialist_output_success`**
@@ -933,20 +964,26 @@
 
 ## `app/tests/unit/test_exit_interview_specialist.py`
 
-- **`test_llm_evaluates_completion`**
-  - *Exit Interview should always call LLM for semantic evaluation.*
-- **`test_llm_returns_incomplete`**
-  - *When LLM determines task is incomplete, result reflects that.*
-- **`test_stray_json_without_is_complete_defaults_to_incomplete`**
-  - *Issue #150: LLM sometimes returns stray JSON (e.g. prior specialist's tool*
-- **`test_exit_interview_has_no_check_heuristics_method`**
-  - *ADR-CORE-061: _check_heuristics() belongs in Interrupt Classifier.*
-- **`test_exit_interview_has_no_evaluate_trace_heuristics_method`**
-  - *ADR-CORE-061: _evaluate_trace_heuristics() belongs in Interrupt Classifier.*
-- **`test_exit_interview_has_no_stutter_detection`**
-  - *ADR-CORE-061: Stutter detection belongs in Interrupt Classifier.*
-- **`test_exit_interview_only_evaluates_completion`**
-  - *ADR-CORE-061: Exit Interview should ONLY have _evaluate_completion.*
+- **`test_complete_evaluation`**
+  - *EI verifies task complete via react_step tool loop.*
+- **`test_incomplete_evaluation`**
+  - *EI marks task incomplete when verification finds missing work.*
+- **`test_max_iterations_defaults_to_incomplete`**
+  - *When react_step loop exhausts iterations without DONE, result is incomplete.*
+- **`test_done_before_tool_use_triggers_nudge`**
+  - *DONE on first call (no prior tool use) → nudge → model retries with tool use.*
+- **`test_unavailable_returns_complete_with_message`**
+  - *No external_mcp_client → cannot verify → defaults to complete.*
+- **`test_disconnected_returns_complete_with_message`**
+  - *prompt-prix disconnected → cannot verify → defaults to complete.*
+- **`test_no_heuristic_methods`**
+  - *EI should not have any heuristic methods (ADR-CORE-061).*
+- **`test_has_verify_method`**
+  - *EI should have _verify (react_step loop) as its core evaluation.*
+- **`test_no_evaluate_completion_method`**
+  - *#195: _evaluate_completion (old single-pass path) should not exist.*
+- **`test_no_build_artifact_summary_method`**
+  - *#195: _build_artifact_summary moved to mcp/artifact_tools.py.*
 - **`test_calls_sa_when_exit_plan_missing`**
   - *When exit_plan is not in artifacts, EI should call SA via MCP.*
 - **`test_skips_sa_call_when_exit_plan_exists`**
@@ -955,20 +992,18 @@
   - *If SA MCP call fails, EI should proceed without exit_plan.*
 - **`test_persists_exit_plan_on_incomplete`**
   - *When task is incomplete, exit_plan should still be persisted for next iteration.*
-- **`test_artifact_summary_includes_value_previews`**
-  - *Artifact summary should include truncated value previews.*
-- **`test_artifact_summary_handles_empty_artifacts`**
-  - *Empty artifacts should return a placeholder.*
-- **`test_artifact_summary_preserves_full_values`**
-  - *Artifact values must not be truncated (#183).*
-- **`test_artifact_summary_handles_binary`**
-  - *Binary artifacts should show size, not content.*
-- **`test_artifact_preview_passed_to_llm_prompt`**
-  - *#155: The LLM prompt should contain artifact value previews, not just keys.*
 - **`test_ei_does_not_clear_max_iterations_on_complete`**
   - *When EI says COMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
 - **`test_ei_does_not_clear_max_iterations_on_incomplete`**
-  - *When EI says INCOMPLETE, it should NOT include max_iterations_exceeded in artifacts.*
+  - *When EI says INCOMPLETE, max_iterations_exceeded should not be in result artifacts.*
+- **`test_minimal_fields`**
+  - *is_complete and reasoning are required; others have defaults.*
+- **`test_all_fields`**
+  - *All fields populated.*
+- **`test_build_tool_params_adds_enum`**
+  - *When routable_specialists set, DONE schema has enum constraint.*
+- **`test_build_tool_params_no_enum_without_routable`**
+  - *Without routable_specialists, DONE schema has no enum.*
 
 ## `app/tests/unit/test_external_mcp_config.py`
 

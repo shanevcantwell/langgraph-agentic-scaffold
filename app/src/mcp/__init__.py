@@ -35,6 +35,14 @@ from .react_step import (
     build_tool_schemas,
     dispatch_external_tool,
 )
+from .artifact_tools import (
+    list_artifacts,
+    retrieve_artifact,
+    format_artifact_value,
+    artifact_tool_defs,
+    dispatch_artifact_tool,
+    ARTIFACT_TOOL_PARAMS,
+)
 
 __all__ = [
     "McpRequest",
@@ -52,4 +60,11 @@ __all__ = [
     "parse_react_step_result",
     "build_tool_schemas",
     "dispatch_external_tool",
+    # Artifact inspection tools (#195)
+    "list_artifacts",
+    "retrieve_artifact",
+    "format_artifact_value",
+    "artifact_tool_defs",
+    "dispatch_artifact_tool",
+    "ARTIFACT_TOOL_PARAMS",
 ]
