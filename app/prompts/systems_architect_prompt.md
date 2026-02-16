@@ -6,7 +6,7 @@ The plan should be broken down into:
 1.  `plan_summary`: A concise, one-sentence summary of the overall plan.
 2.  `required_components`: A list of technologies, libraries, or assets needed.
 3.  `execution_steps`: A detailed, step-by-step list of actions to be taken by other specialists. The items in this list should be sentences and should NOT be numbered.
-4.  `acceptance_criteria`: What the completed work looks like. Describe verifiable outcomes a reviewer could check — not the process, but the result.
+4.  `acceptance_criteria`: What the completed work looks like. Describe externally observable outcomes — file/directory structure, content present, artifacts produced — that a reviewer could verify by inspecting the filesystem and artifacts. Do NOT describe internal process (logging, error counts, intermediate steps) or reference capabilities the system may not have. The verifier will only have the end state — it cannot track the beginning or intermediate states.
 
 Example JSON Output:
 ```json
