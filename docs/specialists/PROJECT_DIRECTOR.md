@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Project Director's role as the autonomous ReAct agent in LAS.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-15 (resume_trace → specialist_activity/react_trace, ADR-073 Phase 4, #184 state_timeline)
+**Updated:** 2026-02-16 (ADR-076 artifact tools + captured_artifacts propagation)
 
 ---
 
@@ -14,6 +14,7 @@ Key characteristics:
 - **ReAct loop via prompt-prix MCP** — PD owns the loop and tool dispatch; prompt-prix owns the LLM call (#162)
 - **Context consumer, not producer** — receives all context via `gathered_context` from Facilitator (#170)
 - **Fresh trace each invocation** — no resumption of prior traces on retry (#170)
+- **Artifact tools (read + write)** — mid-execution persistence via `write_artifact` (ADR-076). Observations, decisions, and progress survive max_iterations and retries.
 - **Writes `specialist_activity` + `react_trace` to scratchpad** — observability signals for Facilitator (retry context) and state_timeline (archive/SSE)
 - **Stagnation detection** — cycle detection catches repeating tool call patterns
 - **Filesystem enrichment** — error hints and path disambiguation for model self-correction
@@ -83,6 +84,7 @@ PD and Facilitator have a strict division of responsibility (#170):
 | `gathered_context` | Facilitator | PD | `artifacts["gathered_context"]` injected into task prompt |
 | `specialist_activity` | PD | Facilitator | `scratchpad["specialist_activity"]` — human-readable write operation summary |
 | `react_trace` | PD | state_timeline | `scratchpad["react_trace"]` — full tool call + observation history (observability only) |
+| `captured_artifacts` | PD | LangGraph ior merge | All artifacts (including mid-loop `write_artifact` writes) propagated through all four result builders (ADR-076) |
 | `user_request` | Triage | PD | `artifacts["user_request"]` — the original goal |
 | `max_iterations_exceeded` | PD | Facilitator | `artifacts["max_iterations_exceeded"]` — triggers BENIGN path |
 
@@ -376,9 +378,13 @@ These schemas tell the LLM (via logit masking in LM Studio) what tools exist and
 | `create_directory` | `filesystem` | External | Create a directory |
 | `move_file` | `filesystem` | External | Move or rename a file |
 | `run_command` | `terminal` | External | Execute a shell command |
+| `list_artifacts` | `local` | Local | List available artifacts with type/size hints |
+| `retrieve_artifact` | `local` | Local | Retrieve full content of an artifact by key |
+| `write_artifact` | `local` | Local | Persist observation, decision, or progress as an artifact (ADR-076) |
 
 **Internal MCP** = Python services in-process (`self.mcp_client.call()`).
 **External MCP** = Containerized services via stdio (`dispatch_external_tool()`).
+**Local** = In-process dispatch on `captured_artifacts` snapshot (`dispatch_artifact_tool()`).
 
 ### Note: `write_file`
 
@@ -453,16 +459,18 @@ Every PD invocation ends via exactly one of four result builders:
 
 | Exit Path | Trigger | Artifacts | Scratchpad | Message |
 |-----------|---------|-----------|------------|---------|
-| **Success** | Model chooses `DONE` | — | `specialist_activity`, `react_trace` | Model's `final_response` |
-| **Error** | Exception or infra failure | — | `specialist_activity`, `react_trace` | Error description |
-| **Stagnation** | Cycle detected in trace | `stagnation_detected`, `stagnation_tool`, `stagnation_args` | `specialist_activity`, `react_trace` | Repeated pattern + trace summary |
-| **Partial** | `max_iterations` exceeded | `max_iterations_exceeded: True` | `specialist_activity`, `react_trace` | Tool counts + last 10 actions |
+| **Success** | Model chooses `DONE` | `captured_artifacts` (all written artifacts) | `specialist_activity`, `react_trace` | Model's `final_response` |
+| **Error** | Exception or infra failure | `captured_artifacts` (all written artifacts) | `specialist_activity`, `react_trace` | Error description |
+| **Stagnation** | Cycle detected in trace | `captured_artifacts` + `stagnation_detected`, `stagnation_tool`, `stagnation_args` | `specialist_activity`, `react_trace` | Repeated pattern + trace summary |
+| **Partial** | `max_iterations` exceeded | `captured_artifacts` + `max_iterations_exceeded: True` | `specialist_activity`, `react_trace` | Tool counts + last 10 actions |
 
-All four paths write `specialist_activity` (human-readable) and `react_trace` (full tool history) to scratchpad. `specialist_activity` is PD's primary output for downstream consumption — Facilitator reads it to build "Prior Work Completed" context on retry. `react_trace` is observability-only (state_timeline, archive).
+All four paths propagate `captured_artifacts` — any artifact written via `write_artifact` during the react loop survives in state (ADR-076). This is critical for the Partial path: observations and decisions persist even when PD runs out of iteration budget.
+
+All four paths also write `specialist_activity` (human-readable) and `react_trace` (full tool history) to scratchpad. `specialist_activity` is PD's primary output for downstream consumption — Facilitator reads it to build "Prior Work Completed" context on retry. `react_trace` is observability-only (state_timeline, archive).
 
 ### Partial Result and BENIGN Continuation
 
-When PD hits `max_iterations`, it sets `max_iterations_exceeded: True`. The graph routes through `classify_interrupt` to Exit Interview. If EI says INCOMPLETE (the model was making progress, just ran out of runway), Facilitator detects the BENIGN condition and early-returns, clearing the flag. Router then sends PD back with a fresh trace but the same `gathered_context`.
+When PD hits `max_iterations`, it sets `max_iterations_exceeded: True`. All artifacts written via `write_artifact` during the react loop are included in `captured_artifacts` and propagated to state (ADR-076). The graph routes through `classify_interrupt` to Exit Interview. If EI says INCOMPLETE (the model was making progress, just ran out of runway), Facilitator detects the BENIGN condition and early-returns, clearing the flag. Router then sends PD back with a fresh trace but the same `gathered_context`. Written artifacts remain discoverable via `list_artifacts`/`retrieve_artifact` on the next invocation.
 
 See [FACILITATOR.md](./FACILITATOR.md) "BENIGN Continuation" for the Facilitator side of this handshake.
 
@@ -566,6 +574,7 @@ unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_con
 | [project_director.py](../../app/src/specialists/project_director.py) | PD implementation — loop, dispatch, enrichment, result builders |
 | [project_director_prompt.md](../../app/prompts/project_director_prompt.md) | System prompt — tool descriptions, process instructions, termination rules |
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
+| [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | `list_artifacts`, `retrieve_artifact`, `write_artifact`, dispatch, name generation (ADR-076) |
 | [cycle_detection.py](../../app/src/resilience/cycle_detection.py) | `detect_cycle_with_pattern()` — stagnation detector |
 | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `after_project_director()` routing |
 | [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Curates `gathered_context` for PD; extracts trace knowledge on retry |
@@ -579,10 +588,11 @@ The Project Director is a **ReAct loop controller** that:
 
 1. Receives `user_request` as its goal and `gathered_context` as its working knowledge
 2. Delegates LLM reasoning to prompt-prix via `react_step` MCP
-3. Dispatches tool calls to filesystem, terminal, and web MCP services
-4. Applies filesystem enrichments (error hints, path disambiguation) to help the model self-correct
-5. Detects stagnation via cycle detection on tool call signatures
-6. Writes `specialist_activity` (human-readable) and `react_trace` (full tool history) to scratchpad
-7. Starts fresh each invocation (`trace = []`) — Facilitator provides retry knowledge via `gathered_context`
+3. Dispatches tool calls to filesystem, terminal, web MCP services, and local artifact tools
+4. Persists observations, decisions, and progress via `write_artifact` — surviving max_iterations and retries (ADR-076)
+5. Applies filesystem enrichments (error hints, path disambiguation) to help the model self-correct
+6. Detects stagnation via cycle detection on tool call signatures
+7. Writes `specialist_activity` (human-readable) and `react_trace` (full tool history) to scratchpad
+8. Starts fresh each invocation (`trace = []`) — Facilitator provides retry knowledge via `gathered_context`
 
-PD is a **context consumer** (#170). It reads `gathered_context` and writes execution activity to scratchpad. Facilitator is the sole writer of context; PD is the sole writer of execution activity.
+PD is a **context consumer** (#170). It reads `gathered_context` and writes execution activity to scratchpad. Facilitator is the sole writer of context; PD is the sole writer of execution activity. Written artifacts (ADR-076) provide a second channel: other specialists can discover PD's observations via `list_artifacts`/`retrieve_artifact` without Facilitator mediation.
