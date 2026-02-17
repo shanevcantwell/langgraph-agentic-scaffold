@@ -18,7 +18,8 @@ from langchain_core.messages import AIMessage
 from .base import BaseSpecialist
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
-    dispatch_external_tool,
+    dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
+    ARTIFACT_TOOL_PARAMS,
 )
 from ..resilience.cycle_detection import detect_cycle_with_pattern
 
@@ -149,11 +150,17 @@ class ProjectDirector(BaseSpecialist):
 
         if not is_react_available(getattr(self, 'external_mcp_client', None)):
             return self._build_error_result(
-                "prompt-prix MCP not reachable — cannot execute react_step loop", []
+                "prompt-prix MCP not reachable — cannot execute react_step loop",
+                [], {}
             )
 
+        # ADR-076: Snapshot artifacts for mid-execution read/write.
+        # write_artifact mutates this snapshot; it propagates on return.
+        captured_artifacts = artifacts.copy()
+
         tools = self._build_tools()
-        tool_schemas = build_tool_schemas(tools, _TOOL_PARAMS)
+        all_params = {**_TOOL_PARAMS, **ARTIFACT_TOOL_PARAMS}
+        tool_schemas = build_tool_schemas(tools, all_params)
         task_prompt = self._build_task_prompt(user_request, state)
         model_id = getattr(self.llm_adapter, 'model_name', None) or "default"
         system_prompt = getattr(self.llm_adapter, 'system_prompt', "") or ""
@@ -186,7 +193,9 @@ class ProjectDirector(BaseSpecialist):
                         f"ProjectDirector completed after {iteration + 1} iterations, "
                         f"{len(trace)} tool calls"
                     )
-                    return self._build_success_result(final_response, trace)
+                    return self._build_success_result(
+                        final_response, trace, captured_artifacts
+                    )
 
                 # Dispatch pending tool calls to real MCP services
                 pending = result.get("pending_tool_calls", [])
@@ -195,13 +204,16 @@ class ProjectDirector(BaseSpecialist):
                 if not pending:
                     logger.warning("react_step returned incomplete with no pending tool calls")
                     return self._build_error_result(
-                        "react_step returned no tool calls and no completion", trace
+                        "react_step returned no tool calls and no completion",
+                        trace, captured_artifacts
                     )
 
                 for tc in pending:
                     tool_name = tc.get("name", "unknown")
                     tool_args = tc.get("args", {})
-                    observation = self._dispatch_tool_call(tc, tools, successful_paths)
+                    observation = self._dispatch_tool_call(
+                        tc, tools, successful_paths, captured_artifacts
+                    )
 
                     trace.append({
                         "iteration": iteration,
@@ -226,17 +238,18 @@ class ProjectDirector(BaseSpecialist):
                 # Stagnation detection after each iteration batch
                 if self._check_stagnation(trace):
                     logger.warning("ProjectDirector: stagnation detected in trace")
-                    return self._build_stagnation_result(trace)
+                    return self._build_stagnation_result(trace, captured_artifacts)
 
             except Exception as e:
                 logger.error(f"ProjectDirector react loop error at iteration {iteration}: {e}")
                 return self._build_error_result(
-                    f"react loop error at iteration {iteration}: {e}", trace
+                    f"react loop error at iteration {iteration}: {e}",
+                    trace, captured_artifacts
                 )
 
         # Max iterations exceeded
         logger.warning(f"ProjectDirector hit max iterations ({max_iterations})")
-        return self._build_partial_result(trace, max_iterations)
+        return self._build_partial_result(trace, max_iterations, captured_artifacts)
 
     # ─── react_step infrastructure ─────────────────────────────────────
 
@@ -245,6 +258,7 @@ class ProjectDirector(BaseSpecialist):
         pending: Dict[str, Any],
         tools: Dict[str, ToolDef],
         successful_paths: List[str],
+        captured_artifacts: dict,
     ) -> str:
         """Dispatch a single pending tool call to the appropriate MCP service."""
         tool_name = pending.get("name", "")
@@ -270,6 +284,10 @@ class ProjectDirector(BaseSpecialist):
                     result = _enrich_filesystem_error(result, failed_path, successful_paths)
 
             return result
+
+        # Local artifact tools (ADR-076)
+        if tool_def.service == "local":
+            return dispatch_artifact_tool(tool_name, tool_args, captured_artifacts)
 
         # Internal MCP: Python-based specialists (search, browse)
         if not hasattr(self, 'mcp_client') or self.mcp_client is None:
@@ -298,7 +316,7 @@ class ProjectDirector(BaseSpecialist):
 
     def _build_tools(self) -> Dict[str, ToolDef]:
         """Define available tools mapping tool names to MCP service coordinates."""
-        return {
+        tools = {
             # Web research (internal MCP)
             "search": ToolDef(
                 service="web_specialist", function="search",
@@ -333,6 +351,9 @@ class ProjectDirector(BaseSpecialist):
                 description="Execute a shell command. Args: command (str). Allowed: mv, mkdir, cp, touch, ls, cat, head, tail, grep, find, wc, sort.",
             ),
         }
+        # Artifact tools (ADR-076 — read + write artifacts mid-execution)
+        tools.update(artifact_tool_defs())
+        return tools
 
     # ─── Prompt & config helpers ───────────────────────────────────────
 
@@ -362,11 +383,12 @@ class ProjectDirector(BaseSpecialist):
     # ─── Result builders ───────────────────────────────────────────────
 
     def _build_success_result(
-        self, final_response: str, trace: List[Dict[str, Any]]
+        self, final_response: str, trace: List[Dict[str, Any]],
+        captured_artifacts: dict,
     ) -> Dict[str, Any]:
         return {
             "messages": [AIMessage(content=final_response)],
-            "artifacts": {},
+            "artifacts": dict(captured_artifacts),
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
                 "react_trace": trace,
@@ -374,11 +396,12 @@ class ProjectDirector(BaseSpecialist):
         }
 
     def _build_error_result(
-        self, error_msg: str, trace: List[Dict[str, Any]]
+        self, error_msg: str, trace: List[Dict[str, Any]],
+        captured_artifacts: dict,
     ) -> Dict[str, Any]:
         return {
             "messages": [AIMessage(content=error_msg)],
-            "artifacts": {},
+            "artifacts": dict(captured_artifacts),
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
                 "react_trace": trace,
@@ -386,7 +409,8 @@ class ProjectDirector(BaseSpecialist):
         }
 
     def _build_stagnation_result(
-        self, trace: List[Dict[str, Any]]
+        self, trace: List[Dict[str, Any]],
+        captured_artifacts: dict,
     ) -> Dict[str, Any]:
         # Find the repeated pattern for the message
         last_tc = trace[-1].get("tool_call", {}) if trace else {}
@@ -400,13 +424,16 @@ class ProjectDirector(BaseSpecialist):
             f"Progress before stagnation:\n{self._summarize_trace(trace)}"
         )
 
+        result_artifacts = dict(captured_artifacts)
+        result_artifacts.update({
+            "stagnation_detected": True,
+            "stagnation_tool": tool_name,
+            "stagnation_args": tool_args,
+        })
+
         return {
             "messages": [AIMessage(content=stagnation_message)],
-            "artifacts": {
-                "stagnation_detected": True,
-                "stagnation_tool": tool_name,
-                "stagnation_args": tool_args,
-            },
+            "artifacts": result_artifacts,
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
                 "react_trace": trace,
@@ -414,14 +441,16 @@ class ProjectDirector(BaseSpecialist):
         }
 
     def _build_partial_result(
-        self, trace: List[Dict[str, Any]], max_iter: int
+        self, trace: List[Dict[str, Any]], max_iter: int,
+        captured_artifacts: dict,
     ) -> Dict[str, Any]:
         partial_msg = self._synthesize_partial(trace, max_iter)
+        result_artifacts = dict(captured_artifacts)
+        result_artifacts["max_iterations_exceeded"] = True
+
         return {
             "messages": [AIMessage(content=partial_msg)],
-            "artifacts": {
-                "max_iterations_exceeded": True,
-            },
+            "artifacts": result_artifacts,
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
                 "react_trace": trace,

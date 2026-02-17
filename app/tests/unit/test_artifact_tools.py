@@ -1,9 +1,9 @@
 # app/tests/unit/test_artifact_tools.py
 """
-Tests for shared artifact inspection tools (mcp/artifact_tools.py).
+Tests for shared artifact tools (mcp/artifact_tools.py).
 
-Extracted from exit_interview_specialist as part of #195.
-These tools are available to any react_step specialist via config.yaml.
+read tools: list_artifacts, retrieve_artifact (extracted #195)
+write tool:  write_artifact (ADR-076 — data flow primitives)
 """
 import json
 import pytest
@@ -11,10 +11,13 @@ import pytest
 from app.src.mcp.artifact_tools import (
     list_artifacts,
     retrieve_artifact,
+    write_artifact,
     format_artifact_value,
     artifact_tool_defs,
     dispatch_artifact_tool,
     ARTIFACT_TOOL_PARAMS,
+    _generate_artifact_name,
+    _resolve_collision,
 )
 
 
@@ -135,22 +138,33 @@ class TestToolDefIntegration:
         defs = artifact_tool_defs()
         assert "list_artifacts" in defs
         assert "retrieve_artifact" in defs
+        assert "write_artifact" in defs
         assert defs["list_artifacts"].is_external is False
         assert defs["retrieve_artifact"].is_external is False
+        assert defs["write_artifact"].is_external is False
 
     def test_tool_defs_service_is_local(self):
         defs = artifact_tool_defs()
         assert defs["list_artifacts"].service == "local"
         assert defs["retrieve_artifact"].service == "local"
+        assert defs["write_artifact"].service == "local"
 
     def test_param_schemas_present(self):
         assert "list_artifacts" in ARTIFACT_TOOL_PARAMS
         assert "retrieve_artifact" in ARTIFACT_TOOL_PARAMS
+        assert "write_artifact" in ARTIFACT_TOOL_PARAMS
 
     def test_retrieve_artifact_requires_key(self):
         schema = ARTIFACT_TOOL_PARAMS["retrieve_artifact"]
         assert "key" in schema["properties"]
         assert "key" in schema["required"]
+
+    def test_write_artifact_requires_content_not_key(self):
+        schema = ARTIFACT_TOOL_PARAMS["write_artifact"]
+        assert "content" in schema["properties"]
+        assert "key" in schema["properties"]
+        assert "content" in schema["required"]
+        assert "key" not in schema.get("required", [])
 
 
 # =============================================================================
@@ -175,3 +189,111 @@ class TestDispatchArtifactTool:
     def test_dispatch_retrieve_missing_key(self):
         result = dispatch_artifact_tool("retrieve_artifact", {"key": "missing"}, {"a": 1})
         assert "not found" in result
+
+    def test_dispatch_write_artifact(self):
+        artifacts = {"existing": "data"}
+        result = dispatch_artifact_tool(
+            "write_artifact", {"content": "hello world", "key": "notes"}, artifacts
+        )
+        assert "notes" in result
+        assert artifacts["notes"] == "hello world"
+
+    def test_dispatch_write_artifact_no_key(self):
+        artifacts = {}
+        result = dispatch_artifact_tool(
+            "write_artifact", {"content": "observation"}, artifacts
+        )
+        assert "written as" in result
+        assert len(artifacts) == 1  # One auto-named entry
+
+
+# =============================================================================
+# write_artifact
+# =============================================================================
+
+class TestWriteArtifact:
+    """Tests for write_artifact (ADR-076 — data flow primitives)."""
+
+    def test_write_with_key(self):
+        artifacts = {}
+        result = write_artifact(artifacts, "dolphin facts", key="observations")
+        assert "observations" in result
+        assert artifacts["observations"] == "dolphin facts"
+
+    def test_write_without_key_generates_name(self):
+        artifacts = {}
+        result = write_artifact(artifacts, "some content")
+        assert "written as" in result
+        # Should have one artifact with an auto-generated key
+        assert len(artifacts) == 1
+        key = list(artifacts.keys())[0]
+        assert "-" in key  # word-word-word format
+
+    def test_write_collision_appends_suffix(self):
+        artifacts = {"notes": "prior notes"}
+        result = write_artifact(artifacts, "new notes", key="notes")
+        assert "notes-2" in result
+        assert artifacts["notes"] == "prior notes"  # Original unchanged
+        assert artifacts["notes-2"] == "new notes"
+
+    def test_write_multiple_collisions(self):
+        artifacts = {"log": "v1", "log-2": "v2", "log-3": "v3"}
+        result = write_artifact(artifacts, "v4", key="log")
+        assert "log-4" in result
+        assert artifacts["log-4"] == "v4"
+
+    def test_write_visible_to_list(self):
+        artifacts = {"user_request": "Sort files"}
+        write_artifact(artifacts, "1.txt is about dolphins", key="file_obs")
+        listing = list_artifacts(artifacts)
+        assert "file_obs" in listing
+
+    def test_write_visible_to_retrieve(self):
+        artifacts = {}
+        write_artifact(artifacts, "categorization plan here", key="plan")
+        retrieved = retrieve_artifact(artifacts, "plan")
+        assert retrieved == "categorization plan here"
+
+    def test_write_returns_char_count(self):
+        artifacts = {}
+        result = write_artifact(artifacts, "x" * 42, key="data")
+        assert "42 chars" in result
+
+    def test_write_empty_content(self):
+        artifacts = {}
+        result = write_artifact(artifacts, "", key="empty")
+        assert "0 chars" in result
+        assert artifacts["empty"] == ""
+
+
+# =============================================================================
+# Name generation helpers
+# =============================================================================
+
+class TestNameGeneration:
+    """Tests for artifact name generation and collision resolution."""
+
+    def test_generated_name_is_three_words(self):
+        name = _generate_artifact_name(set())
+        parts = name.split("-")
+        assert len(parts) == 3
+
+    def test_generated_name_avoids_existing(self):
+        existing = set()
+        names = set()
+        for _ in range(20):
+            name = _generate_artifact_name(existing)
+            assert name not in existing
+            existing.add(name)
+            names.add(name)
+        assert len(names) == 20  # All unique
+
+    def test_collision_no_conflict(self):
+        assert _resolve_collision(set(), "notes") == "notes"
+
+    def test_collision_appends_suffix(self):
+        assert _resolve_collision({"notes"}, "notes") == "notes-2"
+
+    def test_collision_skips_existing_suffixes(self):
+        existing = {"log", "log-2", "log-3"}
+        assert _resolve_collision(existing, "log") == "log-4"

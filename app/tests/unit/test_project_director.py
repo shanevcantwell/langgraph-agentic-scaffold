@@ -186,3 +186,91 @@ class TestEmergentProjectSubgraphPhase2:
 
     # #170: TestUpdateContextFromTrace removed — _update_context_from_trace deleted.
     # Knowledge extraction moved to Facilitator._extract_trace_knowledge().
+
+
+class TestArtifactPropagation:
+    """ADR-076: Captured artifacts propagate through all result builders."""
+
+    @pytest.fixture
+    def director(self, mock_specialist_config):
+        return ProjectDirector("project_director", mock_specialist_config)
+
+    def test_partial_result_includes_captured_artifacts(self, director):
+        """Written artifacts survive max_iterations via _build_partial_result."""
+        captured = {"user_request": "Sort files", "observations": "1.txt is about dolphins"}
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "read_file", "args": {"path": "/test/1.txt"}},
+                "observation": "dolphin content",
+                "success": True,
+            },
+        ]
+
+        result = director._build_partial_result(trace, max_iter=5, captured_artifacts=captured)
+
+        assert result["artifacts"]["observations"] == "1.txt is about dolphins"
+        assert result["artifacts"]["user_request"] == "Sort files"
+        assert result["artifacts"]["max_iterations_exceeded"] is True
+
+    def test_success_result_includes_captured_artifacts(self, director):
+        """Written artifacts propagate on normal completion."""
+        captured = {"user_request": "Sort files", "progress": "8 of 13 done"}
+        trace = []
+
+        result = director._build_success_result("Done!", trace, captured_artifacts=captured)
+
+        assert result["artifacts"]["progress"] == "8 of 13 done"
+        assert result["artifacts"]["user_request"] == "Sort files"
+
+    def test_error_result_includes_captured_artifacts(self, director):
+        """Written artifacts survive even on error."""
+        captured = {"user_request": "Sort files", "partial_work": "started"}
+        trace = []
+
+        result = director._build_error_result("Something broke", trace, captured_artifacts=captured)
+
+        assert result["artifacts"]["partial_work"] == "started"
+
+    def test_stagnation_result_includes_captured_artifacts(self, director):
+        """Written artifacts survive stagnation detection."""
+        captured = {"user_request": "Sort files"}
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "read_file", "args": {"path": "/x"}},
+                "observation": "content",
+                "success": True,
+            },
+        ]
+
+        result = director._build_stagnation_result(trace, captured_artifacts=captured)
+
+        assert result["artifacts"]["user_request"] == "Sort files"
+        assert result["artifacts"]["stagnation_detected"] is True
+
+    def test_stagnation_overrides_dont_clobber_written_artifacts(self, director):
+        """Stagnation metadata merges with, not replaces, written artifacts."""
+        captured = {"user_request": "Sort", "my_notes": "important observations"}
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "search", "args": {"query": "x"}},
+                "observation": "result",
+                "success": True,
+            },
+        ]
+
+        result = director._build_stagnation_result(trace, captured_artifacts=captured)
+
+        assert result["artifacts"]["my_notes"] == "important observations"
+        assert result["artifacts"]["stagnation_detected"] is True
+
+    def test_build_tools_includes_artifact_tools(self, director):
+        """ADR-076: PD's tool set includes artifact read/write tools."""
+        tools = director._build_tools()
+        assert "list_artifacts" in tools
+        assert "retrieve_artifact" in tools
+        assert "write_artifact" in tools
+        assert tools["write_artifact"].is_external is False
+        assert tools["write_artifact"].service == "local"

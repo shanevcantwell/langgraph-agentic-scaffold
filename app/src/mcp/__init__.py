@@ -38,6 +38,7 @@ from .react_step import (
 from .artifact_tools import (
     list_artifacts,
     retrieve_artifact,
+    write_artifact,
     format_artifact_value,
     artifact_tool_defs,
     dispatch_artifact_tool,
@@ -60,9 +61,10 @@ __all__ = [
     "parse_react_step_result",
     "build_tool_schemas",
     "dispatch_external_tool",
-    # Artifact inspection tools (#195)
+    # Artifact tools (#195, ADR-076)
     "list_artifacts",
     "retrieve_artifact",
+    "write_artifact",
     "format_artifact_value",
     "artifact_tool_defs",
     "dispatch_artifact_tool",

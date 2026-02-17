@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 736 |
+| Unit | 74 | 761 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1019** |
+| **Total** | **109** | **1044** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -746,10 +746,26 @@
 - **`test_tool_defs_service_is_local`**
 - **`test_param_schemas_present`**
 - **`test_retrieve_artifact_requires_key`**
+- **`test_write_artifact_requires_content_not_key`**
 - **`test_dispatch_list_artifacts`**
 - **`test_dispatch_retrieve_artifact`**
 - **`test_dispatch_unknown_tool`**
 - **`test_dispatch_retrieve_missing_key`**
+- **`test_dispatch_write_artifact`**
+- **`test_dispatch_write_artifact_no_key`**
+- **`test_write_with_key`**
+- **`test_write_without_key_generates_name`**
+- **`test_write_collision_appends_suffix`**
+- **`test_write_multiple_collisions`**
+- **`test_write_visible_to_list`**
+- **`test_write_visible_to_retrieve`**
+- **`test_write_returns_char_count`**
+- **`test_write_empty_content`**
+- **`test_generated_name_is_three_words`**
+- **`test_generated_name_avoids_existing`**
+- **`test_collision_no_conflict`**
+- **`test_collision_appends_suffix`**
+- **`test_collision_skips_existing_suffixes`**
 
 ## `app/tests/unit/test_base_schemas.py`
 
@@ -1093,6 +1109,12 @@
   - *Issue #167: Task strategy should appear in gathered_context so PD*
 - **`test_facilitator_surfaces_specialist_activity_on_retry`**
   - *ADR-073 Phase 3: On EI retry, Facilitator reads specialist_activity from*
+- **`test_facilitator_accumulates_work_across_passes`**
+  - *Prior Work accumulates across passes. Pass 2 PD sees pass 1's work*
+- **`test_facilitator_task_plan_execution_steps_in_context`**
+  - *Task strategy includes execution_steps and acceptance_criteria from*
+- **`test_facilitator_ei_recommended_steps_in_prior_work`**
+  - *EI's missing_elements appear in Prior Work section as recommended*
 
 ## `app/tests/unit/test_file_ops_schemas.py`
 
@@ -1888,6 +1910,18 @@
   - *Test that Phase 2 subgraph doesn't exclude specialists from hub-and-spoke.*
 - **`test_subgraph_build_no_custom_edges`**
   - *Test that Phase 2 subgraph doesn't add custom edges.*
+- **`test_partial_result_includes_captured_artifacts`**
+  - *Written artifacts survive max_iterations via _build_partial_result.*
+- **`test_success_result_includes_captured_artifacts`**
+  - *Written artifacts propagate on normal completion.*
+- **`test_error_result_includes_captured_artifacts`**
+  - *Written artifacts survive even on error.*
+- **`test_stagnation_result_includes_captured_artifacts`**
+  - *Written artifacts survive stagnation detection.*
+- **`test_stagnation_overrides_dont_clobber_written_artifacts`**
+  - *Stagnation metadata merges with, not replaces, written artifacts.*
+- **`test_build_tools_includes_artifact_tools`**
+  - *ADR-076: PD's tool set includes artifact read/write tools.*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 
