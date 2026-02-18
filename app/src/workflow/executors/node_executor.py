@@ -97,11 +97,14 @@ class NodeExecutor:
                     raise WorkflowError(f"System Halted by Circuit Breaker: {cbt.reason}") from cbt
 
                 elif cbt.action == "ROUTE_TO_ERROR_HANDLER":
-                    # Return a state update that forces routing to the error handler
-                    # The decider functions (route_to_next_specialist, etc.) will pick this up.
+                    # Return a state update that forces routing to the error handler.
+                    # ADR-077: stabilization_action → signals (consumed by SignalProcessorSpecialist).
+                    # error_report stays in scratchpad (observability, not routing).
                     return {
-                        "scratchpad": {
+                        "signals": {
                             "stabilization_action": "ROUTE_TO_ERROR_HANDLER",
+                        },
+                        "scratchpad": {
                             "error_report": f"Circuit Breaker Triggered: {cbt.violation_type}. Reason: {cbt.reason}"
                         },
                         "routing_history": [routing_entry] # Log that we attempted this node

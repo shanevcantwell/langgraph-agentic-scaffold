@@ -72,6 +72,12 @@ class SpecialistResult(BaseModel):
         description="List of parallel tasks for fan-out execution."
     )
 
+    # ADR-077: Routing signals snapshot
+    signals: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Routing signal snapshot (ADR-077). Written by specialists, consumed by SignalProcessorSpecialist."
+    )
+
     @model_validator(mode='after')
     def validate_task_is_complete_not_in_scratchpad(self) -> 'SpecialistResult':
         """

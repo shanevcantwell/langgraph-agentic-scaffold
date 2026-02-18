@@ -83,7 +83,6 @@ def test_facilitator_handles_missing_plan(facilitator):
     state = {"artifacts": {}, "scratchpad": {}}
     result = facilitator.execute(state)
     assert "gathered_context" in result.get("artifacts", {})
-    assert result["scratchpad"]["facilitator_complete"] is True
 
 def test_facilitator_handles_mcp_error(facilitator):
     state = {
@@ -345,9 +344,6 @@ def test_facilitator_handles_ask_user_action_via_interrupt(facilitator):
     assert "I prefer JSON format" in result["artifacts"]["gathered_context"]
     assert "User Clarification" in result["artifacts"]["gathered_context"]
 
-    # Completion flag should be set
-    assert result["scratchpad"]["facilitator_complete"] is True
-
 
 def test_facilitator_propagates_graph_interrupt_for_ask_user(facilitator):
     """
@@ -482,29 +478,6 @@ def test_facilitator_executes_multiple_actions(facilitator):
     assert "\n\n" in gathered  # Sections joined with double newline
 
 
-def test_facilitator_sets_completion_flag(facilitator):
-    """
-    Per FACILITATOR.md: Facilitator sets scratchpad["facilitator_complete"] = True
-    after processing all actions.
-    """
-    state = {
-        "scratchpad": {
-            "triage_actions": [
-                {"type": "research", "target": "test", "description": "test", "strategy": None}
-            ],
-            "triage_reasoning": "Simple action",
-        },
-        "artifacts": {}
-    }
-
-    facilitator.mcp_client.call.return_value = []
-
-    result = facilitator.execute(state)
-
-    assert "scratchpad" in result
-    assert result["scratchpad"]["facilitator_complete"] is True
-
-
 def test_facilitator_filesystem_unavailable_graceful_degradation(facilitator):
     """
     Per FACILITATOR.md: If filesystem MCP is unavailable, Facilitator includes
@@ -529,9 +502,6 @@ def test_facilitator_filesystem_unavailable_graceful_degradation(facilitator):
     gathered = result["artifacts"]["gathered_context"]
     assert "### File: /path/to/file" in gathered
     assert "[Filesystem service unavailable]" in gathered
-
-    # Completion flag still set
-    assert result["scratchpad"]["facilitator_complete"] is True
 
 
 def test_facilitator_directory_listing_filesystem_unavailable(facilitator):
@@ -576,7 +546,6 @@ def test_facilitator_handles_empty_triage_actions(facilitator):
 
     assert "gathered_context" in result.get("artifacts", {})
     assert "Test strategy" in result["artifacts"]["gathered_context"]
-    assert result["scratchpad"]["facilitator_complete"] is True
 
 
 def test_facilitator_continues_after_action_error(facilitator):
@@ -613,5 +582,3 @@ def test_facilitator_continues_after_action_error(facilitator):
     assert "### Research: success_query" in gathered
     assert "Success" in gathered
 
-    # Completion flag still set
-    assert result["scratchpad"]["facilitator_complete"] is True

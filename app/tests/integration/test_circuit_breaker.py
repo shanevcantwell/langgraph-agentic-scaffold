@@ -52,16 +52,17 @@ def test_circuit_breaker_route_to_error_handler(orchestrator_with_circuit_breake
     # and returns a state update with stabilization_action.
     result = safe_executor(invalid_state)
 
-    # Assertions
-    assert "scratchpad" in result
-    assert result["scratchpad"]["stabilization_action"] == "ROUTE_TO_ERROR_HANDLER"
+    # Assertions — ADR-077: stabilization_action in signals, error_report in scratchpad
+    assert "signals" in result
+    assert result["signals"]["stabilization_action"] == "ROUTE_TO_ERROR_HANDLER"
     assert "Circuit Breaker Triggered" in result["scratchpad"]["error_report"]
     assert "structural_integrity_violated" in result["scratchpad"]["error_report"]
 
     # Now verify that the orchestrator respects this action
     # We need to merge the result into the state to simulate graph execution
+    invalid_state["signals"] = result.get("signals", {})
     invalid_state["scratchpad"].update(result["scratchpad"])
-    
+
     # Check routing
     next_node = orchestrator.route_to_next_specialist(invalid_state)
     assert next_node == "error_handling_specialist"

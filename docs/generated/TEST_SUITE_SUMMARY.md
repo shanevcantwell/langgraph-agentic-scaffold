@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 761 |
+| Unit | 74 | 766 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1044** |
+| **Total** | **109** | **1049** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1061,8 +1061,6 @@
   - *On EI retry (exit_interview_result present), Facilitator skips ask_user actions.*
 - **`test_facilitator_executes_multiple_actions`**
   - *Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,*
-- **`test_facilitator_sets_completion_flag`**
-  - *Per FACILITATOR.md: Facilitator sets scratchpad["facilitator_complete"] = True*
 - **`test_facilitator_filesystem_unavailable_graceful_degradation`**
   - *Per FACILITATOR.md: If filesystem MCP is unavailable, Facilitator includes*
 - **`test_facilitator_directory_listing_filesystem_unavailable`**
@@ -1075,21 +1073,21 @@
 ## `app/tests/unit/test_facilitator_benign.py`
 
 - **`test_facilitator_passes_trace_on_benign_interrupt`**
-  - *ADR-073 Phase 4: BENIGN interrupt early-returns, clearing the flag.*
-- **`test_facilitator_no_wip_summary_without_max_iterations`**
-  - *Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).*
+  - *ADR-077: BENIGN interrupt early-returns when routing_context is benign_continuation.*
+- **`test_facilitator_no_wip_summary_without_benign_context`**
+  - *Issue #108: No work-in-progress summary for normal flow (no BENIGN routing_context).*
 - **`test_facilitator_benign_continuation_with_ei_incomplete`**
-  - *ADR-073 Phase 4: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.*
+  - *ADR-077: BENIGN continuation when routing_context is benign_continuation*
 - **`test_facilitator_benign_early_returns_minimal_state`**
   - *BENIGN always early-returns with minimal state.*
 - **`test_facilitator_benign_does_not_accumulate_context`**
-  - *ADR-073 Phase 4: BENIGN early return avoids context pollution.*
+  - *ADR-077: BENIGN early return avoids context pollution.*
 - **`test_facilitator_benign_early_returns_empty_routing_history`**
   - *BENIGN early-returns even with empty routing history.*
 - **`test_facilitator_no_early_return_when_exit_interview_result_present`**
-  - *Issue #114: When exit_interview_result is present (without max_iterations),*
+  - *Issue #114: When exit_interview_result is present (without benign routing_context),*
 - **`test_facilitator_benign_continuation_after_ei_incomplete`**
-  - *ADR-073 Phase 4: BENIGN+INCOMPLETE = continuation, not correction.*
+  - *ADR-077: BENIGN+INCOMPLETE = continuation, not correction.*
 
 ## `app/tests/unit/test_facilitator_retry.py`
 
@@ -1336,31 +1334,6 @@
 
 - **`test_install_script_creates_venv_and_installs_pytest`**
   - *Test that install.sh creates a virtual environment and installs pytest.*
-
-## `app/tests/unit/test_interrupt_classifier.py`
-
-- **`test_max_iterations_exceeded_in_scratchpad_routes_to_exit_interview`**
-  - *BENIGN: max_iterations_exceeded flag → Exit Interview for feedback.*
-- **`test_max_iterations_exceeded_in_artifacts_routes_to_exit_interview`**
-  - *BENIGN: max_iterations_exceeded in artifacts → Exit Interview.*
-- **`test_context_overflow_routes_to_facilitator`**
-  - *BENIGN: context_overflow → Facilitator (compress and continue).*
-- **`test_user_abort_routes_to_end`**
-  - *TERMINAL: user_abort → End (immediate termination).*
-- **`test_stagnation_detected_flag_routes_to_interrupt_evaluator`**
-  - *PATHOLOGICAL: stagnation_detected flag → Interrupt Evaluator.*
-- **`test_tool_error_routes_to_interrupt_evaluator`**
-  - *PATHOLOGICAL: tool_error flag → Interrupt Evaluator.*
-- **`test_artifacts_present_routes_to_exit_interview`**
-  - *NORMAL: artifacts present → Exit Interview for semantic completion.*
-- **`test_no_artifacts_no_flags_routes_to_router`**
-  - *NORMAL: no artifacts, no flags → Router (continue workflow).*
-- **`test_terminal_takes_priority_over_benign`**
-  - *TERMINAL should take priority over BENIGN flags.*
-- **`test_benign_takes_priority_over_pathological`**
-  - *BENIGN (max_iterations) should take priority over PATHOLOGICAL detection.*
-- **`test_benign_takes_priority_over_artifacts`**
-  - *BENIGN interrupt (max_iterations) should route to EI even if artifacts present.*
 
 ## `app/tests/unit/test_invariants.py`
 
@@ -1918,8 +1891,8 @@
   - *Written artifacts survive even on error.*
 - **`test_stagnation_result_includes_captured_artifacts`**
   - *Written artifacts survive stagnation detection.*
-- **`test_stagnation_overrides_dont_clobber_written_artifacts`**
-  - *Stagnation metadata merges with, not replaces, written artifacts.*
+- **`test_stagnation_signals_separate_from_artifacts`**
+  - *ADR-077: Stagnation signals don't pollute the artifacts dict.*
 - **`test_build_tools_includes_artifact_tools`**
   - *ADR-076: PD's tool set includes artifact read/write tools.*
 
@@ -2102,6 +2075,43 @@
   - *add_strategy can insert at specific index.*
 - **`test_duckduckgo_to_brave_fallback`**
   - *DuckDuckGo rate limit triggers Brave fallback.*
+
+## `app/tests/unit/test_signal_processor_specialist.py`
+
+- **`test_stabilization_action_routes_to_exit_interview`**
+  - *CB ROUTE_TO_ERROR_HANDLER → EI when EI is available.*
+- **`test_stabilization_action_falls_back_to_end`**
+  - *CB routes to END when EI is not available.*
+- **`test_user_abort_routes_to_end`**
+  - *TERMINAL: user_abort in scratchpad → END.*
+- **`test_user_abort_takes_priority_over_max_iterations`**
+  - *TERMINAL takes priority over BENIGN.*
+- **`test_max_iterations_exceeded_routes_to_exit_interview`**
+  - *BENIGN: max_iterations_exceeded → EI with benign_continuation context.*
+- **`test_benign_takes_priority_over_stagnation`**
+  - *BENIGN (max_iterations) takes priority over PATHOLOGICAL (stagnation).*
+- **`test_benign_takes_priority_over_artifacts`**
+  - *BENIGN takes priority over normal artifact flow.*
+- **`test_stagnation_detected_routes_to_interrupt_evaluator`**
+  - *PATHOLOGICAL: stagnation_detected → IE when available.*
+- **`test_stagnation_falls_back_to_exit_interview`**
+  - *PATHOLOGICAL fallback: IE unavailable → EI.*
+- **`test_stagnation_falls_back_to_router`**
+  - *PATHOLOGICAL fallback: IE and EI unavailable → Router.*
+- **`test_artifacts_present_routes_to_exit_interview`**
+  - *NORMAL: artifacts present → EI for semantic completion check.*
+- **`test_no_artifacts_no_signals_routes_to_router`**
+  - *NORMAL: no artifacts, no signals → Router (continue workflow).*
+- **`test_replace_reducer_replaces_entirely`**
+  - *New signals dict replaces old — no merge.*
+- **`test_replace_reducer_preserves_on_none`**
+  - *None update preserves current state (node didn't write signals).*
+- **`test_replace_reducer_empty_dict_clears`**
+  - *Empty dict update clears all signals.*
+- **`test_route_from_signal_reads_routing_target`**
+  - *Edge function returns whatever routing_target the signal processor set.*
+- **`test_route_from_signal_falls_back_to_router`**
+  - *Missing routing_target falls back to Router.*
 
 ## `app/tests/unit/test_smoke.py`
 

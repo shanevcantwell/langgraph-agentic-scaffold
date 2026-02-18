@@ -424,16 +424,14 @@ class ProjectDirector(BaseSpecialist):
             f"Progress before stagnation:\n{self._summarize_trace(trace)}"
         )
 
-        result_artifacts = dict(captured_artifacts)
-        result_artifacts.update({
-            "stagnation_detected": True,
-            "stagnation_tool": tool_name,
-            "stagnation_args": tool_args,
-        })
-
         return {
             "messages": [AIMessage(content=stagnation_message)],
-            "artifacts": result_artifacts,
+            "artifacts": dict(captured_artifacts),
+            "signals": {
+                "stagnation_detected": True,
+                "stagnation_tool": tool_name,
+                "stagnation_args": tool_args,
+            },
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
                 "react_trace": trace,
@@ -445,12 +443,13 @@ class ProjectDirector(BaseSpecialist):
         captured_artifacts: dict,
     ) -> Dict[str, Any]:
         partial_msg = self._synthesize_partial(trace, max_iter)
-        result_artifacts = dict(captured_artifacts)
-        result_artifacts["max_iterations_exceeded"] = True
 
         return {
             "messages": [AIMessage(content=partial_msg)],
-            "artifacts": result_artifacts,
+            "artifacts": dict(captured_artifacts),
+            "signals": {
+                "max_iterations_exceeded": True,
+            },
             "scratchpad": {
                 "specialist_activity": self._summarize_activity(trace),
                 "react_trace": trace,

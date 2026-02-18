@@ -88,6 +88,11 @@ class GraphBuilder:
         except (IOError, FileNotFoundError) as e:
             raise SpecialistLoadError(f"Could not load specialist '{CoreSpecialist.ROUTER.value}' due to a prompt loading error: {e}") from e
 
+        # ADR-077: Configure signal processor with specialist awareness
+        # Same pattern as Router — inject specialist map for _route_pathological fallback chain
+        if CoreSpecialist.SIGNAL_PROCESSOR.value in self.specialists:
+            self.specialists[CoreSpecialist.SIGNAL_PROCESSOR.value].set_specialist_map(self.specialists)
+
         workflow_config = self.config.get("workflow", {})
         raw_entry_point = workflow_config.get("entry_point", CoreSpecialist.ROUTER.value)
         if raw_entry_point not in self.specialists:
@@ -550,37 +555,53 @@ class GraphBuilder:
         if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
             check_completion_destinations[CoreSpecialist.EXIT_INTERVIEW.value] = CoreSpecialist.EXIT_INTERVIEW.value
 
-        # ADR-CORE-061: Build destinations for classify_interrupt (non-terminal specialists)
-        # Interrupt Classifier routes to: Exit Interview, Router, Facilitator, or End
-        classify_interrupt_destinations = {
-            CoreSpecialist.EXIT_INTERVIEW.value: CoreSpecialist.EXIT_INTERVIEW.value,
-            CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
-            CoreSpecialist.END.value: CoreSpecialist.END.value,
-        }
-        if "facilitator_specialist" in self.specialists:
-            classify_interrupt_destinations["facilitator_specialist"] = "facilitator_specialist"
-        # Interrupt Evaluator destination (for pathological interrupts)
-        if "interrupt_evaluator_specialist" in self.specialists:
-            classify_interrupt_destinations["interrupt_evaluator_specialist"] = "interrupt_evaluator_specialist"
+        # ADR-077: Signal processor replaces classify_interrupt.
+        # When present, non-terminal specialists route through it.
+        # When absent (minimal configs, tests), fall back to check_task_completion for all.
+        signal_processor_name = CoreSpecialist.SIGNAL_PROCESSOR.value
+        has_signal_processor = signal_processor_name in self.specialists
+
+        if has_signal_processor:
+            signal_processor_destinations = {
+                CoreSpecialist.EXIT_INTERVIEW.value: CoreSpecialist.EXIT_INTERVIEW.value,
+                CoreSpecialist.ROUTER.value: CoreSpecialist.ROUTER.value,
+                CoreSpecialist.END.value: CoreSpecialist.END.value,
+            }
+            if "facilitator_specialist" in self.specialists:
+                signal_processor_destinations["facilitator_specialist"] = "facilitator_specialist"
+            if "interrupt_evaluator_specialist" in self.specialists:
+                signal_processor_destinations["interrupt_evaluator_specialist"] = "interrupt_evaluator_specialist"
 
         for name in self.specialists:
             if name in excluded_specialists:
                 continue
 
-            # ADR-CORE-061: Terminal specialists use check_task_completion
-            # Non-terminal specialists use classify_interrupt
             if name in terminal_specialists:
+                # ADR-CORE-061: Terminal specialists use check_task_completion
                 workflow.add_conditional_edges(
                     name,
                     self.orchestrator.check_task_completion,
                     check_completion_destinations
                 )
+            elif has_signal_processor:
+                # ADR-077: Non-terminal specialists route through signal processor
+                workflow.add_edge(name, signal_processor_name)
             else:
+                # Fallback: no signal processor (minimal config) — use check_task_completion
                 workflow.add_conditional_edges(
                     name,
-                    self.orchestrator.classify_interrupt,
-                    classify_interrupt_destinations
+                    self.orchestrator.check_task_completion,
+                    check_completion_destinations
                 )
+
+        if has_signal_processor:
+            # ADR-077: ONE conditional edge from signal processor
+            # CRITICAL: add_conditional_edges is ADDITIVE (lesson from #160) — call exactly once.
+            workflow.add_conditional_edges(
+                signal_processor_name,
+                self.orchestrator.route_from_signal,
+                signal_processor_destinations
+            )
 
         # ADR-ROADMAP-001 Phase 1: Exit Interview gates the END node
         # ExitInterviewSpecialist validates task completion before allowing termination

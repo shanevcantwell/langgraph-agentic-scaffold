@@ -1,5 +1,8 @@
 """
-Facilitator BENIGN interrupt tests: max_iterations handling, early return.
+Facilitator BENIGN interrupt tests: routing_context-driven early return.
+
+ADR-077: Facilitator reads signals.routing_context == "benign_continuation" (set by
+SignalProcessorSpecialist) instead of artifacts.max_iterations_exceeded.
 
 Split from test_facilitator.py for maintainability.
 """
@@ -22,15 +25,15 @@ def facilitator():
 
 
 # =============================================================================
-# Issue #108/114 / ADR-073 Phase 4: BENIGN Interrupts
+# Issue #108/114 / ADR-077: BENIGN Interrupts via routing_context
 # =============================================================================
 
 def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
     """
-    ADR-073 Phase 4: BENIGN interrupt early-returns, clearing the flag.
+    ADR-077: BENIGN interrupt early-returns when routing_context is benign_continuation.
 
-    When max_iterations_exceeded is set (BENIGN interrupt), Facilitator should
-    early return clearing the flag.
+    Signal processor already classified this as BENIGN. Facilitator early-returns
+    without re-executing triage actions.
     """
     state = {
         "scratchpad": {
@@ -39,9 +42,8 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
             ],
             "triage_reasoning": "Continue interrupted task",
         },
-        "artifacts": {
-            "max_iterations_exceeded": True,
-        },
+        "artifacts": {},
+        "signals": {"routing_context": "benign_continuation"},
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
 
@@ -52,14 +54,12 @@ def test_facilitator_passes_trace_on_benign_interrupt(facilitator):
         # CRITICAL: Should NOT call filesystem (early return)
         mock_list.assert_not_called()
 
-    # Only clears the flag
     assert "gathered_context" not in result["artifacts"]
-    assert result["artifacts"]["max_iterations_exceeded"] is False
 
 
-def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
+def test_facilitator_no_wip_summary_without_benign_context(facilitator):
     """
-    Issue #108: No work-in-progress summary for normal flow (no BENIGN interrupt).
+    Issue #108: No work-in-progress summary for normal flow (no BENIGN routing_context).
     """
     state = {
         "scratchpad": {
@@ -68,9 +68,8 @@ def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
             ],
             "triage_reasoning": "Normal execution",
         },
-        "artifacts": {
-            # NO max_iterations_exceeded - normal flow
-        },
+        "artifacts": {},
+        "signals": {},
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
 
@@ -86,11 +85,11 @@ def test_facilitator_no_wip_summary_without_max_iterations(facilitator):
 
 def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
     """
-    ADR-073 Phase 4: BENIGN continuation when EI says INCOMPLETE but max_iterations caused it.
+    ADR-077: BENIGN continuation when routing_context is benign_continuation
+    and EI said INCOMPLETE.
 
-    When max_iterations_exceeded=True AND exit_interview_result.is_complete=False,
-    this is BENIGN continuation (model was working, ran out of runway), not correction.
-    Facilitator early-returns clearing the flag.
+    This is BENIGN continuation (model was working, ran out of runway), not correction.
+    Facilitator early-returns without re-executing triage actions.
     """
     state = {
         "scratchpad": {
@@ -100,12 +99,12 @@ def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
             "triage_reasoning": "Retry after Exit Interview",
         },
         "artifacts": {
-            "max_iterations_exceeded": True,
             "exit_interview_result": {
                 "is_complete": False,
                 "reasoning": "Files not fully categorized"
             },
         },
+        "signals": {"routing_context": "benign_continuation"},
         "routing_history": ["project_director"]
     }
 
@@ -116,18 +115,16 @@ def test_facilitator_benign_continuation_with_ei_incomplete(facilitator):
         # CRITICAL: Should NOT call filesystem (early return)
         mock_list.assert_not_called()
 
-    # Only clears the flag
     assert "gathered_context" not in result["artifacts"]
-    assert result["artifacts"]["max_iterations_exceeded"] is False
 
 
 def test_facilitator_benign_early_returns_minimal_state(facilitator):
     """
     BENIGN always early-returns with minimal state.
 
-    max_iterations_exceeded means the model was mid-work. Facilitator clears the
-    flag. Context was already gathered in the first Facilitator pass and persists
-    in artifacts via ior merge.
+    Signal processor set routing_context=benign_continuation. Facilitator
+    early-returns. Context was already gathered in the first Facilitator pass
+    and persists in artifacts via ior merge.
     """
     state = {
         "scratchpad": {
@@ -136,9 +133,8 @@ def test_facilitator_benign_early_returns_minimal_state(facilitator):
             ],
             "triage_reasoning": "Continue interrupted task",
         },
-        "artifacts": {
-            "max_iterations_exceeded": True,
-        },
+        "artifacts": {},
+        "signals": {"routing_context": "benign_continuation"},
         "routing_history": ["project_director"]
     }
 
@@ -149,17 +145,15 @@ def test_facilitator_benign_early_returns_minimal_state(facilitator):
         # BENIGN early return — no filesystem calls
         mock_list.assert_not_called()
 
-    # Only clears the flag
-    assert result["artifacts"]["max_iterations_exceeded"] is False
     assert "gathered_context" not in result["artifacts"]
 
 
 def test_facilitator_benign_does_not_accumulate_context(facilitator):
     """
-    ADR-073 Phase 4: BENIGN early return avoids context pollution.
+    ADR-077: BENIGN early return avoids context pollution.
 
-    When max_iterations fires, Facilitator early-returns without re-gathering
-    context. gathered_context from the first pass persists via ior merge.
+    When routing_context is benign_continuation, Facilitator early-returns without
+    re-gathering context. gathered_context from the first pass persists via ior merge.
     """
     state = {
         "scratchpad": {
@@ -170,8 +164,8 @@ def test_facilitator_benign_does_not_accumulate_context(facilitator):
         },
         "artifacts": {
             "gathered_context": "### Directory: /workspace/test\n- [FILE] 1.txt",
-            "max_iterations_exceeded": True,
         },
+        "signals": {"routing_context": "benign_continuation"},
         "routing_history": ["triage_architect", "facilitator_specialist", "router_specialist", "project_director"]
     }
 
@@ -182,18 +176,16 @@ def test_facilitator_benign_does_not_accumulate_context(facilitator):
         # CRITICAL: No filesystem calls (early return)
         mock_list.assert_not_called()
 
-    # Minimal return: only clear the flag
+    # Minimal return: no new gathered_context (prior pass persists via ior)
     assert "gathered_context" not in result["artifacts"]
-    assert result["artifacts"]["max_iterations_exceeded"] is False
-    assert result["scratchpad"] == {"facilitator_complete": True}
 
 
 def test_facilitator_benign_early_returns_empty_routing_history(facilitator):
     """
     BENIGN early-returns even with empty routing history.
 
-    max_iterations_exceeded means the model was working. Facilitator clears
-    the flag. Context was gathered on the first Facilitator pass and persists
+    Signal processor set routing_context=benign_continuation. Facilitator
+    early-returns. Context was gathered on the first Facilitator pass and persists
     via ior merge — no need to re-gather.
     """
     state = {
@@ -203,9 +195,8 @@ def test_facilitator_benign_early_returns_empty_routing_history(facilitator):
             ],
             "triage_reasoning": "First run, no prior trace",
         },
-        "artifacts": {
-            "max_iterations_exceeded": True,
-        },
+        "artifacts": {},
+        "signals": {"routing_context": "benign_continuation"},
         "routing_history": []
     }
 
@@ -216,13 +207,12 @@ def test_facilitator_benign_early_returns_empty_routing_history(facilitator):
         # BENIGN: no filesystem calls (early return)
         mock_list.assert_not_called()
 
-    assert result["artifacts"]["max_iterations_exceeded"] is False
     assert "gathered_context" not in result["artifacts"]
 
 
 def test_facilitator_no_early_return_when_exit_interview_result_present(facilitator):
     """
-    Issue #114: When exit_interview_result is present (without max_iterations),
+    Issue #114: When exit_interview_result is present (without benign routing_context),
     this is EI retry, NOT BENIGN. Facilitator re-gathers context normally.
     """
     state = {
@@ -241,6 +231,7 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
                 "recommended_specialists": ["project_director"]
             }
         },
+        "signals": {},  # No benign routing_context
         "routing_history": ["exit_interview_specialist"]
     }
 
@@ -261,12 +252,12 @@ def test_facilitator_no_early_return_when_exit_interview_result_present(facilita
 
 def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
     """
-    ADR-073 Phase 4: BENIGN+INCOMPLETE = continuation, not correction.
+    ADR-077: BENIGN+INCOMPLETE = continuation, not correction.
 
-    When max_iterations_exceeded=True AND EI says INCOMPLETE, Facilitator
-    early-returns clearing the flag but surfaces specialist_activity and
-    EI feedback into gathered_context so Router has context for correct
-    routing and PD knows what it already did.
+    When routing_context=benign_continuation AND EI says INCOMPLETE, Facilitator
+    early-returns but surfaces specialist_activity and EI feedback into
+    gathered_context so Router has context for correct routing and PD knows
+    what it already did.
     """
     state = {
         "scratchpad": {
@@ -280,7 +271,6 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
             ],
         },
         "artifacts": {
-            "max_iterations_exceeded": True,
             "exit_interview_result": {
                 "is_complete": False,
                 "reasoning": "Only 1 of 6 files categorized",
@@ -288,6 +278,7 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
                 "recommended_specialists": ["project_director"],
             }
         },
+        "signals": {"routing_context": "benign_continuation"},
         "routing_history": ["project_director", "exit_interview_specialist"]
     }
 
@@ -298,10 +289,7 @@ def test_facilitator_benign_continuation_after_ei_incomplete(facilitator):
         # Early return — no re-gathering of triage actions
         mock_list.assert_not_called()
 
-    # BENIGN still clears the flag
-    assert result["artifacts"]["max_iterations_exceeded"] is False
-
-    # But now surfaces continuation context for Router and PD
+    # Surfaces continuation context for Router and PD
     assert "gathered_context" in result["artifacts"]
     gathered = result["artifacts"]["gathered_context"]
 

@@ -32,11 +32,13 @@ class SpecialistCategories:
     # ADR-ROADMAP-001: EXIT_INTERVIEW added - has special edge wiring (after_exit_interview)
     # Issue #161: CRITIC removed — critic subgraph deleted, web_builder is standard spoke
     # Issue #171: systems_architect added - entry pipeline node (SA → Triage), not a spoke
+    # ADR-077: signal_processor added - procedural interrupt classifier, not a spoke
     CORE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
         CoreSpecialist.EXIT_INTERVIEW.value,
+        CoreSpecialist.SIGNAL_PROCESSOR.value,
         "systems_architect",
     ])
 
@@ -48,11 +50,13 @@ class SpecialistCategories:
     # These are core infrastructure specialists that should never appear in triage's recommendations
     # ADR-ROADMAP-001: EXIT_INTERVIEW added - internal gate, not user-routable
     # Issue #171: systems_architect added - entry pipeline, not triage-routable
+    # ADR-077: signal_processor added - procedural infrastructure, not triage-routable
     TRIAGE_INFRASTRUCTURE: frozenset = frozenset([
         CoreSpecialist.ROUTER.value,
         CoreSpecialist.ARCHIVER.value,
         CoreSpecialist.END.value,
         CoreSpecialist.EXIT_INTERVIEW.value,
+        CoreSpecialist.SIGNAL_PROCESSOR.value,
         "systems_architect",
     ])
 

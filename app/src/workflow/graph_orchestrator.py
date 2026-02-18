@@ -78,7 +78,8 @@ class GraphOrchestrator:
         instead of the non-existent 'error_handling_specialist'.
         Falls back to END if Exit Interview is not loaded.
         """
-        action = state.get("scratchpad", {}).get("stabilization_action")
+        # ADR-077: stabilization_action moved from scratchpad to signals
+        action = state.get("signals", {}).get("stabilization_action")
         if action == "ROUTE_TO_ERROR_HANDLER":
             if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
                 logger.warning("Stabilization action detected. Routing to Exit Interview for evaluation.")
@@ -86,21 +87,6 @@ class GraphOrchestrator:
             logger.warning("Stabilization action detected. No Exit Interview available. Routing to END.")
             return CoreSpecialist.END.value
         return None
-
-    def _route_pathological(self, reason: str) -> str:
-        """
-        Issue #161: Guarded routing for pathological interrupts with fallback chain.
-
-        Tries: interrupt_evaluator → exit_interview → router
-        """
-        if "interrupt_evaluator_specialist" in self.specialists:
-            logger.info(f"classify_interrupt: PATHOLOGICAL ({reason}) → Interrupt Evaluator")
-            return "interrupt_evaluator_specialist"
-        if CoreSpecialist.EXIT_INTERVIEW.value in self.specialists:
-            logger.info(f"classify_interrupt: PATHOLOGICAL ({reason}) → Exit Interview (no Interrupt Evaluator)")
-            return CoreSpecialist.EXIT_INTERVIEW.value
-        logger.warning(f"classify_interrupt: PATHOLOGICAL ({reason}) → Router (no IE, no EI)")
-        return CoreSpecialist.ROUTER.value
 
     def _record_im_decision(self, state: GraphState, function: str, result: str, reason: str) -> None:
         """Record an IM routing decision in scratchpad for state timeline visibility."""
@@ -224,11 +210,8 @@ class GraphOrchestrator:
             logger.info("Routing to exit_interview for completion check before END")
             return CoreSpecialist.EXIT_INTERVIEW.value
 
-        # ADR-CORE-061: Kludge REMOVED
-        # The old intercept (lines 214-219) that redirected END → Exit Interview
-        # has been replaced by classify_interrupt() wired into the graph.
-        # Non-terminal specialists now route through classify_interrupt which
-        # handles completion checking properly.
+        # ADR-077: Non-terminal specialists route through SignalProcessorSpecialist
+        # (replaces classify_interrupt). Terminal specialists route through check_task_completion.
 
         # TASK 1.2: Validate route before execution (fail-fast on invalid routes)
         # TASK 3.1: Support parallel routing (list of specialists)
@@ -446,87 +429,17 @@ class GraphOrchestrator:
     # ADR-CORE-061: Tiered Interrupt Architecture
     # =========================================================================
 
-    def classify_interrupt(self, state: GraphState) -> str:
+    def route_from_signal(self, state: GraphState) -> str:
         """
-        ADR-CORE-061: Tier 1 - Procedural interrupt classification. No LLM needed.
+        ADR-077: Edge function that reads SignalProcessorSpecialist's routing decision.
 
-        This is the first line of defense for interrupt handling. It classifies
-        interrupts by type and routes appropriately:
-
-        - TERMINAL: user_abort → End (immediate termination)
-        - BENIGN: max_iterations_exceeded, context_overflow → Facilitator (seamless continue)
-        - PATHOLOGICAL: stagnation, tool_error, stutter → Interrupt Evaluator (needs LLM)
-        - NORMAL + artifacts → Exit Interview (semantic completion check)
-        - NORMAL + no artifacts → Router (continue workflow)
-
-        Key principle: The model never stopped. BENIGN interrupts are infrastructure
-        pauses that the model should be unaware of. Only PATHOLOGICAL interrupts need
-        semantic judgment about recoverability.
+        Intentionally trivial — all classification logic lives in the signal processor
+        specialist. This function just reads signals.routing_target.
         """
-        # Issue #161: Check for circuit breaker stabilization action first
-        stabilization_target = self._check_stabilization_action(state)
-        if stabilization_target:
-            self._record_im_decision(state, "classify_interrupt", stabilization_target,
-                                     "circuit breaker stabilization")
-            return stabilization_target
-
-        scratchpad = state.get("scratchpad", {})
-        artifacts = state.get("artifacts", {})
-
-        # === TERMINAL: Immediate end, no evaluation ===
-        if scratchpad.get("user_abort"):
-            logger.info("classify_interrupt: TERMINAL (user_abort) → End")
-            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.END.value,
-                                     "TERMINAL: user_abort")
-            return CoreSpecialist.END.value
-
-        # === BENIGN: Route through Exit Interview for feedback ===
-        # max_iterations_exceeded: Arbitrary limit hit, trace is healthy
-        # EI provides "INCOMPLETE" feedback that router needs to continue the loop
-        # Flow: EI → after_exit_interview → facilitator → router → back to specialist
-        if artifacts.get("max_iterations_exceeded") or scratchpad.get("max_iterations_exceeded"):
-            logger.info("classify_interrupt: BENIGN (max_iterations) → Exit Interview for feedback")
-            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.EXIT_INTERVIEW.value,
-                                     "BENIGN: max_iterations_exceeded")
-            return CoreSpecialist.EXIT_INTERVIEW.value
-
-        # context_overflow: Context bloat - compress and continue
-        if scratchpad.get("context_overflow"):
-            if "facilitator_specialist" in self.specialists:
-                logger.info("classify_interrupt: BENIGN (context_overflow) → Facilitator (compress and continue)")
-                self._record_im_decision(state, "classify_interrupt", "facilitator_specialist",
-                                         "BENIGN: context_overflow")
-                return "facilitator_specialist"
-            logger.info("classify_interrupt: BENIGN (context_overflow) → Router (no facilitator)")
-            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.ROUTER.value,
-                                     "BENIGN: context_overflow, no facilitator")
+        signals = state.get("signals", {})
+        target = signals.get("routing_target")
+        if not target:
+            logger.warning("route_from_signal: No routing_target in signals, falling back to Router")
             return CoreSpecialist.ROUTER.value
-
-        # === PATHOLOGICAL: Needs LLM judgment on recoverability ===
-        # Issue #161: All pathological paths use guarded routing with fallback chain
-        if scratchpad.get("stagnation_detected"):
-            result = self._route_pathological("stagnation_detected")
-            self._record_im_decision(state, "classify_interrupt", result,
-                                     "PATHOLOGICAL: stagnation_detected")
-            return result
-
-        if scratchpad.get("tool_error"):
-            result = self._route_pathological("tool_error")
-            self._record_im_decision(state, "classify_interrupt", result,
-                                     "PATHOLOGICAL: tool_error")
-            return result
-
-        # === NORMAL FLOW: No interrupt ===
-        # Produced artifacts? Exit Interview evaluates semantic completion
-        if artifacts:
-            logger.info("classify_interrupt: Normal flow, artifacts present → Exit Interview")
-            self._record_im_decision(state, "classify_interrupt", CoreSpecialist.EXIT_INTERVIEW.value,
-                                     "normal flow, artifacts present")
-            return CoreSpecialist.EXIT_INTERVIEW.value
-
-        # No artifacts, no interrupt → Router picks next specialist
-        logger.info("classify_interrupt: Normal flow, no artifacts → Router")
-        self._record_im_decision(state, "classify_interrupt", CoreSpecialist.ROUTER.value,
-                                 "normal flow, no artifacts")
-        return CoreSpecialist.ROUTER.value
+        return target
 

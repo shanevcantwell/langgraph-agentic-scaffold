@@ -155,6 +155,14 @@ specialists:
     description: "Plans and designs implementation strategies. Produces a 'system_plan' artifact for other specialists to execute."
     tags: ["planning"]
 
+  # ADR-077: Procedural interrupt classifier — reads routing signals, determines next graph destination.
+  signal_processor_specialist:
+    type: "procedural"
+    description: "Procedural interrupt classifier. Reads routing signals and determines next graph destination."
+    excluded_from:
+      - triage_architect
+      - router_specialist
+
   # --- Core Capabilities ---
   web_builder:
     type: "llm"

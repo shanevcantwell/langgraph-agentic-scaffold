@@ -124,6 +124,7 @@ def create_test_state(
     scratchpad: Optional[Dict[str, Any]] = None,
     routing_history: Optional[list[str]] = None,
     distillation_state: Optional[Dict[str, Any]] = None,
+    signals: Optional[Dict[str, Any]] = None,
 ) -> GraphState:
     """
     Creates a GraphState for testing with explicit control over all fields.
@@ -160,5 +161,6 @@ def create_test_state(
         "next_specialist": next_specialist,
         "artifacts": artifacts or {},
         "scratchpad": scratchpad or {},
+        "signals": signals or {},
         "distillation_state": distillation_state,
     }

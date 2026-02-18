@@ -257,28 +257,18 @@ class FacilitatorSpecialist(BaseSpecialist):
         artifacts = state.get("artifacts", {})
         exit_interview_result = artifacts.get("exit_interview_result")
 
-        # Issue #114: BENIGN continuation - pass trace when model was working but ran out of runway
-        # Key signal: max_iterations_exceeded must be True (model hit runway limit)
-        # Two scenarios:
-        # 1. Pure BENIGN: max_exceeded + no EI result (interrupted before EI ran)
-        # 2. BENIGN after EI: max_exceeded + EI said INCOMPLETE (EI judged but model was working)
-        # In both cases, the model was doing the right thing, just needs more iterations.
-        max_exceeded = artifacts.get("max_iterations_exceeded", False)
-        ei_incomplete = exit_interview_result and not exit_interview_result.get("is_complete", True)
-
-        # max_exceeded is REQUIRED - it's the signal that this is continuation, not correction
-        is_benign_continuation = max_exceeded and (not exit_interview_result or ei_incomplete)
+        # ADR-077: Signal processor already classified this as BENIGN continuation.
+        # routing_context persists because EI uses after_exit_interview edge (not signal_processor
+        # path), so signals aren't overwritten between signal_processor and Facilitator.
+        routing_context = state.get("signals", {}).get("routing_context")
+        is_benign_continuation = routing_context == "benign_continuation"
 
         if is_benign_continuation:
             # BENIGN continuation: PD hit max_iterations but was making progress.
-            # Clear the flag so PD gets another pass. PD starts fresh (trace=[]).
             # Surface prior work so Router has context for correct routing
             # and PD knows what it already did (without this, Router routes
             # to wrong specialist because gathered_context has no PD info).
-            logger.info(
-                f"Facilitator: BENIGN continuation "
-                f"(max_exceeded={max_exceeded}, ei_incomplete={ei_incomplete})"
-            )
+            logger.info("Facilitator: BENIGN continuation (routing_context=benign_continuation)")
 
             scratchpad = state.get("scratchpad", {})
             context_parts = self._build_task_context(artifacts)
@@ -296,12 +286,8 @@ class FacilitatorSpecialist(BaseSpecialist):
 
             result = {
                 "artifacts": {
-                    "max_iterations_exceeded": False,
                     "accumulated_work": accumulated_work,
                 },
-                "scratchpad": {
-                    "facilitator_complete": True
-                }
             }
 
             if context_parts:
@@ -505,7 +491,4 @@ class FacilitatorSpecialist(BaseSpecialist):
                 "gathered_context": final_context,
                 "accumulated_work": accumulated_work,
             },
-            "scratchpad": {
-                "facilitator_complete": True
-            }
         }

@@ -220,7 +220,7 @@ def test_safe_executor_emits_trace_for_procedural_specialist(node_executor_insta
     mock_specialist.specialist_config = {"type": "procedural"}
     mock_specialist.execute.return_value = {
         "artifacts": {"gathered_context": "research results"},
-        "scratchpad": {"facilitator_complete": True}
+        "scratchpad": {}
     }
 
     safe_executor = node_executor_instance.create_safe_executor(mock_specialist)

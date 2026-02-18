@@ -211,7 +211,8 @@ class TestArtifactPropagation:
 
         assert result["artifacts"]["observations"] == "1.txt is about dolphins"
         assert result["artifacts"]["user_request"] == "Sort files"
-        assert result["artifacts"]["max_iterations_exceeded"] is True
+        # ADR-077: max_iterations_exceeded is a routing signal, not an artifact
+        assert result["signals"]["max_iterations_exceeded"] is True
 
     def test_success_result_includes_captured_artifacts(self, director):
         """Written artifacts propagate on normal completion."""
@@ -247,10 +248,11 @@ class TestArtifactPropagation:
         result = director._build_stagnation_result(trace, captured_artifacts=captured)
 
         assert result["artifacts"]["user_request"] == "Sort files"
-        assert result["artifacts"]["stagnation_detected"] is True
+        # ADR-077: stagnation_detected is a routing signal, not an artifact
+        assert result["signals"]["stagnation_detected"] is True
 
-    def test_stagnation_overrides_dont_clobber_written_artifacts(self, director):
-        """Stagnation metadata merges with, not replaces, written artifacts."""
+    def test_stagnation_signals_separate_from_artifacts(self, director):
+        """ADR-077: Stagnation signals don't pollute the artifacts dict."""
         captured = {"user_request": "Sort", "my_notes": "important observations"}
         trace = [
             {
@@ -264,7 +266,8 @@ class TestArtifactPropagation:
         result = director._build_stagnation_result(trace, captured_artifacts=captured)
 
         assert result["artifacts"]["my_notes"] == "important observations"
-        assert result["artifacts"]["stagnation_detected"] is True
+        assert "stagnation_detected" not in result["artifacts"]
+        assert result["signals"]["stagnation_detected"] is True
 
     def test_build_tools_includes_artifact_tools(self, director):
         """ADR-076: PD's tool set includes artifact read/write tools."""

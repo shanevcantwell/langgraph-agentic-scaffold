@@ -109,6 +109,18 @@ def reduce_parallel_tasks(current: List[str], update: List[str] | str) -> List[s
             return new_list
     return current
 
+def reduce_signals(current: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    ADR-077: Replace reducer for routing signals.
+
+    Each write is a complete snapshot — stale signals don't linger via accumulation.
+    If a node doesn't write to signals (update is None), the current state is preserved.
+    """
+    if update is None:
+        return current
+    return update
+
+
 class GraphState(TypedDict):
     """
     Defines the shared state that is passed between all nodes in the graph.
@@ -145,6 +157,12 @@ class GraphState(TypedDict):
     # and `scratchpad` for transient state.
     artifacts: Annotated[Dict[str, Any], operator.ior]
     scratchpad: Annotated[Dict[str, Any], operator.ior]
+
+    # --- Routing Signals (ADR-077: Signal Processor Architecture) ---
+    # Complete snapshot of routing-relevant signals. Written by specialists (PD, SafeExecutor CB),
+    # consumed by SignalProcessorSpecialist. Uses replace reducer (not ior) — each write is a
+    # full snapshot, preventing stale signals from lingering via accumulation.
+    signals: Annotated[Dict[str, Any], reduce_signals]
 
     # --- Specialist-Specific State REMOVED (Task 2.7: State Purge) ---
     # The following fields have been MIGRATED to scratchpad (see Scratchpad model above):
