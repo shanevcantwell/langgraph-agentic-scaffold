@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Exit Interview specialist's role as the verification gate before END.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-16 (#195: react_step-only architecture, shared artifact tools, no fallback path)
+**Updated:** 2026-02-18 (ADR-077: signal processor replaces classify_interrupt, signals field)
 
 ---
 
@@ -16,7 +16,7 @@ Key characteristics:
 - **Final-state-only observer** — EI cannot see original or intermediate states; it verifies expected end state
 - **Lazy exit_plan via SA MCP** — EI calls Systems Architect on first invocation to produce verification criteria (#115)
 - **No fallback path** — if prompt-prix is unavailable, EI returns an honest "cannot verify" signal (#195)
-- **Graph-wired, not Router-selected** — invoked automatically by `check_task_completion` and `classify_interrupt`
+- **Graph-wired, not Router-selected** — invoked automatically by `check_task_completion` and `SignalProcessor` (ADR-077)
 - **Shared artifact tools** — `list_artifacts` and `retrieve_artifact` extracted to `mcp/artifact_tools.py` for use by any specialist
 
 ---
@@ -44,18 +44,17 @@ check_task_completion (graph_orchestrator.py)
 ### BENIGN Continuation (max_iterations hit)
 
 ```
-Specialist hits max_iterations
+Specialist hits max_iterations (signals: {max_iterations_exceeded: True})
     |
-classify_interrupt (graph_orchestrator.py)
+SignalProcessor: routing_context = "benign_continuation"
     |
-    [max_iterations_exceeded?]
-    |-- YES --> exit_interview_specialist (for feedback)
+    --> exit_interview_specialist (for feedback)
                     |
               after_exit_interview
                     |
                     [INCOMPLETE]
                     |
-              Facilitator: BENIGN early return, clears flag
+              Facilitator: detects routing_context, BENIGN early return
                     |
               Router --> Specialist continues
 ```
@@ -368,11 +367,11 @@ When prompt-prix is unreachable, EI returns `task_is_complete=True` with an hone
 
 ---
 
-## Signal Preservation (#114)
+## Signal Preservation (#114, ADR-077)
 
-EI does **not** touch `max_iterations_exceeded` in its result artifacts. This flag is set by the executing specialist (e.g., PD) and consumed by Facilitator to detect BENIGN continuation. EI is a bystander — it reads the flag implicitly (via artifacts snapshot for tool dispatch) but never writes it.
+EI does **not** write to the `signals` field. Routing signals like `max_iterations_exceeded` are set by the executing specialist (e.g., PD), classified by SignalProcessor into `routing_context: "benign_continuation"`, and consumed by Facilitator to detect BENIGN continuation. EI is a bystander in this chain.
 
-If EI cleared the flag, Facilitator couldn't distinguish BENIGN continuation from a correction cycle.
+**Signal persistence proof:** SignalProcessor writes `routing_context` → EI runs (uses `after_exit_interview` edge, not the signal processor path, so signals aren't overwritten) → Facilitator reads `routing_context` still set. The `signals` replace reducer only fires when a specialist writes to `signals`; EI doesn't.
 
 ---
 
@@ -434,7 +433,7 @@ specialists:
         - read_file            # Read file contents
 ```
 
-EI is `excluded_from` both Triage and Router because it's graph-wired, not user-routable. It is invoked automatically by `check_task_completion` and `classify_interrupt`.
+EI is `excluded_from` both Triage and Router because it's graph-wired, not user-routable. It is invoked automatically by `check_task_completion` and `SignalProcessor` (ADR-077).
 
 ### Dependency Injection
 
@@ -469,7 +468,7 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 - On INCOMPLETE, `missing_elements` is specific (names files/dirs, not generic)
 - `exit_plan` is present (SA was called successfully)
 - EI appears after the executing specialist in `routing_history`
-- No `max_iterations_exceeded` in EI's artifacts (it doesn't touch the flag)
+- No routing signals in EI's result (it doesn't write to `signals`)
 
 ---
 
@@ -481,7 +480,8 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 | [exit_interview_prompt.md](../../app/prompts/exit_interview_prompt.md) | System prompt — tool descriptions, DONE protocol, final-state constraints |
 | [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | Shared artifact inspection tools (list_artifacts, retrieve_artifact) |
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `is_react_available`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
-| [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_task_completion()`, `classify_interrupt()`, `after_exit_interview()` — all EI routing |
+| [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_task_completion()`, `route_from_signal()`, `after_exit_interview()` — EI routing |
+| [signal_processor_specialist.py](../../app/src/specialists/signal_processor_specialist.py) | Classifies routing signals and routes to EI (ADR-077) |
 | [specialist_categories.py](../../app/src/workflow/specialist_categories.py) | `CORE_INFRASTRUCTURE` (includes EI), `SKIP_EXIT_INTERVIEW` |
 | [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Reads `exit_interview_result` on retry to build EI feedback in `gathered_context` |
 | [systems_architect.py](../../app/src/specialists/systems_architect.py) | MCP service: `create_plan()` produces `exit_plan` |
@@ -492,7 +492,7 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 
 The Exit Interview is a **react_step verification agent** that:
 
-1. Receives `task_is_complete=True` from a specialist or `max_iterations_exceeded` from the interrupt classifier
+1. Receives `task_is_complete=True` from a specialist, or is routed by SignalProcessor (BENIGN, circuit breaker, normal completion)
 2. Lazy-creates an `exit_plan` via SA MCP with verification steps tailored to EI's tool capabilities
 3. Runs a react_step loop to inspect the filesystem and artifacts using real tools
 4. Enforces tool-use-before-DONE (#193) — the model must verify real outcomes before judgment

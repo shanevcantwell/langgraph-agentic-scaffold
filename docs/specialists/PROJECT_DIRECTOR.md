@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Project Director's role as the autonomous ReAct agent in LAS.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-16 (ADR-076 artifact tools + captured_artifacts propagation)
+**Updated:** 2026-02-18 (ADR-077: routing signals moved to `signals` field, signal processor replaces classify_interrupt)
 
 ---
 
@@ -34,7 +34,7 @@ TriageArchitect --> Facilitator (gathers context) --> Router
     |
 PD: react_step loop (up to max_iterations)
     |
-classify_interrupt --> ExitInterview
+SignalProcessor --> ExitInterview
     |
     [is_complete?]
     |-- YES --> END
@@ -46,7 +46,7 @@ classify_interrupt --> ExitInterview
 ```
 PD writes specialist_activity to scratchpad
     |
-classify_interrupt --> ExitInterview
+SignalProcessor --> ExitInterview
     |
     [INCOMPLETE]
     |
@@ -66,9 +66,11 @@ Router --> PD:
 ```
 PD hits max_iterations
     |
-_build_partial_result sets max_iterations_exceeded: True
+_build_partial_result sets signals: {max_iterations_exceeded: True}
     |
-Facilitator: early return, clears flag, no context rebuild
+SignalProcessor: routing_context = "benign_continuation" --> EI
+    |
+Facilitator: BENIGN early return, surfaces accumulated_work
     |
 Router --> PD continues (fresh trace, same gathered_context)
 ```
@@ -86,7 +88,8 @@ PD and Facilitator have a strict division of responsibility (#170):
 | `react_trace` | PD | state_timeline | `scratchpad["react_trace"]` — full tool call + observation history (observability only) |
 | `captured_artifacts` | PD | LangGraph ior merge | All artifacts (including mid-loop `write_artifact` writes) propagated through all four result builders (ADR-076) |
 | `user_request` | Triage | PD | `artifacts["user_request"]` — the original goal |
-| `max_iterations_exceeded` | PD | Facilitator | `artifacts["max_iterations_exceeded"]` — triggers BENIGN path |
+| `max_iterations_exceeded` | PD | SignalProcessor | `signals["max_iterations_exceeded"]` — triggers BENIGN path (ADR-077) |
+| `stagnation_detected` + tool/args | PD | SignalProcessor | `signals["stagnation_detected"]` — triggers PATHOLOGICAL path (ADR-077) |
 
 **PD never reads its own prior output.** Facilitator reads `specialist_activity` from scratchpad and surfaces it in `gathered_context` as "Prior Work Completed." This prevents the stale-trace problem where the model re-feeds its prior conversation and thinks it already finished.
 
@@ -438,7 +441,7 @@ If a repeating pattern of length N is found repeated 3+ times, PD exits with `_b
 
 Stagnation output:
 ```python
-# artifacts (state-visible signals):
+# signals (routing, ADR-077):
 {
     "stagnation_detected": True,
     "stagnation_tool": "read_file",
@@ -461,8 +464,10 @@ Every PD invocation ends via exactly one of four result builders:
 |-----------|---------|-----------|------------|---------|
 | **Success** | Model chooses `DONE` | `captured_artifacts` (all written artifacts) | `specialist_activity`, `react_trace` | Model's `final_response` |
 | **Error** | Exception or infra failure | `captured_artifacts` (all written artifacts) | `specialist_activity`, `react_trace` | Error description |
-| **Stagnation** | Cycle detected in trace | `captured_artifacts` + `stagnation_detected`, `stagnation_tool`, `stagnation_args` | `specialist_activity`, `react_trace` | Repeated pattern + trace summary |
-| **Partial** | `max_iterations` exceeded | `captured_artifacts` + `max_iterations_exceeded: True` | `specialist_activity`, `react_trace` | Tool counts + last 10 actions |
+| **Stagnation** | Cycle detected in trace | `captured_artifacts` | `specialist_activity`, `react_trace` | Repeated pattern + trace summary |
+| **Partial** | `max_iterations` exceeded | `captured_artifacts` | `specialist_activity`, `react_trace` | Tool counts + last 10 actions |
+
+**Signals field (ADR-077):** Stagnation writes `stagnation_detected`, `stagnation_tool`, `stagnation_args` to `signals`. Partial writes `max_iterations_exceeded` to `signals`. These are routing signals consumed by SignalProcessor — they no longer live in artifacts.
 
 All four paths propagate `captured_artifacts` — any artifact written via `write_artifact` during the react loop survives in state (ADR-076). This is critical for the Partial path: observations and decisions persist even when PD runs out of iteration budget.
 
@@ -470,7 +475,7 @@ All four paths also write `specialist_activity` (human-readable) and `react_trac
 
 ### Partial Result and BENIGN Continuation
 
-When PD hits `max_iterations`, it sets `max_iterations_exceeded: True`. All artifacts written via `write_artifact` during the react loop are included in `captured_artifacts` and propagated to state (ADR-076). The graph routes through `classify_interrupt` to Exit Interview. If EI says INCOMPLETE (the model was making progress, just ran out of runway), Facilitator detects the BENIGN condition and early-returns, clearing the flag. Router then sends PD back with a fresh trace but the same `gathered_context`. Written artifacts remain discoverable via `list_artifacts`/`retrieve_artifact` on the next invocation.
+When PD hits `max_iterations`, it writes `max_iterations_exceeded: True` to the `signals` field. All artifacts written via `write_artifact` during the react loop are included in `captured_artifacts` and propagated to state (ADR-076). SignalProcessor classifies this as BENIGN and routes to Exit Interview with `routing_context: "benign_continuation"`. If EI says INCOMPLETE (the model was making progress, just ran out of runway), Facilitator detects the BENIGN condition via `routing_context` and early-returns. Router then sends PD back with a fresh trace but the same `gathered_context`. Written artifacts remain discoverable via `list_artifacts`/`retrieve_artifact` on the next invocation.
 
 See [FACILITATOR.md](./FACILITATOR.md) "BENIGN Continuation" for the Facilitator side of this handshake.
 
@@ -478,22 +483,20 @@ See [FACILITATOR.md](./FACILITATOR.md) "BENIGN Continuation" for the Facilitator
 
 ## Graph Routing
 
-### Post-PD Routing ([graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py))
+### Post-PD Routing (ADR-077: Signal Processor)
 
-```python
-def after_project_director(self, state: GraphState) -> str:
-    scratchpad = state.get("scratchpad", {})
-    next_worker = scratchpad.get("next_worker")
+PD results flow through the standard hub-and-spoke via SignalProcessor:
 
-    if next_worker == "web_specialist":
-        return "web_specialist"
-    elif next_worker == "router":
-        return CoreSpecialist.ROUTER.value
-    else:
-        return CoreSpecialist.ROUTER.value  # Default
+```
+PD → SignalProcessor → route_from_signal → {EI, Router, END, ...}
 ```
 
-In practice, PD results flow through the standard hub-and-spoke: PD -> classify_interrupt -> Exit Interview -> Facilitator (if incomplete) -> Router.
+SignalProcessor reads PD's `signals` field to classify the interrupt type:
+- **Normal (artifacts present):** → Exit Interview for completion check
+- **BENIGN (max_iterations_exceeded):** → Exit Interview with `routing_context: "benign_continuation"`
+- **PATHOLOGICAL (stagnation_detected):** → Interrupt Evaluator → EI → Router (fallback chain)
+
+See [SIGNAL_PROCESSOR.md](./SIGNAL_PROCESSOR.md) for the full priority chain.
 
 ---
 

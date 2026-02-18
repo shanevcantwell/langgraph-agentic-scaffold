@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-16 (#199: always-runs via unconditional SA→Facilitator edge, accumulated_work, acceptance_criteria in Task Strategy)
+**Updated:** 2026-02-18 (ADR-077: signal processor replaces classify_interrupt, routing_context detection, ghost signal removal)
 
 ---
 
@@ -41,7 +41,7 @@ Facilitator always runs — it's wired via unconditional SA → Facilitator edge
 ```
 Specialist (e.g., PD)
     |
-classify_interrupt --> ExitInterview
+SignalProcessor --> ExitInterview
     |
     [is_complete?]
     |-- YES --> END
@@ -51,11 +51,13 @@ classify_interrupt --> ExitInterview
 ### BENIGN Continuation (max_iterations hit, model was working)
 
 ```
-Specialist hits max_iterations
+Specialist hits max_iterations (signals: {max_iterations_exceeded: True})
     |
-    [max_iterations_exceeded + (no EI or EI=INCOMPLETE)]
+SignalProcessor: routing_context = "benign_continuation" --> EI
     |
-Facilitator: surfaces accumulated_work + WIP summary, clears flag
+    [INCOMPLETE or no EI]
+    |
+Facilitator: detects routing_context == "benign_continuation", surfaces accumulated_work
     |
 Router --> Specialist continues
 ```
@@ -88,7 +90,7 @@ Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
 
 1. **Task Strategy** — from `_build_task_context()`: `task_plan.plan_summary` + `execution_steps` + `acceptance_criteria` (#173). Full plan context so retry specialists have the complete strategy — not just a one-line summary.
 2. **EI Retry Feedback + Prior Work** — from `_build_prior_work_section()`: accumulated operations + EI `missing_elements` + EI `recommended_specialists` guidance (only on retry)
-3. **WIP Summary** — work-in-progress for BENIGN interrupts (only when `max_iterations_exceeded` without EI, #108)
+3. **WIP Summary** — work-in-progress for BENIGN interrupts (when `routing_context == "benign_continuation"` in signals, #108)
 4. **Plan Action Results** — RESEARCH, READ_FILE, SUMMARIZE, LIST_DIRECTORY, ASK_USER (from triage_actions if any)
 
 ### Action-by-Action Processing
@@ -144,9 +146,7 @@ Categorize 13 files into topic subfolders based on content
             "Created directory /workspace/test/music"
         ]
     },
-    "scratchpad": {
-        "facilitator_complete": True
-    }
+    "scratchpad": {}
 }
 ```
 
@@ -193,16 +193,16 @@ The full react trace is captured separately to `scratchpad["react_trace"]` for o
 
 ## BENIGN Continuation (#114)
 
-When `max_iterations_exceeded` is True, the model was working correctly but ran out of runway. Facilitator detects this and surfaces continuation context:
+When PD (or any specialist) hits max_iterations, it writes `max_iterations_exceeded: True` to the `signals` field. SignalProcessor classifies this as BENIGN and sets `routing_context: "benign_continuation"` in its output signals. Facilitator detects this via `state.get("signals", {}).get("routing_context") == "benign_continuation"`.
 
 - Accumulates `specialist_activity` into `accumulated_work` artifact (same as normal retry)
 - Builds WIP summary and prior work context so Router can make an informed continuation decision
-- Clears `max_iterations_exceeded` flag
 - Does NOT re-execute triage_actions (no MCP calls for context gathering)
+- The `signals` replace reducer handles clearing — Facilitator no longer needs to clear any flags
 
 Two scenarios qualify as BENIGN:
-1. **Pure BENIGN:** `max_exceeded` + no EI result (interrupted before EI ran)
-2. **BENIGN after EI:** `max_exceeded` + EI said INCOMPLETE (model was working, EI judged)
+1. **Pure BENIGN:** `routing_context == "benign_continuation"` + no EI result (interrupted before EI ran)
+2. **BENIGN after EI:** `routing_context == "benign_continuation"` + EI said INCOMPLETE (model was working, EI judged)
 
 ---
 
