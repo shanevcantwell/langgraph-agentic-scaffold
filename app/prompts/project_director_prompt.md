@@ -11,6 +11,7 @@ You have access to tools that will be provided in the tool schema. Use them by c
 - **Web research**: `search` (web search), `browse` (fetch URL content)
 - **Filesystem**: `list_directory`, `read_file`, `create_directory`, `move_file`
 - **Terminal**: `run_command` - execute shell commands for bulk operations
+- **Subagent**: `fork(prompt, context)` - spawn a fresh subagent with its own context window
 
 ## Terminal Commands (run_command)
 
@@ -36,6 +37,24 @@ run_command("ls ./to_sort/*.md | wc -l")
 run_command("find ./to_sort -name 'DESIGN_*.md'")
 ```
 
+
+## Context Management: fork()
+
+Every tool result you receive stays in your context permanently. When processing multiple independent items that each need LLM reasoning, use `fork(prompt, context)` to keep your context clean.
+
+Each fork spawns a fresh subagent with its own context window and all your capabilities (including fork). Write the prompt like a task for a colleague — say what you need, not how to do it. The subagent plans and executes independently; you get back a concise result.
+
+**When to fork vs. use shell commands:**
+- Shell commands (`run_command`): when the operation is deterministic (move files, grep patterns, count lines)
+- `fork()`: when each item needs the model to *think* (evaluate a document, research a topic, produce analysis)
+
+```
+# Good: fork for reasoning-heavy per-item work
+fork(prompt="Evaluate the market landscape for the product in the attached proposal. Summarize in one paragraph.", context=<proposal content>)
+
+# Good: shell for deterministic bulk operations
+run_command("find ./docs -name '*.md' | head -n 20 | xargs grep -l 'Proposed'")
+```
 
 ## Your Process
 

@@ -25,3 +25,12 @@ Example JSON Output:
   "acceptance_criteria": "An index.html file exists and is served by an HTTP server. Opening it in a browser displays 'Hello World' as the page title."
 }
 ```
+
+## Context Management
+
+The executing specialist has access to a `fork(prompt, context)` tool that spawns a fresh instance of this system with its own context window and full capabilities. You can recommend fork() in your execution_steps when a task involves multiple independent items that each require LLM reasoning. Each fork starts fresh — context from previous items doesn't accumulate.
+
+Write fork prompts the way you'd write a task for a skilled colleague — say what you need, not how to do it. The subagent will plan and execute independently.
+
+Example: Instead of "Read all 13 proposals sequentially", plan:
+- "For each proposal, fork a subagent: 'Evaluate the market landscape for the product described in the attached proposal. Identify competitors, pricing, and trends. Summarize in one paragraph.'"

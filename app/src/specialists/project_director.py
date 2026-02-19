@@ -74,6 +74,20 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
         "properties": {"command": {"type": "string", "description": "Shell command to execute"}},
         "required": ["command"],
     },
+    "fork": {
+        "type": "object",
+        "properties": {
+            "prompt": {
+                "type": "string",
+                "description": "Task prompt for the subagent. Write it like a task for a skilled colleague — say what you need, not how to do it.",
+            },
+            "context": {
+                "type": "string",
+                "description": "Optional context to pass (e.g., document content). Only what the subagent needs for this specific subtask.",
+            },
+        },
+        "required": ["prompt"],
+    },
 }
 
 
@@ -285,6 +299,14 @@ class ProjectDirector(BaseSpecialist):
 
             return result
 
+        # fork() — recursive LAS invocation (ADR-045)
+        if tool_def.service == "las" and tool_def.function == "fork":
+            from ..mcp.fork import dispatch_fork
+            return dispatch_fork(
+                prompt=tool_args.get("prompt", ""),
+                context=tool_args.get("context"),
+            )
+
         # Local artifact tools (ADR-076)
         if tool_def.service == "local":
             return dispatch_artifact_tool(tool_name, tool_args, captured_artifacts)
@@ -351,6 +373,18 @@ class ProjectDirector(BaseSpecialist):
                 description="Execute a shell command. Args: command (str). Allowed: mv, mkdir, cp, touch, ls, cat, head, tail, grep, find, wc, sort.",
             ),
         }
+        # fork() — recursive LAS invocation (ADR-045)
+        tools["fork"] = ToolDef(
+            service="las", function="fork",
+            description=(
+                "Spawn a fresh LAS subagent to handle a subtask with its own "
+                "context window. Use when processing multiple independent items "
+                "that each need LLM reasoning — each fork gets clean context, "
+                "preventing accumulation. The subagent has all the same tools "
+                "you do, including fork()."
+            ),
+            is_external=False,
+        )
         # Artifact tools (ADR-076 — read + write artifacts mid-execution)
         tools.update(artifact_tool_defs())
         return tools

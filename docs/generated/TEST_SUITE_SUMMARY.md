@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 766 |
+| Unit | 75 | 782 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1049** |
+| **Total** | **110** | **1065** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1126,6 +1126,36 @@
   - *Tests that Pydantic models raise ValidationError for invalid input.*
 - **`test_write_file_params_allows_empty_content`**
   - *Tests that writing an empty string or empty bytes as content is valid.*
+
+## `app/tests/unit/test_fork.py`
+
+- **`test_success_extracts_last_message`**
+  - *fork returns the last message content from the child invocation.*
+- **`test_subagent_prefix_prepended`**
+  - *fork prepends the subagent marker to the prompt.*
+- **`test_context_passed_as_text_to_process`**
+  - *fork passes context as text_to_process in the request body.*
+- **`test_no_context_omits_text_to_process`**
+  - *fork omits text_to_process when no context is provided.*
+- **`test_timeout_returns_error`**
+  - *fork returns error string on timeout.*
+- **`test_http_error_returns_error`**
+  - *fork returns error string on HTTP error.*
+- **`test_error_report_in_response`**
+  - *fork surfaces error_report from child invocation.*
+- **`test_extracts_last_message_dict`**
+- **`test_extracts_message_string`**
+- **`test_falls_back_to_artifacts`**
+- **`test_empty_response_returns_error`**
+- **`test_missing_final_output`**
+- **`test_fork_in_build_tools`**
+  - *fork ToolDef is present in PD's tool table.*
+- **`test_fork_in_tool_params`**
+  - *fork parameter schema is defined.*
+- **`test_dispatch_routes_fork`**
+  - *_dispatch_tool_call routes fork to dispatch_fork.*
+- **`test_dispatch_fork_without_context`**
+  - *_dispatch_tool_call routes fork correctly when context is omitted.*
 
 ## `app/tests/unit/test_gemini_adapter.py`
 
