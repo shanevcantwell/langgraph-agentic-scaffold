@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 75 | 793 |
+| Unit | 76 | 808 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **110** | **1076** |
+| **Total** | **111** | **1091** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -850,6 +850,39 @@
   - *Tests that the 'invoke' command exits with an error if no prompt is provided.*
 - **`test_cli_stream_no_prompt`**
   - *Tests that the 'stream' command exits with an error if no prompt is provided.*
+
+## `app/tests/unit/test_concurrent_invocation.py`
+
+- **`test_add_then_check_under_concurrency`**
+  - *I1: After request_cancellation(id) returns, is_cancelled(id) == True.*
+- **`test_clear_cancellation_toctou`**
+  - *I4: No exception raised under any interleaving of concurrent operations.*
+- **`test_no_spurious_cancellation`**
+  - *I3: is_cancelled(id) never returns True for an id that was never added.*
+- **`test_bulk_add_clear_stress`**
+  - *I1-I4: 20 threads × 100 iterations, mixed add/clear. No exceptions, no corruption.*
+- **`test_chat_specialist_instance_unchanged`**
+  - *ChatSpecialist: no instance mutation during execute.*
+- **`test_prompt_specialist_instance_unchanged`**
+  - *PromptSpecialist: no instance mutation during execute.*
+- **`test_project_director_instance_unchanged`**
+  - *ProjectDirector: no instance mutation during react_step loop.*
+- **`test_exit_interview_instance_unchanged`**
+  - *ExitInterviewSpecialist: no instance mutation during react_step verification.*
+- **`test_concurrent_chat_output_isolation`**
+  - *Same ChatSpecialist instance, two threads with different inputs.*
+- **`test_concurrent_pd_artifact_isolation`**
+  - *Same PD instance, two threads producing different artifacts.*
+- **`test_concurrent_safe_executors_routing_history`**
+  - *Two safe_executors called concurrently produce independent routing_history.*
+- **`test_concurrent_safe_executor_error_isolation`**
+  - *Thread A's specialist raises. Thread B's succeeds. No error contamination.*
+- **`test_pool_release_on_success`**
+  - *Slot released after successful invoke.*
+- **`test_pool_release_on_exception`**
+  - *I7: Slot released even when HTTP call throws.*
+- **`test_concurrent_pool_acquire_release`**
+  - *I7: 4 threads invoke adapter concurrently. release called exactly 4 times.*
 
 ## `app/tests/unit/test_config_loader.py`
 
