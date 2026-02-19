@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
+from ..utils.cancellation_manager import CancellationManager
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
     dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
@@ -122,6 +123,9 @@ class ExitInterviewSpecialist(BaseSpecialist):
         user_request = artifacts.get("user_request", "")
         routing_history = state.get("routing_history", [])
 
+        # #203: Read run_id for fork cancellation propagation
+        run_id = state.get("run_id")
+
         # Snapshot artifacts for local tool dispatch
         captured_artifacts = artifacts.copy()
 
@@ -134,7 +138,8 @@ class ExitInterviewSpecialist(BaseSpecialist):
             return self._build_unavailable_result(exit_plan)
 
         evaluation = self._verify(
-            user_request, exit_plan, routing_history, artifacts, captured_artifacts
+            user_request, exit_plan, routing_history, artifacts, captured_artifacts,
+            run_id=run_id,
         )
 
         logger.info(
@@ -155,6 +160,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
         routing_history: list,
         artifacts: dict,
         captured_artifacts: dict,
+        run_id: str | None = None,
     ) -> CompletionEvaluation:
         """Run the react_step verification loop."""
         tools = self._build_tools()
@@ -169,6 +175,14 @@ class ExitInterviewSpecialist(BaseSpecialist):
         call_counter = 0
 
         for iteration in range(max_iterations):
+            # #203: Check cancellation between react iterations
+            if run_id and CancellationManager.is_cancelled(run_id):
+                logger.warning(f"ExitInterviewSpecialist: run {run_id} cancelled at iteration {iteration}")
+                return CompletionEvaluation(
+                    is_complete=False,
+                    reasoning=f"Run cancelled at iteration {iteration}",
+                )
+
             result = call_react_step(
                 self.external_mcp_client,
                 model_id=model_id,
@@ -196,7 +210,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     evaluation = self._parse_done_args(tool_args)
                     break
 
-                observation = self._dispatch_tool(tool_name, tool_args, tools, captured_artifacts)
+                observation = self._dispatch_tool(tool_name, tool_args, tools, captured_artifacts, run_id)
                 trace.append({
                     "iteration": iteration,
                     "tool_call": {"id": tc.get("id", ""), "name": tool_name, "args": tool_args},
@@ -300,6 +314,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
     def _dispatch_tool(
         self, tool_name: str, tool_args: dict,
         tools: Dict[str, ToolDef], captured_artifacts: dict,
+        run_id: str | None = None,
     ) -> str:
         """Route a tool call to the appropriate handler."""
         tool_def = tools.get(tool_name)
@@ -312,6 +327,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
             return dispatch_fork(
                 prompt=tool_args.get("prompt", ""),
                 context=tool_args.get("context"),
+                parent_run_id=run_id,
             )
 
         # Local artifact tools

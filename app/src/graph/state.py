@@ -136,6 +136,12 @@ class GraphState(TypedDict):
     task_is_complete: Annotated[bool, operator.or_]
     next_specialist: Optional[str]
 
+    # --- Run Identity (#203: Fork Cancellation Propagation) ---
+    # Write-once at invocation start. SafeExecutor checks CancellationManager.is_cancelled()
+    # at every specialist boundary. PD checks between react_step iterations.
+    # dispatch_fork() reads this to pass as parent_run_id to child invocations.
+    run_id: Optional[str]
+
     # --- LLM Trace Capture (Training Data) ---
     # Accumulates raw LLM prompt/response traces for fine-tuning datasets.
     # Written to llm_traces.jsonl in the archive by ArchiverSpecialist.

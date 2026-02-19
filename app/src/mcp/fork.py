@@ -12,7 +12,7 @@ Use when processing multiple independent items that each require LLM
 reasoning — each fork prevents context accumulation in the parent.
 """
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -27,6 +27,7 @@ def dispatch_fork(
     prompt: str,
     context: str | None = None,
     timeout: float = 300.0,
+    parent_run_id: Optional[str] = None,
 ) -> str:
     """
     Spawn a fresh LAS invocation to handle a subtask.
@@ -38,6 +39,9 @@ def dispatch_fork(
                  the subagent needs for this specific subtask.
         timeout: HTTP timeout in seconds (default 300s — child may need
                  multiple react_step iterations).
+        parent_run_id: Run ID of the parent workflow. Passed to the child
+                       API so CancellationManager can register the
+                       parent→child relationship for cascade cancellation.
 
     Returns:
         Result string from the child invocation, or an error message
@@ -49,9 +53,12 @@ def dispatch_fork(
     }
     if context:
         request_body["text_to_process"] = context
+    if parent_run_id:
+        request_body["parent_run_id"] = parent_run_id
 
     logger.info(f"fork(): Spawning subagent — prompt length={len(prompt)}, "
-                f"context={'yes' if context else 'no'}")
+                f"context={'yes' if context else 'no'}, "
+                f"parent_run_id={parent_run_id or 'none'}")
 
     try:
         response = httpx.post(

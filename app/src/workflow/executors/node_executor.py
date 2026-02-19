@@ -14,6 +14,7 @@ from ...utils.state_serializer import build_timeline_entry
 from ...utils.errors import SpecialistError, WorkflowError, RateLimitError, CircuitBreakerTriggered
 from ...utils.report_schema import ErrorReport
 from ...resilience.monitor import InvariantMonitor
+from ...utils.cancellation_manager import CancellationManager
 from ...llm.tracing import (
     set_current_specialist,
     clear_current_specialist,
@@ -83,6 +84,19 @@ class NodeExecutor:
             # This ensures progenitors, subgraph nodes, and all specialists appear in Archive reports.
             routing_entry = specialist_name
             logger.debug(f"safe_executor: Tracking execution of '{specialist_name}'")
+
+            # #203: Check cancellation before executing specialist
+            run_id = state.get("run_id")
+            if run_id and CancellationManager.is_cancelled(run_id):
+                logger.warning(f"Run {run_id} cancelled — skipping specialist '{specialist_name}'")
+                return {
+                    "scratchpad": {
+                        "error": f"Run cancelled before '{specialist_name}' execution",
+                        "error_report": "## Mission Aborted\n\nThe run was cancelled by user request.",
+                    },
+                    "routing_history": [routing_entry],
+                    "task_is_complete": True,
+                }
 
             # TASK 1.5: Invariant Monitoring (Pre-Execution)
             # Fail-fast if the system is in an invalid state before executing the specialist.

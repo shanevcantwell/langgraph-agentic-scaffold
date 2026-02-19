@@ -9,6 +9,7 @@ print("Environment variables from .env file loaded.")
 from typing import Dict, List, Optional, Any
 import json
 import logging
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
@@ -117,6 +118,12 @@ class InvokeRequest(BaseModel):
         False,
         description="When True, this invocation is a child of another LAS workflow via fork(). "
                     "Skips archiver and EI gate; returns concise result instead of full state."
+    )
+    # #203: Fork cancellation propagation
+    parent_run_id: Optional[str] = Field(
+        None,
+        description="Run ID of the parent workflow that spawned this child via fork(). "
+                    "Used to register parent→child relationship for cascade cancellation."
     )
 
 class InvokeResponse(BaseModel):
@@ -589,14 +596,22 @@ async def stream_graph(request: InvokeRequest):
 @app.post("/v1/graph/invoke", response_model=InvokeResponse)
 def invoke_graph(request: InvokeRequest):
     try:
+        # #203: Generate run_id for sync invocations + register parent-child for fork()
+        child_run_id = str(uuid.uuid4())
+        if request.parent_run_id:
+            CancellationManager.register_child(request.parent_run_id, child_run_id)
+            logger.info(f"Fork invocation: child={child_run_id}, parent={request.parent_run_id}")
+
         logger.info(f"Received sync request to invoke graph with prompt: '{request.input_prompt}'"
-                     f"{' (subagent)' if request.subagent else ''}")
+                     f"{' (subagent)' if request.subagent else ''}"
+                     f" run_id={child_run_id}")
         final_state = workflow_runner.run(
             goal=request.input_prompt,
             text_to_process=request.text_to_process,
             image_to_process=request.image_to_process,
             use_simple_chat=request.use_simple_chat,
             subagent=request.subagent,
+            run_id=child_run_id,
         )
 
         # Task 2.7: error_report moved to scratchpad
@@ -622,6 +637,9 @@ def invoke_graph(request: InvokeRequest):
     except WorkflowError as e:
         logger.error(f"Workflow execution error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow execution error: {e}")
+    finally:
+        # #203: Cleanup cancellation state for sync invocations
+        CancellationManager.clear_cancellation(child_run_id)
 
 async def _standard_stream_formatter(generator):
     """

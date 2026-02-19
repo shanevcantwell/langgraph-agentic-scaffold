@@ -189,7 +189,7 @@ class WorkflowRunner:
 
         logger.info("All pre-flight checks passed successfully.")
 
-    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False, subagent: bool = False) -> Dict[str, Any]:
+    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False, subagent: bool = False, run_id: str = None) -> Dict[str, Any]:
         """
         Executes the workflow with a given goal.
         """
@@ -201,6 +201,7 @@ class WorkflowRunner:
             image_to_process=image_to_process,
             use_simple_chat=use_simple_chat,
             subagent=subagent,
+            run_id=run_id,
         )
 
         config = {"recursion_limit": self.recursion_limit}
@@ -235,6 +236,9 @@ class WorkflowRunner:
         # ADR-CORE-075: Generate or reuse conversation_id for multi-turn
         conv_id = conversation_id or str(uuid.uuid4())
 
+        # Generate a unique run_id for this execution to enable trace tracking
+        run_id = uuid.uuid4()
+
         initial_state: GraphState = create_initial_state(
             goal=goal,
             text_to_process=text_to_process,
@@ -242,10 +246,8 @@ class WorkflowRunner:
             use_simple_chat=use_simple_chat,
             prior_messages=prior_messages,
             conversation_id=conv_id,
+            run_id=str(run_id),
         )
-
-        # Generate a unique run_id for this execution to enable trace tracking
-        run_id = uuid.uuid4()
         # Yield the run_id immediately so the client can start tracking traces
         yield {"run_id": str(run_id)}
         # ADR-CORE-075: Yield conversation_id for multi-turn threading

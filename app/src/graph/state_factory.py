@@ -26,6 +26,7 @@ def create_initial_state(
     prior_messages: Optional[List[dict]] = None,
     conversation_id: Optional[str] = None,
     subagent: bool = False,
+    run_id: Optional[str] = None,
 ) -> GraphState:
     """
     Creates a properly initialized GraphState dictionary.
@@ -80,6 +81,7 @@ def create_initial_state(
         "turn_count": 0,
         "task_is_complete": False,
         "next_specialist": None,
+        "run_id": run_id,
         "artifacts": {},
         "scratchpad": {},
     }
@@ -130,6 +132,7 @@ def create_test_state(
     routing_history: Optional[list[str]] = None,
     distillation_state: Optional[Dict[str, Any]] = None,
     signals: Optional[Dict[str, Any]] = None,
+    run_id: Optional[str] = None,
 ) -> GraphState:
     """
     Creates a GraphState for testing with explicit control over all fields.
@@ -164,6 +167,7 @@ def create_test_state(
         "turn_count": turn_count,
         "task_is_complete": task_is_complete,
         "next_specialist": next_specialist,
+        "run_id": run_id,
         "artifacts": artifacts or {},
         "scratchpad": scratchpad or {},
         "signals": signals or {},

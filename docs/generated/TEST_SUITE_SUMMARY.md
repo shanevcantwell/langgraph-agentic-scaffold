@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 808 |
+| Unit | 76 | 818 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1091** |
+| **Total** | **111** | **1101** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -883,6 +883,26 @@
   - *I7: Slot released even when HTTP call throws.*
 - **`test_concurrent_pool_acquire_release`**
   - *I7: 4 threads invoke adapter concurrently. release called exactly 4 times.*
+- **`test_register_child_creates_relationship`**
+  - *register_child() establishes bidirectional parent-child link.*
+- **`test_cancel_parent_cascades_to_child`**
+  - *Cancelling parent also cancels registered children.*
+- **`test_cancel_parent_cascades_to_grandchildren`**
+  - *Cancellation cascades recursively through the entire tree.*
+- **`test_cancel_child_does_not_cascade_to_parent`**
+  - *Cancelling a child does NOT propagate upward to the parent.*
+- **`test_cancel_idempotent_prevents_infinite_recursion`**
+  - *Repeated cancellation of same run_id is safe (no infinite loop).*
+- **`test_clear_removes_from_tree`**
+  - *clear_cancellation() cleans up the parent-child registry.*
+- **`test_clear_parent_removes_children_registry`**
+  - *clear_cancellation() on parent removes its children set.*
+- **`test_safe_executor_checks_cancellation`**
+  - *SafeExecutor returns abort when run_id is cancelled.*
+- **`test_safe_executor_allows_uncancelled_run`**
+  - *SafeExecutor proceeds normally when run_id is not cancelled.*
+- **`test_concurrent_cancel_and_register`**
+  - *Concurrent register_child + request_cancellation don't corrupt state.*
 
 ## `app/tests/unit/test_config_loader.py`
 

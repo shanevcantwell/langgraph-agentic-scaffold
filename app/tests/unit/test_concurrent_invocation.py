@@ -1,6 +1,6 @@
 # app/tests/unit/test_concurrent_invocation.py
 """
-Concurrent Invocation Tests — Shared Mutable State Integrity (#203 Prerequisite)
+Concurrent Invocation Tests — Shared Mutable State Integrity (#203)
 
 Tests derived from a formal inventory of every shared mutable data store that
 concurrent LAS invocations touch. Each test group maps to an invariant:
@@ -10,6 +10,7 @@ concurrent LAS invocations touch. Each test group maps to an invariant:
   Group 3: Output Isolation Under Concurrency (I6) — concurrent execute() results are independent
   Group 4: SafeExecutor Isolation — routing_history, error reports don't cross-contaminate
   Group 5: Pool Slot Conservation (I7) — release() always matches acquire()
+  Group 6: Cascade Cancellation (#203) — parent→child cancel propagation
 
 See plan: .claude/plans/peaceful-wandering-dream.md for the full mutable state inventory.
 """
@@ -760,3 +761,214 @@ class TestPoolSlotConservation:
         assert pool_mock.release_server.call_count == 4, (
             f"I7 violated: release_server called {pool_mock.release_server.call_count} times, expected 4"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Group 6: Cascade Cancellation (#203 — Parent→Child Propagation)
+#
+# Tests the parent-child tree in CancellationManager:
+#   - register_child() establishes relationships
+#   - request_cancellation() cascades to all descendants
+#   - clear_cancellation() cleans up the tree
+#   - SafeExecutor respects run_id cancellation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestCascadeCancellation:
+    """Verify parent→child cancellation propagation (#203)."""
+
+    def setup_method(self):
+        """Reset CancellationManager class-level state between tests."""
+        CancellationManager._cancelled_runs.clear()
+        CancellationManager._parent_to_children.clear()
+        CancellationManager._child_to_parent.clear()
+
+    def teardown_method(self):
+        CancellationManager._cancelled_runs.clear()
+        CancellationManager._parent_to_children.clear()
+        CancellationManager._child_to_parent.clear()
+
+    def test_register_child_creates_relationship(self):
+        """register_child() establishes bidirectional parent-child link."""
+        CancellationManager.register_child("parent-1", "child-1")
+
+        assert "child-1" in CancellationManager._parent_to_children["parent-1"]
+        assert CancellationManager._child_to_parent["child-1"] == "parent-1"
+
+    def test_cancel_parent_cascades_to_child(self):
+        """Cancelling parent also cancels registered children."""
+        CancellationManager.register_child("parent-1", "child-1")
+        CancellationManager.register_child("parent-1", "child-2")
+
+        CancellationManager.request_cancellation("parent-1")
+
+        assert CancellationManager.is_cancelled("parent-1")
+        assert CancellationManager.is_cancelled("child-1")
+        assert CancellationManager.is_cancelled("child-2")
+
+    def test_cancel_parent_cascades_to_grandchildren(self):
+        """Cancellation cascades recursively through the entire tree."""
+        CancellationManager.register_child("parent", "child")
+        CancellationManager.register_child("child", "grandchild")
+
+        CancellationManager.request_cancellation("parent")
+
+        assert CancellationManager.is_cancelled("parent")
+        assert CancellationManager.is_cancelled("child")
+        assert CancellationManager.is_cancelled("grandchild")
+
+    def test_cancel_child_does_not_cascade_to_parent(self):
+        """Cancelling a child does NOT propagate upward to the parent."""
+        CancellationManager.register_child("parent", "child")
+
+        CancellationManager.request_cancellation("child")
+
+        assert CancellationManager.is_cancelled("child")
+        assert not CancellationManager.is_cancelled("parent")
+
+    def test_cancel_idempotent_prevents_infinite_recursion(self):
+        """Repeated cancellation of same run_id is safe (no infinite loop)."""
+        CancellationManager.register_child("parent", "child")
+        CancellationManager.request_cancellation("parent")
+        # Second call should be a no-op
+        CancellationManager.request_cancellation("parent")
+
+        assert CancellationManager.is_cancelled("parent")
+        assert CancellationManager.is_cancelled("child")
+
+    def test_clear_removes_from_tree(self):
+        """clear_cancellation() cleans up the parent-child registry."""
+        CancellationManager.register_child("parent", "child-1")
+        CancellationManager.register_child("parent", "child-2")
+
+        CancellationManager.clear_cancellation("child-1")
+
+        # child-1 removed from parent's children set
+        assert "child-1" not in CancellationManager._parent_to_children.get("parent", set())
+        # child-2 still registered
+        assert "child-2" in CancellationManager._parent_to_children["parent"]
+        # child-1 no longer in child_to_parent
+        assert "child-1" not in CancellationManager._child_to_parent
+
+    def test_clear_parent_removes_children_registry(self):
+        """clear_cancellation() on parent removes its children set."""
+        CancellationManager.register_child("parent", "child")
+
+        CancellationManager.clear_cancellation("parent")
+
+        assert "parent" not in CancellationManager._parent_to_children
+
+    def test_safe_executor_checks_cancellation(self):
+        """SafeExecutor returns abort when run_id is cancelled."""
+        from app.src.workflow.executors.node_executor import NodeExecutor
+
+        # Minimal config for NodeExecutor
+        config = {"specialists": {}, "invariant_monitor": {"max_loop_count": 10}}
+        executor = NodeExecutor(config)
+
+        # Create a minimal specialist
+        specialist = MagicMock()
+        specialist.specialist_name = "test_specialist"
+        specialist.specialist_config = {}
+        specialist.llm_adapter = None
+
+        safe_exec = executor.create_safe_executor(specialist)
+
+        # Cancel the run before execution
+        CancellationManager.request_cancellation("cancelled-run")
+
+        state = {
+            "messages": [HumanMessage(content="test")],
+            "artifacts": {},
+            "scratchpad": {},
+            "routing_history": [],
+            "turn_count": 0,
+            "task_is_complete": False,
+            "run_id": "cancelled-run",
+        }
+
+        result = safe_exec(state)
+
+        # Should return abort, not execute the specialist
+        assert result["task_is_complete"] is True
+        assert "cancelled" in result["scratchpad"]["error"].lower()
+        specialist.execute.assert_not_called()
+
+    def test_safe_executor_allows_uncancelled_run(self):
+        """SafeExecutor proceeds normally when run_id is not cancelled."""
+        from app.src.workflow.executors.node_executor import NodeExecutor
+
+        config = {"specialists": {}, "invariant_monitor": {"max_loop_count": 10}}
+        executor = NodeExecutor(config)
+
+        specialist = MagicMock()
+        specialist.specialist_name = "test_specialist"
+        specialist.specialist_config = {"type": "llm"}
+        specialist.llm_adapter = MagicMock()
+        specialist.llm_adapter.system_prompt = "test"
+        specialist.llm_adapter.model_name = "test-model"
+        specialist.execute.return_value = {
+            "messages": [AIMessage(content="done")],
+            "artifacts": {},
+        }
+
+        safe_exec = executor.create_safe_executor(specialist)
+
+        state = {
+            "messages": [HumanMessage(content="test")],
+            "artifacts": {},
+            "scratchpad": {},
+            "routing_history": [],
+            "turn_count": 0,
+            "task_is_complete": False,
+            "run_id": "active-run",
+        }
+
+        result = safe_exec(state)
+
+        # Specialist should have been called
+        specialist.execute.assert_called_once()
+
+    def test_concurrent_cancel_and_register(self):
+        """Concurrent register_child + request_cancellation don't corrupt state."""
+        barrier = threading.Barrier(3)
+        errors = []
+
+        def register_children():
+            barrier.wait()
+            try:
+                for i in range(50):
+                    CancellationManager.register_child("parent", f"child-{i}")
+            except Exception as e:
+                errors.append(f"register: {e}")
+
+        def cancel_parent():
+            barrier.wait()
+            try:
+                time.sleep(0.001)  # Let some registrations happen first
+                CancellationManager.request_cancellation("parent")
+            except Exception as e:
+                errors.append(f"cancel: {e}")
+
+        def clear_children():
+            barrier.wait()
+            try:
+                time.sleep(0.002)  # Let cancel propagate first
+                for i in range(50):
+                    CancellationManager.clear_cancellation(f"child-{i}")
+            except Exception as e:
+                errors.append(f"clear: {e}")
+
+        threads = [
+            threading.Thread(target=register_children),
+            threading.Thread(target=cancel_parent),
+            threading.Thread(target=clear_children),
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert not errors, f"Concurrent operation errors: {errors}"
+        # Parent should definitely be cancelled
+        assert CancellationManager.is_cancelled("parent")

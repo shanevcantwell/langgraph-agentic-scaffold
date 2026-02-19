@@ -280,6 +280,7 @@ class TestPDForkIntegration:
         mock_dispatch_fork.assert_called_once_with(
             prompt="Evaluate this proposal",
             context="Proposal content here",
+            parent_run_id=None,
         )
 
     @patch("app.src.mcp.fork.dispatch_fork")
@@ -306,6 +307,7 @@ class TestPDForkIntegration:
         mock_dispatch_fork.assert_called_once_with(
             prompt="Simple task",
             context=None,
+            parent_run_id=None,
         )
 
 
@@ -354,6 +356,7 @@ class TestEIForkIntegration:
         mock_dispatch_fork.assert_called_once_with(
             prompt="Verify file exists at /workspace/output.html",
             context=None,
+            parent_run_id=None,
         )
 
     @patch("app.src.mcp.fork.dispatch_fork")
@@ -377,4 +380,5 @@ class TestEIForkIntegration:
         mock_dispatch_fork.assert_called_once_with(
             prompt="Check contents",
             context="/workspace/report.md",
+            parent_run_id=None,
         )

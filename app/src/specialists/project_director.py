@@ -16,6 +16,7 @@ from typing import Dict, Any, List
 from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
+from ..utils.cancellation_manager import CancellationManager
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
     dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
@@ -168,6 +169,9 @@ class ProjectDirector(BaseSpecialist):
                 [], {}
             )
 
+        # #203: Read run_id for fork cancellation propagation and mid-loop checks
+        run_id = state.get("run_id")
+
         # ADR-076: Snapshot artifacts for mid-execution read/write.
         # write_artifact mutates this snapshot; it propagates on return.
         captured_artifacts = artifacts.copy()
@@ -187,6 +191,14 @@ class ProjectDirector(BaseSpecialist):
         successful_paths: List[str] = []  # For filesystem error enrichment
 
         for iteration in range(max_iterations):
+            # #203: Check cancellation between react iterations
+            if run_id and CancellationManager.is_cancelled(run_id):
+                logger.warning(f"ProjectDirector: run {run_id} cancelled at iteration {iteration}")
+                return self._build_error_result(
+                    f"Run cancelled at iteration {iteration}",
+                    trace, captured_artifacts
+                )
+
             try:
                 result = call_react_step(
                     self.external_mcp_client,
@@ -226,7 +238,7 @@ class ProjectDirector(BaseSpecialist):
                     tool_name = tc.get("name", "unknown")
                     tool_args = tc.get("args", {})
                     observation = self._dispatch_tool_call(
-                        tc, tools, successful_paths, captured_artifacts
+                        tc, tools, successful_paths, captured_artifacts, run_id
                     )
 
                     trace.append({
@@ -273,6 +285,7 @@ class ProjectDirector(BaseSpecialist):
         tools: Dict[str, ToolDef],
         successful_paths: List[str],
         captured_artifacts: dict,
+        run_id: str | None = None,
     ) -> str:
         """Dispatch a single pending tool call to the appropriate MCP service."""
         tool_name = pending.get("name", "")
@@ -305,6 +318,7 @@ class ProjectDirector(BaseSpecialist):
             return dispatch_fork(
                 prompt=tool_args.get("prompt", ""),
                 context=tool_args.get("context"),
+                parent_run_id=run_id,
             )
 
         # Local artifact tools (ADR-076)
