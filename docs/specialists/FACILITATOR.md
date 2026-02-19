@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-18 (ADR-077: signal processor replaces classify_interrupt, routing_context detection, ghost signal removal)
+**Updated:** 2026-02-18 (ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection)
 
 ---
 
@@ -88,6 +88,7 @@ class ContextAction(BaseModel):
 
 Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
 
+0. **Subagent hint** (ADR-045) — if `scratchpad["subagent"]` is true, prepends `### Execution Mode: Subagent` with conciseness guidance. This replaces the old stringly-typed `[SUBAGENT]` prompt prefix with a structural system-prompt-layer injection. The hint lands in gathered_context regardless of which specialist gets routed.
 1. **Task Strategy** — from `_build_task_context()`: `task_plan.plan_summary` + `execution_steps` + `acceptance_criteria` (#173). Full plan context so retry specialists have the complete strategy — not just a one-line summary.
 2. **EI Retry Feedback + Prior Work** — from `_build_prior_work_section()`: accumulated operations + EI `missing_elements` + EI `recommended_specialists` guidance (only on retry)
 3. **WIP Summary** — work-in-progress for BENIGN interrupts (when `routing_context == "benign_continuation"` in signals, #108)

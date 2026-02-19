@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Exit Interview specialist's role as the verification gate before END.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-18 (ADR-077: signal processor replaces classify_interrupt, signals field)
+**Updated:** 2026-02-18 (ADR-045: fork() for per-item verification, subagent mode bypasses EI; ADR-077: signal processor)
 
 ---
 
@@ -29,6 +29,10 @@ Key characteristics:
 Specialist sets task_is_complete = True
     |
 check_task_completion (graph_orchestrator.py)
+    |
+    [EI just validated?] --- YES --> END
+    |
+    [scratchpad["subagent"]?] --- YES --> END (ADR-045: parent verifies)
     |
     [Last specialist in SKIP_EXIT_INTERVIEW?]
     |-- YES --> END (default_responder, chat, tiered_synthesizer)
@@ -101,6 +105,7 @@ EI delegates LLM reasoning to prompt-prix via `react_step` MCP. Like PD, EI itse
   |          NO:  dispatch each pending tool call
   |               |
   |          _dispatch_tool()
+  |               | ──fork (las)──>    dispatch_fork() → subagent LAS invocation (ADR-045)
   |               | ──external MCP──>  filesystem (list_directory, read_file)
   |               | ──local──>         artifact_tools (list_artifacts, retrieve_artifact)
   |               |
@@ -113,7 +118,7 @@ EI delegates LLM reasoning to prompt-prix via `react_step` MCP. Like PD, EI itse
 
 If the model calls DONE without having made any prior tool calls, EI injects a system nudge into the trace:
 
-> "You must call at least one verification tool (list_directory, read_file, list_artifacts, retrieve_artifact) before calling DONE. Verify real outcomes first."
+> "You must call at least one verification tool (list_directory, read_file, list_artifacts, retrieve_artifact, fork) before calling DONE. Verify real outcomes first."
 
 This prevents EI from rubber-stamping completion based on artifact summaries or message content. The model must inspect something real before rendering judgment.
 
@@ -143,11 +148,25 @@ This is conservative by design — the cost of one more routing cycle is much lo
 | `read_file` | `filesystem` | External MCP | Read file contents |
 | `list_artifacts` | local | Shared (`mcp/artifact_tools.py`) | List artifact keys with type/size hints |
 | `retrieve_artifact` | local | Shared (`mcp/artifact_tools.py`) | Retrieve a specific artifact's content |
+| `fork` | `las` | Local (ADR-045) | Spawn subagent for per-item verification |
 | `DONE` | local | Termination signal | Structured evaluation result |
 
 ### External Tools
 
 `list_directory` and `read_file` are dispatched via `dispatch_external_tool()` to the filesystem MCP container. These let EI verify filesystem outcomes — checking that expected directories exist, files were moved, content is correct.
+
+### fork() — Per-Item Verification (ADR-045)
+
+`fork` spawns a subagent LAS invocation to verify a single item independently. Use fork when verifying N independent items that each require inspection — fork once per item instead of reading all files sequentially in EI's context.
+
+Each fork child runs the full pipeline (Triage → SA → Router → Specialist) but in **subagent mode**: EI and Archiver are skipped in the child, and the API returns a concise `{"result": "..."}` response. This prevents:
+- **Context death spiral** — EI reading N files sequentially bloats to 30K+ tokens of prompt per react_step call
+- **Wrong-item verification** — the child's own EI expanding scope and verifying a different item than requested
+
+SA automatically sees fork in EI's tool inventory when generating `exit_plan`, and can recommend fork-based verification for N-item tasks.
+
+**When to fork:** Verifying 4+ independent items that each need content inspection.
+**When NOT to fork:** Simple existence checks (list_directory suffices), or verifying 2-3 items.
 
 ### Local Artifact Tools
 
@@ -479,6 +498,7 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 | [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) | EI implementation — loop, dispatch, SA call, result builders |
 | [exit_interview_prompt.md](../../app/prompts/exit_interview_prompt.md) | System prompt — tool descriptions, DONE protocol, final-state constraints |
 | [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | Shared artifact inspection tools (list_artifacts, retrieve_artifact) |
+| [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` — recursive LAS invocation for per-item verification (ADR-045) |
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `is_react_available`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
 | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_task_completion()`, `route_from_signal()`, `after_exit_interview()` — EI routing |
 | [signal_processor_specialist.py](../../app/src/specialists/signal_processor_specialist.py) | Classifies routing signals and routes to EI (ADR-077) |
@@ -493,10 +513,12 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 The Exit Interview is a **react_step verification agent** that:
 
 1. Receives `task_is_complete=True` from a specialist, or is routed by SignalProcessor (BENIGN, circuit breaker, normal completion)
-2. Lazy-creates an `exit_plan` via SA MCP with verification steps tailored to EI's tool capabilities
-3. Runs a react_step loop to inspect the filesystem and artifacts using real tools
-4. Enforces tool-use-before-DONE (#193) — the model must verify real outcomes before judgment
-5. Calls DONE with a structured `CompletionEvaluation` (complete, reasoning, missing elements, recommended specialists)
-6. Returns an honest "cannot verify" signal when prompt-prix is unavailable — no degraded evaluation (#195)
+2. **Skipped in subagent mode** (ADR-045) — fork() children bypass EI; the parent handles completion verification
+3. Lazy-creates an `exit_plan` via SA MCP with verification steps tailored to EI's tool capabilities (including fork)
+4. Runs a react_step loop to inspect the filesystem and artifacts using real tools
+5. Uses **fork() for per-item verification** (ADR-045) — spawns subagents to verify N items independently instead of reading all files sequentially
+6. Enforces tool-use-before-DONE (#193) — the model must verify real outcomes before judgment
+7. Calls DONE with a structured `CompletionEvaluation` (complete, reasoning, missing elements, recommended specialists)
+8. Returns an honest "cannot verify" signal when prompt-prix is unavailable — no degraded evaluation (#195)
 
 EI is a **final-state observer**. It cannot see what was there before, what was moved, or what changed. It verifies that the expected end state exists, adapting SA's verification steps to what is observable in the current filesystem and artifacts.

@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Systems Architect's dual role as planning node and MCP planning service.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-16 (#199: Triage→SA pipeline flip, #173: acceptance_criteria on SystemPlan)
+**Updated:** 2026-02-18 (ADR-045: fork-aware verification plans; #199: Triage→SA pipeline flip; #173: acceptance_criteria)
 
 ---
 
@@ -192,23 +192,25 @@ def _execute_logic(self, state: dict) -> Dict[str, Any]:
 
 ### Exit Interview: Verification Plan
 
-EI calls SA with a verification-focused context (#115):
+EI calls SA with a verification-focused context (#115). Crucially, EI passes its **full tool inventory** (including `fork`) via `available_tools`, so SA constrains verification steps to EI's actual capabilities:
 
 ```python
-# exit_interview_specialist.py:97-127
-verification_context = f"""User request: {user_request}
-
-Generate a VERIFICATION PLAN with steps to CHECK that this work was completed correctly.
-Each step should be a verification action (list directory, count files, check file contents...).
-These are steps to VERIFY completion, NOT steps to implement the task."""
+# exit_interview_specialist.py — _ensure_exit_plan()
+verification_tools = [
+    {"name": name, "description": tool_def.description}
+    for name, tool_def in self._build_tools().items()
+    if name != "DONE"
+]  # Includes fork since ADR-045
 
 result = self.mcp_client.call(
-    "systems_architect",
-    "create_plan",
+    "systems_architect", "create_plan",
     context=verification_context,
-    artifact_key="exit_plan"
+    artifact_key="exit_plan",
+    available_tools=verification_tools,
 )
 ```
+
+SA's prompt includes guidance for verification plans (ADR-045): when fork is in the tool inventory and the task involves N independent items, SA recommends fork-based verification instead of sequential file reads. This prevents EI's context death spiral (33K+ tokens observed in production).
 
 EI then formats the `exit_plan` into its evaluation prompt so the LLM can verify completion against specific criteria.
 
@@ -357,7 +359,7 @@ SA needs an `llm_config` because it makes LLM calls (unlike Facilitator which is
 | [specialist_categories.py](../../app/src/workflow/specialist_categories.py) | `CORE_INFRASTRUCTURE` classification (#171) |
 | [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | Triage → SA → Facilitator → Router edge wiring (#199) |
 | [web_builder.py](../../app/src/specialists/web_builder.py) | Consumer: implementation plan (lines 32-51) |
-| [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) | Consumer: verification plan (lines 97-128) |
+| [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) | Consumer: verification plan with fork-aware tool inventory (ADR-045) |
 | [project_director.py](../../app/src/specialists/project_director.py) | NOT YET a consumer — missing SA call is the root cause of aimless tool chaining |
 
 ---

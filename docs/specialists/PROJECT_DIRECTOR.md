@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Project Director's role as the autonomous ReAct agent in LAS.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-18 (ADR-077: routing signals moved to `signals` field, signal processor replaces classify_interrupt)
+**Updated:** 2026-02-18 (ADR-045: fork() for subtask delegation; ADR-077: routing signals, signal processor)
 
 ---
 
@@ -144,6 +144,7 @@ PD delegates LLM reasoning to prompt-prix via the `react_step` MCP tool. This me
     |          NO:  dispatch each pending tool call
     |               |
     |          _dispatch_tool_call()
+    |               | ──fork (las)──>    dispatch_fork() → subagent LAS invocation (ADR-045)
     |               | ──external MCP──>  filesystem / terminal
     |               | ──internal MCP──>  web_specialist / browse_specialist
     |               |
@@ -384,6 +385,7 @@ These schemas tell the LLM (via logit masking in LM Studio) what tools exist and
 | `list_artifacts` | `local` | Local | List available artifacts with type/size hints |
 | `retrieve_artifact` | `local` | Local | Retrieve full content of an artifact by key |
 | `write_artifact` | `local` | Local | Persist observation, decision, or progress as an artifact (ADR-076) |
+| `fork` | `las` | Local (ADR-045) | Spawn subagent for independent subtask (context-isolated) |
 
 **Internal MCP** = Python services in-process (`self.mcp_client.call()`).
 **External MCP** = Containerized services via stdio (`dispatch_external_tool()`).
@@ -578,6 +580,7 @@ unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_con
 | [project_director_prompt.md](../../app/prompts/project_director_prompt.md) | System prompt — tool descriptions, process instructions, termination rules |
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
 | [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | `list_artifacts`, `retrieve_artifact`, `write_artifact`, dispatch, name generation (ADR-076) |
+| [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` — recursive LAS invocation for context-isolated subtasks (ADR-045) |
 | [cycle_detection.py](../../app/src/resilience/cycle_detection.py) | `detect_cycle_with_pattern()` — stagnation detector |
 | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `after_project_director()` routing |
 | [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Curates `gathered_context` for PD; extracts trace knowledge on retry |
