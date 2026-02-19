@@ -112,6 +112,12 @@ class InvokeRequest(BaseModel):
         None,
         description="Prior conversation turns as [{role: 'user'|'assistant', content: str}]. Last 3 pairs used."
     )
+    # ADR-CORE-045: Subagent mode for fork() invocations
+    subagent: bool = Field(
+        False,
+        description="When True, this invocation is a child of another LAS workflow via fork(). "
+                    "Skips archiver and EI gate; returns concise result instead of full state."
+    )
 
 class InvokeResponse(BaseModel):
     final_output: Dict[str, Any] = Field(
@@ -583,23 +589,34 @@ async def stream_graph(request: InvokeRequest):
 @app.post("/v1/graph/invoke", response_model=InvokeResponse)
 def invoke_graph(request: InvokeRequest):
     try:
-        logger.info(f"Received sync request to invoke graph with prompt: '{request.input_prompt}'")
+        logger.info(f"Received sync request to invoke graph with prompt: '{request.input_prompt}'"
+                     f"{' (subagent)' if request.subagent else ''}")
         final_state = workflow_runner.run(
             goal=request.input_prompt,
             text_to_process=request.text_to_process,
             image_to_process=request.image_to_process,
-            use_simple_chat=request.use_simple_chat
+            use_simple_chat=request.use_simple_chat,
+            subagent=request.subagent,
         )
-    
+
         # Task 2.7: error_report moved to scratchpad
         scratchpad = final_state.get("scratchpad", {})
         if error_report := (scratchpad.get("error_report") if isinstance(scratchpad, dict) else None):
             logger.error("Workflow ended with an error. Returning error report.")
             return InvokeResponse(final_output={"error_report": error_report})
-    
-        # The final state from the workflow runner is the complete dictionary we want.
-        # We pass it directly as the value for the 'final_output' field in our response model.
-        # This ensures the client receives the full state, including 'artifacts', 'messages', etc.
+
+        # ADR-CORE-045: Subagent mode returns concise result, not full state
+        if request.subagent:
+            artifacts = final_state.get("artifacts", {})
+            concise = artifacts.get("final_user_response.md", "")
+            if not concise:
+                messages = final_state.get("messages", [])
+                if messages:
+                    last = messages[-1]
+                    concise = last.get("content", "") if isinstance(last, dict) else str(getattr(last, "content", ""))
+            return InvokeResponse(final_output={"result": concise or ""})
+
+        # Normal mode: return full state
         return InvokeResponse(final_output=final_state)
 
     except WorkflowError as e:

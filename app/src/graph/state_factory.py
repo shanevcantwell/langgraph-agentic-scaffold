@@ -25,6 +25,7 @@ def create_initial_state(
     distillation_state: Optional[Dict[str, Any]] = None,
     prior_messages: Optional[List[dict]] = None,
     conversation_id: Optional[str] = None,
+    subagent: bool = False,
 ) -> GraphState:
     """
     Creates a properly initialized GraphState dictionary.
@@ -107,6 +108,10 @@ def create_initial_state(
     # Populate scratchpad
     if use_simple_chat:
         initial_state["scratchpad"]["use_simple_chat"] = use_simple_chat
+
+    # ADR-CORE-045: Mark subagent invocations so pipeline can skip EI/Archiver
+    if subagent:
+        initial_state["scratchpad"]["subagent"] = True
 
     if additional_scratchpad:
         initial_state["scratchpad"].update(additional_scratchpad)

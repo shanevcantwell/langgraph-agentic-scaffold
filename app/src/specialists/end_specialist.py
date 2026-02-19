@@ -129,6 +129,11 @@ class EndSpecialist(BaseSpecialist):
         current_state.setdefault("artifacts", {})["final_user_response.md"] = synthesized_response
         current_state.setdefault("scratchpad", {})["user_response_snippets"] = []  # Clear snippets
 
+        # ADR-CORE-045: Skip archiver in subagent mode — parent archives the overall run
+        if current_state.get("scratchpad", {}).get("subagent"):
+            logger.info("EndSpecialist: Subagent mode — skipping archiver.")
+            return current_state
+
         # Archive the interaction
         logger.info("EndSpecialist: Archiving interaction.")
         archival_updates = self.archiver._execute_logic(current_state)

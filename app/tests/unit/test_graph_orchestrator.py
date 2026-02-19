@@ -442,3 +442,50 @@ class TestCheckTriageOutcome:
 
         result = orchestrator_instance.check_triage_outcome(state)
         assert result == "systems_architect"
+
+
+# =============================================================================
+# ADR-CORE-045: Subagent mode bypasses EI
+# =============================================================================
+
+class TestSubagentEIBypass:
+    """
+    ADR-CORE-045: Subagent invocations skip Exit Interview — the parent
+    handles completion verification. check_task_completion routes directly
+    to END when scratchpad["subagent"] is True.
+    """
+
+    def test_subagent_skips_ei_on_task_complete(self, orchestrator_instance):
+        """When subagent=True and task_is_complete, route directly to END (skip EI)."""
+        state = create_test_state(
+            task_is_complete=True,
+            scratchpad={"subagent": True},
+            routing_history=["project_director"],
+        )
+
+        result = orchestrator_instance.check_task_completion(state)
+        assert result == CoreSpecialist.END.value
+
+    def test_non_subagent_routes_to_ei_on_task_complete(self, orchestrator_instance):
+        """Normal (non-subagent) task_is_complete routes to EI for validation."""
+        state = create_test_state(
+            task_is_complete=True,
+            scratchpad={},
+            routing_history=["project_director"],
+        )
+
+        result = orchestrator_instance.check_task_completion(state)
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value
+
+    def test_subagent_without_task_complete_does_not_bypass(self, orchestrator_instance):
+        """Subagent mode only bypasses when task_is_complete is True."""
+        state = create_test_state(
+            task_is_complete=False,
+            scratchpad={"subagent": True},
+            routing_history=["project_director"],
+            next_specialist="project_director",
+        )
+
+        result = orchestrator_instance.check_task_completion(state)
+        # task_is_complete is False, so check_task_completion returns next specialist
+        assert result != CoreSpecialist.END.value

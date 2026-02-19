@@ -309,6 +309,17 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.warning(f"Facilitator: Skipping malformed action {action_data}: {e}")
 
         gathered_context = self._build_task_context(artifacts)
+
+        # ADR-CORE-045: Inject subagent conciseness hint into context
+        # Replaces stringly-typed [SUBAGENT] prompt prefix with system-layer guidance
+        if scratchpad.get("subagent"):
+            gathered_context.insert(0, (
+                "### Execution Mode: Subagent\n"
+                "You are executing as a focused subagent of a parent workflow. "
+                "Complete the specific task and return a concise result — "
+                "your output will be consumed by the parent, not shown to the user directly."
+            ))
+
         logger.info(f"Facilitator: Assembling context ({len(triage_actions)} triage actions).")
 
         # Read routing_history early - needed for WIP summary

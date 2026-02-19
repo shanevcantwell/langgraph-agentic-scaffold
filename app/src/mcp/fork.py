@@ -12,17 +12,11 @@ Use when processing multiple independent items that each require LLM
 reasoning — each fork prevents context accumulation in the parent.
 """
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import httpx
 
 logger = logging.getLogger(__name__)
-
-# Subagent marker prepended to every fork prompt
-_SUBAGENT_PREFIX = (
-    "[SUBAGENT] You are executing as a focused subagent of a parent workflow. "
-    "Complete the specific task below and return a concise result.\n\n"
-)
 
 # LAS API endpoint — localhost because fork originates from within
 # the same langgraph-app container that serves the API.
@@ -49,10 +43,9 @@ def dispatch_fork(
         Result string from the child invocation, or an error message
         prefixed with "Error:" on failure.
     """
-    full_prompt = f"{_SUBAGENT_PREFIX}{prompt}"
-
     request_body: Dict[str, Any] = {
-        "input_prompt": full_prompt,
+        "input_prompt": prompt,
+        "subagent": True,
     }
     if context:
         request_body["text_to_process"] = context
@@ -89,19 +82,36 @@ def _extract_result(data: Dict[str, Any]) -> str:
     """
     Extract a concise result string from the LAS invoke response.
 
-    Tries: last message content → artifacts summary → error_report.
+    Fallback chain:
+      1. error_report (child failed)
+      2. "result" key (subagent-mode streamlined response)
+      3. final_user_response.md artifact (canonical concise output)
+      4. Last message content (specialist's output)
+      5. Error — genuinely empty response
     """
     final_output = data.get("final_output", {})
 
-    # Check for error_report first
+    # 1. Error report
     if isinstance(final_output, dict) and "error_report" in final_output:
         return f"Error: subagent error — {final_output['error_report']}"
 
-    # Extract last message content (the specialist's output)
+    # 2. Subagent-mode streamlined response (Phase 2: API returns {"result": "..."})
+    if isinstance(final_output, dict) and "result" in final_output:
+        result = final_output["result"]
+        if result:
+            return result
+
+    # 3. final_user_response.md — the canonical concise result artifact
+    artifacts = final_output.get("artifacts", {})
+    if isinstance(artifacts, dict):
+        final_response = artifacts.get("final_user_response.md")
+        if final_response:
+            return final_response
+
+    # 4. Last message content (specialist's output)
     messages = final_output.get("messages", [])
     if messages:
         last_msg = messages[-1]
-        # Messages may be dicts or LangChain message objects serialized
         if isinstance(last_msg, dict):
             content = last_msg.get("content", "")
         elif isinstance(last_msg, str):
@@ -110,17 +120,5 @@ def _extract_result(data: Dict[str, Any]) -> str:
             content = str(last_msg)
         if content:
             return content
-
-    # Fall back to artifacts summary
-    artifacts = final_output.get("artifacts", {})
-    if artifacts:
-        # Return artifact keys and their content (no truncation)
-        parts = []
-        for key, value in artifacts.items():
-            if key in ("user_request", "conversation_id"):
-                continue  # Skip system artifacts
-            parts.append(f"[{key}]: {value}")
-        if parts:
-            return "\n".join(parts)
 
     return "Error: fork returned no result — empty response from subagent"

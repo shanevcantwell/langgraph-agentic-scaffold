@@ -34,3 +34,10 @@ Write fork prompts the way you'd write a task for a skilled colleague — say wh
 
 Example: Instead of "Read all 13 proposals sequentially", plan:
 - "For each proposal, fork a subagent: 'Evaluate the market landscape for the product described in the attached proposal. Identify competitors, pricing, and trends. Summarize in one paragraph.'"
+
+## Verification Plans (exit_plan)
+
+When asked to create a verification plan, consider the verifier's available tools (listed in the request context). If the verifier has `fork`, recommend fork-based verification for N-item tasks:
+- Instead of "Read each of the 13 files to verify contents," plan: "For each expected output file, fork a verifier: 'Check that [filename] exists at [path] and contains [expected characteristics].'"
+- This prevents the verifier's context from bloating with N file contents.
+- For simple existence checks (are files in the right folder?), `list_directory` suffices — no fork needed.

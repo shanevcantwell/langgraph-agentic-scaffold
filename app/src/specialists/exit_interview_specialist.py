@@ -46,6 +46,21 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
         "required": ["path"],
     },
     **ARTIFACT_TOOL_PARAMS,
+    # ADR-CORE-045: fork() for per-item verification
+    "fork": {
+        "type": "object",
+        "properties": {
+            "prompt": {
+                "type": "string",
+                "description": "Verification task for the subagent. E.g., 'Verify that /workspace/reports/Q1.md exists and contains quarterly revenue data.'",
+            },
+            "context": {
+                "type": "string",
+                "description": "Optional context — file path or artifact key the subagent should inspect.",
+            },
+        },
+        "required": ["prompt"],
+    },
     "DONE": {
         "type": "object",
         "properties": {
@@ -240,6 +255,16 @@ class ExitInterviewSpecialist(BaseSpecialist):
             ),
             # Artifact inspection (shared local tools)
             **artifact_tool_defs(),
+            # ADR-CORE-045: fork() for per-item verification
+            "fork": ToolDef(
+                service="las", function="fork",
+                description=(
+                    "Spawn a subagent to verify a single item independently. "
+                    "Use when verifying N items — fork once per item instead "
+                    "of reading all files sequentially in this context."
+                ),
+                is_external=False,
+            ),
             # Termination signal
             "DONE": ToolDef(
                 service="local", function="DONE",
@@ -280,6 +305,14 @@ class ExitInterviewSpecialist(BaseSpecialist):
         tool_def = tools.get(tool_name)
         if not tool_def:
             return f"Error: Unknown tool '{tool_name}'"
+
+        # ADR-CORE-045: fork() — recursive LAS invocation for per-item verification
+        if tool_def.service == "las" and tool_def.function == "fork":
+            from ..mcp.fork import dispatch_fork
+            return dispatch_fork(
+                prompt=tool_args.get("prompt", ""),
+                context=tool_args.get("context"),
+            )
 
         # Local artifact tools
         if not tool_def.is_external:

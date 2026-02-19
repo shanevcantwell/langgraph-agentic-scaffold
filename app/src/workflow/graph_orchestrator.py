@@ -108,6 +108,13 @@ class GraphOrchestrator:
                                          "validated by exit_interview")
                 return CoreSpecialist.END.value
 
+            # ADR-CORE-045: Skip EI for subagent invocations — parent handles verification
+            if state.get("scratchpad", {}).get("subagent"):
+                logger.info("--- GraphOrchestrator: subagent mode, skipping exit_interview. ---")
+                self._record_im_decision(state, "check_task_completion", CoreSpecialist.END.value,
+                                         "subagent mode, skipping EI")
+                return CoreSpecialist.END.value
+
             # Skip EI for conversational specialists with no success criteria
             last_specialist = routing_history[-1] if routing_history else None
             if last_specialist in SpecialistCategories.SKIP_EXIT_INTERVIEW:

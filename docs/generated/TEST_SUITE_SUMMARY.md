@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 75 | 782 |
+| Unit | 75 | 793 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **110** | **1065** |
+| **Total** | **110** | **1076** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1131,8 +1131,8 @@
 
 - **`test_success_extracts_last_message`**
   - *fork returns the last message content from the child invocation.*
-- **`test_subagent_prefix_prepended`**
-  - *fork prepends the subagent marker to the prompt.*
+- **`test_subagent_flag_sent`**
+  - *fork sends subagent: true in request body (not stringly-typed prefix).*
 - **`test_context_passed_as_text_to_process`**
   - *fork passes context as text_to_process in the request body.*
 - **`test_no_context_omits_text_to_process`**
@@ -1143,11 +1143,21 @@
   - *fork returns error string on HTTP error.*
 - **`test_error_report_in_response`**
   - *fork surfaces error_report from child invocation.*
+- **`test_error_report_is_highest_priority`**
+  - *error_report takes priority over everything else.*
+- **`test_subagent_result_key_preferred_over_artifacts`**
+  - *Subagent-mode {"result": "..."} preferred over artifacts.*
+- **`test_final_user_response_preferred_over_messages`**
+  - *final_user_response.md artifact preferred over raw messages.*
 - **`test_extracts_last_message_dict`**
+  - *Falls back to last message when no result key or final_user_response.*
 - **`test_extracts_message_string`**
-- **`test_falls_back_to_artifacts`**
+- **`test_no_artifact_dump`**
+  - *Empty messages with artifacts does NOT dump all artifacts.*
 - **`test_empty_response_returns_error`**
 - **`test_missing_final_output`**
+- **`test_empty_result_key_falls_through`**
+  - *Empty string result key falls through to next fallback.*
 - **`test_fork_in_build_tools`**
   - *fork ToolDef is present in PD's tool table.*
 - **`test_fork_in_tool_params`**
@@ -1156,6 +1166,14 @@
   - *_dispatch_tool_call routes fork to dispatch_fork.*
 - **`test_dispatch_fork_without_context`**
   - *_dispatch_tool_call routes fork correctly when context is omitted.*
+- **`test_fork_in_build_tools`**
+  - *fork ToolDef is present in EI's tool table.*
+- **`test_fork_in_tool_params`**
+  - *fork parameter schema is defined in EI's _TOOL_PARAMS.*
+- **`test_dispatch_routes_fork`**
+  - *_dispatch_tool routes fork to dispatch_fork.*
+- **`test_dispatch_fork_with_context`**
+  - *_dispatch_tool routes fork with context.*
 
 ## `app/tests/unit/test_gemini_adapter.py`
 
@@ -1236,6 +1254,12 @@
   - *Empty triage_actions routes to SA for planning.*
 - **`test_no_triage_actions_routes_to_sa`**
   - *Missing triage_actions in scratchpad routes to SA for planning.*
+- **`test_subagent_skips_ei_on_task_complete`**
+  - *When subagent=True and task_is_complete, route directly to END (skip EI).*
+- **`test_non_subagent_routes_to_ei_on_task_complete`**
+  - *Normal (non-subagent) task_is_complete routes to EI for validation.*
+- **`test_subagent_without_task_complete_does_not_bypass`**
+  - *Subagent mode only bypasses when task_is_complete is True.*
 
 ## `app/tests/unit/test_heap_invariants.py`
 

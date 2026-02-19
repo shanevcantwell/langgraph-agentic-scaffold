@@ -117,7 +117,7 @@ def test_invoke_graph_sync(client, patched_api):
     # Assert
     assert response.status_code == 200
     assert response.json() == {"final_output": {"status": "success"}}
-    patched_api.workflow_runner.run.assert_called_once_with(goal="test prompt", text_to_process=None, image_to_process=None, use_simple_chat=False)
+    patched_api.workflow_runner.run.assert_called_once_with(goal="test prompt", text_to_process=None, image_to_process=None, use_simple_chat=False, subagent=False)
 
 def test_invoke_graph_sync_handles_runner_error(client, patched_api, mocker):
     """Tests that the sync endpoint returns a 500 if the runner fails."""

@@ -189,7 +189,7 @@ class WorkflowRunner:
 
         logger.info("All pre-flight checks passed successfully.")
 
-    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False) -> Dict[str, Any]:
+    def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False, subagent: bool = False) -> Dict[str, Any]:
         """
         Executes the workflow with a given goal.
         """
@@ -199,7 +199,8 @@ class WorkflowRunner:
             goal=goal,
             text_to_process=text_to_process,
             image_to_process=image_to_process,
-            use_simple_chat=use_simple_chat
+            use_simple_chat=use_simple_chat,
+            subagent=subagent,
         )
 
         config = {"recursion_limit": self.recursion_limit}

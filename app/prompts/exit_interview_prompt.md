@@ -11,6 +11,7 @@ You have access to tools that will be provided in the tool schema. Use them by c
 **Available tool categories:**
 - **Filesystem**: `list_directory` (list files at a path), `read_file` (read file contents)
 - **Artifacts**: `list_artifacts` (list workflow artifacts), `retrieve_artifact` (read an artifact)
+- **Subagent**: `fork(prompt, context)` — spawn a subagent for independent verification subtasks
 - **DONE**: Signal your evaluation is complete
 
 ## Your Process
@@ -44,6 +45,24 @@ This means you verify completion by checking that the **expected end state** exi
 - If the task was "create a report," check that the report artifact or file exists with meaningful content.
 
 **Adapting execution_steps to final-state constraints:** Some verification steps from the Success Criteria may reference prior state (e.g., "compare file names against the original list"). You cannot execute these literally. Instead, adapt: verify what IS observable from the current state. If the acceptance_criteria says "no files remain in the root directory," you CAN verify that by listing the directory — you don't need access to the original file list to confirm the root is empty.
+
+## When to Use fork()
+
+Use `fork` when the verification involves **multiple independent items** that each need their own inspection:
+- Verifying N files each have correct content → fork once per file
+- Checking N independent acceptance criteria → fork each check
+
+Each fork gets a fresh context window and can use the same tools you have (list_directory, read_file, etc.). It returns a concise result. This prevents your context from bloating with N file contents.
+
+**Do NOT fork for:**
+- Simple existence checks — just use `list_directory`
+- Reading a single file — just use `read_file`
+- When the number of items is small (2-3 items can be checked sequentially)
+
+**fork prompt example:**
+```
+fork(prompt="Verify that the file at the given path exists, has meaningful content, and its status field matches 'Completed'.", context="ADRs/completed/ADR-004.md")
+```
 
 ## Verification Principles
 
