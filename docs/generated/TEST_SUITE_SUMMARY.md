@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 818 |
+| Unit | 76 | 820 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1101** |
+| **Total** | **111** | **1103** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1182,41 +1182,48 @@
 
 ## `app/tests/unit/test_fork.py`
 
-- **`test_success_extracts_last_message`**
-  - *fork returns the last message content from the child invocation.*
-- **`test_subagent_flag_sent`**
-  - *fork sends subagent: true in request body (not stringly-typed prefix).*
+- **`test_success_returns_final_state`**
+  - *dispatch_fork returns the full final state dict from graph.invoke().*
+- **`test_subagent_flag_in_state`**
+  - *dispatch_fork creates state with subagent=True in scratchpad.*
 - **`test_context_passed_as_text_to_process`**
-  - *fork passes context as text_to_process in the request body.*
+  - *dispatch_fork passes context as text_to_process in artifacts.*
 - **`test_no_context_omits_text_to_process`**
-  - *fork omits text_to_process when no context is provided.*
-- **`test_timeout_returns_error`**
-  - *fork returns error string on timeout.*
-- **`test_http_error_returns_error`**
-  - *fork returns error string on HTTP error.*
-- **`test_error_report_in_response`**
-  - *fork surfaces error_report from child invocation.*
-- **`test_error_report_is_highest_priority`**
-  - *error_report takes priority over everything else.*
-- **`test_subagent_result_key_preferred_over_artifacts`**
-  - *Subagent-mode {"result": "..."} preferred over artifacts.*
-- **`test_final_user_response_preferred_over_messages`**
-  - *final_user_response.md artifact preferred over raw messages.*
-- **`test_extracts_last_message_dict`**
-  - *Falls back to last message when no result key or final_user_response.*
-- **`test_extracts_message_string`**
-- **`test_no_artifact_dump`**
-  - *Empty messages with artifacts does NOT dump all artifacts.*
+  - *dispatch_fork omits text_to_process when no context is provided.*
+- **`test_depth_limit_returns_error`**
+  - *dispatch_fork returns error dict when depth limit reached.*
+- **`test_depth_incremented_in_child_state`**
+  - *dispatch_fork increments fork_depth in child's scratchpad.*
+- **`test_exception_returns_error_dict`**
+  - *dispatch_fork returns error dict on graph.invoke() exception.*
+- **`test_recursion_limit_passed_to_config`**
+  - *dispatch_fork passes recursion_limit in graph config.*
+- **`test_parent_child_registration`**
+  - *dispatch_fork registers parent-child relationship when parent_run_id provided.*
+- **`test_no_registration_without_parent_id`**
+  - *dispatch_fork skips registration when no parent_run_id.*
+- **`test_cleanup_on_success`**
+  - *dispatch_fork clears cancellation state after successful invocation.*
+- **`test_cleanup_on_exception`**
+  - *dispatch_fork clears cancellation state even when graph.invoke() raises.*
+- **`test_error_key_is_highest_priority`**
+  - *Error dict from dispatch_fork takes priority.*
+- **`test_final_user_response_is_canonical`**
+  - *final_user_response.md artifact is the canonical result.*
+- **`test_error_report_from_scratchpad`**
+  - *Error report in scratchpad surfaces when no final_user_response.*
+- **`test_last_message_fallback`**
+  - *Falls back to last message when no artifacts or errors.*
 - **`test_empty_response_returns_error`**
-- **`test_missing_final_output`**
-- **`test_empty_result_key_falls_through`**
-  - *Empty string result key falls through to next fallback.*
+  - *Empty state returns error.*
+- **`test_missing_keys_returns_error`**
+  - *Minimal dict with no useful content returns error.*
 - **`test_fork_in_build_tools`**
   - *fork ToolDef is present in PD's tool table.*
 - **`test_fork_in_tool_params`**
   - *fork parameter schema is defined.*
 - **`test_dispatch_routes_fork`**
-  - *_dispatch_tool_call routes fork to dispatch_fork.*
+  - *_dispatch_tool_call routes fork to dispatch_fork with compiled_graph.*
 - **`test_dispatch_fork_without_context`**
   - *_dispatch_tool_call routes fork correctly when context is omitted.*
 - **`test_fork_in_build_tools`**
@@ -1224,7 +1231,7 @@
 - **`test_fork_in_tool_params`**
   - *fork parameter schema is defined in EI's _TOOL_PARAMS.*
 - **`test_dispatch_routes_fork`**
-  - *_dispatch_tool routes fork to dispatch_fork.*
+  - *_dispatch_tool routes fork to dispatch_fork with compiled_graph.*
 - **`test_dispatch_fork_with_context`**
   - *_dispatch_tool routes fork with context.*
 
@@ -1307,8 +1314,8 @@
   - *Empty triage_actions routes to SA for planning.*
 - **`test_no_triage_actions_routes_to_sa`**
   - *Missing triage_actions in scratchpad routes to SA for planning.*
-- **`test_subagent_skips_ei_on_task_complete`**
-  - *When subagent=True and task_is_complete, route directly to END (skip EI).*
+- **`test_subagent_routes_to_ei_on_task_complete`**
+  - *When subagent=True and task_is_complete, route to EI (same as non-subagent).*
 - **`test_non_subagent_routes_to_ei_on_task_complete`**
   - *Normal (non-subagent) task_is_complete routes to EI for validation.*
 - **`test_subagent_without_task_complete_does_not_bypass`**

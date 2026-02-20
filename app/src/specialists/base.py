@@ -27,6 +27,7 @@ class BaseSpecialist(ABC):
         self.specialist_config = specialist_config
         self.llm_adapter: Optional[BaseAdapter] = None
         self.mcp_client: Optional['McpClient'] = None  # TASK 2.5: Injected by GraphBuilder
+        self._compiled_graph = None  # ADR-CORE-045: Injected by WorkflowRunner for fork()
         self.is_enabled = self.specialist_config.get("is_enabled", True)
 
     @abstractmethod

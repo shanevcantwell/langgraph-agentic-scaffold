@@ -450,13 +450,13 @@ class TestCheckTriageOutcome:
 
 class TestSubagentEIBypass:
     """
-    ADR-CORE-045: Subagent invocations skip Exit Interview — the parent
-    handles completion verification. check_task_completion routes directly
-    to END when scratchpad["subagent"] is True.
+    ADR-CORE-045: Subagent invocations run full LAS pipeline including EI.
+    "LAS as a call has to be all of LAS." Only Archiver disk write is
+    suppressed via the subagent flag — EI still validates completion.
     """
 
-    def test_subagent_skips_ei_on_task_complete(self, orchestrator_instance):
-        """When subagent=True and task_is_complete, route directly to END (skip EI)."""
+    def test_subagent_routes_to_ei_on_task_complete(self, orchestrator_instance):
+        """When subagent=True and task_is_complete, route to EI (same as non-subagent)."""
         state = create_test_state(
             task_is_complete=True,
             scratchpad={"subagent": True},
@@ -464,7 +464,7 @@ class TestSubagentEIBypass:
         )
 
         result = orchestrator_instance.check_task_completion(state)
-        assert result == CoreSpecialist.END.value
+        assert result == CoreSpecialist.EXIT_INTERVIEW.value
 
     def test_non_subagent_routes_to_ei_on_task_complete(self, orchestrator_instance):
         """Normal (non-subagent) task_is_complete routes to EI for validation."""

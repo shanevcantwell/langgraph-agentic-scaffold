@@ -66,6 +66,7 @@ class WorkflowRunner:
         # See checkpoint_manager.py docstring for architectural distinction.
         self.checkpointer = None
         self.app = self.builder.build(checkpointer=None)
+        self._inject_compiled_graph()
 
         logger.info("WorkflowRunner initialized (async checkpointer will be set in lifespan)")
 
@@ -81,6 +82,7 @@ class WorkflowRunner:
         """
         self.checkpointer = checkpointer
         self.app = self.builder.build(checkpointer=self.checkpointer)
+        self._inject_compiled_graph()
 
         if self.checkpointer:
             logger.info(f"WorkflowRunner: async checkpointer set ({type(self.checkpointer).__name__})")
@@ -110,6 +112,7 @@ class WorkflowRunner:
         # ADR-CORE-018: Re-initialize checkpointer on reload
         self.checkpointer = get_checkpointer(self.config)
         self.app = self.builder.build(checkpointer=self.checkpointer)
+        self._inject_compiled_graph()
         logger.info("WorkflowRunner successfully reloaded.")
 
     def _perform_pre_flight_checks(self):
@@ -188,6 +191,17 @@ class WorkflowRunner:
             self.builder.adapter_factory.refresh_pool_manifests()
 
         logger.info("All pre-flight checks passed successfully.")
+
+    def _inject_compiled_graph(self):
+        """
+        ADR-CORE-045: Inject compiled graph reference into specialists that use fork().
+
+        Specialists need direct access to the compiled graph for in-process
+        subagent invocation via dispatch_fork() → graph.invoke().
+        Called after every graph (re)build.
+        """
+        for specialist in self.specialists.values():
+            specialist._compiled_graph = self.app
 
     def run(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False, subagent: bool = False, run_id: str = None) -> Dict[str, Any]:
         """

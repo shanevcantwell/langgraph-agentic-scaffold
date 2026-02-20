@@ -171,6 +171,8 @@ class ProjectDirector(BaseSpecialist):
 
         # #203: Read run_id for fork cancellation propagation and mid-loop checks
         run_id = state.get("run_id")
+        # ADR-CORE-045: Read fork depth for recursion limit enforcement
+        fork_depth = state.get("scratchpad", {}).get("fork_depth", 0)
 
         # ADR-076: Snapshot artifacts for mid-execution read/write.
         # write_artifact mutates this snapshot; it propagates on return.
@@ -238,7 +240,8 @@ class ProjectDirector(BaseSpecialist):
                     tool_name = tc.get("name", "unknown")
                     tool_args = tc.get("args", {})
                     observation = self._dispatch_tool_call(
-                        tc, tools, successful_paths, captured_artifacts, run_id
+                        tc, tools, successful_paths, captured_artifacts,
+                        run_id=run_id, fork_depth=fork_depth,
                     )
 
                     trace.append({
@@ -286,6 +289,7 @@ class ProjectDirector(BaseSpecialist):
         successful_paths: List[str],
         captured_artifacts: dict,
         run_id: str | None = None,
+        fork_depth: int = 0,
     ) -> str:
         """Dispatch a single pending tool call to the appropriate MCP service."""
         tool_name = pending.get("name", "")
@@ -314,12 +318,15 @@ class ProjectDirector(BaseSpecialist):
 
         # fork() — recursive LAS invocation (ADR-045)
         if tool_def.service == "las" and tool_def.function == "fork":
-            from ..mcp.fork import dispatch_fork
-            return dispatch_fork(
+            from ..mcp.fork import dispatch_fork, extract_fork_result
+            child_state = dispatch_fork(
+                compiled_graph=self._compiled_graph,
                 prompt=tool_args.get("prompt", ""),
                 context=tool_args.get("context"),
                 parent_run_id=run_id,
+                fork_depth=fork_depth,
             )
+            return extract_fork_result(child_state)
 
         # Local artifact tools (ADR-076)
         if tool_def.service == "local":

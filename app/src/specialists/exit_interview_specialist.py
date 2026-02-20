@@ -125,6 +125,8 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
         # #203: Read run_id for fork cancellation propagation
         run_id = state.get("run_id")
+        # ADR-CORE-045: Read fork depth for recursion limit enforcement
+        fork_depth = state.get("scratchpad", {}).get("fork_depth", 0)
 
         # Snapshot artifacts for local tool dispatch
         captured_artifacts = artifacts.copy()
@@ -139,7 +141,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
         evaluation = self._verify(
             user_request, exit_plan, routing_history, artifacts, captured_artifacts,
-            run_id=run_id,
+            run_id=run_id, fork_depth=fork_depth,
         )
 
         logger.info(
@@ -161,6 +163,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
         artifacts: dict,
         captured_artifacts: dict,
         run_id: str | None = None,
+        fork_depth: int = 0,
     ) -> CompletionEvaluation:
         """Run the react_step verification loop."""
         tools = self._build_tools()
@@ -210,7 +213,10 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     evaluation = self._parse_done_args(tool_args)
                     break
 
-                observation = self._dispatch_tool(tool_name, tool_args, tools, captured_artifacts, run_id)
+                observation = self._dispatch_tool(
+                    tool_name, tool_args, tools, captured_artifacts,
+                    run_id=run_id, fork_depth=fork_depth,
+                )
                 trace.append({
                     "iteration": iteration,
                     "tool_call": {"id": tc.get("id", ""), "name": tool_name, "args": tool_args},
@@ -315,6 +321,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
         self, tool_name: str, tool_args: dict,
         tools: Dict[str, ToolDef], captured_artifacts: dict,
         run_id: str | None = None,
+        fork_depth: int = 0,
     ) -> str:
         """Route a tool call to the appropriate handler."""
         tool_def = tools.get(tool_name)
@@ -323,12 +330,15 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
         # ADR-CORE-045: fork() — recursive LAS invocation for per-item verification
         if tool_def.service == "las" and tool_def.function == "fork":
-            from ..mcp.fork import dispatch_fork
-            return dispatch_fork(
+            from ..mcp.fork import dispatch_fork, extract_fork_result
+            child_state = dispatch_fork(
+                compiled_graph=self._compiled_graph,
                 prompt=tool_args.get("prompt", ""),
                 context=tool_args.get("context"),
                 parent_run_id=run_id,
+                fork_depth=fork_depth,
             )
+            return extract_fork_result(child_state)
 
         # Local artifact tools
         if not tool_def.is_external:
