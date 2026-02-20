@@ -332,14 +332,14 @@ def test_tiered_chat_graceful_degradation_alpha_only(self):
 ### Running Tests
 
 ```bash
-# Run all integration tests
-docker compose exec app python -m pytest app/tests/integration/ -v
+# Run all integration tests (NEVER use docker compose run — creates zombie containers)
+docker exec langgraph-app pytest app/tests/integration/ -v
 
 # Run specific test file
-docker compose exec app python -m pytest app/tests/integration/test_mcp_service_integration.py -v
+docker exec langgraph-app pytest app/tests/integration/test_mcp_service_integration.py -v
 
 # Run specific test function
-docker compose exec app python -m pytest app/tests/integration/test_mcp_service_integration.py::TestMcpServiceIntegration::test_file_reader_service_registers_correctly -v
+docker exec langgraph-app pytest app/tests/integration/test_mcp_service_integration.py::TestMcpServiceIntegration::test_file_reader_service_registers_correctly -v
 ```
 
 ### Debugging Failed Tests
@@ -503,7 +503,7 @@ When writing a new integration test, verify:
 1. **Choose a feature** to add integration tests for (see priorities below)
 2. **Create test file** in `app/tests/integration/`
 3. **Write tests** following patterns in this guide
-4. **Run tests** locally: `docker compose exec app python -m pytest app/tests/integration/your_test.py -v`
+4. **Run tests** in Docker: `docker exec langgraph-app pytest app/tests/integration/your_test.py -v`
 5. **Debug failures** using verbose output and logs
 6. **Commit tests** with descriptive commit message
 

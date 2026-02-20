@@ -1,5 +1,7 @@
 # LAS v1.0 Release Preparation
 
+> **Historical document.** Written during Bedrock-era planning. Some references (ReActMixin, `docker compose run`, test counts) are outdated. Kept for release process reference.
+>
 > Pre-LAP release to establish clean baseline on GitHub.
 
 ---
@@ -66,7 +68,7 @@ docs/
 | Task | Status | Notes |
 |------|--------|-------|
 | Flow integration tests | ✅ | test_flows.py - zero-mock API tests |
-| Run full suite in Docker | ⬜ | `docker compose run --rm app pytest` |
+| Run full suite in Docker | ⬜ | `docker exec langgraph-app pytest` (NEVER use `docker compose run`) |
 | Fix failures | ⬜ | |
 | Verify test count (~1000) | ⬜ | |
 
@@ -110,11 +112,11 @@ docs/
 # 1. Ensure clean working directory
 git status
 
-# 2. Run full test suite
-docker compose run --rm app pytest
+# 2. Run full test suite (NEVER use docker compose run — creates zombie containers)
+docker exec langgraph-app pytest
 
 # 3. Run flow tests specifically
-docker compose run --rm app pytest app/tests/integration/test_flows.py -v
+docker exec langgraph-app pytest app/tests/integration/test_flows.py -v
 
 # 4. Update version (if applicable)
 # pyproject.toml version field

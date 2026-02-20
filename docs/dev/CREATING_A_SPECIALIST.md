@@ -6,7 +6,7 @@ This guide provides a detailed, step-by-step walkthrough for creating a new "Spe
 
 ## Introduction: What is a Specialist?
 
-A Specialist is a modular, reusable component responsible for a single, well-defined task. Think of it as a worker with a specific skill. For example, we have a `FileSpecialist` that knows how to read and write files, and a `WebBuilderSpecialist` that can generate HTML.
+A Specialist is a modular, reusable component responsible for a single, well-defined task. Think of it as a worker with a specific skill. For example, we have a `ProjectDirector` that manages filesystem operations via ReAct tool loops, and a `WebBuilderSpecialist` that can generate HTML.
 
 By creating new Specialists, you can extend the capabilities of the system to perform new tasks.
 
@@ -417,5 +417,5 @@ That's it! You have successfully created a new specialist agent. The `GraphBuild
 For more advanced patterns, see [SPECIALIST_PATTERNS.md](SPECIALIST_PATTERNS.md):
 - **Internal Iteration** - Processing collections without graph-level loops
 - **Procedural Specialists** - Deterministic execution without LLM (see [FACILITATOR.md](../specialists/FACILITATOR.md) for a working example)
-- **ReActMixin** - Iterative tool use with LLM-driven loops
+- **react_step MCP** - Iterative tool use with LLM-driven loops via prompt-prix
 - **External MCP Integration** - Connecting to Docker containers

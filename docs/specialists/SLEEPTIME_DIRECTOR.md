@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the SleeptimeDirector's role as a background orchestration agent.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-12
+**Updated:** 2026-02-20
 **Status:** Design Profile — not yet implemented. Tier 1/2 eval scripts written (uncommitted). Grounded in smoke-tested infrastructure.
 
 ---
@@ -27,10 +27,10 @@ Key characteristics:
 ```
 Main Graph (user-facing)              Sleeptime (background)
 ─────────────────────────             ──────────────────────
-Triage → Facilitator → Router         SleeptimeDirector
+SA → Triage → Facilitator → Router    SleeptimeDirector
     → Specialist → EI → Archive           ↓
          ↑                            Uses LAS as a tool
-         │                            (POST /v1/graph/invoke)
+         │                            (graph.invoke() — in-process)
     User request                           ↓
                                       Produces ranking artifacts
                                       for human review
@@ -140,25 +140,21 @@ Uses prompt-prix MCP's `react_step` in tool-forwarding mode. The director mediat
 
 ### Tier 3 Execution: Full LAS Integration
 
-Calls `POST /v1/graph/invoke` with test prompt and model override:
+Calls `graph.invoke()` in-process with test prompt and model override. The compiled LangGraph is reentrant — each invocation creates independent execution state. Children run full LAS (SA → Triage → Facilitator → Router → Specialist → EI), with only Archiver disk write suppressed via the subagent flag.
 
 ```python
 async def _run_tier3(self, test_case: dict, model_id: str) -> dict:
-    response = await self.http_client.post(
-        "http://localhost:8000/v1/graph/invoke",
-        json={
-            "input_prompt": test_case["user_request"],
-            "config_overrides": {
-                f"specialists.{self.specialist_role}.model": model_id
-            }
-        }
+    from ..mcp.fork import dispatch_fork
+    child_state = dispatch_fork(
+        compiled_graph=self._compiled_graph,
+        prompt=test_case["user_request"],
+        # config_overrides for model binding TBD
     )
-    return response.json()
+    return child_state
 ```
 
 **Dependencies (not yet built):**
-- `CompletionResult` schema on API response
-- Model binding override on `/v1/graph/invoke`
+- Model binding override on `dispatch_fork()` / `graph.invoke()`
 - Sandbox fixture management per run
 
 ### Output: Ranking Artifacts
@@ -376,7 +372,6 @@ async def run_tournament(config: TournamentConfig):
 | Tier 1 shell wrapper | **Written** | `scripts/run_tier1_battery.sh` (uncommitted, shelved for #170) |
 | Tier 2 eval runner | **Written** | `scripts/run_tier2_eval.py` (uncommitted, shelved for #170) |
 | 13-file benchmark | **Written** | `tests/prompt-prix/react_file_categorization_13_benchmark.json` (uncommitted) |
-| `CompletionResult` schema | **Not built** | Needed for Tier 3 only |
 | Model override on invoke | **Not built** | Needed for Tier 3 only |
 | react_step tool-forwarding | **Built & validated** | prompt-prix `mock_tools=None` returns `pending_tool_calls` |
 

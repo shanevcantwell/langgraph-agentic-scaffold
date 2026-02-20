@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Exit Interview specialist's role as the verification gate before END.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-18 (ADR-045: fork() for per-item verification, subagent mode bypasses EI; ADR-077: signal processor)
+**Updated:** 2026-02-20 (ADR-045: fork() via direct graph.invoke(), subagents run full LAS including EI; ADR-077: signal processor)
 
 ---
 
@@ -31,8 +31,6 @@ Specialist sets task_is_complete = True
 check_task_completion (graph_orchestrator.py)
     |
     [EI just validated?] --- YES --> END
-    |
-    [scratchpad["subagent"]?] --- YES --> END (ADR-045: parent verifies)
     |
     [Last specialist in SKIP_EXIT_INTERVIEW?]
     |-- YES --> END (default_responder, chat, tiered_synthesizer)
@@ -159,9 +157,9 @@ This is conservative by design — the cost of one more routing cycle is much lo
 
 `fork` spawns a subagent LAS invocation to verify a single item independently. Use fork when verifying N independent items that each require inspection — fork once per item instead of reading all files sequentially in EI's context.
 
-Each fork child runs the full pipeline (Triage → SA → Router → Specialist) but in **subagent mode**: EI and Archiver are skipped in the child, and the API returns a concise `{"result": "..."}` response. This prevents:
+Each fork child runs the **full LAS pipeline** (SA → Triage → Router → Specialist → EI → EndSpecialist) via direct `graph.invoke()` — the only difference is **Archiver skips disk write** (no `.zip` archive for children). The child's EI validates the subtask was completed correctly before returning. `dispatch_fork()` returns the child's full final state dict; `extract_fork_result()` extracts the canonical result string. This prevents:
 - **Context death spiral** — EI reading N files sequentially bloats to 30K+ tokens of prompt per react_step call
-- **Wrong-item verification** — the child's own EI expanding scope and verifying a different item than requested
+- **Unverified subtask results** — each child's EI validates its own work before the result surfaces to the parent
 
 SA automatically sees fork in EI's tool inventory when generating `exit_plan`, and can recommend fork-based verification for N-item tasks.
 
@@ -513,7 +511,7 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 The Exit Interview is a **react_step verification agent** that:
 
 1. Receives `task_is_complete=True` from a specialist, or is routed by SignalProcessor (BENIGN, circuit breaker, normal completion)
-2. **Skipped in subagent mode** (ADR-045) — fork() children bypass EI; the parent handles completion verification
+2. **Runs in subagent mode too** (ADR-045) — fork() children run full LAS including EI; only Archiver disk write is skipped
 3. Lazy-creates an `exit_plan` via SA MCP with verification steps tailored to EI's tool capabilities (including fork)
 4. Runs a react_step loop to inspect the filesystem and artifacts using real tools
 5. Uses **fork() for per-item verification** (ADR-045) — spawns subagents to verify N items independently instead of reading all files sequentially

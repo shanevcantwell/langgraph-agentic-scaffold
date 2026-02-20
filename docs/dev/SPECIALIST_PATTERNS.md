@@ -5,7 +5,7 @@ This document covers advanced patterns for specialist development. For the basic
 **Contents:**
 - [Internal Iteration with MCP](#internal-iteration-with-mcp) - Processing collections atomically
 - [Procedural Specialists](#procedural-specialists) - Deterministic execution without LLM
-- [ReActMixin](#reactmixin-for-iterative-tool-use) - LLM-driven iterative tool loops
+- [react_step MCP](#react_step-mcp-for-iterative-tool-use) - LLM-driven iterative tool loops via prompt-prix
 - [External MCP Integration](#external-mcp-integration-pattern) - Connecting to Docker containers
 
 ---
@@ -379,146 +379,93 @@ class OpenInterpreterSpecialist(BaseSpecialist):
 
 ---
 
-## ReActMixin for Iterative Tool Use
+## react_step MCP for Iterative Tool Use
 
-The **ReActMixin** enables specialists to perform ReAct-style loops where the LLM iteratively calls tools until it produces a final answer. This is distinct from BatchProcessor (LLM plans once, procedural execution) and graph routing (each tool call is a separate node).
+The **react_step MCP pattern** enables specialists to perform ReAct-style loops where the LLM iteratively calls tools until it produces a final answer. This is distinct from BatchProcessor (LLM plans once, procedural execution) and graph routing (each tool call is a separate node).
 
-ReActMixin keeps the loop internal to a single specialist execution, ideal for:
-- Tight iteration with visual tools (Fara)
-- Debugging workflows
-- Scenarios where LLM needs to see tool results and decide next steps
+The loop runs internal to a single specialist execution. Any specialist becomes ReAct-capable by defining a tool routing table and looping on `call_react_step()`.
 
-**ADR-CORE-051 Update:** ReAct capability is now **config-driven**. Instead of inheriting from ReActMixin, specialists can enable ReAct via config:
+**History:** The former ~1700-line `ReActMixin` / `ReactEnabledSpecialist` / `react_wrapper.py` was replaced by prompt-prix MCP's `react_step()` primitive (Phase 5, #162). -1720 lines net.
 
-```yaml
-specialists:
-  my_specialist:
-    type: "llm"
-    react:
-      enabled: true
-      max_iterations: 10
-      stop_on_error: false
+### Shared Helper Pattern
+
+`app/src/mcp/react_step.py` provides the building blocks:
+
+```python
+from app.src.mcp.react_step import ToolDef, call_react_step, build_tool_schemas, dispatch_external_tool
 ```
+
+| Helper | Purpose |
+|--------|---------|
+| `ToolDef` | Tool definition (name, description, parameters schema) |
+| `build_tool_schemas()` | Build JSON schemas from ToolDefs for the LLM |
+| `call_react_step()` | Call prompt-prix MCP `react_step` tool |
+| `dispatch_external_tool()` | Execute a tool call against the appropriate MCP service |
 
 ### Basic Usage
 
 ```python
-from app.src.specialists.base import BaseSpecialist
-from app.src.specialists.mixins import ToolDef, MaxIterationsExceeded, ReActIteration
-
 class MyAgenticSpecialist(BaseSpecialist):
-    # Note: ReActMixin methods are injected by GraphBuilder when react.enabled: true
-
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
-        # Define available tools (MCP services)
-        tools = {
-            "screenshot": ToolDef(service="fara", function="screenshot"),
-            "verify": ToolDef(service="fara", function="verify_element"),
-            "click": ToolDef(service="fara", function="click"),
+        # 1. Define tool routing table
+        tool_routing = {
+            "list_directory": ("filesystem", "list_directory"),
+            "read_file": ("filesystem", "read_file"),
+            "run_command": ("terminal", "run_command"),
         }
 
-        # Build a task prompt string (ADR-CORE-055: uses task_prompt, not messages)
-        task_prompt = self._build_task_prompt(state)
+        # 2. Build tool schemas for the LLM
+        tool_schemas = build_tool_schemas(tool_routing, self.external_mcp_client)
 
-        try:
-            final_response, trace = self.execute_with_tools(
-                task_prompt=task_prompt,  # String, not List[BaseMessage]
-                tools=tools,
-                max_iterations=15
+        # 3. Loop: call react_step, dispatch tools, feed observations back
+        trace = []
+        for iteration in range(max_iterations):
+            result = call_react_step(
+                mcp_client=self.external_mcp_client,
+                prompt=task_prompt,
+                tool_schemas=tool_schemas,
+                trace=trace,
             )
-        except MaxIterationsExceeded as e:
-            # Handle runaway loops
-            return {
-                "messages": [AIMessage(content=f"Task incomplete after {e.iterations} iterations")],
-                "artifacts": {"react_trace": [step.model_dump() for step in e.history]}
-            }
 
-        # trace is List[ReActIteration] - the canonical record
-        return {
-            "artifacts": {"react_trace": [step.model_dump() for step in trace]},
-            "messages": [AIMessage(content=final_response)]
-        }
+            if result.get("completed"):
+                return {
+                    "artifacts": {"final_response": result["final_response"]},
+                    "scratchpad": {"task_is_complete": True},
+                }
+
+            # Dispatch pending tool calls
+            for tool_call in result.get("pending_tool_calls", []):
+                observation = dispatch_external_tool(
+                    self.external_mcp_client, tool_call, tool_routing
+                )
+                trace.append({"tool_call": tool_call, "observation": observation})
 ```
 
-### How It Works (ADR-CORE-055: Trace-Based Serialization)
+### How It Works
 
-1. **Build task prompt** from state/artifacts (string, not messages)
-2. **Serialize messages** from trace: `_serialize_for_provider(goal, trace)` rebuilds the full message chain
-3. **Send to LLM** with tool definitions
-4. **If LLM returns tool_calls**: Execute via MCP, record in `ReActIteration`, loop back
-5. **If LLM returns text** (no tool_calls): Return as final response
+1. **Build tool schemas** from the specialist's tool routing table
+2. **Call `react_step`** on prompt-prix MCP with the task prompt and accumulated trace
+3. **prompt-prix makes the LLM call** — returns either `completed=True` with a final response, or `pending_tool_calls`
+4. **Specialist dispatches tool calls** to the appropriate MCP services (filesystem, terminal, etc.)
+5. **Append observations** to trace and loop back to step 2
 
-**Key insight:** Messages are rebuilt fresh each iteration from the canonical trace. This ensures the LLM sees its own reasoning (AIMessage with tool_calls) before observing results (ToolMessage). Without this, open-weights models may "forget" their reasoning chain and fail to progress.
+### Current Consumers
 
-### ReActIteration (Canonical Trace Record)
+| Specialist | Tools | Purpose |
+|-----------|-------|---------|
+| `ProjectDirector` | filesystem, terminal, fork | Filesystem operations, research, subtask delegation |
+| `TextAnalysisSpecialist` | semantic-chunker, it-tools, filesystem | Semantic analysis, data processing |
+| `ExitInterviewSpecialist` | filesystem | Completion verification with tool access |
 
-```python
-class ReActIteration(BaseModel):
-    """One iteration of the ReAct loop."""
-    iteration: int          # 0-indexed iteration number
-    tool_call: ToolCall     # What tool was called and with what args
-    observation: str        # Result from tool execution
-    success: bool           # Whether tool execution succeeded
-    thought: Optional[str]  # LLM's reasoning (if extracted)
-```
+### Stagnation Detection
 
-### Tool Definitions
+PD's `_check_stagnation()` detects when the LLM repeats the same tool call pattern `CYCLE_MIN_REPETITIONS` times (default: 3). This catches both identical calls and cyclic patterns.
 
-```python
-class ToolDef(BaseModel):
-    service: str   # MCP service name (e.g., 'fara', 'file_specialist')
-    function: str  # Function within the service
-    description: Optional[str]  # For LLM context
+### Termination Protocol
 
-# Example
-tools = {
-    "read_file": ToolDef(
-        service="file_specialist",
-        function="read_file",
-        description="Read contents of a file"
-    ),
-    "list_dir": ToolDef(
-        service="navigator_specialist",
-        function="list_directory",
-        description="List directory contents"
-    ),
-}
-```
+**Critical:** When using JSON schema with logit masking (LM Studio grammar enforcement), the prompt's termination instructions MUST reference the `DONE` action variant — never "respond without tools" or "return plain text." The grammar physically forces an action on every response; the model must use `DONE` to exit the loop.
 
-### Error Handling
-
-```python
-# Fail fast on first error
-final_response, trace = self.execute_with_tools(
-    task_prompt=task_prompt,
-    tools=tools,
-    stop_on_error=True  # Raises ToolExecutionError
-)
-
-# Or continue and report errors to LLM
-final_response, trace = self.execute_with_tools(
-    task_prompt=task_prompt,
-    tools=tools,
-    stop_on_error=False  # Default: LLM sees error in observation, may retry
-)
-```
-
-### Stagnation Detection (Cycle Prevention)
-
-The ReAct loop includes automatic cycle detection via `_check_stagnation()`. If the same tool call pattern repeats `CYCLE_MIN_REPETITIONS` times (default: 3), a `StagnationDetected` exception is raised.
-
-```python
-from app.src.specialists.mixins import StagnationDetected
-
-try:
-    final_response, trace = self.execute_with_tools(task_prompt, tools)
-except StagnationDetected as e:
-    # LLM is stuck in a loop (e.g., read→read→read without progressing)
-    return {
-        "messages": [AIMessage(content=f"Task stalled: {e.message}")],
-        "artifacts": {"react_trace": [step.model_dump() for step in e.history]}
-    }
-```
+See CONFIGURATION_GUIDE.md § 6.0 for max_iterations and stagnation configuration.
 
 ---
 

@@ -37,12 +37,11 @@ The `report.md` file uses smart formatting for key artifacts (see [state_pruner.
 
 | Artifact | Format |
 |----------|--------|
-| `research_trace_N` | Numbered tool call log with iteration, tool, args summary, result preview |
 | `exit_interview_result` | Structured fields: Status, Method, Reasoning, Missing, Recommended |
-| `project_context` | Structured fields: State, Summary, Next steps |
-| `context_plan`, `system_plan` | Pretty-printed JSON |
-| Other dicts/lists | JSON (truncated at 2000 chars) |
-| Strings | Code fence (truncated at 5000 chars) |
+| `task_plan`, `context_plan`, `system_plan` | Pretty-printed JSON |
+| `specialist_activity` | Human-readable activity log |
+| Other dicts/lists | JSON |
+| Strings | Code fence |
 
 ---
 
@@ -184,44 +183,31 @@ grep -i "error\|exception" ./logs/agentic_server.log | tail -20
 
 **Known issue:** UI Abort does not trigger archiver - the workflow simply stops without preserving state.
 
-### 7. ReactEnabledSpecialist missing attribute error
+### 7. react_step MCP tool call failures
 
-**Symptom:** `AttributeError: 'MySpecialist' object has no attribute '_serialize_for_provider'` (or `_check_stagnation`, `_trace_to_tool_result`, etc.)
+**Symptom:** Specialist's ReAct loop produces errors or unexpected behavior when calling tools.
 
-**Cause:** When ReAct is enabled via config (`react: enabled: true`), `ReactEnabledSpecialist` ([react_wrapper.py](../../app/src/workflow/react_wrapper.py)) injects ReActMixin methods onto the specialist at runtime. If new methods are added to ReActMixin, the injection list must also be updated.
+**Cause:** The react_step MCP pattern delegates LLM calls to prompt-prix and dispatches tool calls locally. Common issues:
+- Tool routing table mismatch (specialist declares tools that aren't connected)
+- `CallToolResult` parsing failure (use `extract_text_from_mcp_result()` from `app/src/mcp/utils.py`)
+- prompt-prix MCP container not running
 
 **Diagnosis:**
 ```bash
-# Check the injection list in react_wrapper.py
-grep -A 15 "methods_to_inject" app/src/workflow/react_wrapper.py
+# Check prompt-prix MCP is reachable
+docker exec langgraph-app python -c "from app.src.mcp.utils import extract_text_from_mcp_result; print('OK')"
+
+# Check which tools a specialist declares
+grep -A 10 "tool_routing" app/src/specialists/project_director.py
 ```
 
-**Fix:** Ensure `methods_to_inject` in [react_wrapper.py](../../app/src/workflow/react_wrapper.py) includes all methods called by `execute_with_tools()`:
+**Shared helper:** `app/src/mcp/react_step.py` provides `ToolDef` + `call_react_step` + `build_tool_schemas` + `dispatch_external_tool`. Any specialist becomes ReAct-capable by defining a tool routing table and looping on `call_react_step()`.
 
-```python
-methods_to_inject = [
-    'execute_with_tools',
-    '_build_tool_schemas',
-    '_execute_tool',
-    '_format_tool_result_message',
-    '_compute_call_signature',      # Stagnation detection
-    '_serialize_for_provider',      # ADR-CORE-055: trace-based serialization
-    '_check_stagnation',            # ADR-CORE-055: cycle detection
-    '_trace_to_tool_result',        # ADR-CORE-055: trace conversion
-]
-```
+**Current ReAct consumers:** ProjectDirector (filesystem/terminal/fork), TextAnalysisSpecialist (semantic-chunker/it-tools), ExitInterview (filesystem/artifact tools).
 
-Also check class attributes are injected:
-```python
-attributes_to_inject = [
-    'CYCLE_MIN_REPETITIONS',  # Stagnation threshold
-    'TOOL_PARAMETERS',        # MCP tool schema cache
-]
-```
+**Note:** The former `ReActMixin` / `ReactEnabledSpecialist` / `react_wrapper.py` were deleted (Phase 5, #162). If you see references to these in old code, they are stale.
 
-**Current ReAct consumers:** ProjectDirector (filesystem/terminal), TextAnalysisSpecialist (data ops). TextAnalysisSpecialist absorbed DataExtractorSpecialist and DataProcessorSpecialist (commit `0c121ce`).
-
-**Related:** ADR-CORE-055 (trace-based ReAct serialization)
+**Related:** See [SPECIALIST_PATTERNS.md](SPECIALIST_PATTERNS.md) for the current react_step MCP pattern.
 
 ---
 
@@ -382,6 +368,8 @@ User Request
     ↓
 TriageArchitect → Creates ContextPlan (actions + recommended_specialists)
     ↓
+SystemsArchitect → Produces task_plan (with acceptance_criteria)
+    ↓
 Facilitator → Executes actions, produces gathered_context artifact
     ↓
 Router → Sees gathered_context, routes to specialist
@@ -412,7 +400,7 @@ unzip -p <archive.zip> final_state.json | jq '.artifacts.gathered_context'
 unzip -p <archive.zip> final_state.json | jq '.artifacts | has("gathered_context")'
 ```
 
-**Deep dive:** See [FACILITATOR.md](../specialist_profiles/FACILITATOR.md) for complete details on context gathering.
+**Deep dive:** See [FACILITATOR.md](../specialists/FACILITATOR.md) for complete details on context gathering.
 
 ---
 

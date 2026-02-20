@@ -195,7 +195,7 @@ LangSmith traces show parallel execution visually:
 
 ### 2.3. Setting the Entry Point and Compiling
 
-1.  **Entry Point:** The graph's entry point is set to the value from `workflow.entry_point` in `config.yaml` (which defaults to `router_specialist`).
+1.  **Entry Point:** The graph's entry point is set via the Context Engineering subgraph — currently `triage_architect` (via `ContextEngineeringSubgraph`), which flows through SA → Facilitator → Router (#199).
 
 2.  **Compilation:** Finally, `workflow.compile()` is called. This returns the immutable, compiled `LangGraph` application, ready to process requests.
 
@@ -229,37 +229,29 @@ graph TD
 
 ## Context Engineering Subgraph
 
-The workflow begins with the **Context Engineering** phase, designed to gather context or clarify intent before the main routing loop.
+The workflow begins with the **Context Engineering** phase (#199), designed to gather context and plan before the main routing loop.
 
 ```
 User Query
     ↓
-TriageArchitect (Generates ContextPlan)
+TriageArchitect (Generates ContextPlan — ACCEPT/REJECT gate)
     ↓
 check_triage_outcome (Decider)
-    ├─→ FacilitatorSpecialist (Execute Plan) → RouterSpecialist
-    ├─→ EndSpecialist (Clarification Needed / ASK_USER)
-    └─→ RouterSpecialist (No Context Needed)
+    ├─→ SystemsArchitect (Produces task_plan with acceptance_criteria)
+    │       ↓
+    │   Facilitator (Executes ContextPlan actions, assembles gathered_context)
+    │       ↓
+    │   RouterSpecialist
+    └─→ EndSpecialist (Clarification Needed / ASK_USER)
 ```
 
 **Key Edges:**
-1.  **Triage -> Facilitator:** If `ContextPlan` has research/read actions.
-2.  **Triage -> End:** If `ContextPlan` has `ASK_USER` actions (Faithfulness Check).
-3.  **Triage -> Router:** If no context actions are needed (e.g., simple greeting).
-4.  **Facilitator -> Router:** After context is gathered, always proceed to Router.
+1.  **Triage -> SA:** If ContextPlan is ACCEPT (standard flow). SA produces `task_plan`.
+2.  **Triage -> End:** If ContextPlan has `ASK_USER` actions (Faithfulness Check).
+3.  **SA -> Facilitator:** Always. Facilitator executes any triage actions and assembles context.
+4.  **Facilitator -> Router:** Always. Router sees `gathered_context` and `task_plan`.
 
-**Configuration:**
-```python
-workflow.add_conditional_edges(
-    "triage_architect",
-    self.orchestrator.check_triage_outcome,
-    {
-        "facilitator_specialist": "facilitator_specialist",
-        router_name: router_name,
-        CoreSpecialist.END.value: CoreSpecialist.END.value  # For clarification questions
-    }
-)
-```
+**Design principle:** Gate before investment. Triage rejects underspecified prompts (ASK_USER → END) before SA invests an LLM call. SA captures intent as `task_plan`; Facilitator assembles context; Router routes with full information.
 
 ---
 

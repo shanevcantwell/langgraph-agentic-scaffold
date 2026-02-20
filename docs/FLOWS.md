@@ -13,7 +13,7 @@ Each flow shows: **Prompt** → **Specialists Called** → **Expected Output**
 | [Chat](#1-chat) | Conversational query | Triage → SA → Facilitator → Router → Alpha∥Bravo → Synthesizer |
 | [File](#2-file-operations) | "read/write/list file" | Triage → SA → Facilitator → Router → PD |
 | [Browser](#3-browser) | "go to / click / fill" | Triage → SA → Facilitator → Router → NavigatorBrowser |
-| [Research](#4-research) | "research / investigate" | Triage → SA → Facilitator → Router → ResearchOrchestrator |
+| [Research](#4-research) | "research / investigate" | Triage → SA → Facilitator → Router → ProjectDirector |
 | [Generation](#5-generation) | "create / build / generate" | Triage → SA → Facilitator → Router → Builder → Exit Interview |
 | [Analysis](#6-analysis) | "analyze / extract / summarize" | Triage → SA → Facilitator → Router → Analyst |
 
@@ -65,7 +65,9 @@ flowchart LR
 PROMPT: "Compare Python and JavaScript for web development"
 
 FLOW:
-  TriageArchitect     → No context needed
+  TriageArchitect     → PASS (no context needed)
+  SystemsArchitect    → task_plan: "Compare Python and JavaScript for web development"
+  Facilitator         → Context assembly (minimal)
   Router              → Routes to tiered_chat_entrypoint
   ProgenitorAlpha     → Technical comparison (Gemini perspective)
   ProgenitorBravo     → Practical comparison (Claude perspective)
@@ -78,7 +80,9 @@ OUTPUT: Multi-perspective comparison with "Alpha notes..." / "Bravo adds..."
 ```mermaid
 flowchart LR
     User([User]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
     Router --> TC
 
     subgraph TC[Tiered Chat - Parallel Execution]
@@ -167,9 +171,13 @@ PROMPT: "Create a file called notes.txt with 'Hello World'"
 
 FLOW:
   TriageArchitect     → Detects file write intent
-  Router              → Routes to file_operations_specialist
-  FileOperationsSpec  → LLM parses intent, calls MCP
-                        MCP: file_specialist.write_file("notes.txt", "Hello World")
+  SystemsArchitect    → task_plan: "Create notes.txt with Hello World content"
+  Facilitator         → Context assembly
+  Router              → Routes to project_director
+  ProjectDirector     → ReAct loop via react_step MCP:
+                        Tool: filesystem.write_file("notes.txt", "Hello World")
+                        Action: DONE
+  ExitInterview       → Verifies file creation
   EndSpecialist       → Archives
 
 OUTPUT: "Created notes.txt successfully"
@@ -178,16 +186,19 @@ OUTPUT: "Created notes.txt successfully"
 ```mermaid
 flowchart LR
     User([User]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
-    Router --> FileOps[FileOperationsSpecialist]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
+    Router --> PD[ProjectDirector<br/>react_step MCP]
 
-    FileOps --> MCP[MCP: write_file]
-    MCP --> FileOps
+    PD --> MCP[MCP: filesystem.write_file]
+    MCP --> PD
 
-    FileOps --> End[EndSpecialist]
+    PD --> EI[ExitInterview]
+    EI --> End[EndSpecialist]
     End --> Response(["Created notes.txt<br/>successfully"])
 
-    style FileOps fill:#87CEEB
+    style PD fill:#87CEEB
 ```
 
 ### 2.3 List Directory
@@ -344,22 +355,14 @@ PROMPT: "What are the latest developments in quantum computing?"
 
 FLOW:
   TriageArchitect     → Detects research intent
-  Router              → Routes to research_orchestrator
-  ResearchOrchestrator → ReAct loop:
-    Iteration 1:
-      DECIDE: Search for "quantum computing 2025 developments"
-      EXECUTE: MCP: web_specialist.search(...)
-      OBSERVE: 10 results returned
-      UPDATE: Add to knowledge base
-    Iteration 2:
-      DECIDE: Browse top 3 results
-      EXECUTE: MCP: browse_specialist.fetch(url1, url2, url3)
-      OBSERVE: Content retrieved
-      UPDATE: Extract key findings
-    Iteration 3:
-      DECIDE: Sufficient information, synthesize
-      COMPLETE: Pass to synthesizer
-  SynthesizerSpecialist → Compiles research report
+  SystemsArchitect    → task_plan: "Research quantum computing developments"
+  Facilitator         → Context assembly
+  Router              → Routes to project_director
+  ProjectDirector     → ReAct loop via react_step MCP:
+    Iteration 1: search("quantum computing 2026 developments")
+    Iteration 2: browse(url1), browse(url2)
+    Iteration 3: DONE — synthesize findings into final_response
+  ExitInterview       → Verifies research completeness
   EndSpecialist       → Archives with report artifact
 
 OUTPUT: Comprehensive research report with citations
@@ -368,27 +371,25 @@ OUTPUT: Comprehensive research report with citations
 ```mermaid
 flowchart TB
     User([User]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
-    Router --> RO[ResearchOrchestrator]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
+    Router --> PD[ProjectDirector]
 
-    subgraph RO[ReAct Loop]
+    subgraph PD[ReAct Loop via react_step MCP]
         direction TB
-        Decide{DECIDE}
-        Execute[EXECUTE<br/>MCP Tool Call]
-        Observe[OBSERVE<br/>Results]
-        Update[UPDATE<br/>Knowledge Base]
-        Check{Done?}
+        Search[search — web query]
+        Browse[browse — fetch URLs]
+        Done[DONE — synthesize]
 
-        Decide --> Execute --> Observe --> Update --> Check
-        Check -->|No| Decide
-        Check -->|Yes| Complete[COMPLETE]
+        Search --> Browse --> Done
     end
 
-    RO --> Synth[SynthesizerSpecialist<br/>Compile Report]
-    Synth --> End[EndSpecialist]
+    PD --> EI[ExitInterview]
+    EI --> End[EndSpecialist]
     End --> Response([Research Report<br/>with Citations])
 
-    style RO fill:#98FB98
+    style PD fill:#98FB98
 ```
 
 ### 4.2 Comparative Research
@@ -397,15 +398,16 @@ PROMPT: "Compare React vs Vue for a new project"
 
 FLOW:
   TriageArchitect     → Complex research, multiple angles
-  Router              → Routes to research_orchestrator
-  ResearchOrchestrator → ReAct loop (4-6 iterations):
-    - Search "React vs Vue 2025"
-    - Search "React performance benchmarks"
-    - Search "Vue developer experience"
-    - Browse key articles
-    - Judge relevance (MCP: inference_service)
-    - Synthesize comparison
-  SynthesizerSpecialist → Structured comparison
+  SystemsArchitect    → task_plan: "Compare React and Vue frameworks"
+  Facilitator         → Context assembly
+  Router              → Routes to project_director
+  ProjectDirector     → ReAct loop (4-6 iterations):
+    - search("React vs Vue 2026")
+    - search("React performance benchmarks")
+    - search("Vue developer experience")
+    - browse(key articles)
+    - DONE — synthesize comparison
+  ExitInterview       → Verifies completeness
   EndSpecialist       → Archives
 
 OUTPUT: Comparative analysis with pros/cons/recommendations
@@ -414,28 +416,30 @@ OUTPUT: Comparative analysis with pros/cons/recommendations
 ```mermaid
 flowchart TB
     User([User]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
-    Router --> RO
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
+    Router --> PD
 
-    subgraph RO[ReAct - Multi-Angle Research]
+    subgraph PD[ReAct — Multi-Angle Research]
         direction LR
-        S1[Search: React vs Vue]
-        S2[Search: React perf]
-        S3[Search: Vue DX]
-        Browse[Browse Articles]
-        Judge[MCP: inference_service<br/>Judge Relevance]
+        S1[search: React vs Vue]
+        S2[search: React perf]
+        S3[search: Vue DX]
+        Browse[browse articles]
+        Done[DONE — synthesize]
 
         S1 --> Browse
         S2 --> Browse
         S3 --> Browse
-        Browse --> Judge
+        Browse --> Done
     end
 
-    RO --> Synth[SynthesizerSpecialist]
-    Synth --> End[EndSpecialist]
+    PD --> EI[ExitInterview]
+    EI --> End[EndSpecialist]
     End --> Response([Comparative Analysis<br/>Pros/Cons/Recs])
 
-    style RO fill:#98FB98
+    style PD fill:#98FB98
 ```
 
 ---
@@ -550,8 +554,10 @@ PROMPT: "Extract all email addresses from this document"
 
 FLOW:
   TriageArchitect     → Data extraction intent
-  Router              → Routes to data_extractor
-  DataExtractor       → Pattern-based extraction
+  SystemsArchitect    → task_plan: "Extract email addresses from document"
+  Facilitator         → Context assembly (document content)
+  Router              → Routes to text_analysis_specialist
+  TextAnalysis        → Single-pass analysis: extracts emails via structured output
   EndSpecialist       → Archives
 
 OUTPUT: Structured list of extracted emails
@@ -560,12 +566,14 @@ OUTPUT: Structured list of extracted emails
 ```mermaid
 flowchart LR
     User(["Document"]) --> Triage[TriageArchitect]
-    Triage --> Router[Router]
-    Router --> Extract[DataExtractor<br/>Pattern Matching]
-    Extract --> End[EndSpecialist]
+    Triage --> SA[SystemsArchitect]
+    SA --> Fac[Facilitator]
+    Fac --> Router[Router]
+    Router --> TA[TextAnalysisSpecialist<br/>Structured Extraction]
+    TA --> End[EndSpecialist]
     End --> Response([Email List])
 
-    style Extract fill:#B0E0E6
+    style TA fill:#B0E0E6
 ```
 
 ---

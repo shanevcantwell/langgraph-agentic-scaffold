@@ -73,9 +73,8 @@ User → Triage → SA → Facilitator → Router → Specialist → Router → 
 ### 3.2 Subgraphs
 Encapsulated multi-specialist workflows that appear as single nodes to the router:
 - **Tiered Chat:** Alpha ∥ Bravo → Synthesizer
-- **Critic Loop:** Builder ↔ Critic (configurable max iterations)
 - **Context Engineering:** Triage → SA → Facilitator → Router (#199)
-- **Distillation:** Coordinator → Expander → Collector → Aggregator
+- **Signal Processor:** Detects and routes interrupt signals (max_iterations, stagnation, etc.)
 
 ### 3.3 Routing Decisions
 Three routing modes:
@@ -265,8 +264,8 @@ See CONFIGURATION_GUIDE.md § 5.0 for details.
 
 | Issue | Problem | LAP Direction |
 |-------|---------|---------------|
-| 37+ specialists | Too many, hard to navigate | Extract to MCP containers |
-| FileSpecialist limbo | Deprecated but not removed | Use official MCP filesystem |
+| ~20 specialists | Consolidated from 37+ via Phase 1b | Further extraction to MCP containers |
+| Deprecated source files | Some deprecated .py files remain | Clean removal pass needed |
 | Documentation bloat | 17 docs, much redundancy | Single authoritative reference |
 | Observability fragmentation | Hooks exist but not unified | Cohesive observability layer |
 | Deep agent lifecycle | Not implemented (ADR-CORE-038) | First-class in LAP |
@@ -277,69 +276,51 @@ See CONFIGURATION_GUIDE.md § 5.0 for details.
 
 ## 11. Specialist Inventory
 
-### Core Infrastructure (5)
+### Core Infrastructure (6)
 - `BaseSpecialist` - Abstract base
 - `RouterSpecialist` - Central routing hub
 - `EndSpecialist` - Termination and synthesis
 - `ArchiverSpecialist` - Workflow reports
-- `TriageArchitect` - Context engineering entry
+- `TriageArchitect` - Context engineering entry (classifier)
+- `SystemsArchitect` - Entry point (task_plan) + MCP planning service (#171)
 
-### Chat & Response (7)
+### Context Engineering (2)
+- `FacilitatorSpecialist` - Context assembly, EI feedback surfacing (procedural)
+- `ExitInterviewSpecialist` - Completion verification via react_step MCP tools
+
+### Chat & Response (6)
 - `ChatSpecialist` - Simple chat
-- `ProgenitorAlpha/Bravo` - Parallel perspectives
-- `TieredSynthesizer` - Combines perspectives
+- `ProgenitorAlpha/Bravo` - Parallel perspectives (tiered chat subgraph)
+- `TieredSynthesizer` - Combines perspectives (procedural join node)
 - `DefaultResponder` - Greetings
-- `PromptSpecialist` - General Q&A
 - `SummarizerSpecialist` - Text condensation
 
-### File Operations (4)
-- `FileSpecialist` - MCP service layer
-- `FileOperationsSpecialist` - User interface
-- `BatchProcessorSpecialist` - Bulk operations
-- `NavigatorSpecialist` - External MCP (deprecated fs driver)
+### Autonomous Agents (1)
+- `ProjectDirector` - ReAct agent for filesystem/research tasks via react_step MCP (filesystem, terminal, fork)
+
+### Analysis (1)
+- `TextAnalysisSpecialist` — ReAct-enabled: single-pass analysis or iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP). Absorbed DataExtractor and DataProcessor (Phase 1b).
+
+### Generation (2)
+- `WebBuilder` - HTML generation
+- `CriticSpecialist` - Artifact review
 
 ### Browser (1)
 - `NavigatorBrowserSpecialist` - surf-mcp integration
 
-### Research (5)
-- `ResearchOrchestrator` - ReAct controller
-- `WebSpecialist` - Search primitive
-- `BrowseSpecialist` - Fetch primitive
-- `SynthesizerSpecialist` - Report generation
-- `ProjectDirector` - Emergent state machine
-
-### Analysis (3)
-- `TextAnalysisSpecialist` — ReAct-enabled: single-pass analysis or iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP). Absorbed DataExtractor and DataProcessor (Phase 1b, commit `0c121ce`).
-- `StructuredDataExtractor`
-- `SentimentClassifier`
-- ~~`DataExtractorSpecialist`~~ — Deprecated, absorbed by TextAnalysisSpecialist
-- ~~`DataProcessorSpecialist`~~ — Deprecated, absorbed by TextAnalysisSpecialist
-
-### Generation (3)
-- `WebBuilder` - HTML generation
-- `CriticSpecialist` - Artifact review
-- `SystemsArchitect` - Technical planning
-
-### Distillation (4)
-- `DistillationCoordinator`
-- `DistillationPromptExpander`
-- `DistillationResponseCollector`
-- `DistillationPromptAggregator`
-
-### Other (3)
-- `FacilitatorSpecialist` - Context plan execution
+### Other (2)
 - `ImageSpecialist` - Image analysis
 - `TribeConductor` - Convening orchestration
 
-**Active in config.yaml: 24 specialists.** Source files exist for additional deprecated/unused specialists (DataExtractor, DataProcessor, FileSpecialist, DistillationCoordinator, etc.) — consolidation ongoing per Phase 1b.
+**Active in config.yaml: ~20 specialists.** Deprecated specialists (FileSpecialist, NavigatorSpecialist, DataExtractor, DataProcessor, ResearchOrchestrator, Distillation pipeline) removed from config; some source files remain with deprecation notices.
 
 ---
 
 ## 12. Test Coverage
 
-- **Unit tests:** 637 tests (mocked LLM calls)
-- **Integration tests:** 178 tests (real configs, some live LLM)
-- **Total:** 916+ tests
+- **Unit tests:** 949 tests (mocked LLM calls), 2 known skipped (#192)
+- **Integration tests:** ~178 tests (real configs, some live LLM)
+- **Total:** 1100+ tests
 
 Key test patterns:
 - Contract validation via Pydantic
@@ -362,9 +343,12 @@ Key test patterns:
 | 5. Context Engineering | ✅ Complete |
 
 Post-Bedrock additions:
-- ReActMixin
+- react_step MCP (replaced ReActMixin — prompt-prix absorption, -1720 lines net)
 - Navigation-MCP (now surf-mcp)
 - V.E.G.A.S. Terminal UI
+- fork() — recursive LAS invocation via graph.invoke() for context-isolated subtasks
+- SystemsArchitect entry point (#171) — SA → Triage → Facilitator → Router pipeline
+- it-tools-mcp — 119 IT utility tools wired to TextAnalysisSpecialist
 
 ---
 

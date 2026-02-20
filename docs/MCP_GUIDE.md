@@ -36,10 +36,10 @@ class MySpecialist(BaseSpecialist):
 
 | Service | Functions | Purpose |
 |---------|-----------|---------|
-| `file_specialist` | read_file, write_file, list_dir, delete, rename | Filesystem ops |
+| `systems_architect` | create_plan | Planning service — produces SystemPlan for any specialist (#115) |
 | `summarizer_specialist` | summarize | Text condensation |
-| `inference_service` | judge_relevance, detect_contradiction | Semantic judgment |
-| `fara_service` | locate, verify, screenshot | Visual grounding |
+
+> **Note:** Many former internal MCP services (file_specialist, inference_service, fara_service) have been replaced by external MCP containers or absorbed by specialists.
 
 ---
 
@@ -92,7 +92,21 @@ await external_client.disconnect_all()
 | `navigator` | surf-mcp | Browser automation with Fara visual grounding |
 | `filesystem` | @modelcontextprotocol/server-filesystem | File operations (directory_tree, read_file, etc.) |
 | `terminal` | terminal-mcp | Sandboxed shell commands (allowlist-based) |
-| `semantic-chunker` | semantic-chunker-mcp | Embedding tools for semantic analysis (calculate_drift, etc.) |
+| `semantic-chunker` | semantic-chunker-mcp | Embedding analysis — embeddinggemma-300m (768-d), NV-Embed-v2 (4096-d) |
+| `it-tools-mcp` | wrenchpilot/it-tools-mcp:v5.10.2 | 119 IT utility tools (format_json, convert_json_to_csv, etc.) |
+| `prompt-prix` | prompt-prix-mcp | Eval primitives — `react_step`, `complete`, `list_models` (9 tools via FastMCP) |
+
+### react_step MCP Pattern
+
+All ReAct-capable specialists (ProjectDirector, TextAnalysisSpecialist, ExitInterview) use the `react_step` tool from prompt-prix MCP for iterative tool use. The shared helper in `app/src/mcp/react_step.py` provides `call_react_step()` + `build_tool_schemas()` + `dispatch_external_tool()`. Any specialist becomes ReAct-capable by defining a tool routing table and looping on `call_react_step()`.
+
+This replaced the former ~1700-line ReActMixin / ReactEnabledSpecialist / react_wrapper.py codebase.
+
+### fork() — Recursive LAS Invocation
+
+`dispatch_fork()` in `app/src/mcp/fork.py` spawns a child LAS invocation via `graph.invoke()` (in-process, not HTTP). The child runs full LAS (SA → Triage → Facilitator → Router → Specialist → EI), with only Archiver disk write suppressed. Returns the child's full final state dict. Used by ProjectDirector for context-isolated subtasks.
+
+Key features: depth-limited recursion (default max 3), parent-child cascade cancellation via `CancellationManager`, full error context (no string compression).
 
 ---
 
