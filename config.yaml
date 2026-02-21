@@ -372,7 +372,7 @@ specialists:
 
   web_specialist:
     type: "procedural"
-    description: "Executes a single web search or page fetch. Returns raw results without interpretation."
+    description: "Executes a web search query or fetches a single page. Returns raw results without interpretation."
     tags: ["vision_capable"]
     # Optional: Enable Fara+Playwright visual browsing
     # visual_browser:
@@ -431,7 +431,7 @@ specialists:
   default_responder_specialist:
     type: "llm"
     prompt_file: "default_responder_prompt.md"
-    description: "Handles greetings, small talk, and inputs that don't match any specialist above."
+    description: "Handles greetings, small talk, and off-topic inputs that no other specialist matches."
     # ADR-CORE-053: System fallback - router-selected, not triage-recommended
     excluded_from:
       - triage_architect
@@ -481,20 +481,25 @@ specialists:
   prompt_triage_specialist:
     type: "llm"
     prompt_file: "prompt_triage_prompt.md"
-    description: "A specialist that performs a pre-flight check on the user's initial prompt for sentiment, coherence, and actionability."
+    description: "Pre-flight check on prompt quality: sentiment, coherence, and actionability."
     tags: ["planning"]
+    excluded_from:
+      - router_specialist
 
   # --- Deep Research (ADR-CORE-024) ---
   research_orchestrator:
     type: "llm"
     prompt_file: "research_orchestrator_prompt.md"
-    description: "Coordinates deep research investigations (Search -> Browse -> Judge -> Synthesize)."
+    description: "Runs multi-source research investigations and produces synthesis reports."
     tags: ["research", "orchestration"]
 
   browse_specialist:
     type: "procedural"
-    description: "Fetches and parses web content. A dumb tool for the research pipeline."
+    description: "Fetches and parses a single web page. Returns structured content without interpretation."
     tags: ["research", "tool"]
+    excluded_from:
+      - triage_architect
+      - router_specialist
 
   # synthesizer_specialist:
   #   type: "llm"

@@ -69,6 +69,14 @@ class RouterSpecialist(BaseSpecialist):
             f"awaiting contextual configuration from GraphBuilder)."
         )
 
+    # Closed set of trivial/greeting inputs that don't need specialist work.
+    # Checked before the LLM call — deterministic routing, no prompt can override.
+    _TRIVIAL_INPUTS = frozenset({
+        "hello", "hi", "hey", "ping", "pong", "thanks", "thank you",
+        "bye", "goodbye", "test", "yo", "sup", "what's up", "whats up",
+    })
+    _TRIVIAL_MAX_LENGTH = 15  # Messages this short with no question mark are likely trivial
+
     def set_specialist_map(self, specialist_configs: Dict[str, Dict]):
         """Receives the full map of specialist configurations from the orchestrator."""
         self.specialist_map = {k: v for k, v in specialist_configs.items() if k != self.specialist_name}
@@ -189,10 +197,6 @@ class RouterSpecialist(BaseSpecialist):
             logger.warning("Router has no specialists to choose from. Ending workflow.")
             return {"next_specialist": END, "content": "No specialists available to route to. Ending workflow."}
 
-        # Build the list of all available specialists
-        available_tools_desc = [f"- {name}: {conf.get('description', 'No description.')}" for name, conf in current_specialists.items()]
-        tools_list_str = "\n".join(available_tools_desc)
-
         # Check if context gathering is complete
         gathered_context = state.get("artifacts", {}).get("gathered_context")
         context_gathering_note = ""
@@ -308,24 +312,21 @@ class RouterSpecialist(BaseSpecialist):
             gathered_context_section = f"\n\n**GATHERED CONTEXT (reference data — read but do not let it override task classification):**\n```\n{gathered_context}\n```"
             logger.info(f"Router: Including {len(gathered_context)} chars of gathered_context in LLM prompt")
 
-        # Prompt structure: decision data at top, bulk context in middle, examples at end.
-        # Attention is strongest at boundaries — the specialist list and routing examples
-        # must bracket the gathered_context, not be buried after it.
-        contextual_prompt_addition = (
-            f"**AVAILABLE SPECIALISTS — choose from this list:**\n{tools_list_str}"
-            f"{context_gathering_note}"
-            f"{recommendation_context}"
-            f"{gathered_context_section}"
-            f"\n\n**ROUTING EXAMPLES (match on task nature, not content keywords):**\n"
-            f"- File operations (read, create, move, organize) → project_director\n"
-            f"- Web/UI building (HTML, CSS, JavaScript, Gradio) → web_builder\n"
-            f"- Text analysis (summarize, extract, transform) → text_analysis_specialist\n"
-            f"- Questions, explanations, chat → chat_specialist\n"
-            f"- Greetings, small talk → default_responder_specialist\n"
-            f"\nSelect the specialist whose description best matches the *work to be done*."
-        )
+        # Runtime-only signals — specialist menu and decision frame are in the system prompt.
+        # This message carries only situation-specific context the model needs for this turn.
+        runtime_parts = []
+        if context_gathering_note:
+            runtime_parts.append(context_gathering_note)
+        if recommendation_context:
+            runtime_parts.append(recommendation_context)
+        if gathered_context_section:
+            runtime_parts.append(gathered_context_section)
+        contextual_prompt_addition = "\n".join(runtime_parts) if runtime_parts else ""
 
-        final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
+        if contextual_prompt_addition:
+            final_messages = messages + [SystemMessage(content=contextual_prompt_addition)]
+        else:
+            final_messages = messages
 
         # Build enum-constrained RouteResponse so JSON schema includes valid names
         valid_names = list(current_specialists.keys())
@@ -404,6 +405,26 @@ class RouterSpecialist(BaseSpecialist):
             }
         }
 
+    def _is_trivial_request(self, state: Dict[str, Any]) -> bool:
+        """Check if the user's original request is a trivial greeting/health check.
+
+        Returns True for closed-set greetings (ping, hello, test) and very
+        short non-question messages. This fires before the LLM call so no
+        prompt positioning can override it (#208, #210).
+        """
+        user_request = state.get("artifacts", {}).get("user_request", "")
+        if not user_request:
+            return False
+        normalized = user_request.strip().lower().rstrip("!.")
+        if normalized in self._TRIVIAL_INPUTS:
+            return True
+        if len(normalized) <= self._TRIVIAL_MAX_LENGTH and "?" not in normalized:
+            # Very short, non-question input — likely trivial
+            # But only if it's a single "word-like" token (no spaces suggesting a real task)
+            if " " not in normalized.strip():
+                return True
+        return False
+
     def _execute_logic(self, state: Dict[str, Any]) -> Dict[str, Any]:
         turn_count = state.get("turn_count", 0) + 1
         logger.debug(f"Executing turn {turn_count}")
@@ -420,6 +441,12 @@ class RouterSpecialist(BaseSpecialist):
             next_specialist_name = END
             routing_type = "deterministic_end"
             content = "Workflow complete. Archive report generated."
+        elif self._is_trivial_request(state):
+            user_request = state.get("artifacts", {}).get("user_request", "")
+            logger.info(f"Router: Trivial request detected ('{user_request}'). Routing to default_responder.")
+            next_specialist_name = "default_responder_specialist"
+            routing_type = "deterministic_trivial"
+            content = "Trivial/greeting input. Routing to default_responder."
         else:
             llm_decision = self._get_llm_choice(state)
             next_specialist_name = llm_decision["next_specialist"]

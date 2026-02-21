@@ -399,6 +399,14 @@ class GraphBuilder:
 
         return dict(index)  # Convert defaultdict to regular dict
 
+    def _build_specialist_table(self, specialists: Dict[str, Dict]) -> str:
+        """Build a markdown table of routable specialists for the router prompt."""
+        rows = ["| Specialist | Capability |", "|---|---|"]
+        for name, conf in specialists.items():
+            desc = conf.get("description", "No description.")
+            rows.append(f"| {name} | {desc} |")
+        return "\n".join(rows)
+
     def _configure_router(self, specialists: Dict[str, BaseSpecialist], configs: Dict):
         router_instance = specialists[CoreSpecialist.ROUTER.value]
         router_config = configs.get(CoreSpecialist.ROUTER.value, {})
@@ -422,15 +430,8 @@ class GraphBuilder:
             self.specialists[ei_name].set_routable_specialists(list(available_specialists.keys()))
             logger.info(f"ExitInterview: injected {len(available_specialists)} routable specialist names")
 
-        standup_report = "\n\n--- AVAILABLE SPECIALISTS ---\n" + "\n".join([f"- {name}: {conf.get('description', 'No description.')}" for name, conf in available_specialists.items()])
-        feedback_instruction = (
-            "\nIMPORTANT ROUTING INSTRUCTIONS:\n"
-            "1. **Precondition Fulfillment**: Review the conversation history. If a specialist (e.g., 'systems_architect') previously stated it was blocked waiting for an artifact, and the most recent specialist (e.g., 'file_specialist') just provided that artifact, your next step is to route back to the original, blocked specialist.\n"
-            "2. **Error Correction**: If a specialist reports an error or that it cannot perform a task, you MUST use that feedback to select a different, more appropriate specialist to resolve the issue. Do not give up.\n"
-            "3. **Follow the Plan**: If a `task_plan` exists in state, route to the specialist best suited to execute it. The task_plan captures the system's understanding of the user's intent.\n"
-            "4. **Use Provided Tools**: You MUST choose from the list of specialists provided to you."
-        )
-        dynamic_system_prompt = f"{base_prompt}{standup_report}\n{feedback_instruction}"
+        specialist_table = self._build_specialist_table(available_specialists)
+        dynamic_system_prompt = base_prompt.replace("{{SPECIALIST_TABLE}}", specialist_table)
         binding_key = router_config.get("llm_config")
         if not binding_key:
             raise WorkflowError(f"Could not resolve LLM binding for '{CoreSpecialist.ROUTER.value}'. Ensure it is bound in 'user_settings.yaml' or a 'default_llm_config' is set.")
