@@ -296,7 +296,7 @@ See CONFIGURATION_GUIDE.md § 5.0 for details.
 - `SummarizerSpecialist` - Text condensation
 
 ### Autonomous Agents (1)
-- `ProjectDirector` - ReAct agent for filesystem/research tasks via react_step MCP (filesystem, terminal, fork)
+- `ProjectDirector` - ReAct agent for filesystem/research tasks via react_step MCP (filesystem, terminal, fork with expected_artifacts)
 
 ### Analysis (1)
 - `TextAnalysisSpecialist` — ReAct-enabled: single-pass analysis or iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP). Absorbed DataExtractor and DataProcessor (Phase 1b).
@@ -318,9 +318,9 @@ See CONFIGURATION_GUIDE.md § 5.0 for details.
 
 ## 12. Test Coverage
 
-- **Unit tests:** 949 tests (mocked LLM calls), 2 known skipped (#192)
+- **Unit tests:** 964 tests (mocked LLM calls), 2 known skipped (#192)
 - **Integration tests:** ~178 tests (real configs, some live LLM)
-- **Total:** 1100+ tests
+- **Total:** 1140+ tests
 
 Key test patterns:
 - Contract validation via Pydantic
@@ -346,7 +346,7 @@ Post-Bedrock additions:
 - react_step MCP (replaced ReActMixin — prompt-prix absorption, -1720 lines net)
 - Navigation-MCP (now surf-mcp)
 - V.E.G.A.S. Terminal UI
-- fork() — recursive LAS invocation via graph.invoke() for context-isolated subtasks
+- fork() — recursive LAS invocation via graph.invoke() for context-isolated subtasks, with conditioning frame (#205) and expected_artifacts (#206)
 - SystemsArchitect entry point (#171) — SA → Triage → Facilitator → Router pipeline
 - it-tools-mcp — 119 IT utility tools wired to TextAnalysisSpecialist
 

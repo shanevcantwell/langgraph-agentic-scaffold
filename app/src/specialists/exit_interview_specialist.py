@@ -59,6 +59,11 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
                 "type": "string",
                 "description": "Optional context — file path or artifact key the subagent should inspect.",
             },
+            "expected_artifacts": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Artifact keys you need back. E.g., ['verification_result'] for a PASS/FAIL check.",
+            },
         },
         "required": ["prompt"],
     },
@@ -331,14 +336,16 @@ class ExitInterviewSpecialist(BaseSpecialist):
         # ADR-CORE-045: fork() — recursive LAS invocation for per-item verification
         if tool_def.service == "las" and tool_def.function == "fork":
             from ..mcp.fork import dispatch_fork, extract_fork_result
+            expected = tool_args.get("expected_artifacts")
             child_state = dispatch_fork(
                 compiled_graph=self._compiled_graph,
                 prompt=tool_args.get("prompt", ""),
                 context=tool_args.get("context"),
+                expected_artifacts=expected,
                 parent_run_id=run_id,
                 fork_depth=fork_depth,
             )
-            return extract_fork_result(child_state)
+            return extract_fork_result(child_state, expected_artifacts=expected)
 
         # Local artifact tools
         if not tool_def.is_external:

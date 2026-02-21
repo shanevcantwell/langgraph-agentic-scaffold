@@ -3,12 +3,18 @@ Tests for fork() — recursive LAS invocation (ADR-CORE-045).
 
 Tests dispatch_fork() with mocked graph.invoke(), extract_fork_result
 fallback chain, depth limiting, CancellationManager integration,
+expected_artifacts (#206), conditioning frame (#205),
 PD integration, and EI integration.
 """
 import pytest
 from unittest.mock import patch, MagicMock
 
-from app.src.mcp.fork import dispatch_fork, extract_fork_result
+from app.src.mcp.fork import (
+    dispatch_fork,
+    extract_fork_result,
+    _build_child_prompt,
+    _CONDITIONING_FRAME,
+)
 
 
 class TestDispatchFork:
@@ -175,6 +181,89 @@ class TestDispatchFork:
         mock_cm.clear_cancellation.assert_called_once()
 
 
+class TestConditioningFrame:
+    """Tests for the anti-fabrication conditioning frame (#205)."""
+
+    def test_conditioning_frame_prepended_to_prompt(self):
+        """Every child prompt starts with the conditioning frame."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {"artifacts": {}, "messages": []}
+
+        dispatch_fork(compiled_graph=mock_graph, prompt="Run a ping test")
+
+        call_args = mock_graph.invoke.call_args
+        initial_state = call_args[0][0]
+        goal = initial_state["artifacts"]["user_request"]
+        assert goal.startswith(_CONDITIONING_FRAME)
+        assert "Run a ping test" in goal
+
+    def test_conditioning_frame_present_without_expected_artifacts(self):
+        """Conditioning frame is present even without expected_artifacts."""
+        prompt = _build_child_prompt("Simple task")
+        assert _CONDITIONING_FRAME in prompt
+        assert "Simple task" in prompt
+        assert "write_artifact" not in prompt
+
+    def test_conditioning_frame_present_with_expected_artifacts(self):
+        """Conditioning frame is present alongside artifact instructions."""
+        prompt = _build_child_prompt("Do work", expected_artifacts=["result"])
+        assert _CONDITIONING_FRAME in prompt
+        assert "Do work" in prompt
+        assert "`result`" in prompt
+        assert "write_artifact" in prompt
+
+
+class TestBuildChildPrompt:
+    """Tests for _build_child_prompt — procedural prompt assembly."""
+
+    def test_basic_prompt(self):
+        """Basic prompt includes conditioning frame and task."""
+        result = _build_child_prompt("Categorize these files")
+        assert _CONDITIONING_FRAME in result
+        assert "Categorize these files" in result
+
+    def test_expected_artifacts_appended(self):
+        """Expected artifact keys are appended as instructions."""
+        result = _build_child_prompt(
+            "Check the file",
+            expected_artifacts=["verification_result", "evidence"],
+        )
+        assert "`verification_result`" in result
+        assert "`evidence`" in result
+        assert "write_artifact" in result
+
+    def test_no_artifacts_no_instruction(self):
+        """No artifact instruction when expected_artifacts is None."""
+        result = _build_child_prompt("Simple task")
+        assert "write_artifact" not in result
+
+    def test_empty_artifacts_no_instruction(self):
+        """No artifact instruction when expected_artifacts is empty list."""
+        result = _build_child_prompt("Simple task", expected_artifacts=[])
+        assert "write_artifact" not in result
+
+
+class TestExpectedArtifacts:
+    """Tests for expected_artifacts in dispatch_fork and extract_fork_result (#206)."""
+
+    def test_dispatch_passes_expected_artifacts_to_prompt(self):
+        """dispatch_fork includes artifact key instructions in child prompt."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {"artifacts": {}, "messages": []}
+
+        dispatch_fork(
+            compiled_graph=mock_graph,
+            prompt="Verify the file",
+            expected_artifacts=["verification_result"],
+        )
+
+        call_args = mock_graph.invoke.call_args
+        initial_state = call_args[0][0]
+        goal = initial_state["artifacts"]["user_request"]
+        assert "`verification_result`" in goal
+        assert "write_artifact" in goal
+
+
 class TestExtractForkResult:
     """Tests for extract_fork_result helper — fallback chain priority."""
 
@@ -231,6 +320,65 @@ class TestExtractForkResult:
         result = extract_fork_result({})
         assert result.startswith("Error:")
 
+    # --- expected_artifacts extraction (#206) ---
+
+    def test_expected_artifacts_extracted(self):
+        """When expected_artifacts specified, returns only those values."""
+        result = extract_fork_result(
+            {
+                "artifacts": {
+                    "verification_result": "PASS",
+                    "evidence": "File exists with correct contents",
+                    "final_user_response.md": "Long narrative response...",
+                    "gathered_context": "Should not appear",
+                },
+            },
+            expected_artifacts=["verification_result", "evidence"],
+        )
+        assert "verification_result: PASS" in result
+        assert "evidence: File exists with correct contents" in result
+        assert "Long narrative" not in result
+        assert "gathered_context" not in result
+
+    def test_expected_artifacts_partial_missing(self):
+        """Reports missing artifacts when some keys weren't written."""
+        result = extract_fork_result(
+            {
+                "artifacts": {"verification_result": "FAIL"},
+            },
+            expected_artifacts=["verification_result", "evidence"],
+        )
+        assert "verification_result: FAIL" in result
+        assert "missing artifacts" in result
+        assert "evidence" in result
+
+    def test_expected_artifacts_all_missing_falls_through(self):
+        """When none of the expected artifacts exist, falls back to standard chain."""
+        result = extract_fork_result(
+            {
+                "artifacts": {"final_user_response.md": "Fallback narrative"},
+            },
+            expected_artifacts=["nonexistent_key"],
+        )
+        assert result == "Fallback narrative"
+
+    def test_expected_artifacts_with_error_key(self):
+        """Error key still takes priority over expected_artifacts."""
+        result = extract_fork_result(
+            {"error": "Fork failed"},
+            expected_artifacts=["verification_result"],
+        )
+        assert result.startswith("Error:")
+        assert "Fork failed" in result
+
+    def test_expected_artifacts_single_key(self):
+        """Single expected artifact returns clean result."""
+        result = extract_fork_result(
+            {"artifacts": {"status": "COMPLETE"}},
+            expected_artifacts=["status"],
+        )
+        assert result == "status: COMPLETE"
+
 
 class TestPDForkIntegration:
     """Tests for fork() integration in ProjectDirector."""
@@ -251,12 +399,13 @@ class TestPDForkIntegration:
         assert tools["fork"].is_external is False
 
     def test_fork_in_tool_params(self):
-        """fork parameter schema is defined."""
+        """fork parameter schema includes expected_artifacts."""
         from app.src.specialists.project_director import _TOOL_PARAMS
 
         assert "fork" in _TOOL_PARAMS
         assert "prompt" in _TOOL_PARAMS["fork"]["properties"]
         assert "context" in _TOOL_PARAMS["fork"]["properties"]
+        assert "expected_artifacts" in _TOOL_PARAMS["fork"]["properties"]
         assert "prompt" in _TOOL_PARAMS["fork"]["required"]
 
     @patch("app.src.mcp.fork.dispatch_fork")
@@ -290,6 +439,7 @@ class TestPDForkIntegration:
             compiled_graph=pd._compiled_graph,
             prompt="Evaluate this proposal",
             context="Proposal content here",
+            expected_artifacts=None,
             parent_run_id=None,
             fork_depth=0,
         )
@@ -322,8 +472,49 @@ class TestPDForkIntegration:
             compiled_graph=pd._compiled_graph,
             prompt="Simple task",
             context=None,
+            expected_artifacts=None,
             parent_run_id=None,
             fork_depth=0,
+        )
+
+    @patch("app.src.mcp.fork.dispatch_fork")
+    @patch("app.src.mcp.fork.extract_fork_result")
+    def test_dispatch_fork_with_expected_artifacts(self, mock_extract, mock_dispatch):
+        """_dispatch_tool_call passes expected_artifacts through to both functions."""
+        from app.src.specialists.project_director import ProjectDirector
+
+        mock_dispatch.return_value = {"artifacts": {"status": "DONE"}}
+        mock_extract.return_value = "status: DONE"
+
+        pd = ProjectDirector("project_director", {
+            "type": "llm",
+            "max_iterations": 5,
+        })
+        pd._compiled_graph = MagicMock()
+        tools = pd._build_tools()
+
+        pending = {
+            "name": "fork",
+            "args": {
+                "prompt": "Check the file",
+                "expected_artifacts": ["status"],
+            },
+        }
+
+        result = pd._dispatch_tool_call(pending, tools, [], {})
+
+        assert result == "status: DONE"
+        mock_dispatch.assert_called_once_with(
+            compiled_graph=pd._compiled_graph,
+            prompt="Check the file",
+            context=None,
+            expected_artifacts=["status"],
+            parent_run_id=None,
+            fork_depth=0,
+        )
+        mock_extract.assert_called_once_with(
+            {"artifacts": {"status": "DONE"}},
+            expected_artifacts=["status"],
         )
 
 
@@ -343,12 +534,13 @@ class TestEIForkIntegration:
         assert tools["fork"].is_external is False
 
     def test_fork_in_tool_params(self):
-        """fork parameter schema is defined in EI's _TOOL_PARAMS."""
+        """fork parameter schema includes expected_artifacts."""
         from app.src.specialists.exit_interview_specialist import _TOOL_PARAMS
 
         assert "fork" in _TOOL_PARAMS
         assert "prompt" in _TOOL_PARAMS["fork"]["properties"]
         assert "context" in _TOOL_PARAMS["fork"]["properties"]
+        assert "expected_artifacts" in _TOOL_PARAMS["fork"]["properties"]
         assert "prompt" in _TOOL_PARAMS["fork"]["required"]
 
     @patch("app.src.mcp.fork.dispatch_fork")
@@ -376,6 +568,7 @@ class TestEIForkIntegration:
             compiled_graph=ei._compiled_graph,
             prompt="Verify file exists at /workspace/output.html",
             context=None,
+            expected_artifacts=None,
             parent_run_id=None,
             fork_depth=0,
         )
@@ -405,6 +598,44 @@ class TestEIForkIntegration:
             compiled_graph=ei._compiled_graph,
             prompt="Check contents",
             context="/workspace/report.md",
+            expected_artifacts=None,
             parent_run_id=None,
             fork_depth=0,
+        )
+
+    @patch("app.src.mcp.fork.dispatch_fork")
+    @patch("app.src.mcp.fork.extract_fork_result")
+    def test_dispatch_fork_with_expected_artifacts(self, mock_extract, mock_dispatch):
+        """_dispatch_tool passes expected_artifacts through to both functions."""
+        from app.src.specialists.exit_interview_specialist import ExitInterviewSpecialist
+
+        mock_dispatch.return_value = {"artifacts": {"verification_result": "PASS"}}
+        mock_extract.return_value = "verification_result: PASS"
+
+        ei = ExitInterviewSpecialist("exit_interview", {"type": "llm"})
+        ei._compiled_graph = MagicMock()
+        tools = ei._build_tools()
+
+        result = ei._dispatch_tool(
+            "fork",
+            {
+                "prompt": "Verify file exists",
+                "expected_artifacts": ["verification_result"],
+            },
+            tools,
+            {},
+        )
+
+        assert result == "verification_result: PASS"
+        mock_dispatch.assert_called_once_with(
+            compiled_graph=ei._compiled_graph,
+            prompt="Verify file exists",
+            context=None,
+            expected_artifacts=["verification_result"],
+            parent_run_id=None,
+            fork_depth=0,
+        )
+        mock_extract.assert_called_once_with(
+            {"artifacts": {"verification_result": "PASS"}},
+            expected_artifacts=["verification_result"],
         )

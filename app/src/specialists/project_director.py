@@ -86,6 +86,11 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
                 "type": "string",
                 "description": "Optional context to pass (e.g., document content). Only what the subagent needs for this specific subtask.",
             },
+            "expected_artifacts": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Artifact keys you need back from the subagent. The subagent will be instructed to write results to these keys using write_artifact.",
+            },
         },
         "required": ["prompt"],
     },
@@ -319,14 +324,16 @@ class ProjectDirector(BaseSpecialist):
         # fork() — recursive LAS invocation (ADR-045)
         if tool_def.service == "las" and tool_def.function == "fork":
             from ..mcp.fork import dispatch_fork, extract_fork_result
+            expected = tool_args.get("expected_artifacts")
             child_state = dispatch_fork(
                 compiled_graph=self._compiled_graph,
                 prompt=tool_args.get("prompt", ""),
                 context=tool_args.get("context"),
+                expected_artifacts=expected,
                 parent_run_id=run_id,
                 fork_depth=fork_depth,
             )
-            return extract_fork_result(child_state)
+            return extract_fork_result(child_state, expected_artifacts=expected)
 
         # Local artifact tools (ADR-076)
         if tool_def.service == "local":

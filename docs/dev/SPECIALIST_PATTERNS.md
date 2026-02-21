@@ -453,9 +453,9 @@ class MyAgenticSpecialist(BaseSpecialist):
 
 | Specialist | Tools | Purpose |
 |-----------|-------|---------|
-| `ProjectDirector` | filesystem, terminal, fork | Filesystem operations, research, subtask delegation |
+| `ProjectDirector` | filesystem, terminal, fork | Filesystem operations, research, subtask delegation via fork with `expected_artifacts` (#206) |
 | `TextAnalysisSpecialist` | semantic-chunker, it-tools, filesystem | Semantic analysis, data processing |
-| `ExitInterviewSpecialist` | filesystem | Completion verification with tool access |
+| `ExitInterviewSpecialist` | filesystem, fork | Completion verification with tool access; per-item verification via fork with `expected_artifacts` (#206) |
 
 ### Stagnation Detection
 
@@ -466,6 +466,32 @@ PD's `_check_stagnation()` detects when the LLM repeats the same tool call patte
 **Critical:** When using JSON schema with logit masking (LM Studio grammar enforcement), the prompt's termination instructions MUST reference the `DONE` action variant — never "respond without tools" or "return plain text." The grammar physically forces an action on every response; the model must use `DONE` to exit the loop.
 
 See CONFIGURATION_GUIDE.md § 6.0 for max_iterations and stagnation configuration.
+
+### fork() — Context-Isolated Subtasks (ADR-045)
+
+Specialists with react_step capability can spawn **subagent invocations** via the `fork` tool. Each fork runs a fresh LAS graph invocation with its own context window. This is context garbage collection — the child does work in its own context, and the parent grows by the result size, not the work size.
+
+Key features:
+- **Conditioning frame (#205):** Every child receives a prompt prefix that reframes honest failure reports as more valuable than fabricated results. This counters the completion-pressure fabrication pattern observed in small models.
+- **Expected artifacts (#206):** Callers specify artifact keys they need back. The child prompt is procedurally augmented with write instructions; `extract_fork_result()` returns only those values.
+- **Depth limiting:** `fork_depth` tracks recursion. Default max depth is 3.
+- **Cascade cancellation (#203):** Parent-child relationships registered in CancellationManager.
+
+```python
+# In _dispatch_tool_call():
+expected = tool_args.get("expected_artifacts")
+child_state = dispatch_fork(
+    compiled_graph=self._compiled_graph,
+    prompt=tool_args.get("prompt", ""),
+    context=tool_args.get("context"),
+    expected_artifacts=expected,
+    parent_run_id=run_id,
+    fork_depth=fork_depth,
+)
+return extract_fork_result(child_state, expected_artifacts=expected)
+```
+
+See [fork.py](../../app/src/mcp/fork.py) for the full implementation and [PROJECT_DIRECTOR.md](../specialists/PROJECT_DIRECTOR.md) for PD-specific fork usage.
 
 ---
 

@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Project Director's role as the autonomous ReAct agent in LAS.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-20 (ADR-045: fork() via direct graph.invoke(); ADR-077: routing signals, signal processor)
+**Updated:** 2026-02-20 (ADR-045: fork() with conditioning frame + expected_artifacts (#205, #206); ADR-077: routing signals, signal processor)
 
 ---
 
@@ -385,11 +385,40 @@ These schemas tell the LLM (via logit masking in LM Studio) what tools exist and
 | `list_artifacts` | `local` | Local | List available artifacts with type/size hints |
 | `retrieve_artifact` | `local` | Local | Retrieve full content of an artifact by key |
 | `write_artifact` | `local` | Local | Persist observation, decision, or progress as an artifact (ADR-076) |
-| `fork` | `las` | Local (ADR-045) | Spawn subagent via `graph.invoke()` for independent subtask (context-isolated, runs full LAS including EI) |
+| `fork` | `las` | Local (ADR-045) | Spawn subagent via `graph.invoke()` for independent subtask (context-isolated, runs full LAS including EI). Supports `expected_artifacts` for structured result extraction (#206). |
 
 **Internal MCP** = Python services in-process (`self.mcp_client.call()`).
 **External MCP** = Containerized services via stdio (`dispatch_external_tool()`).
 **Local** = In-process dispatch on `captured_artifacts` snapshot (`dispatch_artifact_tool()`).
+
+### fork() — Conditioning Frame and Expected Artifacts (#205, #206)
+
+Every child spawned via `fork` receives a **conditioning frame** prepended to its prompt:
+
+> "This is a development environment where failures are expected and informative. If a tool fails, a capability is unavailable, or you cannot complete the task, report exactly what happened and what you tried. A clear failure report is more valuable than a simulated or fabricated result. Never generate synthetic data to stand in for real tool output."
+
+This reframes the reward landscape so that "good output" and "honest output" point the same direction. Without it, small models (qwen3-30b, gpt-oss-20b) fabricate realistic-looking tool results when real tools fail — the completion attractor overwhelms honesty (#205).
+
+PD can also specify **expected_artifacts** — a list of artifact keys the child should write its results to:
+
+```json
+{
+    "name": "fork",
+    "args": {
+        "prompt": "Analyze the contents of /workspace/data/report.csv",
+        "context": "...",
+        "expected_artifacts": ["csv_analysis", "row_count"]
+    }
+}
+```
+
+When `expected_artifacts` is provided:
+1. `_build_child_prompt()` procedurally appends write instructions to the child's prompt
+2. The child writes results via `write_artifact` to the specified keys
+3. `extract_fork_result()` returns only those artifact values as key-value pairs
+4. Missing keys are logged and reported in the result string
+
+When `expected_artifacts` is omitted, the standard extraction chain applies: `final_user_response.md` → `error_report` → last message fallback.
 
 ### Note: `write_file`
 
@@ -580,7 +609,7 @@ unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_con
 | [project_director_prompt.md](../../app/prompts/project_director_prompt.md) | System prompt — tool descriptions, process instructions, termination rules |
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
 | [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | `list_artifacts`, `retrieve_artifact`, `write_artifact`, dispatch, name generation (ADR-076) |
-| [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` + `extract_fork_result()` — recursive LAS invocation via `graph.invoke()` for context-isolated subtasks (ADR-045) |
+| [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` + `extract_fork_result()` — recursive LAS invocation via `graph.invoke()` with conditioning frame (#205) and `expected_artifacts` (#206) |
 | [cycle_detection.py](../../app/src/resilience/cycle_detection.py) | `detect_cycle_with_pattern()` — stagnation detector |
 | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `after_project_director()` routing |
 | [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Curates `gathered_context` for PD; extracts trace knowledge on retry |

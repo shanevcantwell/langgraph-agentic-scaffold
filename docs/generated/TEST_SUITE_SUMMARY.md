@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 820 |
+| Unit | 76 | 835 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1103** |
+| **Total** | **111** | **1118** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1206,6 +1206,22 @@
   - *dispatch_fork clears cancellation state after successful invocation.*
 - **`test_cleanup_on_exception`**
   - *dispatch_fork clears cancellation state even when graph.invoke() raises.*
+- **`test_conditioning_frame_prepended_to_prompt`**
+  - *Every child prompt starts with the conditioning frame.*
+- **`test_conditioning_frame_present_without_expected_artifacts`**
+  - *Conditioning frame is present even without expected_artifacts.*
+- **`test_conditioning_frame_present_with_expected_artifacts`**
+  - *Conditioning frame is present alongside artifact instructions.*
+- **`test_basic_prompt`**
+  - *Basic prompt includes conditioning frame and task.*
+- **`test_expected_artifacts_appended`**
+  - *Expected artifact keys are appended as instructions.*
+- **`test_no_artifacts_no_instruction`**
+  - *No artifact instruction when expected_artifacts is None.*
+- **`test_empty_artifacts_no_instruction`**
+  - *No artifact instruction when expected_artifacts is empty list.*
+- **`test_dispatch_passes_expected_artifacts_to_prompt`**
+  - *dispatch_fork includes artifact key instructions in child prompt.*
 - **`test_error_key_is_highest_priority`**
   - *Error dict from dispatch_fork takes priority.*
 - **`test_final_user_response_is_canonical`**
@@ -1218,22 +1234,36 @@
   - *Empty state returns error.*
 - **`test_missing_keys_returns_error`**
   - *Minimal dict with no useful content returns error.*
+- **`test_expected_artifacts_extracted`**
+  - *When expected_artifacts specified, returns only those values.*
+- **`test_expected_artifacts_partial_missing`**
+  - *Reports missing artifacts when some keys weren't written.*
+- **`test_expected_artifacts_all_missing_falls_through`**
+  - *When none of the expected artifacts exist, falls back to standard chain.*
+- **`test_expected_artifacts_with_error_key`**
+  - *Error key still takes priority over expected_artifacts.*
+- **`test_expected_artifacts_single_key`**
+  - *Single expected artifact returns clean result.*
 - **`test_fork_in_build_tools`**
   - *fork ToolDef is present in PD's tool table.*
 - **`test_fork_in_tool_params`**
-  - *fork parameter schema is defined.*
+  - *fork parameter schema includes expected_artifacts.*
 - **`test_dispatch_routes_fork`**
   - *_dispatch_tool_call routes fork to dispatch_fork with compiled_graph.*
 - **`test_dispatch_fork_without_context`**
   - *_dispatch_tool_call routes fork correctly when context is omitted.*
+- **`test_dispatch_fork_with_expected_artifacts`**
+  - *_dispatch_tool_call passes expected_artifacts through to both functions.*
 - **`test_fork_in_build_tools`**
   - *fork ToolDef is present in EI's tool table.*
 - **`test_fork_in_tool_params`**
-  - *fork parameter schema is defined in EI's _TOOL_PARAMS.*
+  - *fork parameter schema includes expected_artifacts.*
 - **`test_dispatch_routes_fork`**
   - *_dispatch_tool routes fork to dispatch_fork with compiled_graph.*
 - **`test_dispatch_fork_with_context`**
   - *_dispatch_tool routes fork with context.*
+- **`test_dispatch_fork_with_expected_artifacts`**
+  - *_dispatch_tool passes expected_artifacts through to both functions.*
 
 ## `app/tests/unit/test_gemini_adapter.py`
 

@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Exit Interview specialist's role as the verification gate before END.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-20 (ADR-045: fork() via direct graph.invoke(), subagents run full LAS including EI; ADR-077: signal processor)
+**Updated:** 2026-02-20 (ADR-045: fork() with conditioning frame + expected_artifacts (#205, #206); ADR-077: signal processor)
 
 ---
 
@@ -146,7 +146,7 @@ This is conservative by design — the cost of one more routing cycle is much lo
 | `read_file` | `filesystem` | External MCP | Read file contents |
 | `list_artifacts` | local | Shared (`mcp/artifact_tools.py`) | List artifact keys with type/size hints |
 | `retrieve_artifact` | local | Shared (`mcp/artifact_tools.py`) | Retrieve a specific artifact's content |
-| `fork` | `las` | Local (ADR-045) | Spawn subagent for per-item verification |
+| `fork` | `las` | Local (ADR-045) | Spawn subagent for per-item verification. Supports `expected_artifacts` for structured result extraction (#206). |
 | `DONE` | local | Termination signal | Structured evaluation result |
 
 ### External Tools
@@ -157,7 +157,9 @@ This is conservative by design — the cost of one more routing cycle is much lo
 
 `fork` spawns a subagent LAS invocation to verify a single item independently. Use fork when verifying N independent items that each require inspection — fork once per item instead of reading all files sequentially in EI's context.
 
-Each fork child runs the **full LAS pipeline** (SA → Triage → Router → Specialist → EI → EndSpecialist) via direct `graph.invoke()` — the only difference is **Archiver skips disk write** (no `.zip` archive for children). The child's EI validates the subtask was completed correctly before returning. `dispatch_fork()` returns the child's full final state dict; `extract_fork_result()` extracts the canonical result string. This prevents:
+Each fork child runs the **full LAS pipeline** (SA → Triage → Router → Specialist → EI → EndSpecialist) via direct `graph.invoke()` — the only difference is **Archiver skips disk write** (no `.zip` archive for children). Every child receives a **conditioning frame** (#205) that reframes the reward landscape — honest failure reports are more valuable than fabricated results. The child's EI validates the subtask was completed correctly before returning.
+
+EI can specify **expected_artifacts** (#206) — artifact keys the child should write results to. `extract_fork_result()` returns only those values, giving EI a structured 1-bit-equivalent answer instead of a narrative response. This prevents:
 - **Context death spiral** — EI reading N files sequentially bloats to 30K+ tokens of prompt per react_step call
 - **Unverified subtask results** — each child's EI validates its own work before the result surfaces to the parent
 
@@ -496,7 +498,7 @@ unzip -p ./logs/archive/run_*.zip state_timeline.jsonl | grep exit_interview | j
 | [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) | EI implementation — loop, dispatch, SA call, result builders |
 | [exit_interview_prompt.md](../../app/prompts/exit_interview_prompt.md) | System prompt — tool descriptions, DONE protocol, final-state constraints |
 | [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | Shared artifact inspection tools (list_artifacts, retrieve_artifact) |
-| [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` — recursive LAS invocation for per-item verification (ADR-045) |
+| [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` + `extract_fork_result()` — recursive LAS invocation with conditioning frame (#205) and `expected_artifacts` (#206) |
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `is_react_available`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
 | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_task_completion()`, `route_from_signal()`, `after_exit_interview()` — EI routing |
 | [signal_processor_specialist.py](../../app/src/specialists/signal_processor_specialist.py) | Classifies routing signals and routes to EI (ADR-077) |
@@ -514,7 +516,7 @@ The Exit Interview is a **react_step verification agent** that:
 2. **Runs in subagent mode too** (ADR-045) — fork() children run full LAS including EI; only Archiver disk write is skipped
 3. Lazy-creates an `exit_plan` via SA MCP with verification steps tailored to EI's tool capabilities (including fork)
 4. Runs a react_step loop to inspect the filesystem and artifacts using real tools
-5. Uses **fork() for per-item verification** (ADR-045) — spawns subagents to verify N items independently instead of reading all files sequentially
+5. Uses **fork() for per-item verification** (ADR-045) — spawns subagents to verify N items independently, with `expected_artifacts` for structured result extraction (#206)
 6. Enforces tool-use-before-DONE (#193) — the model must verify real outcomes before judgment
 7. Calls DONE with a structured `CompletionEvaluation` (complete, reasoning, missing elements, recommended specialists)
 8. Returns an honest "cannot verify" signal when prompt-prix is unavailable — no degraded evaluation (#195)
