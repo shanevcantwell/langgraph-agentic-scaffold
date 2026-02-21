@@ -713,6 +713,65 @@ pre, .markdown-body pre {
 .thought-badge.badge-start { background: var(--secondary-color); color: var(--bg-color); }
 .thought-badge.badge-end { background: #27ae60; color: #fff; }
 .thought-badge.badge-error { background: var(--alert-color); color: #fff; }
+.thought-badge.badge-fork { background: #e67e22; color: #fff; }
+
+/* Fork entries in Thought Stream */
+.thought-fork .fork-route {
+    font-size: 0.8em;
+    color: var(--text-dim);
+    margin-top: 2px;
+    font-family: var(--font-main);
+}
+.thought-fork .fork-run-id {
+    font-size: 0.7em;
+    color: var(--text-dim);
+    font-family: var(--font-main);
+    opacity: 0.6;
+}
+.thought-fork.fork-error { border-left: 2px solid var(--alert-color); }
+
+/* Fork breadcrumb in Tool Chain */
+.fork-breadcrumb {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(230, 126, 34, 0.08);
+    border: 1px solid rgba(230, 126, 34, 0.3);
+    border-radius: 3px;
+}
+.fork-breadcrumb-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.fork-breadcrumb-label {
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #e67e22;
+    font-family: var(--font-main);
+}
+.fork-run-id {
+    font-size: 0.75em;
+    font-family: var(--font-main);
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+.fork-routing-path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+.fork-path-node {
+    font-size: 0.8em;
+    padding: 1px 5px;
+    background: var(--bg-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 2px;
+    font-family: var(--font-main);
+}
+.fork-path-arrow { color: var(--text-dim); font-size: 0.8em; }
+.fork-error-flag { font-size: 0.75em; color: var(--alert-color); font-weight: bold; }
 
 /* ============================================================================ */
 /* ENHANCED NEURAL GRID */

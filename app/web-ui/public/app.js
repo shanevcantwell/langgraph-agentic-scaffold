@@ -48,6 +48,7 @@ let loadedFile = null; // { content: string, type: 'text' | 'image' }
 let abortController = null; // Controller for the fetch request
 let thoughtStreamEntries = []; // Track thought stream entries
 let currentArtifacts = {}; // Track artifacts as they're generated
+let progressInterval = null; // Progress polling interval for intra-node updates
 
 // STATE tab: snapshot accumulator and intra-run paging
 let stateSnapshots = [];       // Accumulates state_snapshot events within current run
@@ -553,6 +554,7 @@ async function executeWorkflow() {
         // User can manually select all + delete to clear, or just type over it
 
         stopTracePolling();
+        stopProgressPolling();
         abortController = null;
 
         // Clear file after send? Maybe keep it? Let's keep it for now, user can clear manually.
@@ -649,6 +651,18 @@ function addThoughtStreamEntry(specialist, message, type = 'info', options = {})
                     <span class="thought-content">📡 ${message}</span>
                 `;
             }
+            break;
+
+        case 'fork':
+            div.className = 'thought-entry thought-fork' + (options.hadError ? ' fork-error' : '');
+            div.innerHTML = `
+                <span class="thought-time">${timestamp}</span>
+                <span class="thought-badge badge-fork">FORK</span>
+                <span class="thought-specialist">${specialist}</span>
+                <span class="thought-content">${escapeHtml(message)}</span>
+                ${options.childRoute ? `<div class="fork-route">${escapeHtml(options.childRoute)}</div>` : ''}
+                ${options.childRunId ? `<span class="fork-run-id">${options.childRunId.substring(0, 8)}</span>` : ''}
+            `;
             break;
 
         case 'reasoning':
@@ -933,6 +947,28 @@ function renderSnapshot(index) {
                 if (isLong) html += '<span class="toggle-arrow">&#x25B6;</span>';
                 html += '</div>';
                 html += `<pre class="tool-observation-content">${escapeHtml(entry.observation)}</pre>`;
+                html += '</div>';
+            }
+
+            // Fork child routing breadcrumb
+            if (entry.fork_metadata) {
+                const fm = entry.fork_metadata;
+                html += '<div class="fork-breadcrumb">';
+                html += '<div class="fork-breadcrumb-header">';
+                html += '<span class="fork-breadcrumb-label">CHILD INVOCATION</span>';
+                if (fm.child_run_id) {
+                    html += `<span class="fork-run-id">${fm.child_run_id.substring(0, 8)}</span>`;
+                }
+                html += '</div>';
+                if (fm.child_routing_history && fm.child_routing_history.length > 0) {
+                    html += '<div class="fork-routing-path">';
+                    fm.child_routing_history.forEach((node, i) => {
+                        if (i > 0) html += '<span class="fork-path-arrow">\u2192</span>';
+                        html += `<span class="fork-path-node">${escapeHtml(node)}</span>`;
+                    });
+                    html += '</div>';
+                }
+                if (fm.had_error) html += '<span class="fork-error-flag">ERROR</span>';
                 html += '</div>';
             }
 
@@ -1258,7 +1294,7 @@ function handleStreamEvent(event) {
     if (event.run_id && !currentRunId) {
         currentRunId = event.run_id;
         logStatus(`► RUN ID: ${currentRunId}`);
-        // startTracePolling(currentRunId); // Disabled in favor of Mission Report
+        startProgressPolling(currentRunId); // Live intra-node progress
     }
 
     const data = event.data || {};
@@ -1434,6 +1470,7 @@ function handleStreamEvent(event) {
             break;
 
         case 'workflow_end':
+            stopProgressPolling();
             logStatus(`► WORKFLOW COMPLETE`);
             addThoughtStreamEntry('SYSTEM', 'Workflow completed successfully', 'lifecycle');
 
@@ -1856,6 +1893,67 @@ function startTracePolling(runId) {
 
 function stopTracePolling() {
     if (tracePollInterval) clearInterval(tracePollInterval);
+}
+
+// --- Intra-node progress polling ---
+// Polls /v1/progress/{run_id} every 2.5s to get live tool call updates
+// from long-running specialists (PD react_step loop, fork invocations).
+
+function startProgressPolling(runId) {
+    if (progressInterval) clearInterval(progressInterval);
+    progressInterval = setInterval(async () => {
+        try {
+            const resp = await fetch(`${API_BASE}/progress/${runId}`);
+            if (!resp.ok) return;
+            const data = await resp.json();
+            for (const entry of (data.entries || [])) {
+                renderProgressEntry(entry);
+            }
+        } catch (e) {
+            // Silently ignore poll failures (run may have ended)
+        }
+    }, 2500);
+}
+
+function stopProgressPolling() {
+    if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+    }
+}
+
+function renderProgressEntry(entry) {
+    const specialist = (entry.specialist || 'project_director').replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase();
+    const tool = entry.tool || 'unknown';
+
+    // Fork entries get special rendering
+    if (entry.fork_metadata) {
+        const fm = entry.fork_metadata;
+        const route = (fm.child_routing_history || []).join(' \u2192 ');
+        addThoughtStreamEntry(specialist, entry.args_summary || tool, 'fork', {
+            childRunId: fm.child_run_id,
+            childRoute: route,
+            hadError: fm.had_error,
+        });
+        return;
+    }
+
+    // _start entries render as lifecycle
+    if (tool === '_start') {
+        addThoughtStreamEntry(specialist, entry.args_summary || 'Starting react loop...', 'lifecycle');
+        return;
+    }
+
+    // Regular tool calls
+    if (entry.success) {
+        addThoughtStreamEntry(specialist, `${tool}()`, 'mcp', {
+            service: 'react_step',
+            method: tool,
+            params: entry.args_summary,
+        });
+    } else {
+        addThoughtStreamEntry(specialist, `${tool}() \u2014 ${(entry.observation_preview || 'failed').substring(0, 100)}`, 'error');
+    }
 }
 
 function renderTraces(runs) {

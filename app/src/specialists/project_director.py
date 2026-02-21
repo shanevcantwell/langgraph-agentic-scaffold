@@ -10,6 +10,7 @@ Uses prompt-prix MCP react_step() for iterative tool use (#162):
 
 Replaces the former ReActMixin + ReactEnabledSpecialist pattern.
 """
+import json
 import logging
 from typing import Dict, Any, List
 
@@ -17,6 +18,7 @@ from langchain_core.messages import AIMessage
 
 from .base import BaseSpecialist
 from ..utils.cancellation_manager import CancellationManager
+from ..utils.progress_store import publish as publish_progress
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
     dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
@@ -179,6 +181,16 @@ class ProjectDirector(BaseSpecialist):
         # ADR-CORE-045: Read fork depth for recursion limit enforcement
         fork_depth = state.get("scratchpad", {}).get("fork_depth", 0)
 
+        # Publish start event for live UI progress polling
+        if run_id:
+            publish_progress(run_id, {
+                "specialist": self.specialist_name,
+                "iteration": -1,
+                "tool": "_start",
+                "args_summary": f"goal: {user_request[:150]}",
+                "success": True,
+            })
+
         # ADR-076: Snapshot artifacts for mid-execution read/write.
         # write_artifact mutates this snapshot; it propagates on return.
         captured_artifacts = artifacts.copy()
@@ -249,7 +261,8 @@ class ProjectDirector(BaseSpecialist):
                         run_id=run_id, fork_depth=fork_depth,
                     )
 
-                    trace.append({
+                    # Build trace entry with optional fork metadata
+                    trace_entry = {
                         "iteration": iteration,
                         "tool_call": {
                             "id": tc.get("id", f"call_{call_counter}"),
@@ -259,7 +272,25 @@ class ProjectDirector(BaseSpecialist):
                         "observation": observation,
                         "success": not observation.startswith("Error:"),
                         "thought": thought,
-                    })
+                    }
+                    if tool_name == "fork" and getattr(self, '_last_fork_metadata', None):
+                        trace_entry["fork_metadata"] = self._last_fork_metadata
+                        self._last_fork_metadata = None
+                    trace.append(trace_entry)
+
+                    # Publish progress for live UI polling
+                    if run_id:
+                        progress_entry = {
+                            "specialist": self.specialist_name,
+                            "iteration": iteration,
+                            "tool": tool_name,
+                            "args_summary": json.dumps(tool_args, default=str)[:200],
+                            "success": not observation.startswith("Error:"),
+                            "observation_preview": observation[:300],
+                        }
+                        if trace_entry.get("fork_metadata"):
+                            progress_entry["fork_metadata"] = trace_entry["fork_metadata"]
+                        publish_progress(run_id, progress_entry)
 
                     # Track successful filesystem paths for error enrichment
                     if not observation.startswith("Error:") and tool_name in (
@@ -333,7 +364,14 @@ class ProjectDirector(BaseSpecialist):
                 parent_run_id=run_id,
                 fork_depth=fork_depth,
             )
-            return extract_fork_result(child_state, expected_artifacts=expected)
+            observation = extract_fork_result(child_state, expected_artifacts=expected)
+            # Capture child metadata for trace enrichment + live UI progress
+            self._last_fork_metadata = {
+                "child_run_id": child_state.get("run_id"),
+                "child_routing_history": child_state.get("routing_history", []),
+                "had_error": "error" in child_state,
+            }
+            return observation
 
         # Local artifact tools (ADR-076)
         if tool_def.service == "local":

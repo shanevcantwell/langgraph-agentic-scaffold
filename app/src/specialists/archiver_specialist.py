@@ -112,7 +112,7 @@ class ArchiverSpecialist(BaseSpecialist):
         Creates a self-contained .zip package with manifest, artifacts, and report.
         Returns the absolute path to the .zip file.
         """
-        run_id = str(uuid.uuid4())
+        run_id = state.get("run_id") or str(uuid.uuid4())
         timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
         package_name = f"run_{timestamp}_{run_id[:8]}"
         package_dir = os.path.join(self.archive_dir, package_name)
@@ -207,6 +207,7 @@ class ArchiverSpecialist(BaseSpecialist):
             # 5. Create Manifest
             manifest = AtomicManifest(
                 run_id=run_id,
+                parent_run_id=state.get("scratchpad", {}).get("parent_run_id"),
                 routing_history=state.get("routing_history", []),
                 artifacts=artifact_manifests,
                 final_response_generated=bool(state.get("artifacts", {}).get("final_user_response.md")),

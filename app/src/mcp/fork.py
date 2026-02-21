@@ -126,12 +126,16 @@ def dispatch_fork(
     if parent_run_id:
         CancellationManager.register_child(parent_run_id, child_run_id)
 
+    child_scratchpad = {"fork_depth": fork_depth + 1}
+    if parent_run_id:
+        child_scratchpad["parent_run_id"] = parent_run_id
+
     initial_state = create_initial_state(
         goal=child_prompt,
         text_to_process=context,
         subagent=True,
         run_id=child_run_id,
-        additional_scratchpad={"fork_depth": fork_depth + 1},
+        additional_scratchpad=child_scratchpad,
     )
 
     try:

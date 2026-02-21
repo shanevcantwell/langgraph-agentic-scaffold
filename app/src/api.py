@@ -675,6 +675,18 @@ async def stream_graph_events(request: InvokeRequest):
         raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")
 
 
+@app.get("/v1/progress/{run_id}")
+async def get_progress(run_id: str):
+    """
+    Poll for intra-node progress entries during long-running specialist execution.
+    Returns accumulated entries since last poll, then clears them.
+    UI polls this every 2-3s while a run is active.
+    """
+    from .utils.progress_store import drain
+    entries = drain(run_id)
+    return {"entries": entries}
+
+
 @app.get("/v1/archives/{filename}")
 async def download_archive(filename: str):
     """

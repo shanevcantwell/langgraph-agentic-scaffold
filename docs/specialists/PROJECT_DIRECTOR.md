@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Project Director's role as the autonomous ReAct agent in LAS.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-20 (ADR-045: fork() with conditioning frame + expected_artifacts (#205, #206); ADR-077: routing signals, signal processor)
+**Updated:** 2026-02-21 (Live progress polling + fork observability breadcrumbs; ADR-045: fork() with conditioning frame + expected_artifacts (#205, #206); ADR-077: routing signals, signal processor)
 
 ---
 
@@ -16,6 +16,8 @@ Key characteristics:
 - **Fresh trace each invocation** — no resumption of prior traces on retry (#170)
 - **Artifact tools (read + write)** — mid-execution persistence via `write_artifact` (ADR-076). Observations, decisions, and progress survive max_iterations and retries.
 - **Writes `specialist_activity` + `react_trace` to scratchpad** — observability signals for Facilitator (retry context) and state_timeline (archive/SSE)
+- **Live progress publishing** — publishes tool calls to `progress_store` after each react_step iteration for real-time UI polling (see [WEB_UI.md](../WEB_UI.md) "Intra-Node Progress")
+- **Fork metadata capture** — `_last_fork_metadata` pattern attaches child_run_id + child_routing_history to trace entries and progress events
 - **Stagnation detection** — cycle detection catches repeating tool call patterns
 - **Filesystem enrichment** — error hints and path disambiguation for model self-correction
 
@@ -272,6 +274,44 @@ The `trace` list grows during a single PD invocation. Each entry records one too
 
 On iteration 0, `trace = []` — the model sees only the system prompt, task prompt, and tool schemas. On iteration N, the model sees the full history of tool calls and observations from iterations 0 through N-1.
 
+### Live Progress Publishing
+
+PD publishes a progress entry to `progress_store` after each tool dispatch. The web UI polls `GET /v1/progress/{run_id}` every 2.5s to render these as Thought Stream entries during execution — solving the problem that `astream()` only yields when the entire PD node completes.
+
+```python
+# Published after each tool call (inside react loop)
+{
+    "specialist": "project_director",
+    "iteration": 2,
+    "tool": "list_directory",
+    "args_summary": '{"path": "/workspace/test"}',  # JSON, truncated to 200 chars
+    "success": True,
+    "observation_preview": "[FILE] /workspace/test/1.txt\n..."  # First 300 chars
+}
+```
+
+Fork tool calls include additional metadata:
+
+```python
+{
+    "specialist": "project_director",
+    "iteration": 5,
+    "tool": "fork",
+    "args_summary": '{"prompt": "Analyze...", "expected_artifacts": ["result"]}',
+    "success": True,
+    "observation_preview": "result: The analysis shows...",
+    "fork_metadata": {
+        "child_run_id": "a1b2c3d4-...",
+        "child_routing_history": ["triage_architect", "systems_architect", "facilitator", "router", "project_director"],
+        "had_error": False
+    }
+}
+```
+
+The `_last_fork_metadata` side-channel pattern: `_dispatch_tool_call()` captures metadata from the child state, the react loop reads it before the next tool call and attaches it to both the trace entry (for archives/Inspector) and the progress entry (for live UI).
+
+See [WEB_UI.md](../WEB_UI.md) for how the UI renders these entries.
+
 ### What prompt-prix Receives
 
 `call_react_step()` sends this parameter dict to prompt-prix MCP via `sync_call_external_mcp()`:
@@ -419,6 +459,14 @@ When `expected_artifacts` is provided:
 4. Missing keys are logged and reported in the result string
 
 When `expected_artifacts` is omitted, the standard extraction chain applies: `final_user_response.md` → `error_report` → last message fallback.
+
+### Child Archives and Bidirectional Linkage
+
+Child fork invocations write their own archives (EndSpecialist no longer suppresses archiving for subagents). The archive `run_id` matches the child's workflow `state["run_id"]`, and `parent_run_id` is written to the child's `AtomicManifest`.
+
+**Post-hoc navigation:**
+- **Drill down:** Parent's `react_trace` contains `fork_metadata.child_run_id` on fork entries → find child archive by run_id prefix
+- **Climb up:** Child's `manifest.json` has `parent_run_id` → find parent archive
 
 ### Note: `write_file`
 
@@ -610,6 +658,7 @@ unzip -p ./logs/archive/run_*.zip final_state.json | jq '.artifacts.gathered_con
 | [react_step.py](../../app/src/mcp/react_step.py) | Shared helpers: `ToolDef`, `call_react_step`, `build_tool_schemas`, `dispatch_external_tool` |
 | [artifact_tools.py](../../app/src/mcp/artifact_tools.py) | `list_artifacts`, `retrieve_artifact`, `write_artifact`, dispatch, name generation (ADR-076) |
 | [fork.py](../../app/src/mcp/fork.py) | `dispatch_fork()` + `extract_fork_result()` — recursive LAS invocation via `graph.invoke()` with conditioning frame (#205) and `expected_artifacts` (#206) |
+| [progress_store.py](../../app/src/utils/progress_store.py) | Thread-safe publish/drain store for intra-node progress events — consumed by `GET /v1/progress/{run_id}` |
 | [cycle_detection.py](../../app/src/resilience/cycle_detection.py) | `detect_cycle_with_pattern()` — stagnation detector |
 | [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `after_project_director()` routing |
 | [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Curates `gathered_context` for PD; extracts trace knowledge on retry |

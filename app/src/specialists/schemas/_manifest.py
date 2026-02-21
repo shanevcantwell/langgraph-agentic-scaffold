@@ -125,6 +125,7 @@ class AtomicManifest(BaseModel):
     """
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     run_id: str = Field(..., description="Unique identifier for this execution run.")
+    parent_run_id: Optional[str] = Field(default=None, description="Set for child fork archives. Points to the parent's run_id.")
     routing_history: List[str] = Field(default_factory=list)
     artifacts: List[ArtifactManifest] = Field(default_factory=list)
     final_response_generated: bool
