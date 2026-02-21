@@ -525,14 +525,23 @@ class ProjectDirector(BaseSpecialist):
         Written to scratchpad["specialist_activity"] so Facilitator can surface
         prior work on retry. The local trace stays in PD — only this summary
         reaches state.
+
+        Includes both successful and failed steps. Failed steps carry the
+        observation text so retry models can learn from prior errors (e.g.,
+        allowlist restrictions, missing tools). No truncation — downstream
+        can't distinguish missing from cut (#209).
         """
         entries = []
         for step in trace:
-            if not step.get("success"):
-                continue
             tc = step.get("tool_call", {})
             name = tc.get("name", "")
             args = tc.get("args", {})
+            succeeded = step.get("success", False)
+
+            if not succeeded:
+                observation = step.get("observation", "unknown error")
+                entries.append(f"FAILED: {name}({args}) — {observation}")
+                continue
 
             if name == "create_directory":
                 entries.append(f"Created directory {args.get('path', '?')}")
@@ -545,9 +554,6 @@ class ProjectDirector(BaseSpecialist):
                 entries.append(f"Wrote {path}{size}")
             elif name == "run_command":
                 cmd = args.get("command", "?")
-                # Truncate long commands (e.g., cat <<EOF writes)
-                if len(cmd) > 80:
-                    cmd = cmd[:77] + "..."
                 entries.append(f"Ran: {cmd}")
         return entries
 
