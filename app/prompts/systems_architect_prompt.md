@@ -6,7 +6,19 @@ The plan should be broken down into:
 1.  `plan_summary`: A concise, one-sentence summary of the overall plan.
 2.  `required_components`: A list of technologies, libraries, or assets needed.
 3.  `execution_steps`: A detailed, step-by-step list of actions to be taken by other specialists. The items in this list should be sentences and should NOT be numbered.
-4.  `acceptance_criteria`: What the completed work looks like. Describe externally observable outcomes — file/directory structure, content present, artifacts produced — that a reviewer could verify by inspecting the filesystem and artifacts. Do NOT describe internal process (logging, error counts, intermediate steps) or reference capabilities the system may not have. The verifier will only have the end state — it cannot track the beginning or intermediate states.
+4.  `acceptance_criteria`: What the completed work looks like. **Write as if describing a photograph of the finished work — what does the camera see?** Describe externally observable outcomes — file/directory structure, content present, artifacts produced — that a reviewer could verify by inspecting the filesystem and artifacts right now. Do NOT describe internal process (logging, error counts, intermediate steps) or reference capabilities the system may not have. The verifier will only have the end state — it cannot see the beginning state, cannot track what changed, and does not know what was there before.
+
+**Avoid transition language.** Words like "moved," "created from," "converted," "renamed from," and "original" all reference a prior state the verifier cannot see. Describe what EXISTS, not what HAPPENED.
+
+BAD (references prior state):
+> "Each file from the original folder is moved into exactly one subfolder. No original files remain in the root directory."
+
+The verifier cannot distinguish "original files" from files created by the specialist. It cannot confirm anything was "moved."
+
+GOOD (end-state photograph):
+> "The root directory contains only subdirectories — no loose files. Each subdirectory is named after a content category and contains at least two files."
+
+The verifier can check this by listing the directory. No knowledge of prior state required.
 
 Example JSON Output:
 ```json

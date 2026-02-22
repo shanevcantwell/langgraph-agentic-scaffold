@@ -87,7 +87,7 @@ class SystemPlan(BaseModel):
     acceptance_criteria: str = ""        # Observable outcomes defining "done" (#173)
 ```
 
-The `acceptance_criteria` field (#173) provides externally observable outcomes — what the completed end state looks like. SA's prompt distinguishes observable outcomes ("all files are in category subdirectories") from internal process state ("all file movements are logged"). EI feeds `acceptance_criteria` to SA when generating `exit_plan` for verification.
+The `acceptance_criteria` field (#173) provides externally observable outcomes — what the completed end state looks like. **Criteria must be verifiable from end-state alone** (#211): EI is a final-state-only observer that cannot see prior state, cannot track transitions, and cannot distinguish "original" files from specialist-created ones. The SA prompt enforces this with a contrastive BAD/GOOD example and prohibits transition language ("moved," "created from," "original"). EI feeds `acceptance_criteria` to SA when generating `exit_plan` for verification.
 
 SA's system prompt ([systems_architect_prompt.md](../../app/prompts/systems_architect_prompt.md)) instructs the model to produce this exact structure. The prompt includes an example JSON output to ground the format.
 
