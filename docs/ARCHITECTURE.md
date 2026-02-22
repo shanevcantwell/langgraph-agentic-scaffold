@@ -1,6 +1,6 @@
-# LAS v1.0 Architecture Reference
+# LAS Architecture Reference
 
-> Definitive reference for LAS 1.0 ("Project Bedrock Complete") to inform LAP (LAS 2.0) design.
+**Updated:** 2026-02-22
 
 ---
 
@@ -8,155 +8,189 @@
 
 **LAS** (langgraph-agentic-scaffold) is a Python orchestration framework for multi-model agentic workflows with structural safety constraints.
 
-**Core thesis:** frontier LLMs are unreliable and possibly manipulative. The framework must enforce safety through structure, not trust.
+**Core thesis:** LLMs are unreliable and potentially manipulative. The framework enforces safety through structure, not trust. Every specialist executes inside a safety wrapper. No specialist can unilaterally terminate, corrupt state, or bypass the control plane.
+
+**Architectural metaphor:** LAS applies computing primitives to LLM orchestration:
+
+| Computing Concept | LAS Equivalent | Purpose |
+|-------------------|----------------|---------|
+| **CPU / Scheduler** | Router | Turn-by-turn routing decisions |
+| **Stack** | Context Window | Ephemeral per-invocation working memory |
+| **Heap** | Artifacts | Persistent, cross-specialist shared state |
+| **System Calls** | MCP | Synchronous service invocation bypassing Router |
+| **Process Fork** | fork() | Context-isolated subtask with own lifecycle |
+| **Signals** | signals field | Asynchronous inter-node communication (ADR-077) |
+
+**Explicit MoE:** LAS specialist routing is a visible, auditable version of what happens implicitly inside a transformer's Mixture-of-Experts layers. The Router is the gating function. Specialists are the experts. The routing decision is observable, loggable, and adjustable — unlike implicit MoE where expert selection happens in hidden dimensions.
 
 ---
 
-## 2. Architectural Primitives
+## 2. Ecosystem
 
-### 2.1 GraphState
+LAS is the composition layer for an ecosystem of independently-developed AI services. Each sibling repo is a self-contained capability module with its own UI, tests, and development cycle. LAS orchestrates them through MCP.
+
+| Service | Repo | Role in Ecosystem |
+|---------|------|-------------------|
+| **prompt-prix** | `prompt-prix/` | LLM interface + eval platform. LAS never calls LLMs directly — prompt-prix owns the model boundary via `react_step` MCP. Also provides battery evaluation, model tournament, and a Gradio eval UI. |
+| **semantic-chunker** | `semantic-chunker/` | Embedding infrastructure. embeddinggemma-300m (768-d) default, NV-Embed-v2 (4096-d). Provides `calculate_drift`, `classify_document`, `analyze_variants` — the measurement tools for prompt geometry research. |
+| **surf-mcp** | `surf-mcp/` | Browser automation with Fara visual grounding. Perception layer for web interaction. |
+| **local-inference-pool** | `local-inference-pool/` | Multi-GPU compute substrate. Routes model requests across rtx8000 + rtx3090 with JIT-swap guard and least-loaded balancing. Consumed via `PooledLMStudioAdapter`. |
+| **it-tools-mcp** | `it-tools-mcp/` | 119 IT utility tools (format_json, convert_json_to_csv, etc.). Standard library wired to TextAnalysisSpecialist. |
+
+**Repo boundaries are context firewalls.** Separate repos prevent AI assistants from accidentally growing or damaging code that exceeds their context window. Each repo is independently comprehensible.
+
+---
+
+## 3. Architectural Primitives
+
+### 3.1 GraphState
 Central state object passed between all nodes. Uses `Annotated` types for merge behavior.
 
 ```python
 messages: Annotated[list, operator.add]      # Append-only conversation
 artifacts: Annotated[dict, operator.ior]     # Dict merge for outputs
-scratchpad: dict                             # Ephemeral signals (cleared after routing)
+scratchpad: dict                             # Ephemeral working memory
+signals: dict                                # Inter-node communication (replace reducer, ADR-077)
 routing_history: list                        # Execution path tracking
 turn_count: int                              # Recursion control
 ```
 
-**Key insight:** Scratchpad is ephemeral (signals), artifacts are persistent (outputs).
+**Three-field architecture:**
+- **Scratchpad** — ephemeral, cleared after routing. Specialist-to-Facilitator communication.
+- **Artifacts** — persistent, dict-merge. Cross-specialist shared state.
+- **Signals** — replace reducer, consumed by SignalProcessor. Routing-level communication (max_iterations_exceeded, stagnation_detected).
 
-### 2.2 BaseSpecialist
+### 3.2 BaseSpecialist
 All specialists inherit from `BaseSpecialist`. Contract:
-- `_execute_logic(state) -> dict` - Core logic, returns state updates
-- `_perform_pre_flight_checks() -> bool` - Validation before execution
-- `register_mcp_services(registry)` - Optional MCP service exposure
+- `_execute_logic(state) -> dict` — Core logic, returns state updates
+- `_perform_pre_flight_checks() -> bool` — Validation before execution
+- `register_mcp_services(registry)` — Optional MCP service exposure
 
-**Key insight:** Specialists never mutate state directly. They return dicts that the executor merges.
+Specialists never mutate state directly. They return dicts that SafeExecutor merges.
 
-### 2.3 NodeExecutor (SafeExecutor)
-Wraps all specialist execution. Responsibilities:
+### 3.3 NodeExecutor (SafeExecutor)
+Wraps all specialist execution:
 - Invariant checking (pre/post execution)
-- Error isolation
-- Circuit breaker triggering
-- LangSmith tracing
+- Error isolation and circuit breaker triggering
+- Observability hooks (state_timeline, LangSmith tracing)
 
-**Key insight:** No specialist can bypass safety. All execution flows through this wrapper.
+**Exception:** Router bypasses SafeExecutor to preserve `turn_count` handling (only Router can increment it). Router includes its own observability hooks directly.
 
-### 2.4 MCP (Message-Centric Protocol)
+### 3.4 MCP (Model Context Protocol)
 Synchronous service invocation between specialists. Two types:
 - **Internal MCP:** Python functions registered in `McpRegistry`
-- **External MCP:** Containerized services via stdio JSON-RPC
+- **External MCP:** Containerized services via stdio JSON-RPC (filesystem, terminal, semantic-chunker, prompt-prix, surf-mcp, it-tools)
 
-```python
-# Internal
-result = self.mcp_client.call("file_specialist", "read_file", path="...")
-
-# External
-result = sync_call_external_mcp(client, "navigator", "goto", {"url": "..."})
-```
-
-**Key insight:** MCP is for deterministic service calls. Dossier pattern is for LLM-driven handoffs.
+MCP is for deterministic service calls. The dossier pattern is for LLM-driven handoffs through the graph.
 
 ---
 
-## 3. Routing Architecture
+## 4. Routing Architecture
 
-### 3.1 Hub-and-Spoke
-Router is the central hub. All specialists return to router after execution.
+### 4.1 Hub-and-Spoke
+Router is the central hub. All specialists return to Router after execution.
 
 ```
-User → Triage → SA → Facilitator → Router → Specialist → Router → ... → End
+User → Triage → SA → Facilitator → Router → Specialist → SignalProcessor → EI → ... → End
 ```
 
-### 3.2 Subgraphs
-Encapsulated multi-specialist workflows that appear as single nodes to the router:
-- **Tiered Chat:** Alpha ∥ Bravo → Synthesizer
-- **Context Engineering:** Triage → SA → Facilitator → Router (#199)
-- **Signal Processor:** Detects and routes interrupt signals (max_iterations, stagnation, etc.)
+### 4.2 Entry Pipeline (Context Engineering)
+Every request flows through the entry pipeline before reaching Router:
 
-### 3.3 Routing Decisions
+```
+User Request
+    ↓
+TriageArchitect ──→ ACCEPT/REJECT gate (thin classifier, not planner)
+    ↓ [PASS]
+SystemsArchitect ──→ Produces task_plan (write-once master intent + acceptance_criteria)
+    ↓
+Facilitator ──→ Assembles gathered_context (always runs, sole context writer)
+    ↓
+Router ──→ Routes with gathered_context available
+```
+
+**Facilitator pattern (ISO-9000 Context Management):** Specialists don't fetch context — they receive it. Facilitator is the single point of context assembly. Context-related fixes belong in Facilitator, not specialists.
+
+### 4.3 Signal Processor (ADR-077)
+After specialist execution, SignalProcessor reads the `signals` field to classify interrupt type:
+- **Normal** → Exit Interview for completion check
+- **BENIGN** (max_iterations_exceeded) → EI with `routing_context: "benign_continuation"`
+- **PATHOLOGICAL** (stagnation_detected) → Interrupt Evaluator → EI → Router fallback chain
+
+### 4.4 Routing Modes
 Three routing modes:
 1. **Declarative:** Explicit `next_specialist` in scratchpad
 2. **Procedural:** Decider functions in `GraphOrchestrator`
 3. **Probabilistic:** Router LLM chooses based on capability descriptions
 
+### 4.5 Subgraphs
+Encapsulated multi-specialist workflows that appear as single nodes:
+- **Tiered Chat:** Alpha || Bravo → Synthesizer (multi-model adversarial validation)
+- **Context Engineering:** Triage → SA → Facilitator → Router
+- **Generate-Critique-Refine:** WebBuilder → Critic loop (max 3)
+
 ---
 
-## 4. Core Flows
+## 5. Core Execution Patterns
 
-### 4.1 Context Engineering (Pre-flight, #199)
+### 5.1 ReAct Tool Use (react_step MCP)
 ```
-User Request
+Specialist with tools
     ↓
-TriageArchitect ──→ ACCEPT/REJECT gate (classifier)
-    ↓ [PASS]
-SystemsArchitect ──→ Produces task_plan (with acceptance_criteria)
+┌──────────────────────────────────────────┐
+│ Loop until DONE (via call_react_step):   │
+│   1. call_react_step() → prompt-prix MCP │
+│   2. prompt-prix makes LLM call          │
+│   3. Specialist dispatches tool calls    │
+│   4. Append observations to trace        │
+│   5. Publish progress for live UI        │
+│   6. Check max_iterations / stagnation   │
+└──────────────────────────────────────────┘
     ↓
-Facilitator ──→ Assembles gathered_context (always runs)
-    ↓
-Router ──→ Routes with gathered_context available
+Specialist writes artifacts + signals
 ```
 
-**Purpose:** Gate, plan, and gather context before routing so specialists have what they need.
+**Consumers:** ProjectDirector (filesystem/terminal/fork), TextAnalysisSpecialist (semantic-chunker/it-tools), ExitInterview (filesystem/artifacts).
 
-### 4.2 Tiered Chat (CORE-CHAT-002)
+**Shared helper:** `app/src/mcp/react_step.py` provides `ToolDef` + `call_react_step` + `build_tool_schemas` + `dispatch_external_tool`. Any specialist becomes ReAct-capable by defining a tool routing table and looping on `call_react_step()`.
+
+### 5.2 fork() — Context-Isolated Subtasks (ADR-045)
+```
+Parent specialist (e.g., ProjectDirector)
+    ↓
+dispatch_fork(prompt, context, expected_artifacts)
+    ↓
+Child graph.invoke() — full LAS pipeline in isolated context
+    ↓
+extract_fork_result() → concise result returned to parent
+```
+
+**fork() = context garbage collection.** Child does work in its own context window, returns a concise result. Parent grows by result size, not work size.
+
+Features:
+- **Conditioning frame** — prepended anti-fabrication prompt (#205). Reframes reward landscape so honest failure reports and task completion are equally valued.
+- **Expected artifacts** — structured result extraction via `write_artifact` keys (#206)
+- **Child archiving** — children write full archives with `parent_run_id` for bidirectional navigation
+- **Fork metadata** — child_run_id + child_routing_history captured for live UI breadcrumbs and post-hoc inspection
+
+### 5.3 Tiered Chat (CORE-CHAT-002)
 ```
 Router
     ↓
 ┌───────┬───────┐
-│ Alpha │ Bravo │  (parallel, different models)
+│ Alpha │ Bravo │  (parallel, different models/providers)
 └───┬───┴───┬───┘
     ↓       ↓
 TieredSynthesizer ──→ Combines perspectives
-    ↓
-End
 ```
 
-**Purpose:** Multi-model adversarial validation. Different providers reduce correlated errors.
-
-### 4.3 Generate-Critique-Refine
-```
-WebBuilder ──→ Creates artifact
-    ↓
-Critic ──→ Reviews, returns ACCEPT or REVISE
-    ↓
-[REVISE] → WebBuilder (loop, max 3)
-[ACCEPT] → End
-```
-
-**Purpose:** Self-improvement loop with explicit termination.
-
-### 4.4 ReAct Tool Use (react_step MCP)
-```
-Specialist with tools: config
-    ↓
-┌─────────────────────────────────────────┐
-│ Loop until DONE (via call_react_step):  │
-│   1. call_react_step() → prompt-prix    │
-│   2. prompt-prix makes LLM call         │
-│   3. Specialist dispatches tool calls   │
-│   4. Append observations to trace       │
-│   5. Check max_iterations               │
-└─────────────────────────────────────────┘
-    ↓
-Specialist writes artifacts + signals task_is_complete
-```
-
-**Purpose:** Iterative tool use with LLM-in-the-loop control.
-
-**Current consumers:** ProjectDirector (filesystem/terminal), TextAnalysisSpecialist (semantic-chunker/it-tools), ExitInterview (filesystem/artifact tools).
-
-**Shared helper pattern:** `app/src/mcp/react_step.py` provides `ToolDef` + `call_react_step` + `build_tool_schemas` + `dispatch_external_tool`. Any specialist becomes ReAct-capable by defining a tool routing table and looping on `call_react_step()`. No config flag, no wrapper, no mixin.
-
-**ReActMixin deleted:** The former ~1700-line `ReActMixin` / `ReactEnabledSpecialist` / `react_wrapper.py` was replaced by prompt-prix MCP's `react_step()` primitive (Phase 5, #162). -1720 lines net.
+Multi-model adversarial validation. Different providers reduce correlated errors.
 
 ---
 
-## 5. Safety Mechanisms
+## 6. Safety Mechanisms
 
-### 5.1 Invariant Monitor
+### 6.1 Invariant Monitor
 Checks system health before each specialist execution:
 - State structure validity
 - Max turn count (recursion limit)
@@ -164,68 +198,84 @@ Checks system health before each specialist execution:
 
 Violations trigger circuit breaker → stabilization action (HALT or ROUTE_TO_ERROR).
 
-### 5.2 Fail-Fast Validation
+### 6.2 Fail-Fast Validation
 - **Startup:** Critical specialists must load or app fails
+- **Connectivity:** `verify_connectivity.py` validates LLM provider reachability before app starts
 - **Routing:** Unknown destinations raise `WorkflowError`
 
-### 5.3 Four-Stage Termination
-Human control preserved:
+### 6.3 Four-Stage Termination
+No specialist can unilaterally terminate:
 1. Specialist produces artifacts
-2. Exit Interview evaluates completion (ADR-CORE-036)
-3. End specialist synthesizes final response
-4. Archiver records to atomic package
+2. SignalProcessor classifies interrupt type (ADR-077)
+3. Exit Interview evaluates completion with tool-based verification
+4. EndSpecialist synthesizes final response
+5. ArchiverSpecialist records atomic archive package
 
-No specialist can unilaterally terminate.
+### 6.4 Structural Defenses
 
----
-
-## 6. Observability Hooks
-
-| Hook | Location | Purpose |
-|------|----------|---------|
-| `@traceable` | Specialists, MCP | LangSmith trace spans |
-| `AgUiEmitter` | API | SSE events to UI |
-| `logger.*` | Everywhere | Structured logging |
-| `TrainingCapture` | BaseSpecialist | Training data collection |
-| `ArchiverSpecialist` | End of flow | Workflow reports to disk |
-
-**Gap:** No unified observability strategy. Hooks exist but aren't cohesive.
+| Defense | Against | Mechanism |
+|---------|---------|-----------|
+| SafeExecutor wrapper | Arbitrary state mutation | All specialist execution sandboxed |
+| Context curation at boundaries | Whispering Gallery Effect (context accumulation) | Facilitator rebuilds context fresh each invocation |
+| Multi-model progenitors | Correlated LLM errors | Different providers for Alpha vs Bravo |
+| Conditioning frame on fork | Model fabrication (#205) | Anti-fabrication prompt reframes reward landscape |
+| Stagnation detection | Infinite tool loops | Cycle detection on tool call signatures |
 
 ---
 
-## 7. External Integrations
+## 7. Observability
 
-### 7.1 LLM Adapters
+### 7.1 Live Observability (V.E.G.A.S. Terminal)
+
+The web UI provides real-time workflow visualization. See [WEB_UI.md](WEB_UI.md) for full architecture.
+
+| Feature | Mechanism |
+|---------|-----------|
+| **Thought Stream** | Semantic entries (ROUTE, MCP, FORK, THINK, ARTIFACT, ERROR) streamed via SSE |
+| **Intra-node progress** | PD publishes to progress_store; UI polls `/v1/progress/{run_id}` every 2.5s |
+| **Fork breadcrumbs** | Live routing path + child_run_id in Thought Stream; CHILD INVOCATION panel in Inspector |
+| **Inspector** | Prompt Inspector (system/assembled prompts), Tool Chain viewer (react_trace), Scratchpad viewer |
+| **Neural Grid** | Specialist node visualization with active highlighting |
+
+### 7.2 Post-Hoc Observability (Archives)
+
+Every workflow produces a timestamped zip archive in `./logs/archive/`:
+- `manifest.json` — routing_history, timestamps, run metadata, parent_run_id for child forks
+- `llm_traces.jsonl` — per-specialist execution with latency_ms
+- `final_state.json` — accumulated state at workflow end
+- `state_timeline.jsonl` — state snapshots at each specialist boundary
+
+**The archive is authoritative.** If the UI shows something different, the bug is in the UI layer.
+
+### 7.3 Observability Stack
+
+| Layer | Tool | Purpose |
+|-------|------|---------|
+| Tracing | LangSmith `@traceable` | Hierarchical specialist execution spans |
+| Streaming | AgUiTranslator → SSE | Real-time events to web UI |
+| Progress | progress_store → polling | Intra-node updates during long ReAct loops |
+| Archive | ArchiverSpecialist | Atomic post-hoc workflow packages |
+| Logging | Python `logging` | Structured operational logs |
+
+---
+
+## 8. LLM Adapters
+
 Factory pattern with provider abstraction:
-- `PooledLMStudioAdapter` (local models via GPU pool — primary, ADR-068)
-- `LMStudioAdapter` (local models, single server — base class for pooled)
-- `GeminiAdapter` (Google)
-- `AnthropicAdapter` (Claude)
-- `OpenAIAdapter` (GPT)
 
-`PooledLMStudioAdapter` extends `LMStudioAdapter` with `local-inference-pool` for multi-GPU routing (rtx8000 + rtx3090), JIT-swap guard, and least-loaded balancing.
+| Adapter | Provider | Notes |
+|---------|----------|-------|
+| `PooledLMStudioAdapter` | Local (multi-GPU) | Primary. Extends LMStudioAdapter with local-inference-pool for rtx8000 + rtx3090 routing, JIT-swap guard, least-loaded balancing (ADR-068) |
+| `LMStudioAdapter` | Local (single server) | Base class for pooled adapter |
+| `GeminiAdapter` | Google | Cloud provider |
+| `AnthropicAdapter` | Anthropic | Cloud provider |
+| `OpenAIAdapter` | OpenAI | Cloud provider |
 
-### 7.2 External MCP Containers
-- **filesystem:** File read/write/list operations
-- **terminal:** Shell command execution (run_command, get_cwd)
-- **surf-mcp:** Browser automation with Fara visual grounding
-- **semantic-chunker:** Embedding analysis — embeddinggemma-300m (768-d) default, NV-Embed-v2 (4096-d) available (calculate_drift, classify_document, analyze_variants)
-- **it-tools-mcp:** 119 IT utility tools (format_json, convert_json_to_csv, etc.)
-- **prompt-prix-mcp:** Eval primitives (react_step, complete, list_models) — operational, 9 tools via FastMCP
-
-### 7.3 prompt-prix Integration (Eval)
-Two containers from the same image, different purposes:
-- **prompt-prix-mcp:** Thin MCP server for iteration primitives. LAS calls via `sync_call_external_mcp()`.
-- **prompt-prix (app):** Full application for battery evaluation. LAS calls via internal MCP tool wrapping `docker exec prompt-prix prompt-prix-cli run-battery ...`.
-
-Battery runs go through the CLI (full app), not MCP. Model/adapter routing is prompt-prix's responsibility — LAS is model-agnostic at the eval boundary.
-
-### 7.4 Search Strategies
-Fallback chain: Brave → DuckDuckGo → (future: more)
+**Model agnosticism:** The system works with 20+ models. No specialist depends on specific model behaviors. All model bindings are runtime configuration (`user_settings.yaml`).
 
 ---
 
-## 8. Configuration Tiers
+## 9. Configuration
 
 ```
 .env              → Secrets (API keys, never committed)
@@ -233,139 +283,92 @@ config.yaml       → Structure (specialists, providers, MCP)
 user_settings.yaml → Bindings (which model for which specialist)
 ```
 
-**Key insight:** Separation allows same structure with different runtime bindings.
-
-### 8.1 Specialist Menu Exclusions (ADR-CORE-053)
-
-Control which specialists appear in triage menus via config-driven exclusions:
-- `excluded_from: [triage_architect]` - Hide specialist from specific menus
-- `TRIAGE_INFRASTRUCTURE` - Built-in exclusions (router, archiver, end, critic)
-- `SpecialistCategories.get_triage_exclusions()` - Centralized exclusion logic
-
-See CONFIGURATION_GUIDE.md § 5.0 for details.
+Separation allows the same structure with different runtime bindings. Supports `${VAR_NAME}` and `${VAR_NAME:-default}` interpolation.
 
 ---
 
-## 9. What Works Well (Keep for LAP)
-
-| Pattern | Why It Works |
-|---------|--------------|
-| SafeExecutor wrapper | Enforces safety structurally |
-| Scratchpad/Artifacts split | Clear ephemeral vs persistent semantics |
-| MCP for services | Clean synchronous invocation |
-| Subgraph encapsulation | Complex flows as single nodes |
-| Tiered parallel progenitors | Multi-model reduces correlated errors |
-| Context engineering pre-flight | Specialists get context they need |
-| Invariant monitor | Catches loops and corruption |
-
----
-
-## 10. What's Awkward (Fix in LAP)
-
-| Issue | Problem | LAP Direction |
-|-------|---------|---------------|
-| ~20 specialists | Consolidated from 37+ via Phase 1b | Further extraction to MCP containers |
-| Deprecated source files | Some deprecated .py files remain | Clean removal pass needed |
-| Documentation bloat | 17 docs, much redundancy | Single authoritative reference |
-| Observability fragmentation | Hooks exist but not unified | Cohesive observability layer |
-| Deep agent lifecycle | Not implemented (ADR-CORE-038) | First-class in LAP |
-| Model registry | Duplicated across projects | Shared MCP service (ADR-CORE-039) |
-| WebUI adapters | Fragile DOM scraping | Visual grounding via surf-mcp |
-
----
-
-## 11. Specialist Inventory
+## 10. Specialist Inventory
 
 ### Core Infrastructure (6)
-- `BaseSpecialist` - Abstract base
-- `RouterSpecialist` - Central routing hub
-- `EndSpecialist` - Termination and synthesis
-- `ArchiverSpecialist` - Workflow reports
-- `TriageArchitect` - Context engineering entry (classifier)
-- `SystemsArchitect` - Entry point (task_plan) + MCP planning service (#171)
+- `BaseSpecialist` — Abstract base
+- `RouterSpecialist` — Central routing hub (deterministic greeting gate + LLM routing)
+- `EndSpecialist` — Termination and synthesis
+- `ArchiverSpecialist` — Atomic workflow archives
+- `TriageArchitect` — Entry pipeline classifier
+- `SystemsArchitect` — Entry point (task_plan) + MCP planning service
 
-### Context Engineering (2)
-- `FacilitatorSpecialist` - Context assembly, EI feedback surfacing (procedural)
-- `ExitInterviewSpecialist` - Completion verification via react_step MCP tools
-
-### Chat & Response (6)
-- `ChatSpecialist` - Simple chat
-- `ProgenitorAlpha/Bravo` - Parallel perspectives (tiered chat subgraph)
-- `TieredSynthesizer` - Combines perspectives (procedural join node)
-- `DefaultResponder` - Greetings
-- `SummarizerSpecialist` - Text condensation
+### Context Engineering (3)
+- `FacilitatorSpecialist` — Context assembly, EI feedback surfacing, BENIGN continuation (procedural)
+- `ExitInterviewSpecialist` — Completion verification via react_step MCP tools
+- `SignalProcessorSpecialist` — Interrupt classification and routing (ADR-077)
 
 ### Autonomous Agents (1)
-- `ProjectDirector` - ReAct agent for filesystem/research tasks via react_step MCP (filesystem, terminal, fork with expected_artifacts)
+- `ProjectDirector` — ReAct agent for filesystem/research tasks (filesystem, terminal, fork with expected_artifacts, live progress publishing)
 
 ### Analysis (1)
-- `TextAnalysisSpecialist` — ReAct-enabled: single-pass analysis or iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP). Absorbed DataExtractor and DataProcessor (Phase 1b).
+- `TextAnalysisSpecialist` — ReAct-enabled: single-pass analysis or iterative tool use (filesystem, terminal, semantic-chunker, it-tools MCP)
+
+### Chat & Response (6)
+- `ChatSpecialist` — Simple chat
+- `ProgenitorAlpha/Bravo` — Parallel perspectives (tiered chat subgraph)
+- `TieredSynthesizer` — Combines perspectives (procedural join node)
+- `DefaultResponder` — Greetings
+- `SummarizerSpecialist` — Text condensation
 
 ### Generation (2)
-- `WebBuilder` - HTML generation
-- `CriticSpecialist` - Artifact review
+- `WebBuilder` — HTML generation
+- `CriticSpecialist` — Artifact review (generate-critique-refine loop)
 
 ### Browser (1)
-- `NavigatorBrowserSpecialist` - surf-mcp integration
+- `NavigatorBrowserSpecialist` — surf-mcp integration
 
 ### Other (2)
-- `ImageSpecialist` - Image analysis
-- `TribeConductor` - Convening orchestration
+- `ImageSpecialist` — Image analysis
+- `TribeConductor` — Convening orchestration
 
-**Active in config.yaml: ~20 specialists.** Deprecated specialists (FileSpecialist, NavigatorSpecialist, DataExtractor, DataProcessor, ResearchOrchestrator, Distillation pipeline) removed from config; some source files remain with deprecation notices.
+**Active in config.yaml: ~20 specialists.**
 
 ---
 
-## 12. Test Coverage
+## 11. Test Coverage
 
 - **Unit tests:** 964 tests (mocked LLM calls), 2 known skipped (#192)
-- **Integration tests:** ~178 tests (real configs, some live LLM)
-- **Total:** 1140+ tests
-
-Key test patterns:
-- Contract validation via Pydantic
-- State transition verification
-- Subgraph wiring tests
-- MCP service tests
+- **Integration tests:** ~178 tests (real configs, live LLM)
+- **Concurrent invocation tests:** 15 tests verifying shared mutable state integrity under concurrent fork()
+- **Total:** 1,150+ tests
 
 ---
 
-## 13. Project Bedrock Status
+## 12. Key Files
 
-**100% complete (37/37 tasks)**
-
-| Workstream | Status |
-|------------|--------|
-| 1. Foundational Resilience | ✅ Complete |
-| 2. Explicit Control Plane (MCP) | ✅ Complete |
-| 3. Hybrid Routing Engine | ✅ Complete |
-| 4. Platform & Tooling | ✅ Complete |
-| 5. Context Engineering | ✅ Complete |
-
-Post-Bedrock additions:
-- react_step MCP (replaced ReActMixin — prompt-prix absorption, -1720 lines net)
-- Navigation-MCP (now surf-mcp)
-- V.E.G.A.S. Terminal UI
-- fork() — recursive LAS invocation via graph.invoke() for context-isolated subtasks, with conditioning frame (#205) and expected_artifacts (#206)
-- SystemsArchitect entry point (#171) — SA → Triage → Facilitator → Router pipeline
-- it-tools-mcp — 119 IT utility tools wired to TextAnalysisSpecialist
-
----
-
-## 14. LAP Design Implications
-
-Based on LAS v1.0 experience:
-
-1. **Organism Model:** LAS is Brain (Codex) + Spine (control plane). Specialists become MCP containers ("organs").
-
-2. **Deep Agent Lifecycle:** First-class spawn/pause/resume/terminate for long-running agents.
-
-3. **Model Registry MCP:** Shared service discovery across LAS, prompt-prix, surf-mcp.
-
-4. **Unified Observability:** Single strategy for tracing, events, logging, capture.
-
-5. **Documentation as Code:** Generate docs from code structure, not maintain separately.
+| File | Purpose |
+|------|---------|
+| `graph_orchestrator.py` | Interrupt classification, routing logic |
+| `graph_builder.py` | Adapter wiring, edge registration |
+| `context_engineering.py` | Entry pipeline (Triage → SA → Facilitator → Router) |
+| `specialist_categories.py` | CORE_INFRASTRUCTURE, MCP_ONLY, exclusions |
+| `facilitator_specialist.py` | Context assembly, EI feedback surfacing |
+| `project_director.py` | Autonomous ReAct agent with progress publishing |
+| `text_analysis_specialist.py` | Dual-mode (single-pass + react_step MCP) |
+| `lmstudio_adapter.py` | Tool call parsing, request building |
+| `pooled_adapter.py` | Multi-GPU pool routing |
+| `factory.py` | AdapterFactory, pool lifecycle |
+| `config_loader.py` | Server name resolution, env var injection |
+| `mcp/react_step.py` | Shared ToolDef, call_react_step, build_tool_schemas |
+| `mcp/fork.py` | dispatch_fork, extract_fork_result, conditioning frame |
+| `state.py` | GraphState definition, reducers |
+| `node_executor.py` | SafeExecutor wrapper |
+| `utils/progress_store.py` | Thread-safe intra-node progress publishing |
 
 ---
 
-*This document supersedes: ARCHITECTURE.md, HAPPY_PATHS.md, GRAPH_VISUALIZATIONS.md, and various orphan pattern docs for LAP planning purposes.*
+## 13. Research Connections
+
+LAS serves as a workbench for studying how orchestration-layer interventions shape model behavior without touching weights:
+
+- **Prompt geometry:** semantic-chunker measures phrasing geometry in embedding space. RLHF shapes response space by making regions "cold" — phrasings geometrically distant from trained forms may hit unexplored regions.
+- **Explicit MoE as interpretability tool:** Specialist routing decisions are observable analogs of implicit MoE expert selection. TransformerLens residual stream analysis can compare LAS's explicit gating with the same models' internal routing.
+- **Semantic contrast:** Prompt decision-point quality measured via embedding-space drift between branches. Higher pairwise drift between decision options → sharper model decision boundaries.
+- **Context engineering as physics:** Token positions create query-key geometries that determine inference trajectories. Facilitator constructs the experiential reality for each inference pass — what it places where determines what the model attends to.
+
+See `docs/ADRs/` for architectural decisions and design documentation.
