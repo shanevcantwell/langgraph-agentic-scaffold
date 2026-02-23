@@ -103,8 +103,9 @@ User Request
 TriageArchitect ──→ ACCEPT/REJECT gate (thin classifier, not planner)
     ↓ [PASS]
 SystemsArchitect ──→ Produces task_plan (write-once master intent + acceptance_criteria)
-    ↓
-Facilitator ──→ Assembles gathered_context (always runs, sole context writer)
+    ↓ [check_sa_outcome: task_plan exists? #217]
+Facilitator ──→ Assembles gathered_context (sole context writer)
+    (SA failure → END with termination_reason)
     ↓
 Router ──→ Routes with gathered_context available
 ```

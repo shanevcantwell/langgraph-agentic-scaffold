@@ -15,7 +15,7 @@ def test_context_engineering_graph_wiring(
     1. TriageArchitect and Facilitator are nodes.
     2. Researcher and Summarizer are NOT nodes (MCP only).
     3. TriageArchitect routes to SystemsArchitect or END.
-    4. SystemsArchitect -> Facilitator (unconditional).
+    4. SystemsArchitect routes to Facilitator or END (#217: conditional on task_plan).
     5. Facilitator -> Router (unconditional).
     """
     # --- Arrange ---
@@ -66,8 +66,15 @@ def test_context_engineering_graph_wiring(
         }
     )
 
-    # SystemsArchitect -> Facilitator (unconditional)
-    mock_workflow.add_edge.assert_any_call("systems_architect", "facilitator_specialist")
+    # #217: SystemsArchitect -> [Facilitator | END] (conditional on task_plan)
+    mock_workflow.add_conditional_edges.assert_any_call(
+        "systems_architect",
+        builder.orchestrator.check_sa_outcome,
+        {
+            "facilitator_specialist": "facilitator_specialist",
+            "end_specialist": "end_specialist",
+        }
+    )
 
     # Facilitator -> Router (unconditional)
     mock_workflow.add_edge.assert_any_call("facilitator_specialist", "router_specialist")

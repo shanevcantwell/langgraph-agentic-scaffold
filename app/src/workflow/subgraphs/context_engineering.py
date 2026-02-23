@@ -28,9 +28,17 @@ class ContextEngineeringSubgraph(BaseSubgraph):
             logger.info("Graph Edge: Added TriageArchitect conditional edge (PASS->SA, CLARIFY->END)")
 
         if "systems_architect" in self.specialists and "facilitator_specialist" in self.specialists:
-            # SA produces task_plan, then Facilitator assembles gathered_context
-            workflow.add_edge("systems_architect", "facilitator_specialist")
-            logger.info("Graph Edge: Added SystemsArchitect -> Facilitator edge")
+            # #217: SA produces task_plan → Facilitator. SA fails → END (fail-fast).
+            # Checks artifacts.task_plan (positive signal) not scratchpad.error (negative).
+            workflow.add_conditional_edges(
+                "systems_architect",
+                self.orchestrator.check_sa_outcome,
+                {
+                    "facilitator_specialist": "facilitator_specialist",
+                    CoreSpecialist.END.value: CoreSpecialist.END.value,
+                }
+            )
+            logger.info("Graph Edge: Added SystemsArchitect conditional edge (task_plan->Facilitator, fail->END)")
 
         if "facilitator_specialist" in self.specialists:
             workflow.add_edge("facilitator_specialist", CoreSpecialist.ROUTER.value)

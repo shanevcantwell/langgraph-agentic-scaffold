@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the TriageArchitect specialist's role as the entry gate.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-16 (#199: Triage→SA pipeline flip, ACCEPT/REJECT classifier rewrite)
+**Updated:** 2026-02-23 (#199: Triage→SA pipeline flip, ACCEPT/REJECT classifier rewrite; #217: SA fail-fast conditional edge)
 
 ---
 
@@ -171,7 +171,7 @@ This means:
 - **PASS** (no actions, or non-ask_user actions) -> SystemsArchitect -> Facilitator -> Router -> Specialist
 - **CLARIFY** (ask_user only) -> EndSpecialist formats rejection (#179)
 
-The decision is purely structural (are there ask_user-only actions?) not semantic (what kind of task?). Specialist selection is Router's job. The old three-way gate (Facilitator vs Router vs END) was collapsed into two paths because Facilitator always runs via the SA -> Facilitator unconditional edge (#199).
+The decision is purely structural (are there ask_user-only actions?) not semantic (what kind of task?). Specialist selection is Router's job. The old three-way gate (Facilitator vs Router vs END) was collapsed into two paths because Facilitator runs after SA on the success path. SA → Facilitator is a conditional edge via `check_sa_outcome()` (#217) — if SA fails to produce `task_plan`, the graph routes to END instead.
 
 ---
 
@@ -179,7 +179,7 @@ The decision is purely structural (are there ask_user-only actions?) not semanti
 
 ### Path 1: Facilitator Reads triage_actions
 
-Facilitator always runs (unconditional SA -> Facilitator edge). It reads `scratchpad["triage_actions"]` and:
+Facilitator runs when SA succeeds (conditional SA → Facilitator edge via `check_sa_outcome()`, #217). It reads `scratchpad["triage_actions"]` and:
 
 1. Parses each action dict into a `ContextAction` for type-safe dispatch
 2. Iterates through actions, calling MCP services for each (RESEARCH -> web search, READ_FILE -> filesystem, etc.)
@@ -333,12 +333,13 @@ Triage is the **first node** in the entry pipeline, wired by `ContextEngineering
 
 ```
 Triage (entry gate) -> [SA | END]
-SA -> Facilitator -> Router
+SA -> [Facilitator | END]  (#217: conditional on task_plan)
+Facilitator -> Router
 ```
 
 - Triage is the graph entry point (`config.yaml: entry_point: "triage_architect"` in the subgraph wiring, though config still lists SA as the named entry_point for backward compat)
 - Triage -> SA/END is a conditional edge via `check_triage_outcome()` (two-way: PASS or CLARIFY)
-- SA -> Facilitator is an unconditional edge (SA always hands off to Facilitator)
+- SA -> Facilitator/END is a conditional edge via `check_sa_outcome()` (#217: routes to END if `task_plan` missing)
 - Facilitator -> Router is an unconditional edge
 - Triage is excluded from Router's specialist menu (TRIAGE_INFRASTRUCTURE)
 - Triage is excluded from hub-and-spoke edges (subgraph-managed via `get_excluded_specialists()`)

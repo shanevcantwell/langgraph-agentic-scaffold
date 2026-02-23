@@ -2,17 +2,17 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-18 (ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection)
+**Updated:** 2026-02-23 (ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection; #217: SA fail-fast conditional edge)
 
 ---
 
 ## Executive Summary
 
-The **Facilitator** is a deterministic, non-LLM specialist that bridges planning (SA) and task execution (Router). It **always runs** on every pass — assembling context from task_plan, prior work, EI feedback, and triage actions into a unified `gathered_context` for downstream specialists.
+The **Facilitator** is a deterministic, non-LLM specialist that bridges planning (SA) and task execution (Router). It assembles context from task_plan, prior work, EI feedback, and triage actions into a unified `gathered_context` for downstream specialists.
 
 Key characteristics:
 - **Procedural, not LLM-based** — executes a plan, doesn't reason
-- **Always runs** — unconditional SA → Facilitator → Router edge (#199). No conditional routing based on triage_actions.
+- **Runs when SA succeeds** — conditional SA → Facilitator edge via `check_sa_outcome()` (#217). If SA fails to produce `task_plan`, the graph routes to END instead of Facilitator.
 - **MCP orchestrator** — calls internal and external services via Model Context Protocol
 - **Sole context writer** — specialists receive context via `gathered_context`, never accumulate their own (#170, ADR-071)
 - **Fresh rebuild each invocation** — `gathered_context` rebuilt from scratch, but `accumulated_work` artifact persists across passes
@@ -30,11 +30,11 @@ User Request
 TriageArchitect (ACCEPT/REJECT gate, #199)
     |
     [check_triage_outcome]
-    |-- PASS  --> SystemsArchitect (task_plan) --> Facilitator --> Router --> Specialist
+    |-- PASS  --> SystemsArchitect (task_plan) --[check_sa_outcome]--> Facilitator --> Router --> Specialist
     '-- CLARIFY (ask_user only) --> EndSpecialist (reject with cause, #179)
 ```
 
-Facilitator always runs — it's wired via unconditional SA → Facilitator edge. Context assembly runs regardless of whether triage_actions has entries.
+Facilitator runs when SA produces a valid `task_plan` — wired via conditional SA → Facilitator edge (`check_sa_outcome()`, #217). If SA fails, the graph routes to END with a termination reason instead of proceeding with no plan. Context assembly runs regardless of whether triage_actions has entries.
 
 ### Retry Path (EI says INCOMPLETE)
 
@@ -354,7 +354,7 @@ mcp:
 | [facilitator_specialist.py](../../app/src/specialists/facilitator_specialist.py) | Facilitator implementation |
 | [context_schema.py](../../app/src/interface/context_schema.py) | ContextPlan/ContextAction schemas |
 | [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | Subgraph edge definitions |
-| [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_triage_outcome()` routing logic |
+| [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_triage_outcome()` and `check_sa_outcome()` routing logic (#217) |
 | [external_client.py](../../app/src/mcp/external_client.py) | `sync_call_external_mcp()` bridge |
 | [mcp/utils.py](../../app/src/mcp/utils.py) | `extract_text_from_mcp_result()` helper |
 | [exit_interview_feedback.md](../../app/prompts/exit_interview_feedback.md) | EI feedback prompt template |
@@ -365,7 +365,7 @@ mcp:
 
 The Facilitator is a **procedural MCP orchestrator** that:
 
-1. Always runs on every pass — unconditional SA → Facilitator → Router edge (#199)
+1. Runs when SA succeeds — conditional SA → Facilitator edge via `check_sa_outcome()` (#217); Facilitator → Router is unconditional
 2. Rebuilds `gathered_context` fresh each invocation (Task Strategy + execution_steps + acceptance_criteria from task_plan, EI feedback, accumulated prior work, triage action results)
 3. Accumulates `specialist_activity` into `accumulated_work` artifact across retries
 4. Produces a unified `gathered_context` artifact for downstream specialists

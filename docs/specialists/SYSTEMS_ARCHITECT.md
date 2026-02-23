@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Systems Architect's dual role as planning node and MCP planning service.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-18 (ADR-045: fork-aware verification plans; #199: Triage→SA pipeline flip; #173: acceptance_criteria)
+**Updated:** 2026-02-23 (ADR-045: fork-aware verification plans; #199: Triage→SA pipeline flip; #173: acceptance_criteria; #217: SA fail-fast conditional edge)
 
 ---
 
@@ -57,7 +57,10 @@ SystemsArchitect._execute_logic()
 artifacts["task_plan"] = plan.model_dump()
     |
     ▼
-Facilitator (assembles gathered_context) → Router → Specialist
+check_sa_outcome (#217)
+    |
+    ├── task_plan EXISTS → Facilitator (assembles gathered_context) → Router → Specialist
+    └── task_plan MISSING (SA failed) → END with termination_reason
 ```
 
 ### MCP Service Flow
@@ -84,7 +87,7 @@ class SystemPlan(BaseModel):
     plan_summary: str                    # Concise one-sentence summary
     required_components: List[str]       # Technologies, libraries, assets needed
     execution_steps: List[str]           # Detailed sequential steps
-    acceptance_criteria: str = ""        # Observable outcomes defining "done" (#173)
+    acceptance_criteria: str              # Observable outcomes defining "done" (#173, #216: required, min 30 chars)
 ```
 
 The `acceptance_criteria` field (#173) provides externally observable outcomes — what the completed end state looks like. **Criteria must be verifiable from end-state alone** (#211): EI is a final-state-only observer that cannot see prior state, cannot track transitions, and cannot distinguish "original" files from specialist-created ones. The SA prompt enforces this with a contrastive BAD/GOOD example and prohibits transition language ("moved," "created from," "original"). EI feeds `acceptance_criteria` to SA when generating `exit_plan` for verification.
@@ -173,7 +176,7 @@ SA runs as the second graph node (after Triage PASS) on every accepted request. 
 1. Reads user messages (enriched with gathered_context if available)
 2. Produces a `task_plan` capturing the system's theory of user intent (with `acceptance_criteria`)
 3. Writes `artifacts["task_plan"]`
-4. Hands off unconditionally to Facilitator
+4. Hands off to Facilitator via `check_sa_outcome` (#217: conditional — routes to END if task_plan missing)
 
 ```python
 # systems_architect.py:47-76
@@ -316,7 +319,7 @@ CORE_INFRASTRUCTURE: frozenset = frozenset([
 This means:
 - SA **is a graph node** — added by the ContextEngineeringSubgraph
 - Triage → SA is a conditional edge (only on PASS) via `check_triage_outcome()` (#199)
-- SA → Facilitator is an unconditional edge ([context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py))
+- SA → Facilitator is a conditional edge via `check_sa_outcome()` (#217: routes to END if `task_plan` missing)
 - SA **is excluded from Router's menu** — it's infrastructure, not a task-execution specialist
 - SA **is excluded from hub-and-spoke edges** — has dedicated subgraph wiring
 - SA **is also registered in MCP** — specialists can still call `create_plan()` for narrower plans
@@ -357,7 +360,8 @@ SA needs an `llm_config` because it makes LLM calls (unlike Facilitator which is
 | [systems_architect_prompt.md](../../app/prompts/systems_architect_prompt.md) | System prompt with SystemPlan JSON example |
 | [_orchestration.py](../../app/src/specialists/schemas/_orchestration.py) | `SystemPlan` Pydantic schema |
 | [specialist_categories.py](../../app/src/workflow/specialist_categories.py) | `CORE_INFRASTRUCTURE` classification (#171) |
-| [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | Triage → SA → Facilitator → Router edge wiring (#199) |
+| [context_engineering.py](../../app/src/workflow/subgraphs/context_engineering.py) | Triage → SA → Facilitator → Router edge wiring (#199, #217) |
+| [graph_orchestrator.py](../../app/src/workflow/graph_orchestrator.py) | `check_sa_outcome()` conditional edge (#217) |
 | [web_builder.py](../../app/src/specialists/web_builder.py) | Consumer: implementation plan (lines 32-51) |
 | [exit_interview_specialist.py](../../app/src/specialists/exit_interview_specialist.py) | Consumer: verification plan with fork-aware tool inventory (ADR-045) |
 | [project_director.py](../../app/src/specialists/project_director.py) | NOT YET a consumer — missing SA call is the root cause of aimless tool chaining |

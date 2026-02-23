@@ -17,7 +17,7 @@ Each flow shows: **Prompt** → **Specialists Called** → **Expected Output**
 | [Generation](#5-generation) | "create / build / generate" | Triage → SA → Facilitator → Router → Builder → Exit Interview |
 | [Analysis](#6-analysis) | "analyze / extract / summarize" | Triage → SA → Facilitator → Router → Analyst |
 
-> **Entry pipeline (#199):** Every flow passes through Triage (ACCEPT/REJECT gate) → SA (task_plan) → Facilitator (gathered_context) → Router. Diagrams below abbreviate this as "Entry Pipeline" where the pre-Router steps are not the focus.
+> **Entry pipeline (#199, #217):** Every flow passes through Triage (ACCEPT/REJECT gate) → SA (task_plan) → Facilitator (gathered_context) → Router. SA failure routes to END instead of Facilitator (#217: fail-fast via `check_sa_outcome()`). Diagrams below abbreviate this as "Entry Pipeline" where the pre-Router steps are not the focus.
 
 ---
 
@@ -583,7 +583,7 @@ flowchart LR
 For the hub-and-spoke architecture diagram and routing concepts, see [ARCHITECTURE.md § 3.1](ARCHITECTURE.md#31-hub-and-spoke).
 
 **Key points:**
-- All flows enter via TriageArchitect → SystemsArchitect → Facilitator → Router (#199)
+- All flows enter via TriageArchitect → SystemsArchitect → Facilitator → Router (#199, #217: SA failure short-circuits to END)
 - Router is the central hub — specialists return to router after execution
 - All flows exit via EndSpecialist → ArchiverSpecialist
 
@@ -593,7 +593,7 @@ For the hub-and-spoke architecture diagram and routing concepts, see [ARCHITECTU
 
 Every flow satisfies:
 
-1. **Entry:** Always starts at TriageArchitect → SystemsArchitect → Facilitator → Router (#199)
+1. **Entry:** Always starts at TriageArchitect → SystemsArchitect → Facilitator → Router (#199, #217: SA failure → END)
 2. **Exit:** Always ends at EndSpecialist (archives result)
 3. **Safety:** All specialist execution wrapped by NodeExecutor
 4. **State:** Specialists return dicts, never mutate GraphState directly

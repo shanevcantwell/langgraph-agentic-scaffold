@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 835 |
+| Unit | 76 | 849 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1118** |
+| **Total** | **111** | **1132** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -827,6 +827,12 @@
   - *#179: Ask-user-only plan = underspecified prompt. Routes to EndSpecialist*
 - **`test_check_triage_outcome_routes_to_sa_on_normal_actions`**
   - *Tests that check_triage_outcome routes to SystemsArchitect for normal*
+- **`test_sa_outcome_routes_to_facilitator_when_task_plan_exists`**
+  - *#217: When SA successfully produces a task_plan artifact,*
+- **`test_sa_outcome_routes_to_end_when_task_plan_missing`**
+  - *#217: When SA fails (no task_plan in artifacts), check_sa_outcome*
+- **`test_sa_outcome_routes_to_end_when_artifacts_empty`**
+  - *#217: When state has no artifacts at all (edge case),*
 - **`test_end_specialist_generates_clarification_response`**
   - *Tests that EndSpecialist generates a clarification response instead of*
 
@@ -2352,6 +2358,28 @@
   - *create_plan() should raise ValueError if LLM returns no JSON response.*
 - **`test_register_mcp_services_exposes_create_plan`**
   - *register_mcp_services() should register create_plan with the MCP registry.*
+- **`test_valid_acceptance_criteria`**
+  - *A substantive description passes validation.*
+- **`test_valid_at_exactly_30_chars`**
+  - *Boundary: exactly 30 characters should pass.*
+- **`test_missing_acceptance_criteria_raises`**
+  - *Omitting acceptance_criteria entirely is a required-field error.*
+- **`test_too_short_raises`**
+  - *Values under 30 chars (after strip) are rejected.*
+- **`test_placeholder_only_raises`**
+  - *Strings >= 30 chars made entirely of periods, spaces, and ellipsis characters*
+- **`test_real_content_with_ellipsis_passes`**
+  - *Content that happens to contain ellipsis but has real text passes.*
+- **`test_whitespace_only_raises`**
+  - *All-whitespace strings are rejected (too short after strip).*
+- **`test_empty_acceptance_criteria_raises_through_execute_logic`**
+  - *When LLM returns empty acceptance_criteria, _execute_logic raises ValidationError.*
+- **`test_placeholder_acceptance_criteria_raises_through_execute_logic`**
+  - *When LLM returns long placeholder acceptance_criteria, _execute_logic raises ValidationError.*
+- **`test_missing_acceptance_criteria_raises_through_execute_logic`**
+  - *When LLM omits acceptance_criteria entirely, _execute_logic raises ValidationError.*
+- **`test_mcp_create_plan_also_validates`**
+  - *The MCP tool path (_generate_plan via create_plan) enforces the same validator.*
 
 ## `app/tests/unit/test_text_analysis_specialist.py`
 

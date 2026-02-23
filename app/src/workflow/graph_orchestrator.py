@@ -69,6 +69,34 @@ class GraphOrchestrator:
                                  "PASS, no actions")
         return "systems_architect"
 
+    def check_sa_outcome(self, state: GraphState) -> str:
+        """
+        Decides next step after SystemsArchitect (#217).
+        SUCCESS (task_plan created) → Facilitator for context assembly.
+        FAILURE (no task_plan) → END with termination reason.
+
+        Checks the positive signal (did SA produce its output?) rather than
+        the negative (did scratchpad.error get set?). This catches ALL SA
+        failure modes: validator rejection, timeout, malformed JSON, LLM refusal.
+        """
+        task_plan = state.get("artifacts", {}).get("task_plan")
+        if task_plan:
+            self._record_im_decision(state, "check_sa_outcome", "facilitator_specialist",
+                                     "task_plan created")
+            return "facilitator_specialist"
+
+        # SA failed — set termination_reason for EndSpecialist to display
+        scratchpad = state.get("scratchpad", {})
+        sa_error = scratchpad.get("error", "Unknown SA failure")
+        scratchpad["termination_reason"] = (
+            f"Planning failed: {sa_error}\n\n"
+            "The Systems Architect could not produce a valid task plan. "
+            "This may indicate a model configuration issue."
+        )
+        self._record_im_decision(state, "check_sa_outcome", CoreSpecialist.END.value,
+                                 f"no task_plan: {sa_error}")
+        return CoreSpecialist.END.value
+
     def _check_stabilization_action(self, state: GraphState) -> str | None:
         """
         Checks if a stabilization action (Circuit Breaker) has been triggered.

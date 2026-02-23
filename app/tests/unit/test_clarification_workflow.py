@@ -61,6 +61,68 @@ def test_check_triage_outcome_routes_to_sa_on_normal_actions(orchestrator_instan
     # Assert — Triage PASS routes to SA (not Facilitator)
     assert result == "systems_architect"
 
+# =============================================================================
+# Issue #217: SA Fail-Fast — check_sa_outcome
+# =============================================================================
+
+def test_sa_outcome_routes_to_facilitator_when_task_plan_exists(orchestrator_instance):
+    """
+    #217: When SA successfully produces a task_plan artifact,
+    check_sa_outcome routes to facilitator_specialist.
+    """
+    state = {
+        "artifacts": {
+            "task_plan": {
+                "plan_summary": "Organize files by category.",
+                "required_components": ["project_director"],
+                "execution_steps": ["Read directory", "Create subdirs", "Move files"],
+                "acceptance_criteria": "Files are sorted into category subdirectories.",
+            }
+        },
+        "scratchpad": {},
+    }
+
+    result = orchestrator_instance.check_sa_outcome(state)
+    assert result == "facilitator_specialist"
+
+
+def test_sa_outcome_routes_to_end_when_task_plan_missing(orchestrator_instance):
+    """
+    #217: When SA fails (no task_plan in artifacts), check_sa_outcome
+    routes to END and sets termination_reason for EndSpecialist.
+    """
+    state = {
+        "artifacts": {},
+        "scratchpad": {
+            "error": "Specialist 'systems_architect' failed. See report for details."
+        },
+    }
+
+    result = orchestrator_instance.check_sa_outcome(state)
+
+    assert result == CoreSpecialist.END.value
+    # Verify termination_reason was set for EndSpecialist
+    assert "termination_reason" in state["scratchpad"]
+    assert "Planning failed" in state["scratchpad"]["termination_reason"]
+    assert "systems_architect" in state["scratchpad"]["termination_reason"]
+
+
+def test_sa_outcome_routes_to_end_when_artifacts_empty(orchestrator_instance):
+    """
+    #217: When state has no artifacts at all (edge case),
+    check_sa_outcome routes to END with a generic failure message.
+    """
+    state = {
+        "scratchpad": {},
+    }
+
+    result = orchestrator_instance.check_sa_outcome(state)
+
+    assert result == CoreSpecialist.END.value
+    assert "termination_reason" in state["scratchpad"]
+    assert "Unknown SA failure" in state["scratchpad"]["termination_reason"]
+
+
 def test_end_specialist_generates_clarification_response():
     """
     Tests that EndSpecialist generates a clarification response instead of

@@ -239,17 +239,20 @@ TriageArchitect (Generates ContextPlan — ACCEPT/REJECT gate)
 check_triage_outcome (Decider)
     ├─→ SystemsArchitect (Produces task_plan with acceptance_criteria)
     │       ↓
-    │   Facilitator (Executes ContextPlan actions, assembles gathered_context)
-    │       ↓
-    │   RouterSpecialist
+    │   check_sa_outcome (Decider, #217)
+    │       ├─→ Facilitator (Executes ContextPlan actions, assembles gathered_context)
+    │       │       ↓
+    │       │   RouterSpecialist
+    │       └─→ EndSpecialist (SA failed — no task_plan)
     └─→ EndSpecialist (Clarification Needed / ASK_USER)
 ```
 
 **Key Edges:**
 1.  **Triage -> SA:** If ContextPlan is ACCEPT (standard flow). SA produces `task_plan`.
 2.  **Triage -> End:** If ContextPlan has `ASK_USER` actions (Faithfulness Check).
-3.  **SA -> Facilitator:** Always. Facilitator executes any triage actions and assembles context.
-4.  **Facilitator -> Router:** Always. Router sees `gathered_context` and `task_plan`.
+3.  **SA -> Facilitator:** If `task_plan` exists in artifacts (#217: conditional via `check_sa_outcome()`).
+4.  **SA -> End:** If SA failed to produce `task_plan` (#217: fail-fast with `termination_reason`).
+5.  **Facilitator -> Router:** Always. Router sees `gathered_context` and `task_plan`.
 
 **Design principle:** Gate before investment. Triage rejects underspecified prompts (ASK_USER → END) before SA invests an LLM call. SA captures intent as `task_plan`; Facilitator assembles context; Router routes with full information.
 
