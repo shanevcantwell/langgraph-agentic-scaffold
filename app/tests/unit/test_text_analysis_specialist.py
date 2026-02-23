@@ -341,10 +341,12 @@ def test_react_path_tool_dispatch(react_ta):
     assert "0.35" in result["messages"][0].content
     results = result["artifacts"]["text_analysis_results"]
     assert results[0]["status"] == "complete"
-    # Trace should contain the tool call
-    assert len(results[0]["trace"]) == 1
+    # Trace should contain the tool call + DONE terminal entry (#215)
+    assert len(results[0]["trace"]) == 2
     assert results[0]["trace"][0]["tool_call"]["name"] == "calculate_drift"
     assert results[0]["trace"][0]["success"] is True
+    assert results[0]["trace"][1]["tool_call"]["name"] == "DONE"
+    assert results[0]["trace"][1]["success"] is True
 
 
 def test_react_path_max_iterations(react_ta):

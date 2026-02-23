@@ -22,7 +22,7 @@ from ..utils.progress_store import publish as publish_progress
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
     dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
-    ARTIFACT_TOOL_PARAMS,
+    ARTIFACT_TOOL_PARAMS, make_terminal_trace_entry,
 )
 from ..resilience.cycle_detection import detect_cycle_with_pattern
 
@@ -171,10 +171,9 @@ class ProjectDirector(BaseSpecialist):
         logger.info(f"ProjectDirector starting: {user_request}")
 
         if not is_react_available(getattr(self, 'external_mcp_client', None)):
-            return self._build_error_result(
-                "prompt-prix MCP not reachable — cannot execute react_step loop",
-                [], {}
-            )
+            error_msg = "prompt-prix MCP not reachable — cannot execute react_step loop"
+            trace = [make_terminal_trace_entry("ERROR", -1, error_msg, False)]
+            return self._build_error_result(error_msg, trace, {})
 
         # #203: Read run_id for fork cancellation propagation and mid-loop checks
         run_id = state.get("run_id")
@@ -213,10 +212,14 @@ class ProjectDirector(BaseSpecialist):
             # #203: Check cancellation between react iterations
             if run_id and CancellationManager.is_cancelled(run_id):
                 logger.warning(f"ProjectDirector: run {run_id} cancelled at iteration {iteration}")
-                return self._build_error_result(
-                    f"Run cancelled at iteration {iteration}",
-                    trace, captured_artifacts
-                )
+                cancel_msg = f"Run cancelled at iteration {iteration}"
+                trace.append(make_terminal_trace_entry("CANCELLED", iteration, cancel_msg, False))
+                if run_id:
+                    publish_progress(run_id, {
+                        "specialist": self.specialist_name, "iteration": iteration,
+                        "tool": "CANCELLED", "args_summary": cancel_msg, "success": False,
+                    })
+                return self._build_error_result(cancel_msg, trace, captured_artifacts)
 
             try:
                 result = call_react_step(
@@ -234,6 +237,20 @@ class ProjectDirector(BaseSpecialist):
 
                 if result.get("completed"):
                     final_response = result.get("final_response", "Task complete.")
+                    # #215: Record DONE in trace from prompt-prix done_trace_entry
+                    done_entry = result.get("done_trace_entry")
+                    if done_entry:
+                        done_entry["iteration"] = iteration
+                        done_entry["observation"] = final_response
+                        done_entry["success"] = True
+                        trace.append(done_entry)
+                    else:
+                        trace.append(make_terminal_trace_entry("DONE", iteration, final_response, True))
+                    if run_id:
+                        publish_progress(run_id, {
+                            "specialist": self.specialist_name, "iteration": iteration,
+                            "tool": "DONE", "args_summary": final_response[:200], "success": True,
+                        })
                     logger.info(
                         f"ProjectDirector completed after {iteration + 1} iterations, "
                         f"{len(trace)} tool calls"
@@ -247,11 +264,15 @@ class ProjectDirector(BaseSpecialist):
                 thought = result.get("thought")
 
                 if not pending:
-                    logger.warning("react_step returned incomplete with no pending tool calls")
-                    return self._build_error_result(
-                        "react_step returned no tool calls and no completion",
-                        trace, captured_artifacts
-                    )
+                    no_tools_msg = "react_step returned no tool calls and no completion"
+                    logger.warning(no_tools_msg)
+                    trace.append(make_terminal_trace_entry("NO_TOOLS", iteration, no_tools_msg, False))
+                    if run_id:
+                        publish_progress(run_id, {
+                            "specialist": self.specialist_name, "iteration": iteration,
+                            "tool": "NO_TOOLS", "args_summary": no_tools_msg, "success": False,
+                        })
+                    return self._build_error_result(no_tools_msg, trace, captured_artifacts)
 
                 for tc in pending:
                     tool_name = tc.get("name", "unknown")
@@ -303,17 +324,42 @@ class ProjectDirector(BaseSpecialist):
                 # Stagnation detection after each iteration batch
                 if self._check_stagnation(trace):
                     logger.warning("ProjectDirector: stagnation detected in trace")
+                    last_tc = trace[-1].get("tool_call", {}) if trace else {}
+                    trace.append(make_terminal_trace_entry(
+                        "STAGNATION", iteration,
+                        f"Repeating {last_tc.get('name', '?')} with same args — halting",
+                        False, {"repeated_tool": last_tc.get("name"), "repeated_args": last_tc.get("args", {})},
+                    ))
+                    if run_id:
+                        publish_progress(run_id, {
+                            "specialist": self.specialist_name, "iteration": iteration,
+                            "tool": "STAGNATION", "args_summary": f"Repeating {last_tc.get('name', '?')}", "success": False,
+                        })
                     return self._build_stagnation_result(trace, captured_artifacts)
 
             except Exception as e:
-                logger.error(f"ProjectDirector react loop error at iteration {iteration}: {e}")
-                return self._build_error_result(
-                    f"react loop error at iteration {iteration}: {e}",
-                    trace, captured_artifacts
-                )
+                error_msg = f"react loop error at iteration {iteration}: {e}"
+                logger.error(f"ProjectDirector {error_msg}")
+                trace.append(make_terminal_trace_entry("ERROR", iteration, str(e), False))
+                if run_id:
+                    publish_progress(run_id, {
+                        "specialist": self.specialist_name, "iteration": iteration,
+                        "tool": "ERROR", "args_summary": str(e)[:200], "success": False,
+                    })
+                return self._build_error_result(error_msg, trace, captured_artifacts)
 
         # Max iterations exceeded
         logger.warning(f"ProjectDirector hit max iterations ({max_iterations})")
+        trace.append(make_terminal_trace_entry(
+            "MAX_ITERATIONS", max_iterations - 1,
+            f"Reached {max_iterations} iterations without completion", False,
+            {"max_iterations": max_iterations, "iterations_used": max_iterations},
+        ))
+        if run_id:
+            publish_progress(run_id, {
+                "specialist": self.specialist_name, "iteration": max_iterations - 1,
+                "tool": "MAX_ITERATIONS", "args_summary": f"Limit: {max_iterations}", "success": False,
+            })
         return self._build_partial_result(trace, max_iterations, captured_artifacts)
 
     # ─── react_step infrastructure ─────────────────────────────────────

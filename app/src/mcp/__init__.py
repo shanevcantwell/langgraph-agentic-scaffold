@@ -34,6 +34,7 @@ from .react_step import (
     parse_react_step_result,
     build_tool_schemas,
     dispatch_external_tool,
+    make_terminal_trace_entry,
 )
 from .fork import dispatch_fork
 from .artifact_tools import (
@@ -62,6 +63,7 @@ __all__ = [
     "parse_react_step_result",
     "build_tool_schemas",
     "dispatch_external_tool",
+    "make_terminal_trace_entry",
     # fork() — recursive LAS invocation (ADR-045)
     "dispatch_fork",
     # Artifact tools (#195, ADR-076)

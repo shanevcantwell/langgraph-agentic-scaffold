@@ -17,7 +17,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
-from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result
+from ..mcp import sync_call_external_mcp, extract_text_from_mcp_result, make_terminal_trace_entry
 from .schemas import TextAnalysis
 
 logger = logging.getLogger(__name__)
@@ -237,12 +237,22 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 # Permission denied or parse error returns a string
                 if isinstance(result, str):
                     logger.error(f"TextAnalysisSpecialist react_step returned error: {result}")
+                    trace.append(make_terminal_trace_entry("ERROR", iteration, result, False))
                     return self._build_error_result(state, result, trace)
 
                 call_counter = result.get("call_counter", call_counter)
 
                 if result.get("completed"):
                     final_response = result.get("final_response", "Analysis complete.")
+                    # #215: Record DONE in trace from prompt-prix done_trace_entry
+                    done_entry = result.get("done_trace_entry")
+                    if done_entry:
+                        done_entry["iteration"] = iteration
+                        done_entry["observation"] = final_response
+                        done_entry["success"] = True
+                        trace.append(done_entry)
+                    else:
+                        trace.append(make_terminal_trace_entry("DONE", iteration, final_response, True))
                     logger.info(
                         f"TextAnalysisSpecialist completed after {iteration + 1} iterations, "
                         f"{len(trace)} tool calls"
@@ -254,10 +264,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
                 thought = result.get("thought")
 
                 if not pending:
-                    logger.warning("react_step returned incomplete but no pending tool calls")
-                    return self._build_error_result(
-                        state, "react_step returned no tool calls and no completion", trace
-                    )
+                    no_tools_msg = "react_step returned no tool calls and no completion"
+                    logger.warning(no_tools_msg)
+                    trace.append(make_terminal_trace_entry("NO_TOOLS", iteration, no_tools_msg, False))
+                    return self._build_error_result(state, no_tools_msg, trace)
 
                 for tc in pending:
                     observation = self._dispatch_tool_call(tc, tools)
@@ -274,10 +284,10 @@ class TextAnalysisSpecialist(BaseSpecialist):
                     })
 
             except Exception as e:
-                logger.error(f"TextAnalysisSpecialist react loop error at iteration {iteration}: {e}")
-                return self._build_error_result(
-                    state, f"react loop error at iteration {iteration}: {e}", trace
-                )
+                error_msg = f"react loop error at iteration {iteration}: {e}"
+                logger.error(f"TextAnalysisSpecialist {error_msg}")
+                trace.append(make_terminal_trace_entry("ERROR", iteration, str(e), False))
+                return self._build_error_result(state, error_msg, trace)
 
         # Max iterations exceeded
         partial_msg = (
@@ -285,6 +295,11 @@ class TextAnalysisSpecialist(BaseSpecialist):
             f"Partial progress:\n{self._summarize_trace_dicts(trace)}"
         )
         logger.warning(f"TextAnalysisSpecialist hit max iterations ({max_iterations})")
+        trace.append(make_terminal_trace_entry(
+            "MAX_ITERATIONS", max_iterations - 1,
+            f"Reached {max_iterations} iterations without completion", False,
+            {"max_iterations": max_iterations, "iterations_used": max_iterations},
+        ))
         return self._build_partial_result(state, partial_msg, trace, max_iterations)
 
     def _parse_react_step_result(self, raw_result: Any) -> Any:

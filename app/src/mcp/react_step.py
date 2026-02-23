@@ -86,8 +86,7 @@ def call_react_step(
         },
         timeout=timeout,
     )
-    result = parse_react_step_result(raw_result)
-    return _normalize_done(result)
+    return parse_react_step_result(raw_result)
 
 
 def parse_react_step_result(raw_result) -> Any:
@@ -118,36 +117,21 @@ def parse_react_step_result(raw_result) -> Any:
         return {"completed": True, "final_response": text}
 
 
-def _normalize_done(result: Dict[str, Any]) -> Dict[str, Any]:
+def make_terminal_trace_entry(
+    name: str, iteration: int, observation: str, success: bool,
+    args: dict | None = None,
+) -> dict:
+    """Build a trace entry for a react loop terminal event (DONE, MAX_ITERATIONS, etc.).
+
+    Terminal entries use the same shape as tool-call trace entries so the UI's
+    Tool Chain viewer renders them without special-casing.
     """
-    Normalize DONE tool calls so specialists never see them as pending.
-
-    prompt-prix adds DONE to tool schemas and may return it as a pending_tool_call
-    instead of setting completed=True. This extracts DONE, marks the result as
-    completed, and stores the raw args in done_args for specialist-specific parsing.
-
-    Specialists that need structured DONE data (e.g., EI's is_complete/reasoning)
-    read from done_args. Specialists that just need a final message get it from
-    final_response (hoisted from done_args if present).
-    """
-    if result.get("completed"):
-        return result
-
-    pending = result.get("pending_tool_calls", [])
-    for i, tc in enumerate(pending):
-        if tc.get("name") == "DONE":
-            args = tc.get("args", {})
-            result["completed"] = True
-            result["done_args"] = args
-            # Hoist final_response for backward compat (PD, TA use this)
-            if "final_response" in args:
-                result["final_response"] = args["final_response"]
-            # Remove DONE from pending (other tool calls in same batch are unlikely but safe)
-            result["pending_tool_calls"] = pending[:i] + pending[i+1:]
-            logger.info(f"Normalized DONE tool call to completed=True (args: {list(args.keys())})")
-            break
-
-    return result
+    return {
+        "tool_call": {"id": "terminal", "name": name, "args": args or {}},
+        "iteration": iteration,
+        "observation": observation,
+        "success": success,
+    }
 
 
 def build_tool_schemas(

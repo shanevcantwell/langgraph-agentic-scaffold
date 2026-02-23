@@ -28,7 +28,7 @@ from ..utils.cancellation_manager import CancellationManager
 from ..mcp import (
     ToolDef, is_react_available, call_react_step, build_tool_schemas,
     dispatch_external_tool, artifact_tool_defs, dispatch_artifact_tool,
-    ARTIFACT_TOOL_PARAMS,
+    ARTIFACT_TOOL_PARAMS, make_terminal_trace_entry,
 )
 
 logger = logging.getLogger(__name__)
@@ -144,7 +144,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
             logger.warning("ExitInterviewSpecialist: prompt-prix unavailable — cannot verify")
             return self._build_unavailable_result(exit_plan)
 
-        evaluation = self._verify(
+        evaluation, trace = self._verify(
             user_request, exit_plan, routing_history, artifacts, captured_artifacts,
             run_id=run_id, fork_depth=fork_depth,
         )
@@ -155,8 +155,8 @@ class ExitInterviewSpecialist(BaseSpecialist):
         )
 
         if evaluation.is_complete:
-            return self._build_complete_result(evaluation, exit_plan)
-        return self._build_incomplete_result(evaluation, exit_plan)
+            return self._build_complete_result(evaluation, exit_plan, trace)
+        return self._build_incomplete_result(evaluation, exit_plan, trace)
 
     # ─── react_step verification loop ────────────────────────────────────
 
@@ -169,8 +169,8 @@ class ExitInterviewSpecialist(BaseSpecialist):
         captured_artifacts: dict,
         run_id: str | None = None,
         fork_depth: int = 0,
-    ) -> CompletionEvaluation:
-        """Run the react_step verification loop."""
+    ) -> tuple[CompletionEvaluation, List[Dict[str, Any]]]:
+        """Run the react_step verification loop. Returns (evaluation, trace)."""
         tools = self._build_tools()
         tool_params = self._build_tool_params()
         tool_schemas = build_tool_schemas(tools, tool_params)
@@ -186,10 +186,12 @@ class ExitInterviewSpecialist(BaseSpecialist):
             # #203: Check cancellation between react iterations
             if run_id and CancellationManager.is_cancelled(run_id):
                 logger.warning(f"ExitInterviewSpecialist: run {run_id} cancelled at iteration {iteration}")
+                cancel_msg = f"Run cancelled at iteration {iteration}"
+                trace.append(make_terminal_trace_entry("CANCELLED", iteration, cancel_msg, False))
                 return CompletionEvaluation(
                     is_complete=False,
-                    reasoning=f"Run cancelled at iteration {iteration}",
-                )
+                    reasoning=cancel_msg,
+                ), trace
 
             result = call_react_step(
                 self.external_mcp_client,
@@ -205,8 +207,15 @@ class ExitInterviewSpecialist(BaseSpecialist):
             call_counter = result.get("call_counter", call_counter + 1)
             evaluation = None
 
-            # completed=True means DONE was normalized by _normalize_done
+            # completed=True means prompt-prix v0.3.0 intercepted DONE
             if result.get("completed"):
+                # #215: Record DONE in trace from prompt-prix done_trace_entry
+                done_entry = result.get("done_trace_entry")
+                if done_entry:
+                    done_entry["iteration"] = iteration
+                    done_entry["observation"] = _json.dumps(result.get("done_args", {}), default=str)
+                    done_entry["success"] = True
+                    trace.append(done_entry)
                 evaluation = self._parse_completed_result(result)
 
             # Dispatch non-DONE pending tool calls
@@ -215,6 +224,9 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 tool_args = tc.get("args", {})
 
                 if tool_name == "DONE":
+                    trace.append(make_terminal_trace_entry(
+                        "DONE", iteration, _json.dumps(tool_args, default=str), True, tool_args,
+                    ))
                     evaluation = self._parse_done_args(tool_args)
                     break
 
@@ -231,6 +243,10 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
             if not result.get("pending_tool_calls") and not result.get("completed"):
                 logger.warning("ExitInterviewSpecialist: react_step returned no tool calls and not completed")
+                trace.append(make_terminal_trace_entry(
+                    "NO_TOOLS", iteration,
+                    "react_step returned no tool calls and not completed", False,
+                ))
                 break
 
             # Tool-use-before-DONE guard (#193)
@@ -252,17 +268,22 @@ class ExitInterviewSpecialist(BaseSpecialist):
                         "success": False,
                     })
                     continue
-                return evaluation
+                return evaluation, trace
 
         # Max iterations without DONE — honest "couldn't verify"
         logger.warning(
             f"ExitInterviewSpecialist: hit {max_iterations} iterations without DONE"
         )
+        trace.append(make_terminal_trace_entry(
+            "MAX_ITERATIONS", max_iterations - 1,
+            f"Verification did not complete within {max_iterations} iterations", False,
+            {"max_iterations": max_iterations},
+        ))
         return CompletionEvaluation(
             is_complete=False,
             reasoning=f"Verification did not complete within {max_iterations} iterations — defaulting to incomplete",
             missing_elements="EI verification loop exhausted without reaching a conclusion",
-        )
+        ), trace
 
     # ─── Tool definitions ────────────────────────────────────────────────
 
@@ -467,7 +488,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
         )
 
     def _parse_completed_result(self, result: dict) -> CompletionEvaluation:
-        """Parse a completed react_step result (DONE normalized by _normalize_done)."""
+        """Parse a completed react_step result (DONE intercepted by prompt-prix v0.3.0)."""
         done_args = result.get("done_args")
         if done_args and "is_complete" in done_args:
             return self._parse_done_args(done_args)
@@ -499,8 +520,9 @@ class ExitInterviewSpecialist(BaseSpecialist):
 
     def _build_complete_result(
         self, evaluation: CompletionEvaluation, exit_plan: dict,
+        trace: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
-        return {
+        result = {
             "messages": [AIMessage(
                 content=f"[Exit Interview] Task verified complete: {evaluation.reasoning}"
             )],
@@ -513,12 +535,22 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 },
             },
         }
+        if trace:
+            result["scratchpad"] = {"react_trace": trace}
+        return result
 
     def _build_incomplete_result(
         self, evaluation: CompletionEvaluation, exit_plan: dict,
+        trace: List[Dict[str, Any]] | None = None,
     ) -> Dict[str, Any]:
         recommended = evaluation.recommended_specialists or ["project_director"]
         specialists_str = ", ".join(recommended)
+        scratchpad: Dict[str, Any] = {
+            "recommended_specialists": recommended,
+            "exit_interview_incomplete": True,
+        }
+        if trace:
+            scratchpad["react_trace"] = trace
         return {
             "messages": [AIMessage(content=(
                 f"[Exit Interview] Task not complete: {evaluation.reasoning}\n\n"
@@ -536,10 +568,7 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     "recommended_specialists": recommended,
                 },
             },
-            "scratchpad": {
-                "recommended_specialists": recommended,
-                "exit_interview_incomplete": True,
-            },
+            "scratchpad": scratchpad,
         }
 
     def _build_unavailable_result(self, exit_plan: dict) -> Dict[str, Any]:
