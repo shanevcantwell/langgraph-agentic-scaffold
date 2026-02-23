@@ -216,9 +216,17 @@ class GraphBuilder:
             await self.external_mcp_client.cleanup()
             logger.info("External MCP cleanup complete")
 
+    # Services that are programmatic infrastructure, not model-facing tools.
+    # These appear in tools: config for MCP permissions but should not be
+    # injected into specialist prompts (the model can't call them directly).
+    _INFRASTRUCTURE_SERVICES = {"prompt-prix"}
+
     def _format_tool_descriptions(self, tools: dict) -> str:
         """
         Format tool permissions for injection into specialist prompts (ADR-CORE-051).
+
+        Filters out infrastructure services (e.g., prompt-prix) that the model
+        cannot invoke directly — they are called programmatically by the specialist.
 
         Args:
             tools: Dict mapping service names to tool lists or "*" wildcard
@@ -232,6 +240,8 @@ class GraphBuilder:
 
         lines = ["", "--- AVAILABLE MCP TOOLS ---"]
         for service, tool_list in tools.items():
+            if service in self._INFRASTRUCTURE_SERVICES:
+                continue
             if tool_list == "*":
                 lines.append(f"- {service}: ALL tools available")
             else:
