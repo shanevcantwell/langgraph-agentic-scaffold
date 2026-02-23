@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, ANY
+from pydantic import ValidationError
 from langchain_core.messages import AIMessage, HumanMessage
 from app.src.specialists.systems_architect import SystemsArchitect
 from app.src.specialists.schemas import SystemPlan
@@ -17,7 +18,8 @@ def test_systems_architect_creates_system_plan(systems_architect_specialist):
     mock_json_response = {
         "plan_summary": mock_plan_summary,
         "required_components": ["web_builder"],
-        "execution_steps": ["Generate HTML", "Generate CSS"]
+        "execution_steps": ["Generate HTML", "Generate CSS"],
+        "acceptance_criteria": "An index.html file exists with valid HTML structure and a linked styles.css file.",
     }
     systems_architect_specialist.llm_adapter.invoke.return_value = {
         "json_response": mock_json_response
@@ -86,7 +88,8 @@ class TestSystemsArchitectMCPTool:
         mock_json_response = {
             "plan_summary": "Sort files into categories",
             "required_components": ["project_director"],
-            "execution_steps": ["Create directories", "Move files"]
+            "execution_steps": ["Create directories", "Move files"],
+            "acceptance_criteria": "The target directory contains subdirectories for each category with files sorted accordingly.",
         }
         systems_architect_specialist.llm_adapter.invoke.return_value = {
             "json_response": mock_json_response
@@ -109,7 +112,8 @@ class TestSystemsArchitectMCPTool:
         mock_json_response = {
             "plan_summary": "Test plan",
             "required_components": [],
-            "execution_steps": []
+            "execution_steps": [],
+            "acceptance_criteria": "The workspace contains organized files matching the user request criteria.",
         }
         systems_architect_specialist.llm_adapter.invoke.return_value = {
             "json_response": mock_json_response
@@ -148,3 +152,165 @@ class TestSystemsArchitectMCPTool:
         assert call_args[0][0] == "systems_architect"  # service name
         assert "create_plan" in call_args[0][1]  # methods dict
         assert call_args[0][1]["create_plan"] == systems_architect_specialist.create_plan
+
+
+# =============================================================================
+# Issue #216: acceptance_criteria Validator
+# =============================================================================
+
+# --- Shared valid fields for reuse in validator tests ---
+_VALID_PLAN_FIELDS = {
+    "plan_summary": "Test plan.",
+    "required_components": [],
+    "execution_steps": ["Do the thing."],
+}
+
+
+class TestAcceptanceCriteriaValidator:
+    """Tests for SystemPlan.acceptance_criteria field_validator (#216).
+
+    The validator enforces:
+    1. acceptance_criteria is required (not optional)
+    2. Minimum 30 characters after stripping whitespace
+    3. Rejects placeholder-only content (periods, spaces, ellipses)
+    """
+
+    def test_valid_acceptance_criteria(self):
+        """A substantive description passes validation."""
+        plan = SystemPlan(
+            **_VALID_PLAN_FIELDS,
+            acceptance_criteria="The output directory contains three subdirectories with at least two files each.",
+        )
+        assert len(plan.acceptance_criteria) > 30
+
+    def test_valid_at_exactly_30_chars(self):
+        """Boundary: exactly 30 characters should pass."""
+        criteria = "A" * 30  # 30 chars of real content
+        plan = SystemPlan(**_VALID_PLAN_FIELDS, acceptance_criteria=criteria)
+        assert plan.acceptance_criteria == criteria
+
+    def test_missing_acceptance_criteria_raises(self):
+        """Omitting acceptance_criteria entirely is a required-field error."""
+        with pytest.raises(ValidationError, match="acceptance_criteria"):
+            SystemPlan(**_VALID_PLAN_FIELDS)
+
+    @pytest.mark.parametrize("short_value", [
+        "",
+        " ",
+        "Done.",
+        "Files exist.",
+        "A" * 29,  # one char below threshold
+        "..",       # placeholder, but caught by length first
+        "...",
+        "…",       # unicode ellipsis, also too short
+        "  ...  ", # stripped to "...", length 3
+    ])
+    def test_too_short_raises(self, short_value):
+        """Values under 30 chars (after strip) are rejected.
+
+        Note: short placeholder strings (e.g. '...') are caught by the length
+        check first, not the placeholder check. This is correct — both checks
+        reject the value, length just fires first.
+        """
+        with pytest.raises(ValidationError, match="too short"):
+            SystemPlan(**_VALID_PLAN_FIELDS, acceptance_criteria=short_value)
+
+    @pytest.mark.parametrize("placeholder_value", [
+        "." * 30,           # 30 periods — passes length, caught by placeholder
+        "." * 50,           # 50 periods
+        ". " * 20,          # periods with spaces, 39 chars stripped
+        "…" * 30,           # 30 unicode ellipses
+        "  " + "." * 35 + "  ",  # padded periods, 35 after strip
+    ])
+    def test_placeholder_only_raises(self, placeholder_value):
+        """Strings >= 30 chars made entirely of periods, spaces, and ellipsis characters
+        are rejected by the placeholder check (they pass the length check).
+        """
+        with pytest.raises(ValidationError, match="placeholder"):
+            SystemPlan(**_VALID_PLAN_FIELDS, acceptance_criteria=placeholder_value)
+
+    def test_real_content_with_ellipsis_passes(self):
+        """Content that happens to contain ellipsis but has real text passes.
+
+        This guards against false positives from user prompts with quoted ellipses.
+        """
+        criteria = "The workspace contains all original files… organized into category subdirectories."
+        plan = SystemPlan(**_VALID_PLAN_FIELDS, acceptance_criteria=criteria)
+        assert "…" in plan.acceptance_criteria
+
+    def test_whitespace_only_raises(self):
+        """All-whitespace strings are rejected (too short after strip)."""
+        with pytest.raises(ValidationError, match="too short"):
+            SystemPlan(**_VALID_PLAN_FIELDS, acceptance_criteria="     \t\n    ")
+
+
+class TestAcceptanceCriteriaErrorPath:
+    """Tests that ValidationError from the acceptance_criteria validator
+    propagates correctly through SA's _generate_plan() → _execute_logic().
+
+    SafeExecutor catches these exceptions in production. Here we verify the
+    exception surfaces from the specialist code itself (SafeExecutor is tested
+    separately).
+    """
+
+    def test_empty_acceptance_criteria_raises_through_execute_logic(self, systems_architect_specialist):
+        """When LLM returns empty acceptance_criteria, _execute_logic raises ValidationError."""
+        systems_architect_specialist.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "plan_summary": "Categorize text files by topic.",
+                "required_components": ["project_director"],
+                "execution_steps": ["Read files", "Create directories", "Move files"],
+                "acceptance_criteria": "",
+            }
+        }
+        initial_state = {"messages": [HumanMessage(content="Categorize files.")]}
+
+        with pytest.raises(ValidationError, match="too short"):
+            systems_architect_specialist._execute_logic(initial_state)
+
+    def test_placeholder_acceptance_criteria_raises_through_execute_logic(self, systems_architect_specialist):
+        """When LLM returns long placeholder acceptance_criteria, _execute_logic raises ValidationError."""
+        systems_architect_specialist.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "plan_summary": "Organize workspace.",
+                "required_components": [],
+                "execution_steps": ["Read directory"],
+                "acceptance_criteria": "." * 40,  # 40 periods — passes length, caught by placeholder
+            }
+        }
+        initial_state = {"messages": [HumanMessage(content="Organize workspace.")]}
+
+        with pytest.raises(ValidationError, match="placeholder"):
+            systems_architect_specialist._execute_logic(initial_state)
+
+    def test_missing_acceptance_criteria_raises_through_execute_logic(self, systems_architect_specialist):
+        """When LLM omits acceptance_criteria entirely, _execute_logic raises ValidationError."""
+        systems_architect_specialist.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "plan_summary": "Some plan.",
+                "required_components": [],
+                "execution_steps": ["Step one"],
+                # acceptance_criteria omitted entirely
+            }
+        }
+        initial_state = {"messages": [HumanMessage(content="Do something.")]}
+
+        with pytest.raises(ValidationError, match="acceptance_criteria"):
+            systems_architect_specialist._execute_logic(initial_state)
+
+    def test_mcp_create_plan_also_validates(self, systems_architect_specialist):
+        """The MCP tool path (_generate_plan via create_plan) enforces the same validator."""
+        systems_architect_specialist.llm_adapter.invoke.return_value = {
+            "json_response": {
+                "plan_summary": "A plan via MCP.",
+                "required_components": [],
+                "execution_steps": [],
+                "acceptance_criteria": "",
+            }
+        }
+
+        with pytest.raises(ValidationError, match="too short"):
+            systems_architect_specialist.create_plan(
+                context="Plan via MCP",
+                artifact_key="test_plan",
+            )
