@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Systems Architect's dual role as planning node and MCP planning service.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-23 (ADR-045: fork-aware verification plans; #199: Triage→SA pipeline flip; #173: acceptance_criteria; #217: SA fail-fast conditional edge)
+**Updated:** 2026-02-24 (ADR-045: fork-aware verification plans; #199: Triage→SA pipeline flip; #173: acceptance_criteria; #217: SA fail-fast conditional edge; #218: graceful validation failure with raw response preservation)
 
 ---
 
@@ -51,16 +51,17 @@ SystemsArchitect._execute_logic()
     |
     ├── Guard: if task_plan already exists → pass through (retry path)
     ├── _get_enriched_messages(state) → includes gathered_context if available
-    └── _generate_plan(messages) → SystemPlan (with acceptance_criteria)
+    ├── _call_llm_for_plan(messages) → raw JSON dict
+    └── SystemPlan(**json_response) → validate
     |
-    ▼
-artifacts["task_plan"] = plan.model_dump()
+    ├── [valid] → artifacts["task_plan"] = plan.model_dump()
+    └── [invalid] → scratchpad["sa_raw_response"] = json_response (#218)
     |
     ▼
 check_sa_outcome (#217)
     |
     ├── task_plan EXISTS → Facilitator (assembles gathered_context) → Router → Specialist
-    └── task_plan MISSING (SA failed) → END with termination_reason
+    └── task_plan MISSING (SA failed or validation failed) → END with termination_reason
 ```
 
 ### MCP Service Flow
@@ -95,6 +96,16 @@ The `acceptance_criteria` field (#173) provides externally observable outcomes �
 SA's system prompt ([systems_architect_prompt.md](../../app/prompts/systems_architect_prompt.md)) instructs the model to produce this exact structure. The prompt includes an example JSON output to ground the format.
 
 The same schema serves all plan variants — `task_plan`, `exit_plan`, `system_plan`, `project_plan`. The caller controls the artifact key and context; SA always produces a SystemPlan.
+
+### Graceful Validation Failure (#218)
+
+When the LLM returns JSON that fails `SystemPlan` validation (e.g., `acceptance_criteria` too short, missing fields), SA does **not** raise. Instead:
+1. Raw model output is preserved in `scratchpad["sa_raw_response"]` for observability
+2. No `task_plan` artifact is written
+3. `check_sa_outcome` (#217) sees no `task_plan` → routes to END with `termination_reason`
+4. SafeExecutor's success path runs normally → traces, routing history, and archive all captured
+
+This separation between `_call_llm_for_plan()` (raw JSON) and `SystemPlan(**json_response)` (validation) ensures the model's output is never lost, even when it doesn't satisfy schema constraints.
 
 ---
 
@@ -179,14 +190,24 @@ SA runs as the second graph node (after Triage PASS) on every accepted request. 
 4. Hands off to Facilitator via `check_sa_outcome` (#217: conditional — routes to END if task_plan missing)
 
 ```python
-# systems_architect.py:47-76
+# systems_architect.py:66-113
 def _execute_logic(self, state: dict) -> Dict[str, Any]:
     existing_plan = state.get("artifacts", {}).get("task_plan")
     if existing_plan:
         return {"messages": [...]}  # pass through on retry
 
     messages = self._get_enriched_messages(state)
-    plan = self._generate_plan(messages)
+    json_response = self._call_llm_for_plan(messages)  # Raw JSON, no validation
+
+    try:
+        plan = SystemPlan(**json_response)  # Validate separately
+    except (ValidationError, ValueError):
+        # #218: Raw model output preserved; no task_plan → check_sa_outcome → END
+        return {
+            "messages": [create_llm_message(...)],
+            "scratchpad": {"sa_raw_response": json_response},
+        }
+
     return {
         "messages": [new_message],
         "artifacts": {"task_plan": plan.model_dump()},
@@ -356,7 +377,7 @@ SA needs an `llm_config` because it makes LLM calls (unlike Facilitator which is
 
 | File | Purpose |
 |------|---------|
-| [systems_architect.py](../../app/src/specialists/systems_architect.py) | SA implementation — `_execute_logic()` (entry point), `create_plan()` (MCP), `_generate_plan()` (shared core) |
+| [systems_architect.py](../../app/src/specialists/systems_architect.py) | SA implementation — `_execute_logic()` (entry point), `create_plan()` (MCP), `_call_llm_for_plan()` (raw JSON), `_generate_plan()` (with validation) |
 | [systems_architect_prompt.md](../../app/prompts/systems_architect_prompt.md) | System prompt with SystemPlan JSON example |
 | [_orchestration.py](../../app/src/specialists/schemas/_orchestration.py) | `SystemPlan` Pydantic schema |
 | [specialist_categories.py](../../app/src/workflow/specialist_categories.py) | `CORE_INFRASTRUCTURE` classification (#171) |

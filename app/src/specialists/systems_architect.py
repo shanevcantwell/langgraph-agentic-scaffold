@@ -3,6 +3,8 @@
 import logging
 from typing import Dict, Any, List
 
+from pydantic import ValidationError
+
 from .base import BaseSpecialist
 from .helpers import create_llm_message
 from ..llm.adapter import StandardizedLLMRequest
@@ -20,28 +22,45 @@ class SystemsArchitect(BaseSpecialist):
         super().__init__(specialist_name=specialist_name, specialist_config=specialist_config)
         logger.info("---INITIALIZED SystemsArchitect---")
 
-    def _generate_plan(self, messages: List[BaseMessage]) -> SystemPlan:
+    def _call_llm_for_plan(self, messages: List[BaseMessage]) -> dict:
         """
-        Core planning logic - shared by graph execution and MCP tool.
+        Get raw JSON response from LLM. Does NOT validate against SystemPlan.
 
         Args:
             messages: The messages to send to the LLM
 
         Returns:
-            SystemPlan instance
+            Raw JSON dict from the model
         """
         request = StandardizedLLMRequest(
             messages=messages,
             output_model_class=SystemPlan
         )
 
-        # Adapter raises ValueError if structured output parsing fails
         response_data = self.llm_adapter.invoke(request)
         json_response = response_data.get("json_response")
 
         if not json_response:
             raise ValueError("SystemsArchitect failed to get a valid plan from the LLM.")
 
+        return json_response
+
+    def _generate_plan(self, messages: List[BaseMessage]) -> SystemPlan:
+        """
+        Core planning logic - shared by graph execution and MCP tool.
+        Calls _call_llm_for_plan then validates via SystemPlan.
+
+        Args:
+            messages: The messages to send to the LLM
+
+        Returns:
+            SystemPlan instance
+
+        Raises:
+            ValidationError: If the model's JSON doesn't satisfy SystemPlan constraints
+            ValueError: If the model returns no JSON at all
+        """
+        json_response = self._call_llm_for_plan(messages)
         return SystemPlan(**json_response)
 
     def _execute_logic(self, state: dict) -> Dict[str, Any]:
@@ -60,7 +79,25 @@ class SystemsArchitect(BaseSpecialist):
 
         # Get enriched messages (includes gathered_context if available)
         messages: List[BaseMessage] = self._get_enriched_messages(state)
-        plan = self._generate_plan(messages)
+
+        # Call LLM, then validate separately so raw response is preserved on failure.
+        json_response = self._call_llm_for_plan(messages)
+
+        try:
+            plan = SystemPlan(**json_response)
+        except (ValidationError, ValueError) as e:
+            # Return raw model output for observability, but NO task_plan.
+            # check_sa_outcome sees no task_plan → routes to END.
+            # SafeExecutor's success path runs → traces, routing history captured.
+            logger.warning(f"SystemsArchitect: plan validation failed: {e}")
+            return {
+                "messages": [create_llm_message(
+                    specialist_name=self.specialist_name,
+                    llm_adapter=self.llm_adapter,
+                    content=f"Plan validation failed: {e}",
+                )],
+                "scratchpad": {"sa_raw_response": json_response},
+            }
 
         new_message = create_llm_message(
             specialist_name=self.specialist_name,

@@ -59,18 +59,23 @@ def test_systems_architect_handles_no_json_response(systems_architect_specialist
         systems_architect_specialist._execute_logic(initial_state)
 
 def test_systems_architect_handles_malformed_json_response(systems_architect_specialist):
-    """Tests that the specialist raises an error if LLM returns malformed JSON."""
+    """When LLM returns malformed JSON (missing required fields), _execute_logic
+    returns normally with the raw response in scratchpad — no exception raised.
+    check_sa_outcome routes to END because task_plan is absent."""
     # Arrange
-    # Missing required fields 'required_components' and 'execution_steps' in SystemPlan
+    raw = {"plan_summary": "Invalid plan."}
     systems_architect_specialist.llm_adapter.invoke.return_value = {
-        "json_response": {"plan_summary": "Invalid plan."}
+        "json_response": raw
     }
 
     initial_state = {"messages": [HumanMessage(content="Plan something.")]}
 
-    # Act & Assert
-    with pytest.raises(Exception): # Expecting Pydantic validation error
-        systems_architect_specialist._execute_logic(initial_state)
+    # Act — no exception
+    result = systems_architect_specialist._execute_logic(initial_state)
+
+    # Assert: raw response preserved, no task_plan
+    assert result["scratchpad"]["sa_raw_response"] == raw
+    assert "task_plan" not in result.get("artifacts", {})
 
 
 # =============================================================================
@@ -245,58 +250,62 @@ class TestAcceptanceCriteriaValidator:
 
 
 class TestAcceptanceCriteriaErrorPath:
-    """Tests that ValidationError from the acceptance_criteria validator
-    propagates correctly through SA's _generate_plan() → _execute_logic().
+    """Tests that ValidationError from acceptance_criteria is caught by
+    _execute_logic, which returns normally with sa_raw_response in scratchpad
+    and no task_plan in artifacts. check_sa_outcome routes to END.
 
-    SafeExecutor catches these exceptions in production. Here we verify the
-    exception surfaces from the specialist code itself (SafeExecutor is tested
-    separately).
+    The MCP path (_generate_plan via create_plan) still raises — tested separately.
     """
 
-    def test_empty_acceptance_criteria_raises_through_execute_logic(self, systems_architect_specialist):
-        """When LLM returns empty acceptance_criteria, _execute_logic raises ValidationError."""
-        systems_architect_specialist.llm_adapter.invoke.return_value = {
-            "json_response": {
-                "plan_summary": "Categorize text files by topic.",
-                "required_components": ["project_director"],
-                "execution_steps": ["Read files", "Create directories", "Move files"],
-                "acceptance_criteria": "",
-            }
+    def test_empty_acceptance_criteria_preserves_raw_response(self, systems_architect_specialist):
+        """When LLM returns empty acceptance_criteria, _execute_logic returns
+        the raw response in scratchpad without raising."""
+        raw = {
+            "plan_summary": "Categorize text files by topic.",
+            "required_components": ["project_director"],
+            "execution_steps": ["Read files", "Create directories", "Move files"],
+            "acceptance_criteria": "",
         }
+        systems_architect_specialist.llm_adapter.invoke.return_value = {"json_response": raw}
         initial_state = {"messages": [HumanMessage(content="Categorize files.")]}
 
-        with pytest.raises(ValidationError, match="too short"):
-            systems_architect_specialist._execute_logic(initial_state)
+        result = systems_architect_specialist._execute_logic(initial_state)
 
-    def test_placeholder_acceptance_criteria_raises_through_execute_logic(self, systems_architect_specialist):
-        """When LLM returns long placeholder acceptance_criteria, _execute_logic raises ValidationError."""
-        systems_architect_specialist.llm_adapter.invoke.return_value = {
-            "json_response": {
-                "plan_summary": "Organize workspace.",
-                "required_components": [],
-                "execution_steps": ["Read directory"],
-                "acceptance_criteria": "." * 40,  # 40 periods — passes length, caught by placeholder
-            }
+        assert result["scratchpad"]["sa_raw_response"] == raw
+        assert "task_plan" not in result.get("artifacts", {})
+
+    def test_placeholder_acceptance_criteria_preserves_raw_response(self, systems_architect_specialist):
+        """When LLM returns placeholder acceptance_criteria, _execute_logic returns
+        the raw response in scratchpad without raising."""
+        raw = {
+            "plan_summary": "Organize workspace.",
+            "required_components": [],
+            "execution_steps": ["Read directory"],
+            "acceptance_criteria": "." * 40,
         }
+        systems_architect_specialist.llm_adapter.invoke.return_value = {"json_response": raw}
         initial_state = {"messages": [HumanMessage(content="Organize workspace.")]}
 
-        with pytest.raises(ValidationError, match="placeholder"):
-            systems_architect_specialist._execute_logic(initial_state)
+        result = systems_architect_specialist._execute_logic(initial_state)
 
-    def test_missing_acceptance_criteria_raises_through_execute_logic(self, systems_architect_specialist):
-        """When LLM omits acceptance_criteria entirely, _execute_logic raises ValidationError."""
-        systems_architect_specialist.llm_adapter.invoke.return_value = {
-            "json_response": {
-                "plan_summary": "Some plan.",
-                "required_components": [],
-                "execution_steps": ["Step one"],
-                # acceptance_criteria omitted entirely
-            }
+        assert result["scratchpad"]["sa_raw_response"] == raw
+        assert "task_plan" not in result.get("artifacts", {})
+
+    def test_missing_acceptance_criteria_preserves_raw_response(self, systems_architect_specialist):
+        """When LLM omits acceptance_criteria entirely, _execute_logic returns
+        the raw response in scratchpad without raising."""
+        raw = {
+            "plan_summary": "Some plan.",
+            "required_components": [],
+            "execution_steps": ["Step one"],
         }
+        systems_architect_specialist.llm_adapter.invoke.return_value = {"json_response": raw}
         initial_state = {"messages": [HumanMessage(content="Do something.")]}
 
-        with pytest.raises(ValidationError, match="acceptance_criteria"):
-            systems_architect_specialist._execute_logic(initial_state)
+        result = systems_architect_specialist._execute_logic(initial_state)
+
+        assert result["scratchpad"]["sa_raw_response"] == raw
+        assert "task_plan" not in result.get("artifacts", {})
 
     def test_mcp_create_plan_also_validates(self, systems_architect_specialist):
         """The MCP tool path (_generate_plan via create_plan) enforces the same validator."""

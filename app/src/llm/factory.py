@@ -231,6 +231,7 @@ class AdapterFactory:
                 "api_identifier": provider_config.get("api_identifier"),
                 "parameters": provider_config.get("parameters", {}),
                 "context_window": provider_config.get("context_window"),
+                "skip_schema_enforcement": provider_config.get("skip_schema_enforcement", False),
             }
             if "max_image_size_mb" in provider_config:
                 model_config["max_image_size_mb"] = provider_config["max_image_size_mb"]

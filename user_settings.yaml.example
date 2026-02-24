@@ -4,7 +4,13 @@
 # use and HOW to assign them to the specialists from `config.yaml`.
 #
 # It is safe to edit and is not tracked by Git.
+# Copy this to `user_settings.yaml` and customize for your environment.
 # ==============================================================================
+
+# --- 0. Architecture Selection ---
+# Choose the orchestration architecture.
+# Options: "default" (Router-centric), "convening" (TribeConductor/Heap-centric)
+architecture: "default"
 
 # --- 1. Define Your Concrete Models ---
 # This section defines your named LLM provider configurations. Each configuration
@@ -20,13 +26,20 @@
 #   lmstudio_router:
 #     type: "lmstudio"
 #     server: "rtx3090"  # → fast GPU for routing
-#     api_identifier: "gpt-oss-20b"
+#     api_identifier: "qwen3-30b-a3b"
 #   lmstudio_specialist:
 #     type: "lmstudio"
 #     server: "rtx8000"  # → bigger GPU for specialists
 #     api_identifier: "qwen3-30b"
 #
 # If no `server` is specified, falls back to LMSTUDIO_BASE_URL env var.
+#
+# SCHEMA ENFORCEMENT (#219):
+# LM Studio's llama.cpp backend uses GBNF grammar-constrained decoding to enforce
+# JSON output. Some model families (e.g., gpt-oss with Harmony format) are
+# incompatible because their control tokens are blocked by the JSON grammar.
+# Set skip_schema_enforcement: true for these models. Harmony tokens are
+# automatically stripped. See docs/CONFIGURATION_GUIDE.md Section 1.2.
 #
 # Maximum image size in MB (base64 encoded). Rejects uploads exceeding this.
 # ~10MB base64 ≈ 7.5MB original image. Adjust based on your context window.
@@ -57,12 +70,25 @@ llm_providers:
   # ===========================================================================
   # For local providers (like LM Studio), this is typically the model file path/name
   # that the server is loading. Include parameters for model-specific sampling.
+  #
+  # Provider config options:
+  #   type: "lmstudio" or "lmstudio_pool" (multi-GPU pool via local-inference-pool)
+  #   server: Named server from LMSTUDIO_SERVERS env var (optional)
+  #   api_identifier: Model name as loaded in LM Studio
+  #   skip_schema_enforcement: true  # For Harmony-format models (#219)
+  #   skip_ping: true  # Skip startup connectivity check (avoid loading unused models)
+  #   context_window: 16384  # Override context length (optional)
+  #   parameters:
+  #     temperature: 0.7
+  #     top_p: 0.9
+  #     top_k: 64      # Non-standard param, sent via extra_body
+  #     max_tokens: 4096
 
   # Router model - fast, lightweight, good at classification
   lmstudio_router:
     type: "lmstudio"
     # server: "rtx3090"  # Uncomment for distributed inference
-    api_identifier: "gpt-oss-20b"   # Tested to be excellent router when prompted well
+    api_identifier: "qwen3-30b-a3b"
     parameters:
       temperature: 0.7
       top_p: 0.8      # Nucleus sampling - important for MoE models
@@ -77,6 +103,14 @@ llm_providers:
       temperature: 0.7
       top_p: 0.9
 
+  # Example: Harmony-format model with schema enforcement disabled (#219)
+  # gpt-oss models use OpenAI's Harmony response format with special tokens
+  # that are incompatible with GBNF grammar-constrained decoding.
+  # lmstudio_harmony_example:
+  #   type: "lmstudio"
+  #   api_identifier: "gpt-oss-20b"
+  #   skip_schema_enforcement: true  # #219: Harmony format incompatible with GBNF grammar
+
   # ===========================================================================
   # VISION MODELS (LM Studio)
   # ===========================================================================
@@ -86,6 +120,7 @@ llm_providers:
     type: "lmstudio"
     # server: "rtx8000"  # Larger VRAM typically needed for vision models
     api_identifier: "lfm2-vl-1.6b"
+    skip_ping: true  # Avoid loading vision model during startup validation
     # parameters:
     #   top_p: 0.8
     #   temperature: 0.8
@@ -129,11 +164,19 @@ specialist_model_bindings:
   default_responder_specialist: "lmstudio_router"
   prompt_triage_specialist: "lmstudio_router"
   triage_architect: "lmstudio_router"
+  exit_interview_specialist: "lmstudio_specialist"
+
+  # project_director: "lmstudio_specialist"
 
   # --- Research & Context Gathering ---
   # Note: Web research is handled by the Context Engineering flow (TriageArchitect → Facilitator → WebSpecialist)
   # WebSpecialist is MCP-only (not routable) - no model binding needed
   summarizer_specialist: "lmstudio_specialist"
+
+  # --- Vision Specialist Bindings ---
+  # image_specialist REQUIRES a vision-capable model (lfm2-vl, llava, qwen-vl, etc.)
+  # Default fallback to lmstudio_specialist would use a text-only model and fail.
+  image_specialist: "lmstudio_vision"
 
   # --- Hybrid Specialist Bindings ---
   # The Open Interpreter specialist is hybrid, requiring an LLM for planning.
@@ -179,7 +222,7 @@ specialist_model_bindings:
 
   progenitor_alpha_specialist: "lmstudio_specialist"  # Analytical perspective
   progenitor_bravo_specialist: "lmstudio_specialist"  # Contextual perspective
-  tiered_synthesizer_specialist: "lmstudio_specialist"
+  # tiered_synthesizer_specialist: "lmstudio_specialist"
 
   # ALTERNATIVE CONFIGURATIONS (uncomment to try):
   # Both Cloud (Premium Quality):

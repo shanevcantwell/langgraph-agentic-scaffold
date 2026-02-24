@@ -2,6 +2,7 @@
 import logging
 import json
 import os
+import re
 import time
 import tiktoken
 from uuid import uuid4
@@ -25,6 +26,10 @@ class LMStudioAdapter(BaseAdapter):
     Uses JSON schema enforcement via 'response_format' for tool-calling instead
     of native Harmony format, which degrades after ~10 calls with some models.
     """
+
+    # #219: Harmony format control tokens (gpt-oss o200k_harmony encoding, IDs 200002-200012).
+    # These wrap the model's multi-channel output and must be stripped before JSON parsing.
+    _HARMONY_TOKEN_RE = re.compile(r'<\|(?:start|end|channel|message|constrain|call|return)\|>')
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
         super().__init__(model_config)
         if not base_url:
@@ -42,6 +47,11 @@ class LMStudioAdapter(BaseAdapter):
                 "This can cause issues with some local model servers. Ensure this is the exact "
                 "identifier expected by the server (often the model's filename)."
             )
+
+        # #219: Harmony models (gpt-oss) produce garbled output under GBNF grammar-constrained
+        # decoding because Harmony control tokens are blocked by the JSON grammar.
+        # When True, skip response_format and parse JSON from free text instead.
+        self.skip_schema_enforcement = self.config.get('skip_schema_enforcement', False)
 
         self.context_window = self.config.get('context_window')  # None if not configured; let LMStudio handle limits
         self.timeout = int(os.getenv("LMSTUDIO_TIMEOUT", REQUEST_TIMEOUT))
@@ -91,7 +101,8 @@ class LMStudioAdapter(BaseAdapter):
         model_config = {
             "api_identifier": provider_config.get("api_identifier"),
             "parameters": provider_config.get("parameters", {}),
-            "context_window": provider_config.get("context_window")
+            "context_window": provider_config.get("context_window"),
+            "skip_schema_enforcement": provider_config.get("skip_schema_enforcement", False),
         }
         return cls(model_config=model_config,
                    base_url=provider_config["base_url"],
@@ -158,7 +169,7 @@ class LMStudioAdapter(BaseAdapter):
             tools: List of Pydantic model classes representing available tools
 
         Returns:
-            JSON Schema dict with $schema declaration (required by LMStudio)
+            JSON Schema dict for LM Studio structured output
         """
         variants = []
 
@@ -196,7 +207,6 @@ class LMStudioAdapter(BaseAdapter):
             })
 
         return {
-            "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "ToolCallResponse",
             "type": "object",
             "required": ["reasoning", "actions"],
@@ -356,6 +366,17 @@ class LMStudioAdapter(BaseAdapter):
 
         return api_messages
 
+    def _strip_harmony_tokens(self, text: str) -> str:
+        """Strip Harmony special tokens from response text.
+
+        gpt-oss models emit multi-channel responses like:
+            <|channel|>final <|constrain|>SystemPlan<|message|>{...json...}
+        This strips the control tokens so JSON extraction can find the payload.
+        Channel/constrain labels (e.g., "final ", "SystemPlan") between tokens
+        are left for _robustly_parse_json_from_text()'s {-to-} extraction.
+        """
+        return self._HARMONY_TOKEN_RE.sub('', text)
+
     def _build_request_kwargs(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         """
         Build the OpenAI-compatible API request kwargs from a StandardizedLLMRequest.
@@ -424,7 +445,17 @@ class LMStudioAdapter(BaseAdapter):
         # --- Intent Detection: JSON schema enforcement for tools (#135) ---
         # Instead of native tool-calling (Harmony), use response_format with JSON schema.
         # This is more reliable for models like gpt-oss that degrade after ~10 tool calls.
-        if request.tools:
+        #
+        # #219: Harmony models (gpt-oss) produce garbled output under GBNF grammar-constrained
+        # decoding. Their control tokens (<|channel|>, <|constrain|>, etc.) are blocked by the
+        # JSON grammar. When skip_schema_enforcement is True, we skip response_format entirely
+        # and let the model produce JSON from prompt instructions + Harmony's own <|constrain|>.
+        if self.skip_schema_enforcement:
+            logger.info(
+                f"LMStudioAdapter: Schema enforcement skipped for '{self.model_name}' "
+                "(skip_schema_enforcement=True). JSON will be parsed from text response."
+            )
+        elif request.tools:
             logger.info("LMStudioAdapter: Using JSON schema enforcement for tools (not native tool-calling).")
             tool_call_schema = self._build_tool_call_schema(request.tools)
             api_kwargs["response_format"] = {
@@ -442,9 +473,9 @@ class LMStudioAdapter(BaseAdapter):
         elif request.output_model_class and issubclass(request.output_model_class, BaseModel):
             schema_source = request.output_model_class
             logger.info(f"LMStudioAdapter: Invoking in JSON Schema enforcement mode with schema {schema_source.__name__}.")
-            # Issue #135: Add $schema declaration required by LMStudio
+            # #135 originally added $schema declaration; removed because
+            # LM Studio 0.4+ rejects it as invalid, disabling logit masking.
             schema = schema_source.model_json_schema()
-            schema["$schema"] = "http://json-schema.org/draft-07/schema#"
             api_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {
@@ -501,15 +532,26 @@ class LMStudioAdapter(BaseAdapter):
             capture_trace(request, result, latency_ms, self.model_name)
             return result
 
-        # Issue #135: Parse tool call(s) from JSON schema-enforced response.
-        # This is the primary path when request.tools is set - we use response_format
-        # with JSON schema instead of native tool-calling (Harmony) for reliability.
+        # Issue #135: Parse tool call(s) from JSON-formatted response.
+        # Primary path when request.tools is set. With schema enforcement, content is
+        # grammar-constrained JSON. Without (#219), content is free text (possibly with
+        # Harmony framing) that we strip and parse.
         # Phase 0.9: Supports "actions" array for concurrent multi-tool dispatch.
-        if request.tools and "response_format" in api_kwargs:
+        if request.tools and ("response_format" in api_kwargs or self.skip_schema_enforcement):
             content = message.content or ""
+            # #219: Strip Harmony control tokens before JSON extraction
+            if self._HARMONY_TOKEN_RE.search(content):
+                logger.info("LMStudioAdapter: Stripping Harmony tokens from tool response")
+                content = self._strip_harmony_tokens(content)
             if content.strip():
                 try:
-                    json_resp = json.loads(content)
+                    # Try direct parse first; fall back to robust extraction from text
+                    try:
+                        json_resp = json.loads(content)
+                    except json.JSONDecodeError:
+                        json_resp = self._robustly_parse_json_from_text(content)
+                        if not json_resp:
+                            raise json.JSONDecodeError("No JSON found after Harmony stripping", content, 0)
 
                     # Primary path: "actions" array (Phase 0.9 concurrent dispatch)
                     actions = json_resp.get("actions", [])
@@ -626,6 +668,10 @@ class LMStudioAdapter(BaseAdapter):
                     content = reasoning_content
                 else:
                     content = "{}"
+            # #219: Belt-and-suspenders — strip Harmony tokens even in schema-enforced path
+            if self._HARMONY_TOKEN_RE.search(content):
+                logger.info("LMStudioAdapter: Stripping Harmony tokens from schema-enforced response")
+                content = self._strip_harmony_tokens(content)
             json_response = None
             try:
                 # First, try to parse directly
@@ -663,6 +709,10 @@ class LMStudioAdapter(BaseAdapter):
                     content = reasoning_content
                 else:
                     content = ""
+            # #219: Strip Harmony tokens before JSON extraction
+            if self._HARMONY_TOKEN_RE.search(content):
+                logger.info("LMStudioAdapter: Stripping Harmony tokens from text response")
+                content = self._strip_harmony_tokens(content)
             json_data = self._robustly_parse_json_from_text(content)
             if json_data:
                 result = {"json_response": json_data, "text_response": content}

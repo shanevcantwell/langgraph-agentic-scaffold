@@ -1,6 +1,6 @@
 # LAS Architecture Reference
 
-**Updated:** 2026-02-22
+**Updated:** 2026-02-24
 
 ---
 
@@ -105,7 +105,7 @@ TriageArchitect ──→ ACCEPT/REJECT gate (thin classifier, not planner)
 SystemsArchitect ──→ Produces task_plan (write-once master intent + acceptance_criteria)
     ↓ [check_sa_outcome: task_plan exists? #217]
 Facilitator ──→ Assembles gathered_context (sole context writer)
-    (SA failure → END with termination_reason)
+    (SA failure or validation failure (#218) → END with termination_reason)
     ↓
 Router ──→ Routes with gathered_context available
 ```
@@ -274,6 +274,8 @@ Factory pattern with provider abstraction:
 
 **Model agnosticism:** The system works with 20+ models. No specialist depends on specific model behaviors. All model bindings are runtime configuration (`user_settings.yaml`).
 
+**Schema enforcement (#219):** LMStudioAdapter uses GBNF grammar-constrained decoding (`response_format`) to enforce JSON output structure. Models using the Harmony response format (e.g., gpt-oss) are incompatible with GBNF grammar because Harmony's control tokens (`<|channel|>`, `<|constrain|>`, etc.) are blocked by the JSON grammar. Set `skip_schema_enforcement: true` in provider config to disable `response_format` and parse JSON from free text instead. Harmony tokens are automatically stripped in all response paths. The `$schema` declaration was also removed from generated JSON schemas (#218) — LM Studio 0.4+ rejects it as invalid, silently disabling logit masking.
+
 ---
 
 ## 9. Configuration
@@ -333,7 +335,7 @@ Separation allows the same structure with different runtime bindings. Supports `
 
 ## 11. Test Coverage
 
-- **Unit tests:** 964 tests (mocked LLM calls), 2 known skipped (#192)
+- **Unit tests:** 997 tests (mocked LLM calls), 2 known skipped (#192)
 - **Integration tests:** ~178 tests (real configs, live LLM)
 - **Concurrent invocation tests:** 15 tests verifying shared mutable state integrity under concurrent fork()
 - **Total:** 1,150+ tests

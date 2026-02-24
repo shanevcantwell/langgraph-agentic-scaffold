@@ -817,3 +817,134 @@ class TestParserParamFiltering:
 
         result = LMStudioAdapter._get_known_params_for_tool("move_file", [move_file])
         assert result == {"source", "destination"}
+
+
+# =============================================================================
+# Issue #219: Harmony Token Stripping & Schema Enforcement Skip
+# =============================================================================
+
+class TestHarmonyTokenStripping:
+    """Tests for _strip_harmony_tokens and skip_schema_enforcement (#219).
+
+    gpt-oss models use the Harmony response format with special tokens
+    (<|channel|>, <|constrain|>, <|message|>, etc.) that are incompatible
+    with llama.cpp's GBNF grammar-constrained decoding. When
+    skip_schema_enforcement is True, we skip response_format and strip
+    Harmony tokens before JSON parsing.
+    """
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_strip_harmony_tokens_from_structured_output(self, mock_openai):
+        """Harmony-wrapped SystemPlan JSON should parse correctly after stripping."""
+        adapter = LMStudioAdapter(
+            model_config={"api_identifier": "gpt-oss-20b", "parameters": {}},
+            base_url=MOCK_BASE_URL,
+            system_prompt="You are a systems architect."
+        )
+
+        # Simulate Harmony-wrapped response
+        harmony_text = (
+            '<|channel|>final <|constrain|>SystemPlan<|message|>'
+            '{"plan_summary":"Categorize files.","required_components":[],'
+            '"execution_steps":["Read files","Create dirs","Move files"],'
+            '"acceptance_criteria":"Each subdirectory contains at least two files."}'
+        )
+        stripped = adapter._strip_harmony_tokens(harmony_text)
+
+        # Should be parseable as JSON after stripping
+        # (robust parser handles leftover channel labels like "final SystemPlan")
+        import json
+        start = stripped.find('{')
+        json_str = stripped[start:]
+        parsed = json.loads(json_str)
+        assert parsed["plan_summary"] == "Categorize files."
+        assert len(parsed["execution_steps"]) == 3
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_strip_harmony_tokens_from_tool_response(self, mock_openai):
+        """Harmony-wrapped tool call JSON should parse correctly after stripping."""
+        adapter = LMStudioAdapter(
+            model_config={"api_identifier": "gpt-oss-20b", "parameters": {}},
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+
+        harmony_text = (
+            '<|start|>assistant<|channel|>final <|constrain|>json<|message|>'
+            '{"reasoning":"Need to list files","actions":[{"tool_name":"list_directory","path":"/workspace"}]}'
+        )
+        stripped = adapter._strip_harmony_tokens(harmony_text)
+
+        import json
+        start = stripped.find('{')
+        parsed = json.loads(stripped[start:])
+        assert parsed["actions"][0]["tool_name"] == "list_directory"
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_strip_preserves_clean_json(self, mock_openai):
+        """When no Harmony tokens are present, content passes through unchanged."""
+        adapter = LMStudioAdapter(
+            model_config={"api_identifier": "qwen3-30b", "parameters": {}},
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+
+        clean_json = '{"plan_summary":"A plan.","execution_steps":["Step 1"]}'
+        stripped = adapter._strip_harmony_tokens(clean_json)
+        assert stripped == clean_json
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_skip_schema_enforcement_omits_response_format(self, mock_openai):
+        """When skip_schema_enforcement=True, _build_request_kwargs should NOT set response_format."""
+        adapter = LMStudioAdapter(
+            model_config={
+                "api_identifier": "gpt-oss-20b",
+                "parameters": {},
+                "skip_schema_enforcement": True,
+            },
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+
+        assert adapter.skip_schema_enforcement is True
+
+        # Request with output_model_class (SA path)
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Plan something")],
+            output_model_class=type("FakeSchema", (BaseModel,), {"__annotations__": {"plan": str}}),
+        )
+        kwargs = adapter._build_request_kwargs(request)
+        assert "response_format" not in kwargs
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_schema_enforcement_default_false(self, mock_openai):
+        """skip_schema_enforcement defaults to False when not specified in config."""
+        adapter = LMStudioAdapter(
+            model_config={"api_identifier": "qwen3-30b", "parameters": {}},
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+        assert adapter.skip_schema_enforcement is False
+
+    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    def test_skip_schema_enforcement_with_tools_omits_response_format(self, mock_openai):
+        """When skip_schema_enforcement=True, tool requests also skip response_format."""
+        adapter = LMStudioAdapter(
+            model_config={
+                "api_identifier": "gpt-oss-20b",
+                "parameters": {},
+                "skip_schema_enforcement": True,
+            },
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+
+        class list_directory(BaseModel):
+            path: str
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="List files")],
+            tools=[list_directory],
+        )
+        kwargs = adapter._build_request_kwargs(request)
+        assert "response_format" not in kwargs

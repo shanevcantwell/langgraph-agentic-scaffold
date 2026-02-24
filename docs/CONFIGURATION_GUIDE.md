@@ -135,6 +135,29 @@ llm_providers:
 - Moving a workload to different hardware only changes `user_settings.yaml`
 - Providers without a `server` field fall back to `LMSTUDIO_BASE_URL`
 
+## 1.2 Schema Enforcement Control (#219)
+
+LM Studio's llama.cpp backend uses GBNF grammar-constrained decoding to enforce JSON output structure. Some model families (notably gpt-oss with Harmony format) are incompatible with GBNF grammar because their response-format control tokens are blocked by the JSON grammar, producing garbled output.
+
+**Per-model flag:**
+```yaml
+llm_providers:
+  my_harmony_model:
+    type: "lmstudio"
+    api_identifier: "gpt-oss-20b"
+    skip_schema_enforcement: true  # Disable GBNF grammar; parse JSON from text
+```
+
+When `skip_schema_enforcement: true`:
+- `response_format` is NOT sent in API requests — no grammar-constrained decoding
+- The model produces JSON from prompt instructions (schema shape is still described in system prompts)
+- Harmony control tokens (`<|channel|>`, `<|constrain|>`, `<|message|>`, etc.) are automatically stripped before JSON parsing
+- Falls back to robust `{`-to-`}` extraction if direct `json.loads()` fails
+
+**Default:** `false` (grammar enforcement enabled). Only set `true` for models whose response format is incompatible with GBNF grammar.
+
+**Note:** The `$schema` declaration was also removed from all generated JSON schemas (#218) — LM Studio 0.4+ rejects it as an invalid keyword, silently disabling logit masking.
+
 ## 2.0 Container Naming Convention
 
 The `docker-compose.yml` file uses explicit container names (`langgraph-app` and `langgraph-proxy`). This is to prevent conflicts with other projects and to make the containers easily identifiable. It is strongly recommended not to change these names, as it can lead to unexpected behavior and orphaned containers.

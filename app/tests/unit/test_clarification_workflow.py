@@ -123,6 +123,58 @@ def test_sa_outcome_routes_to_end_when_artifacts_empty(orchestrator_instance):
     assert "Unknown SA failure" in state["scratchpad"]["termination_reason"]
 
 
+# =============================================================================
+# SA Raw Response Preservation on Validation Failure
+# =============================================================================
+
+def test_sa_validation_failure_preserves_raw_response():
+    """
+    When the model returns valid JSON but SystemPlan validation fails
+    (e.g., acceptance_criteria too short), _execute_logic should:
+    1. Return normally (no exception) so SafeExecutor success path runs
+    2. Include the raw model JSON in scratchpad.sa_raw_response
+    3. NOT include task_plan in artifacts
+    """
+    from unittest.mock import patch
+    from app.src.specialists.systems_architect import SystemsArchitect
+
+    # Arrange: model returns valid JSON with short acceptance_criteria
+    raw_response = {
+        "plan_summary": "Categorize 13 files into topic subdirectories.",
+        "required_components": ["filesystem access"],
+        "execution_steps": ["Read files", "Create dirs", "Move files"],
+        "acceptance_criteria": "..."  # Too short — validator rejects
+    }
+
+    sa = SystemsArchitect("systems_architect", {"type": "structured"})
+    sa.llm_adapter = MagicMock()
+    sa.llm_adapter.invoke.return_value = {"json_response": raw_response}
+    sa.llm_adapter.model_name = "test-model"
+
+    from langchain_core.messages import HumanMessage
+    state = {
+        "artifacts": {},
+        "messages": [HumanMessage(content="Categorize files in categories_test")],
+        "scratchpad": {},
+    }
+
+    # Act — should NOT raise
+    result = sa._execute_logic(state)
+
+    # Assert
+    # 1. Raw response preserved in scratchpad
+    assert "sa_raw_response" in result.get("scratchpad", {})
+    assert result["scratchpad"]["sa_raw_response"]["acceptance_criteria"] == "..."
+    assert result["scratchpad"]["sa_raw_response"]["plan_summary"] == "Categorize 13 files into topic subdirectories."
+
+    # 2. No task_plan in artifacts (check_sa_outcome will route to END)
+    assert "task_plan" not in result.get("artifacts", {})
+
+    # 3. Message explains the failure
+    assert len(result.get("messages", [])) == 1
+    assert "validation failed" in result["messages"][0].content.lower()
+
+
 def test_end_specialist_generates_clarification_response():
     """
     Tests that EndSpecialist generates a clarification response instead of

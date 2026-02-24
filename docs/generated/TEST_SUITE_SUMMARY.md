@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 849 |
+| Unit | 76 | 856 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1132** |
+| **Total** | **111** | **1139** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -833,6 +833,8 @@
   - *#217: When SA fails (no task_plan in artifacts), check_sa_outcome*
 - **`test_sa_outcome_routes_to_end_when_artifacts_empty`**
   - *#217: When state has no artifacts at all (edge case),*
+- **`test_sa_validation_failure_preserves_raw_response`**
+  - *When the model returns valid JSON but SystemPlan validation fails*
 - **`test_end_specialist_generates_clarification_response`**
   - *Tests that EndSpecialist generates a clarification response instead of*
 
@@ -1617,6 +1619,18 @@
   - *Should return None for unknown tool (permissive fallback).*
 - **`test_get_known_params_multi_field_tool`**
   - *Should return all field names for a multi-field tool.*
+- **`test_strip_harmony_tokens_from_structured_output`**
+  - *Harmony-wrapped SystemPlan JSON should parse correctly after stripping.*
+- **`test_strip_harmony_tokens_from_tool_response`**
+  - *Harmony-wrapped tool call JSON should parse correctly after stripping.*
+- **`test_strip_preserves_clean_json`**
+  - *When no Harmony tokens are present, content passes through unchanged.*
+- **`test_skip_schema_enforcement_omits_response_format`**
+  - *When skip_schema_enforcement=True, _build_request_kwargs should NOT set response_format.*
+- **`test_schema_enforcement_default_false`**
+  - *skip_schema_enforcement defaults to False when not specified in config.*
+- **`test_skip_schema_enforcement_with_tools_omits_response_format`**
+  - *When skip_schema_enforcement=True, tool requests also skip response_format.*
 
 ## `app/tests/unit/test_mcp_client.py`
 
@@ -2349,7 +2363,7 @@
 - **`test_systems_architect_handles_no_json_response`**
   - *Tests that the specialist raises an error if LLM returns no JSON response.*
 - **`test_systems_architect_handles_malformed_json_response`**
-  - *Tests that the specialist raises an error if LLM returns malformed JSON.*
+  - *When LLM returns malformed JSON (missing required fields), _execute_logic*
 - **`test_create_plan_returns_artifact_with_specified_key`**
   - *create_plan() should return artifacts with the caller-specified key.*
 - **`test_create_plan_uses_context_as_human_message`**
@@ -2372,12 +2386,12 @@
   - *Content that happens to contain ellipsis but has real text passes.*
 - **`test_whitespace_only_raises`**
   - *All-whitespace strings are rejected (too short after strip).*
-- **`test_empty_acceptance_criteria_raises_through_execute_logic`**
-  - *When LLM returns empty acceptance_criteria, _execute_logic raises ValidationError.*
-- **`test_placeholder_acceptance_criteria_raises_through_execute_logic`**
-  - *When LLM returns long placeholder acceptance_criteria, _execute_logic raises ValidationError.*
-- **`test_missing_acceptance_criteria_raises_through_execute_logic`**
-  - *When LLM omits acceptance_criteria entirely, _execute_logic raises ValidationError.*
+- **`test_empty_acceptance_criteria_preserves_raw_response`**
+  - *When LLM returns empty acceptance_criteria, _execute_logic returns*
+- **`test_placeholder_acceptance_criteria_preserves_raw_response`**
+  - *When LLM returns placeholder acceptance_criteria, _execute_logic returns*
+- **`test_missing_acceptance_criteria_preserves_raw_response`**
+  - *When LLM omits acceptance_criteria entirely, _execute_logic returns*
 - **`test_mcp_create_plan_also_validates`**
   - *The MCP tool path (_generate_plan via create_plan) enforces the same validator.*
 
