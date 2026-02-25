@@ -30,7 +30,7 @@ def facilitator():
     return specialist
 
 def test_facilitator_executes_research_action(facilitator):
-    # Arrange
+    """#223: RESEARCH action calls webfetch-mcp web_search via external MCP."""
     state = {
         "scratchpad": {
             "triage_actions": [
@@ -41,17 +41,19 @@ def test_facilitator_executes_research_action(facilitator):
         "artifacts": {}
     }
 
-    facilitator.mcp_client.call.return_value = [{"title": "Result", "url": "url", "snippet": "snippet"}]
+    with patch('app.src.specialists.facilitator_specialist.sync_call_external_mcp') as mock_sync:
+        mock_sync.return_value = _make_mcp_result("Result 1: LangGraph overview\nResult 2: LangGraph tutorial")
+        result = facilitator.execute(state)
 
-    # Act
-    result = facilitator.execute(state)
-
-    # Assert
-    assert "artifacts" in result
-    assert "gathered_context" in result["artifacts"]
-    # #222: web_specialist removed, RESEARCH action now stubs with warning
+    # Assert webfetch was called with correct params
+    mock_sync.assert_called_once_with(
+        facilitator.external_mcp_client,
+        "webfetch",
+        "web_search",
+        {"query": "LangGraph"},
+    )
     assert "### Research: LangGraph" in result["artifacts"]["gathered_context"]
-    assert "webfetch-mcp re-wiring pending" in result["artifacts"]["gathered_context"]
+    assert "LangGraph overview" in result["artifacts"]["gathered_context"]
 
 def test_facilitator_executes_read_file_action(facilitator):
     # Arrange
@@ -80,8 +82,8 @@ def test_facilitator_handles_missing_plan(facilitator):
     result = facilitator.execute(state)
     assert "gathered_context" in result.get("artifacts", {})
 
-def test_facilitator_research_action_stubbed(facilitator):
-    """#222: RESEARCH action is stubbed until webfetch-mcp re-wiring (#223)."""
+def test_facilitator_research_webfetch_unavailable(facilitator):
+    """#223: When webfetch MCP is unavailable, RESEARCH degrades gracefully."""
     state = {
         "scratchpad": {
             "triage_actions": [
@@ -92,11 +94,13 @@ def test_facilitator_research_action_stubbed(facilitator):
         "artifacts": {}
     }
 
+    # webfetch not connected (filesystem still is)
+    facilitator.external_mcp_client.is_connected.side_effect = lambda svc: svc != "webfetch"
+
     result = facilitator.execute(state)
 
-    # RESEARCH should produce stub message, not call MCP
     assert "### Research: LangGraph" in result["artifacts"]["gathered_context"]
-    assert "webfetch-mcp re-wiring pending" in result["artifacts"]["gathered_context"]
+    assert "Webfetch MCP unavailable" in result["artifacts"]["gathered_context"]
     facilitator.mcp_client.call.assert_not_called()
 
 def test_facilitator_reads_artifact_instead_of_file_for_uploaded_image(facilitator):
@@ -374,7 +378,7 @@ def test_facilitator_propagates_graph_interrupt_for_ask_user(facilitator):
 def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
     """
     When a plan has RESEARCH then ASK_USER, the interrupt must still propagate.
-    RESEARCH is now stubbed (#222), but ASK_USER's GraphInterrupt must still
+    #223: RESEARCH calls webfetch-mcp, ASK_USER's GraphInterrupt must still
     bubble up rather than being caught as an error.
     """
     from unittest.mock import patch
@@ -391,12 +395,14 @@ def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
         "artifacts": {}
     }
 
-    with patch("langgraph.types.interrupt", side_effect=GraphInterrupt(("test",))):
-        with pytest.raises(GraphInterrupt):
-            facilitator.execute(state)
+    with patch('app.src.specialists.facilitator_specialist.sync_call_external_mcp') as mock_sync:
+        mock_sync.return_value = _make_mcp_result("Search results for topic")
+        with patch("langgraph.types.interrupt", side_effect=GraphInterrupt(("test",))):
+            with pytest.raises(GraphInterrupt):
+                facilitator.execute(state)
 
-    # RESEARCH is stubbed, no MCP call expected
-    facilitator.mcp_client.call.assert_not_called()
+    # RESEARCH called webfetch, then ASK_USER raised GraphInterrupt
+    mock_sync.assert_called_once()
 
 
 def test_facilitator_skips_ask_user_on_ei_retry(facilitator):
@@ -445,7 +451,7 @@ def test_facilitator_executes_multiple_actions(facilitator):
     """
     Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,
     joining results with double newlines.
-    #222: RESEARCH actions are now stubbed, but both should still appear in context.
+    #223: Both RESEARCH actions call webfetch-mcp web_search.
     """
     state = {
         "scratchpad": {
@@ -458,16 +464,17 @@ def test_facilitator_executes_multiple_actions(facilitator):
         "artifacts": {}
     }
 
-    result = facilitator.execute(state)
+    with patch('app.src.specialists.facilitator_specialist.sync_call_external_mcp') as mock_sync:
+        mock_sync.return_value = _make_mcp_result("Search results")
+        result = facilitator.execute(state)
 
-    # RESEARCH is stubbed — no MCP calls
-    facilitator.mcp_client.call.assert_not_called()
+    # webfetch called twice (once per RESEARCH action)
+    assert mock_sync.call_count == 2
 
-    # Both stub results should appear in gathered_context
+    # Both results should appear in gathered_context
     gathered = result["artifacts"]["gathered_context"]
     assert "### Research: topic1" in gathered
     assert "### Research: topic2" in gathered
-    assert "webfetch-mcp re-wiring pending" in gathered
     assert "\n\n" in gathered  # Sections joined with double newline
 
 
@@ -545,12 +552,12 @@ def test_facilitator_continues_after_action_error(facilitator):
     """
     Per FACILITATOR.md: Individual action failures don't halt the entire plan.
     Error is logged and next action continues.
-    #222: Uses RESEARCH (stubbed) + SUMMARIZE actions to test error continuation.
+    #223: RESEARCH calls webfetch (fails), SUMMARIZE calls internal MCP (succeeds).
     """
     state = {
         "scratchpad": {
             "triage_actions": [
-                {"type": "research", "target": "failing_query", "description": "Will stub", "strategy": None},
+                {"type": "research", "target": "failing_query", "description": "Will fail", "strategy": None},
                 {"type": "summarize", "target": "some text to summarize", "description": "Will succeed", "strategy": None},
             ],
             "triage_reasoning": "Multiple actions with mixed types",
@@ -558,13 +565,15 @@ def test_facilitator_continues_after_action_error(facilitator):
         "artifacts": {}
     }
 
-    # Summarize calls MCP
     facilitator.mcp_client.call.return_value = "Summarized text"
 
-    result = facilitator.execute(state)
+    with patch('app.src.specialists.facilitator_specialist.sync_call_external_mcp') as mock_sync:
+        mock_sync.side_effect = Exception("SearXNG connection refused")
+        result = facilitator.execute(state)
 
-    # RESEARCH is stubbed, SUMMARIZE calls MCP
+    # RESEARCH failed → error captured, SUMMARIZE succeeded
     gathered = result["artifacts"]["gathered_context"]
-    assert "### Research: failing_query" in gathered
-    assert "webfetch-mcp re-wiring pending" in gathered
+    assert "### Error: failing_query" in gathered
+    assert "SearXNG connection refused" in gathered
+    assert "### Summary:" in gathered
 

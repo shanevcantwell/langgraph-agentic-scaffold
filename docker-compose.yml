@@ -206,7 +206,7 @@ services:
     command: ["tail", "-f", "/dev/null"]  # Keep alive; LAS starts via docker exec
 
   # webfetch-mcp - Web search (SearXNG) and content extraction (Readability)
-  # Source: manull/webfetch-mcp (MIT) — local fork at ../webfetch-mcp
+  # Source: manull/webfetch-mcp (MIT) — local fork at ../../webfetch-mcp
   # Provides: web_search, web_fetch
   # Requires: SearXNG container running separately (port 8080 on host)
   # Optional service - use: docker-compose --profile webfetch up
@@ -214,7 +214,7 @@ services:
     profiles: ["webfetch"]
     container_name: webfetch-mcp
     build:
-      context: ../webfetch-mcp  # Sibling project
+      context: ../../webfetch-mcp  # /home/shane/github/webfetch-mcp
     stdin_open: true  # Required for MCP stdio transport
     tty: true
     environment:

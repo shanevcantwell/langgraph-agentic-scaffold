@@ -12,11 +12,12 @@ logger = logging.getLogger(__name__)
 class FacilitatorSpecialist(BaseSpecialist):
     """
     Orchestrates triage actions by calling other specialists via MCP
-    via MCP (Synchronous Service Invocation).
+    (Synchronous Service Invocation).
 
     Uses:
     - Internal MCP for summarizer_specialist
     - External MCP (filesystem container) for file operations (ADR-CORE-035)
+    - External MCP (webfetch-mcp) for web search via SearXNG (#223)
 
     Note: external_mcp_client is injected by GraphBuilder after specialist loading.
     """
@@ -364,15 +365,21 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.info(f"Facilitator: Executing action {action.type} -> {action.target}")
                 
                 if action.type == ContextActionType.RESEARCH:
-                    # #222: WebSpecialist removed. Re-wiring to webfetch-mcp tracked in #223.
-                    logger.warning(
-                        f"Facilitator: RESEARCH action skipped — web_specialist removed. "
-                        f"Target: {action.target}. See #223 for webfetch-mcp re-wiring."
-                    )
-                    gathered_context.append(
-                        f"### Research: {action.target}\n"
-                        f"(Web search unavailable — webfetch-mcp re-wiring pending #223)"
-                    )
+                    # #223: RESEARCH calls webfetch-mcp web_search (replaced web_specialist)
+                    if not self.external_mcp_client or not self.external_mcp_client.is_connected("webfetch"):
+                        logger.warning("Facilitator: Webfetch MCP not available for RESEARCH action")
+                        gathered_context.append(
+                            f"### Research: {action.target}\n(Webfetch MCP unavailable)"
+                        )
+                    else:
+                        result = sync_call_external_mcp(
+                            self.external_mcp_client,
+                            "webfetch",
+                            "web_search",
+                            {"query": action.target},
+                        )
+                        text = extract_text_from_mcp_result(result)
+                        gathered_context.append(f"### Research: {action.target}\n{text}")
                     
                 elif action.type == ContextActionType.READ_FILE:
                     # Special handling: Check if target refers to an artifact already in state

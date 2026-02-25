@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-23 (ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection; #217: SA fail-fast conditional edge)
+**Updated:** 2026-02-25 (#223: RESEARCH action wired to webfetch-mcp web_search; ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection; #217: SA fail-fast conditional edge)
 
 ---
 
@@ -98,7 +98,7 @@ Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
 
 | Action Type | MCP Service Called | Result |
 |-------------|-------------------|--------|
-| `RESEARCH` | *Stubbed* — webfetch-mcp re-wiring pending (#223) | Placeholder message noting search unavailable |
+| `RESEARCH` | External: `webfetch.web_search(query)` (#223) | Search results from SearXNG via webfetch-mcp |
 | `READ_FILE` | External: `filesystem.read_file(path)` | File contents in code block |
 | `SUMMARIZE` | Internal: `summarizer_specialist.summarize(text)` | Condensed summary |
 | `LIST_DIRECTORY` | External: `filesystem.list_directory(path)` | Markdown bullet list with full paths |
@@ -214,9 +214,6 @@ Two scenarios qualify as BENIGN:
 Called via `self.mcp_client.call()`:
 
 ```python
-# RESEARCH action currently stubbed (#222, #223)
-# Previously called web_specialist.search() via internal MCP
-# Will be re-wired to webfetch-mcp external MCP service
 results = self.mcp_client.call(
     service_name="summarizer_specialist",
     function_name="summarize",
@@ -229,11 +226,20 @@ results = self.mcp_client.call(
 Called via the sync-to-async bridge `sync_call_external_mcp()`, with results parsed by `extract_text_from_mcp_result()`:
 
 ```python
+# Filesystem MCP (file operations)
 content = sync_call_external_mcp(
     self.external_mcp_client,
     "filesystem",
     "read_file",
     {"path": "/workspace/config.yaml"}
+)
+
+# Webfetch MCP (web search via SearXNG, #223)
+results = sync_call_external_mcp(
+    self.external_mcp_client,
+    "webfetch",
+    "web_search",
+    {"query": action.target}
 )
 ```
 
@@ -332,7 +338,7 @@ specialists:
     type: "procedural"  # No LLM config needed
 ```
 
-### External MCP (filesystem)
+### External MCP (filesystem + webfetch)
 
 ```yaml
 mcp:
@@ -341,7 +347,10 @@ mcp:
     services:
       filesystem:
         command: "docker"
-        args: ["run", "-i", "--rm", "-v", "/workspace:/workspace", "mcp/filesystem", "/workspace"]
+        args: ["exec", "-i", "filesystem-mcp", "node", "/app/dist/index.js", "/workspace"]
+      webfetch:
+        command: "docker"
+        args: ["exec", "-i", "webfetch-mcp", "node", "/app/server.mjs"]
 ```
 
 ### Dependency Injection

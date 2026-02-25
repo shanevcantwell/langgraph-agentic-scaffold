@@ -1090,11 +1090,12 @@
 ## `app/tests/unit/test_facilitator.py`
 
 - **`test_facilitator_executes_research_action`**
+  - *#223: RESEARCH action calls webfetch-mcp web_search via external MCP.*
 - **`test_facilitator_executes_read_file_action`**
 - **`test_facilitator_handles_missing_plan`**
   - *No triage_actions and no artifacts — Facilitator still returns gathered_context.*
-- **`test_facilitator_research_action_stubbed`**
-  - *#222: RESEARCH action is stubbed until webfetch-mcp re-wiring (#223).*
+- **`test_facilitator_research_webfetch_unavailable`**
+  - *#223: When webfetch MCP is unavailable, RESEARCH degrades gracefully.*
 - **`test_facilitator_reads_artifact_instead_of_file_for_uploaded_image`**
   - *Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem.*
 - **`test_facilitator_reads_artifact_for_uploaded_image_png_key`**

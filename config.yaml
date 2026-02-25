@@ -406,6 +406,8 @@ specialists:
         - read_file
         - list_allowed_directories
         - list_directory
+      webfetch:
+        - web_search
     # ADR-CORE-053: Internal context engineering node
     excluded_from:
       - triage_architect
