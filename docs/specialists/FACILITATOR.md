@@ -98,7 +98,7 @@ Each invocation rebuilds `gathered_context` from scratch. The assembly order is:
 
 | Action Type | MCP Service Called | Result |
 |-------------|-------------------|--------|
-| `RESEARCH` | Internal: `web_specialist.search(query)` | Web search results formatted as markdown links |
+| `RESEARCH` | *Stubbed* — webfetch-mcp re-wiring pending (#223) | Placeholder message noting search unavailable |
 | `READ_FILE` | External: `filesystem.read_file(path)` | File contents in code block |
 | `SUMMARIZE` | Internal: `summarizer_specialist.summarize(text)` | Condensed summary |
 | `LIST_DIRECTORY` | External: `filesystem.list_directory(path)` | Markdown bullet list with full paths |
@@ -214,10 +214,13 @@ Two scenarios qualify as BENIGN:
 Called via `self.mcp_client.call()`:
 
 ```python
+# RESEARCH action currently stubbed (#222, #223)
+# Previously called web_specialist.search() via internal MCP
+# Will be re-wired to webfetch-mcp external MCP service
 results = self.mcp_client.call(
-    service_name="web_specialist",
-    function_name="search",
-    query="quantum computing 2026"
+    service_name="summarizer_specialist",
+    function_name="summarize",
+    text="..."
 )
 ```
 

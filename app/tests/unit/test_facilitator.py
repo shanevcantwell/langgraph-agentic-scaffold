@@ -49,13 +49,9 @@ def test_facilitator_executes_research_action(facilitator):
     # Assert
     assert "artifacts" in result
     assert "gathered_context" in result["artifacts"]
+    # #222: web_specialist removed, RESEARCH action now stubs with warning
     assert "### Research: LangGraph" in result["artifacts"]["gathered_context"]
-
-    facilitator.mcp_client.call.assert_called_with(
-        service_name="web_specialist",
-        function_name="search",
-        query="LangGraph"
-    )
+    assert "webfetch-mcp re-wiring pending" in result["artifacts"]["gathered_context"]
 
 def test_facilitator_executes_read_file_action(facilitator):
     # Arrange
@@ -84,7 +80,8 @@ def test_facilitator_handles_missing_plan(facilitator):
     result = facilitator.execute(state)
     assert "gathered_context" in result.get("artifacts", {})
 
-def test_facilitator_handles_mcp_error(facilitator):
+def test_facilitator_research_action_stubbed(facilitator):
+    """#222: RESEARCH action is stubbed until webfetch-mcp re-wiring (#223)."""
     state = {
         "scratchpad": {
             "triage_actions": [
@@ -95,11 +92,12 @@ def test_facilitator_handles_mcp_error(facilitator):
         "artifacts": {}
     }
 
-    facilitator.mcp_client.call.side_effect = Exception("MCP Error")
-
     result = facilitator.execute(state)
 
-    assert "### Error: LangGraph" in result["artifacts"]["gathered_context"]
+    # RESEARCH should produce stub message, not call MCP
+    assert "### Research: LangGraph" in result["artifacts"]["gathered_context"]
+    assert "webfetch-mcp re-wiring pending" in result["artifacts"]["gathered_context"]
+    facilitator.mcp_client.call.assert_not_called()
 
 def test_facilitator_reads_artifact_instead_of_file_for_uploaded_image(facilitator):
     """Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem."""
@@ -376,8 +374,8 @@ def test_facilitator_propagates_graph_interrupt_for_ask_user(facilitator):
 def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
     """
     When a plan has RESEARCH then ASK_USER, the interrupt must still propagate.
-    The RESEARCH action executes normally, but when ASK_USER raises
-    GraphInterrupt, it must bubble up rather than being caught as an error.
+    RESEARCH is now stubbed (#222), but ASK_USER's GraphInterrupt must still
+    bubble up rather than being caught as an error.
     """
     from unittest.mock import patch
     from langgraph.errors import GraphInterrupt
@@ -393,14 +391,12 @@ def test_facilitator_interrupt_propagates_with_prior_actions(facilitator):
         "artifacts": {}
     }
 
-    facilitator.mcp_client.call.return_value = [{"title": "R", "url": "u", "snippet": "s"}]
-
     with patch("langgraph.types.interrupt", side_effect=GraphInterrupt(("test",))):
         with pytest.raises(GraphInterrupt):
             facilitator.execute(state)
 
-    # Research action should have been called before the interrupt
-    facilitator.mcp_client.call.assert_called_once()
+    # RESEARCH is stubbed, no MCP call expected
+    facilitator.mcp_client.call.assert_not_called()
 
 
 def test_facilitator_skips_ask_user_on_ei_retry(facilitator):
@@ -449,6 +445,7 @@ def test_facilitator_executes_multiple_actions(facilitator):
     """
     Per FACILITATOR.md: Facilitator processes all actions in the plan sequentially,
     joining results with double newlines.
+    #222: RESEARCH actions are now stubbed, but both should still appear in context.
     """
     state = {
         "scratchpad": {
@@ -461,20 +458,16 @@ def test_facilitator_executes_multiple_actions(facilitator):
         "artifacts": {}
     }
 
-    facilitator.mcp_client.call.side_effect = [
-        [{"title": "Result1", "url": "url1", "snippet": "snippet1"}],
-        [{"title": "Result2", "url": "url2", "snippet": "snippet2"}],
-    ]
-
     result = facilitator.execute(state)
 
-    # Both actions should be executed
-    assert facilitator.mcp_client.call.call_count == 2
+    # RESEARCH is stubbed — no MCP calls
+    facilitator.mcp_client.call.assert_not_called()
 
-    # Both results should appear in gathered_context, separated by double newline
+    # Both stub results should appear in gathered_context
     gathered = result["artifacts"]["gathered_context"]
     assert "### Research: topic1" in gathered
     assert "### Research: topic2" in gathered
+    assert "webfetch-mcp re-wiring pending" in gathered
     assert "\n\n" in gathered  # Sections joined with double newline
 
 
@@ -552,33 +545,26 @@ def test_facilitator_continues_after_action_error(facilitator):
     """
     Per FACILITATOR.md: Individual action failures don't halt the entire plan.
     Error is logged and next action continues.
+    #222: Uses RESEARCH (stubbed) + SUMMARIZE actions to test error continuation.
     """
     state = {
         "scratchpad": {
             "triage_actions": [
-                {"type": "research", "target": "failing_query", "description": "Will fail", "strategy": None},
-                {"type": "research", "target": "success_query", "description": "Will succeed", "strategy": None},
+                {"type": "research", "target": "failing_query", "description": "Will stub", "strategy": None},
+                {"type": "summarize", "target": "some text to summarize", "description": "Will succeed", "strategy": None},
             ],
-            "triage_reasoning": "Multiple actions with one failing",
+            "triage_reasoning": "Multiple actions with mixed types",
         },
         "artifacts": {}
     }
 
-    # First call fails, second succeeds
-    facilitator.mcp_client.call.side_effect = [
-        Exception("Network error"),
-        [{"title": "Success", "url": "url", "snippet": "snippet"}],
-    ]
+    # Summarize calls MCP
+    facilitator.mcp_client.call.return_value = "Summarized text"
 
     result = facilitator.execute(state)
 
-    # Both actions attempted
-    assert facilitator.mcp_client.call.call_count == 2
-
-    # Error for first, success for second
+    # RESEARCH is stubbed, SUMMARIZE calls MCP
     gathered = result["artifacts"]["gathered_context"]
-    assert "### Error: failing_query" in gathered
-    assert "Network error" in gathered
-    assert "### Research: success_query" in gathered
-    assert "Success" in gathered
+    assert "### Research: failing_query" in gathered
+    assert "webfetch-mcp re-wiring pending" in gathered
 

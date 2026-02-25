@@ -363,28 +363,6 @@ class GraphOrchestrator:
             logger.info(f"Distillation: All prompts collected ({collection_index}/{len(expanded_prompts)}) - returning to coordinator")
             return "distillation_coordinator_specialist"
 
-    def after_project_director(self, state: GraphState) -> str:
-        """
-        Decides next step after ProjectDirector.
-        """
-        scratchpad = state.get("scratchpad", {})
-        next_worker = scratchpad.get("next_worker")
-        
-        if next_worker == "web_specialist":
-            return "web_specialist"
-        elif next_worker == "router":
-            return CoreSpecialist.ROUTER.value
-        else:
-            logger.warning(f"ProjectDirector returned unknown next_worker: {next_worker}. Defaulting to Router.")
-            return CoreSpecialist.ROUTER.value
-
-    def after_web_specialist(self, state: GraphState) -> str:
-        """
-        Decides next step after WebSpecialist.
-        #170: Emergent Project Subgraph removed — always return to Router.
-        """
-        return CoreSpecialist.ROUTER.value
-
     def after_exit_interview(self, state: GraphState) -> str:
         """
         ADR-ROADMAP-001 Phase 1: Decides next step after ExitInterviewSpecialist.

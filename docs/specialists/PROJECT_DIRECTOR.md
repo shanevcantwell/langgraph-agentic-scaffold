@@ -148,7 +148,7 @@ PD delegates LLM reasoning to prompt-prix via the `react_step` MCP tool. This me
     |          _dispatch_tool_call()
     |               | ──fork (las)──>    dispatch_fork() → subagent LAS invocation (ADR-045)
     |               | ──external MCP──>  filesystem / terminal
-    |               | ──internal MCP──>  web_specialist / browse_specialist
+    |               | ──external MCP──>  webfetch (web_search / web_fetch)
     |               |
     |          append {tool_call, observation, success} to trace
     |               |
@@ -415,8 +415,8 @@ These schemas tell the LLM (via logit masking in LM Studio) what tools exist and
 
 | Tool | MCP Service | Type | Purpose |
 |------|-------------|------|---------|
-| `search` | `web_specialist` | Internal | Web search queries |
-| `browse` | `browse_specialist` | Internal | Fetch and parse a URL |
+| `web_search` | `webfetch` | External | SearXNG web search (#220) |
+| `web_fetch` | `webfetch` | External | Fetch URL + extract via Readability (#220) |
 | `list_directory` | `filesystem` | External | List files/dirs at a path |
 | `read_file` | `filesystem` | External | Read file contents |
 | `create_directory` | `filesystem` | External | Create a directory |

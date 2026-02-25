@@ -38,10 +38,8 @@ dependencies = [
     "langgraph-checkpoint-sqlite",  # SQLite checkpointing for HitL interrupt/resume (ADR-CORE-018)
     # Add pip-tools as a core dependency to break the bootstrap cycle
     "pip-tools",
-    "duckduckgo-search", # For Researcher Specialist default search
     "tiktoken", # For token counting and context pruning
     "pillow",  # Image manipulation for vision model scaling (FaraService, ImageSpecialist)
-    "beautifulsoup4", # For web scraping (BrowseSpecialist)
     "local-inference-pool @ git+https://github.com/shanevcantwell/local-inference-pool.git@v0.1.0",  # Shared GPU pool (ADR-CORE-068)
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]

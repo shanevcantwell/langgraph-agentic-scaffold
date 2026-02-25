@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 860 |
-| Integration | 28 | 191 |
+| Unit | 74 | 834 |
+| Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1143** |
+| **Total** | **109** | **1115** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -300,10 +300,6 @@
 
 ## `app/tests/integration/test_mcp_tools_integration.py`
 
-- **`test_search_function_registered`**
-  - *Verify search function is registered in MCP.*
-- **`test_search_returns_results`**
-  - *Verify search function returns list of results.*
 - **`test_summarize_function_registered`**
   - *Verify summarize function is registered in MCP.*
 - **`test_summarize_returns_text`**
@@ -1097,7 +1093,8 @@
 - **`test_facilitator_executes_read_file_action`**
 - **`test_facilitator_handles_missing_plan`**
   - *No triage_actions and no artifacts — Facilitator still returns gathered_context.*
-- **`test_facilitator_handles_mcp_error`**
+- **`test_facilitator_research_action_stubbed`**
+  - *#222: RESEARCH action is stubbed until webfetch-mcp re-wiring (#223).*
 - **`test_facilitator_reads_artifact_instead_of_file_for_uploaded_image`**
   - *Test that Facilitator retrieves in-memory artifacts instead of trying to read from filesystem.*
 - **`test_facilitator_reads_artifact_for_uploaded_image_png_key`**
@@ -2032,7 +2029,7 @@
 - **`test_project_director_is_base_specialist`**
   - *#162: PD is a plain BaseSpecialist using react_step MCP directly.*
 - **`test_project_director_defines_tools`**
-  - *Test that ProjectDirector defines search and browse tools.*
+  - *Test that ProjectDirector defines web_search and web_fetch tools (#220, #221).*
 - **`test_task_prompt_includes_user_request`**
   - *#170: Task prompt includes user_request as Goal.*
 - **`test_task_prompt_no_gathered_context`**
@@ -2081,25 +2078,6 @@
   - *Tests fallback to default_responder when LLM returns an empty list of recommendations.*
 - **`test_prompt_triage_no_specialist_map_configured`**
   - *Tests behavior when specialist_map is empty.*
-
-## `app/tests/unit/test_research_flow.py`
-
-- **`test_router_llm_prompt_includes_gathered_context_content`**
-  - *BUG-RESEARCH-001: Router should include gathered_context CONTENT in LLM prompt.*
-- **`test_router_logs_gathered_context_for_debugging`**
-  - *BUG-RESEARCH-004: Router should log what context it sees for debugging.*
-- **`test_router_prompt_contains_failure_indicator_for_llm_decision`**
-  - *BUG-RESEARCH-002: Verify Router provides failure information to LLM.*
-- **`test_duckduckgo_no_results_returns_distinct_failure_marker`**
-  - *Verify DuckDuckGoSearchStrategy returns a recognizable failure pattern.*
-- **`test_duckduckgo_rate_limit_retries_with_backoff`**
-  - *Verify DuckDuckGoSearchStrategy retries on rate limit with exponential backoff.*
-- **`test_duckduckgo_rate_limit_succeeds_on_retry`**
-  - *Verify DuckDuckGoSearchStrategy succeeds if retry works.*
-- **`test_web_specialist_graph_node_requires_web_task`**
-  - *BUG-RESEARCH-003: When Router routes to web_specialist, scratchpad.web_task*
-- **`test_web_specialist_mcp_path_vs_graph_path`**
-  - *Document the two invocation paths for WebSpecialist.*
 
 ## `app/tests/unit/test_router_observability.py`
 
@@ -2208,45 +2186,6 @@
   - *Decline with no recommendations should not cause errors.*
 - **`test_router_scratchpad_clears_all_decline_signals`**
   - *REGRESSION GUARD: Router MUST clear all decline-related signals in its return.*
-
-## `app/tests/unit/test_search_strategies.py`
-
-- **`test_requires_api_key`**
-  - *Strategy returns error when no API key configured.*
-- **`test_api_key_from_extra_params`**
-  - *API key can be passed via extra_params.*
-- **`test_successful_search`**
-  - *Successful search returns formatted results.*
-- **`test_rate_limited_response`**
-  - *Returns Rate Limited marker on 429 status.*
-- **`test_auth_error_response`**
-  - *Returns Auth Error on 401 status.*
-- **`test_quota_exceeded_response`**
-  - *Returns Quota Exceeded on 422 status.*
-- **`test_empty_results`**
-  - *Returns No Results marker when search finds nothing.*
-- **`test_timeout_handling`**
-  - *Returns Timeout Error on request timeout.*
-- **`test_requires_at_least_one_strategy`**
-  - *Raises error if no strategies provided.*
-- **`test_first_strategy_success`**
-  - *Returns results from first strategy if successful.*
-- **`test_fallback_on_rate_limit`**
-  - *Falls back to second strategy on rate limit.*
-- **`test_fallback_on_exception`**
-  - *Falls back to second strategy on exception.*
-- **`test_all_strategies_fail`**
-  - *Returns last error when all strategies fail.*
-- **`test_no_results_is_not_retryable`**
-  - *'No Results' is not considered a retryable error.*
-- **`test_multiple_results_not_retryable`**
-  - *Multiple results are never considered retryable errors.*
-- **`test_add_strategy_append`**
-  - *add_strategy appends by default.*
-- **`test_add_strategy_with_priority`**
-  - *add_strategy can insert at specific index.*
-- **`test_duckduckgo_to_brave_fallback`**
-  - *DuckDuckGo rate limit triggers Brave fallback.*
 
 ## `app/tests/unit/test_signal_processor_specialist.py`
 

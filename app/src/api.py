@@ -397,10 +397,7 @@ def get_graph_topology():
         "facilitator_specialist": "context",
         "dialogue_specialist": "context",
         # Research Pipeline
-        "research_orchestrator": "research",
-        "browse_specialist": "research",
         "synthesizer_specialist": "research",
-        "web_specialist": "research",
         # Chat Subgraph
         "chat_specialist": "chat",
         "progenitor_alpha_specialist": "chat",

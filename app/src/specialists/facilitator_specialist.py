@@ -15,7 +15,7 @@ class FacilitatorSpecialist(BaseSpecialist):
     via MCP (Synchronous Service Invocation).
 
     Uses:
-    - Internal MCP for web_specialist, summarizer_specialist
+    - Internal MCP for summarizer_specialist
     - External MCP (filesystem container) for file operations (ADR-CORE-035)
 
     Note: external_mcp_client is injected by GraphBuilder after specialist loading.
@@ -364,15 +364,15 @@ class FacilitatorSpecialist(BaseSpecialist):
                 logger.info(f"Facilitator: Executing action {action.type} -> {action.target}")
                 
                 if action.type == ContextActionType.RESEARCH:
-                    # Call WebSpecialist via MCP
-                    results = self.mcp_client.call(
-                        service_name="web_specialist",
-                        function_name="search",
-                        query=action.target
+                    # #222: WebSpecialist removed. Re-wiring to webfetch-mcp tracked in #223.
+                    logger.warning(
+                        f"Facilitator: RESEARCH action skipped — web_specialist removed. "
+                        f"Target: {action.target}. See #223 for webfetch-mcp re-wiring."
                     )
-                    # Format results
-                    formatted_results = "\n".join([f"- [{r.get('title')}]({r.get('url')}): {r.get('snippet')}" for r in results]) if isinstance(results, list) else str(results)
-                    gathered_context.append(f"### Research: {action.target}\n{formatted_results}")
+                    gathered_context.append(
+                        f"### Research: {action.target}\n"
+                        f"(Web search unavailable — webfetch-mcp re-wiring pending #223)"
+                    )
                     
                 elif action.type == ContextActionType.READ_FILE:
                     # Special handling: Check if target refers to an artifact already in state

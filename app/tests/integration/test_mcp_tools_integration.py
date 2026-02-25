@@ -51,24 +51,6 @@ def mcp_client(mcp_registry):
 
 
 @pytest.fixture
-def web_specialist_with_registry(mcp_registry):
-    """Create WebSpecialist with MCP registration."""
-    from app.src.specialists.web_specialist import WebSpecialist
-    from app.src.strategies.search.duckduckgo_strategy import DuckDuckGoSearchStrategy
-
-    specialist = WebSpecialist(
-        specialist_name="web_specialist",
-        specialist_config={},
-        search_strategy=DuckDuckGoSearchStrategy()
-    )
-
-    # Register MCP services
-    specialist.register_mcp_services(mcp_registry)
-
-    return specialist
-
-
-@pytest.fixture
 def summarizer_specialist_with_registry(mcp_registry):
     """Create SummarizerSpecialist with MCP registration and mocked LLM."""
     from app.src.specialists.summarizer_specialist import SummarizerSpecialist
@@ -118,38 +100,6 @@ def image_specialist_with_registry(mcp_registry):
 # NOTE: TestFileSpecialistMcp removed - file_specialist superseded by external
 # filesystem MCP container (ADR-CORE-035). Coverage now in test_filesystem_mcp.py
 # =============================================================================
-
-
-# =============================================================================
-# WEB SPECIALIST MCP TESTS
-# =============================================================================
-
-class TestWebSpecialistMcp:
-    """Test web_specialist MCP functions."""
-
-    def test_search_function_registered(
-        self, mcp_client, web_specialist_with_registry
-    ):
-        """Verify search function is registered in MCP."""
-        services = mcp_client.list_services()
-
-        assert "web_specialist" in services
-        assert "search" in services["web_specialist"]
-
-    def test_search_returns_results(
-        self, mcp_client, web_specialist_with_registry
-    ):
-        """Verify search function returns list of results."""
-        # Note: web_specialist.search() uses DuckDuckGo strategy
-        # This test verifies the MCP plumbing works
-        result = mcp_client.call(
-            "web_specialist",
-            "search",
-            query="test query",
-            max_results=5
-        )
-
-        assert isinstance(result, list)
 
 
 # =============================================================================
@@ -245,12 +195,12 @@ class TestMcpErrorHandling:
         assert "not found" in str(exc_info.value).lower()
 
     def test_call_nonexistent_function_raises_error(
-        self, mcp_client, web_specialist_with_registry
+        self, mcp_client, summarizer_specialist_with_registry
     ):
         """Verify calling non-existent function raises appropriate error."""
         with pytest.raises(ValueError) as exc_info:
             mcp_client.call(
-                "web_specialist",
+                "summarizer_specialist",
                 "nonexistent_function"
             )
 
@@ -276,14 +226,14 @@ class TestMcpRegistry:
     """Test MCP registry functionality."""
 
     def test_list_services_returns_all_registered(
-        self, mcp_client, web_specialist_with_registry
+        self, mcp_client, summarizer_specialist_with_registry
     ):
         """Verify list_services returns all registered services."""
         services = mcp_client.list_services()
 
         assert isinstance(services, dict)
-        assert "web_specialist" in services
-        assert "search" in services["web_specialist"]
+        assert "summarizer_specialist" in services
+        assert "summarize" in services["summarizer_specialist"]
 
     def test_registry_isolation(self, mcp_config):
         """Verify each registry instance is isolated."""

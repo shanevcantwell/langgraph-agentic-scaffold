@@ -31,14 +31,19 @@ logger = logging.getLogger(__name__)
 
 # Tool parameter schemas for OpenAI function calling format
 _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
-    "search": {
+    "web_search": {
         "type": "object",
-        "properties": {"query": {"type": "string", "description": "Search query string"}},
+        "properties": {
+            "query": {"type": "string", "description": "Search query string"},
+            "limit": {"type": "integer", "description": "Max results (1-20, default 5)"},
+        },
         "required": ["query"],
     },
-    "browse": {
+    "web_fetch": {
         "type": "object",
-        "properties": {"url": {"type": "string", "description": "URL to fetch and parse"}},
+        "properties": {
+            "url": {"type": "string", "description": "URL to fetch and extract content from"},
+        },
         "required": ["url"],
     },
     "list_directory": {
@@ -451,16 +456,14 @@ class ProjectDirector(BaseSpecialist):
     def _build_tools(self) -> Dict[str, ToolDef]:
         """Define available tools mapping tool names to MCP service coordinates."""
         tools = {
-            # Web research (internal MCP)
-            "search": ToolDef(
-                service="web_specialist", function="search",
-                description="Search the web for information. Args: query (str).",
-                is_external=False,
+            # Web research via SearXNG (external MCP — webfetch-mcp, #220/#221)
+            "web_search": ToolDef(
+                service="webfetch", function="web_search",
+                description="Search the web via SearXNG. Args: query (str), limit (int, optional, 1-20, default 5).",
             ),
-            "browse": ToolDef(
-                service="browse_specialist", function="browse",
-                description="Fetch and parse a URL to read its content. Args: url (str).",
-                is_external=False,
+            "web_fetch": ToolDef(
+                service="webfetch", function="web_fetch",
+                description="Fetch a URL and extract its content using Mozilla Readability. Args: url (str).",
             ),
             # Filesystem (external MCP)
             "list_directory": ToolDef(

@@ -33,25 +33,9 @@ def mock_llm_adapter():
 
 @pytest.fixture
 def mock_mcp_client():
-    """Mock MCP client for search and browse calls."""
+    """Mock MCP client."""
     client = MagicMock()
-
-    def mcp_call(service, function, **kwargs):
-        if service == "web_specialist" and function == "search":
-            return [
-                {"title": "Result 1", "url": "https://example.com/1", "snippet": "First result"},
-                {"title": "Result 2", "url": "https://example.com/2", "snippet": "Second result"},
-            ]
-        elif service == "browse_specialist" and function == "browse":
-            return {
-                "url": kwargs.get("url", "unknown"),
-                "title": "Example Page",
-                "content": "This is the page content with relevant information.",
-                "status": "success"
-            }
-        return {"error": f"Unknown service/function: {service}/{function}"}
-
-    client.call = MagicMock(side_effect=mcp_call)
+    client.call = MagicMock(return_value={"error": "Unknown service/function"})
     return client
 
 
@@ -70,20 +54,16 @@ class TestProjectDirectorPhase2:
         assert callable(is_react_available)
 
     def test_project_director_defines_tools(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
-        """Test that ProjectDirector defines search and browse tools."""
+        """Test that ProjectDirector defines web_search and web_fetch tools (#220, #221)."""
         director = ProjectDirector("project_director", mock_specialist_config)
         director.llm_adapter = mock_llm_adapter
         director.mcp_client = mock_mcp_client
 
-        # The tools are defined inside _execute_logic, so we verify by checking
-        # the ToolDef imports work
-        from app.src.mcp import ToolDef
-        tools = {
-            "search": ToolDef(service="web_specialist", function="search"),
-            "browse": ToolDef(service="browse_specialist", function="browse"),
-        }
-        assert "search" in tools
-        assert "browse" in tools
+        tools = director._build_tools()
+        assert "web_search" in tools
+        assert "web_fetch" in tools
+        assert tools["web_search"].service == "webfetch"
+        assert tools["web_fetch"].service == "webfetch"
 
     def test_task_prompt_includes_user_request(self, mock_specialist_config, mock_llm_adapter, mock_mcp_client):
         """#170: Task prompt includes user_request as Goal."""
@@ -131,13 +111,13 @@ class TestProjectDirectorPhase2:
         trace = [
             {
                 "iteration": 0,
-                "tool_call": {"id": "1", "name": "search", "args": {"query": "topic"}},
+                "tool_call": {"id": "1", "name": "web_search", "args": {"query": "topic"}},
                 "observation": "Result 1",
                 "success": True,
             },
             {
                 "iteration": 1,
-                "tool_call": {"id": "2", "name": "browse", "args": {"url": "http://example.com"}},
+                "tool_call": {"id": "2", "name": "web_fetch", "args": {"url": "http://example.com"}},
                 "observation": "Page content",
                 "success": True,
             },
@@ -147,8 +127,8 @@ class TestProjectDirectorPhase2:
 
         assert "Task Incomplete" in partial
         assert "5 iteration limit" in partial
-        assert "search: 1" in partial
-        assert "browse: 1" in partial
+        assert "web_search: 1" in partial
+        assert "web_fetch: 1" in partial
 
 
 class TestEmergentProjectSubgraphPhase2:
@@ -159,7 +139,7 @@ class TestEmergentProjectSubgraphPhase2:
         from app.src.workflow.subgraphs.emergent_project import EmergentProjectSubgraph
 
         subgraph = EmergentProjectSubgraph(
-            specialists={"project_director": MagicMock(), "web_specialist": MagicMock()},
+            specialists={"project_director": MagicMock()},
             orchestrator=MagicMock(),
             config={}
         )

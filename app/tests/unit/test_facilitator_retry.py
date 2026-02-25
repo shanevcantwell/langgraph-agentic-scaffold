@@ -184,7 +184,7 @@ def test_facilitator_curated_feedback_excludes_routing_data(facilitator):
                 "is_complete": False,
                 "reasoning": "Files not moved",
                 "missing_elements": "Move remaining files",
-                "recommended_specialists": ["project_director", "web_specialist"]
+                "recommended_specialists": ["project_director", "chat_specialist"]
             }
         }
     }
@@ -198,7 +198,7 @@ def test_facilitator_curated_feedback_excludes_routing_data(facilitator):
     assert "Move remaining files" in gathered
     assert "Files not moved" in gathered
     # Routing recommendations should not leak into gathered_context
-    assert "web_specialist" not in gathered
+    assert "chat_specialist" not in gathered
 
 
 def test_facilitator_skips_exit_interview_feedback_when_complete(facilitator):

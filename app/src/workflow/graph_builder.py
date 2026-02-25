@@ -283,23 +283,7 @@ class GraphBuilder:
             try:
                 SpecialistClass = get_specialist_class(name, config)
                 
-                if name == "web_specialist":
-                    # TASK: Inject Search Strategy
-                    from ..strategies.search.duckduckgo_strategy import DuckDuckGoSearchStrategy
-                    # TODO: Read from config to allow switching strategies (e.g. Tavily, Google)
-                    # For now, default to DuckDuckGo
-                    search_strategy_instance = DuckDuckGoSearchStrategy()
-
-                    # NOTE: FaraService removed - visual browsing now handled by
-                    # navigator_browser_specialist via surf-mcp (see GH #32)
-                    instance = SpecialistClass(
-                        specialist_name=name,
-                        specialist_config=config,
-                        search_strategy=search_strategy_instance
-                    )
-
-                else:
-                    instance = SpecialistClass(specialist_name=name, specialist_config=config)
+                instance = SpecialistClass(specialist_name=name, specialist_config=config)
 
                 is_critical = name in self.config.get("workflow", {}).get("critical_specialists", [])
                 if not instance.is_enabled:

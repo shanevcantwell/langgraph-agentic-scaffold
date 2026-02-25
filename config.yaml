@@ -133,6 +133,18 @@ mcp:
         args: ["exec", "-i", "prompt-prix-mcp", "prompt-prix-mcp"]
         timeout_ms: 600000
 
+      # webfetch MCP - Web search via SearXNG + content extraction via Readability
+      # Source: manull/webfetch-mcp (MIT)
+      # Provides: web_search, web_fetch
+      # Infrastructure defined in docker-compose.yml (profile: webfetch)
+      # Requires: SearXNG container running separately
+      webfetch:
+        enabled: true
+        required: false  # Graceful degradation if container not running
+        command: "docker"
+        args: ["exec", "-i", "webfetch-mcp", "node", "/app/server.mjs"]
+        timeout_ms: 30000
+
 # ==============================================================================
 # SPECIALIST CONFIGURATION
 # ==============================================================================
@@ -369,16 +381,10 @@ specialists:
         - run_command
         - get_cwd
         - get_allowed_commands
-
-  web_specialist:
-    type: "procedural"
-    description: "Executes a web search query or fetches a single page. Returns raw results without interpretation."
-    tags: ["vision_capable"]
-    # Optional: Enable Fara+Playwright visual browsing
-    # visual_browser:
-    #   enabled: true
-    #   headless: true
-    #   viewport: [1920, 1080]
+      # webfetch MCP - SearXNG search + Readability content extraction (#220, #221)
+      webfetch:
+        - web_search
+        - web_fetch
 
   summarizer_specialist:
     type: "llm"
@@ -484,21 +490,6 @@ specialists:
     description: "Pre-flight check on prompt quality: sentiment, coherence, and actionability."
     tags: ["planning"]
     excluded_from:
-      - router_specialist
-
-  # --- Deep Research (ADR-CORE-024) ---
-  research_orchestrator:
-    type: "llm"
-    prompt_file: "research_orchestrator_prompt.md"
-    description: "Runs multi-source research investigations and produces synthesis reports."
-    tags: ["research", "orchestration"]
-
-  browse_specialist:
-    type: "procedural"
-    description: "Fetches and parses a single web page. Returns structured content without interpretation."
-    tags: ["research", "tool"]
-    excluded_from:
-      - triage_architect
       - router_specialist
 
   # synthesizer_specialist:

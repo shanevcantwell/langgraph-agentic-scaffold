@@ -148,24 +148,24 @@ def test_validate_dedup_and_cap_combined(router_specialist):
     After dedup, 6 unique valid entries remain — all within the 8-specialist cap.
     """
     valid_options = [
-        "default_responder_specialist", "research_orchestrator",
-        "navigator_browser_specialist", "web_specialist",
-        "web_builder", "image_specialist", "project_director", "chat_specialist"
+        "default_responder_specialist", "text_analysis_specialist",
+        "navigator_browser_specialist", "chat_specialist",
+        "web_builder", "image_specialist", "project_director", "tiered_synthesizer_specialist"
     ]
     llm_choice = [
-        "default_responder_specialist", "research_orchestrator",
-        "navigator_browser_specialist", "web_specialist",
+        "default_responder_specialist", "text_analysis_specialist",
+        "navigator_browser_specialist", "chat_specialist",
         "web_builder", "image_specialist",
-        "navigator_browser_specialist", "research_orchestrator",
-        "default_responder_specialist", "research_orchestrator",
+        "navigator_browser_specialist", "text_analysis_specialist",
+        "default_responder_specialist", "text_analysis_specialist",
         "web_builder", "image_specialist",
     ]
     choice, is_valid = router_specialist._validate_llm_choice(llm_choice, valid_options)
     assert is_valid is True
     # 6 unique entries from the 12, in first-occurrence order
     assert choice == [
-        "default_responder_specialist", "research_orchestrator",
-        "navigator_browser_specialist", "web_specialist",
+        "default_responder_specialist", "text_analysis_specialist",
+        "navigator_browser_specialist", "chat_specialist",
         "web_builder", "image_specialist",
     ]
     assert len(choice) == 6  # deduped from 12

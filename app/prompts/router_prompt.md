@@ -17,7 +17,6 @@ ANSWER — The user wants information, explanation, or reasoning about context.
 
 OBSERVE — The user wants external data fetched or examined.
   navigator_browser_specialist: interactive website browsing (click, fill, navigate)
-  web_specialist: web search or single page fetch (raw results)
   image_specialist: visual content analysis
 
 GREET — Social input with no task (hello, thanks, ping, bye).
