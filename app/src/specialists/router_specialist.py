@@ -49,10 +49,11 @@ def _build_route_response_model(valid_names: List[str]) -> Type[BaseModel]:
             Field(
                 ...,
                 min_length=1,
+                max_length=len(valid_names),
                 description=(
                     "The specialist(s) to route to next. Can be a single specialist "
                     "or multiple for parallel execution. Must be from the AVAILABLE "
-                    "SPECIALISTS listed in the prompt."
+                    "SPECIALISTS listed in the prompt. No duplicates."
                 ),
             ),
         ),
@@ -163,12 +164,16 @@ class RouterSpecialist(BaseSpecialist):
     def _validate_llm_choice(
         self, llm_choice: str | List[str], valid_options: List[str]
     ) -> Tuple[str | List[str] | None, bool]:
-        """Validate the LLM's specialist choice — reject-or-accept, never mutate.
+        """Validate the LLM's specialist choice — reject invalid, dedup, cap length.
 
         Returns (validated_choice, is_valid).  When any entry is invalid the
         *entire* response is rejected so the caller can retry with a correction
         message.  This prevents silent partial filtering that destroys parallel
         fan-out intent (e.g. ["project", "systems_architect"] → ["systems_architect"]).
+
+        Duplicates are silently removed (first occurrence wins).  Lists longer
+        than the available specialist count are truncated.  Both are logged at
+        WARNING for observability (#219).
         """
         if isinstance(llm_choice, list):
             invalid = [c for c in llm_choice if c not in valid_options]
@@ -178,7 +183,30 @@ class RouterSpecialist(BaseSpecialist):
                     f"Valid: {valid_options}"
                 )
                 return None, False
-            return llm_choice, True
+
+            # Dedup: preserve order, first occurrence wins (#219)
+            seen = set()
+            deduped = []
+            for c in llm_choice:
+                if c not in seen:
+                    seen.add(c)
+                    deduped.append(c)
+            if len(deduped) < len(llm_choice):
+                logger.warning(
+                    f"Router: Removed {len(llm_choice) - len(deduped)} duplicate(s) "
+                    f"from LLM selection. Original: {llm_choice}, deduped: {deduped}"
+                )
+
+            # Cap at available specialist count (#219)
+            max_len = len(valid_options)
+            if len(deduped) > max_len:
+                logger.warning(
+                    f"Router: LLM selected {len(deduped)} specialists but only "
+                    f"{max_len} available. Truncating to first {max_len}."
+                )
+                deduped = deduped[:max_len]
+
+            return deduped, True
 
         if llm_choice not in valid_options:
             logger.error(

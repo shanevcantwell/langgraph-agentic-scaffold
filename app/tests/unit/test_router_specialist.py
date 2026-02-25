@@ -121,6 +121,66 @@ def test_validate_llm_choice_list_all_invalid(router_specialist):
     assert is_valid is False
 
 
+def test_validate_deduplicates_list(router_specialist):
+    """Duplicate specialist names are removed, preserving first-occurrence order (#219)."""
+    valid_options = ["spec1", "spec2", "spec3"]
+    choice, is_valid = router_specialist._validate_llm_choice(
+        ["spec1", "spec2", "spec1", "spec2", "spec3"], valid_options
+    )
+    assert is_valid is True
+    assert choice == ["spec1", "spec2", "spec3"]
+
+
+def test_validate_all_available_selected_not_truncated(router_specialist):
+    """Selecting all available specialists is valid — cap only fires above count (#219)."""
+    valid_options = ["spec1", "spec2", "spec3"]
+    choice, is_valid = router_specialist._validate_llm_choice(
+        ["spec1", "spec2", "spec3"], valid_options
+    )
+    assert is_valid is True
+    assert choice == ["spec1", "spec2", "spec3"]
+
+
+def test_validate_dedup_and_cap_combined(router_specialist):
+    """Duplicates removed first, then length capped (#219).
+
+    Simulates the LFM2 failure: 12 entries from 8 available, with duplicates.
+    After dedup, 6 unique valid entries remain — all within the 8-specialist cap.
+    """
+    valid_options = [
+        "default_responder_specialist", "research_orchestrator",
+        "navigator_browser_specialist", "web_specialist",
+        "web_builder", "image_specialist", "project_director", "chat_specialist"
+    ]
+    llm_choice = [
+        "default_responder_specialist", "research_orchestrator",
+        "navigator_browser_specialist", "web_specialist",
+        "web_builder", "image_specialist",
+        "navigator_browser_specialist", "research_orchestrator",
+        "default_responder_specialist", "research_orchestrator",
+        "web_builder", "image_specialist",
+    ]
+    choice, is_valid = router_specialist._validate_llm_choice(llm_choice, valid_options)
+    assert is_valid is True
+    # 6 unique entries from the 12, in first-occurrence order
+    assert choice == [
+        "default_responder_specialist", "research_orchestrator",
+        "navigator_browser_specialist", "web_specialist",
+        "web_builder", "image_specialist",
+    ]
+    assert len(choice) == 6  # deduped from 12
+
+
+def test_validate_preserves_valid_list(router_specialist):
+    """Clean list without duplicates passes through unchanged (#219)."""
+    valid_options = ["spec1", "spec2", "spec3"]
+    choice, is_valid = router_specialist._validate_llm_choice(
+        ["spec1", "spec3"], valid_options
+    )
+    assert is_valid is True
+    assert choice == ["spec1", "spec3"]
+
+
 # --- Integration-Style Tests for _execute_logic ---
 
 def test_router_stage_3_termination_logic(router_specialist):

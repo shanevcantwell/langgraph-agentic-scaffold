@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 76 | 856 |
+| Unit | 76 | 860 |
 | Integration | 28 | 191 |
 | Other | 7 | 92 |
-| **Total** | **111** | **1139** |
+| **Total** | **111** | **1143** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -2155,6 +2155,14 @@
   - *Mixed valid/invalid list is rejected entirely — no partial filtering.*
 - **`test_validate_llm_choice_list_all_invalid`**
   - *All-invalid list returns (None, False).*
+- **`test_validate_deduplicates_list`**
+  - *Duplicate specialist names are removed, preserving first-occurrence order (#219).*
+- **`test_validate_all_available_selected_not_truncated`**
+  - *Selecting all available specialists is valid — cap only fires above count (#219).*
+- **`test_validate_dedup_and_cap_combined`**
+  - *Duplicates removed first, then length capped (#219).*
+- **`test_validate_preserves_valid_list`**
+  - *Clean list without duplicates passes through unchanged (#219).*
 - **`test_router_stage_3_termination_logic`**
   - *Tests Stage 3 of termination: when an archive report is present, the router*
 - **`test_router_normal_llm_routing`**
