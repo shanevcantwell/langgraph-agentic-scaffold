@@ -409,8 +409,8 @@ def get_graph_topology():
         # File Operations
         "navigator_specialist": "files",
         "batch_processor_specialist": "files",
-        # Browser
-        "navigator_browser_specialist": "browser",
+        # Browser (disabled — pending surf-mcp integration)
+        # "navigator_browser_specialist": "browser",
         # Builders
         "web_builder": "builders",
         # Distillation (internal subgraph)

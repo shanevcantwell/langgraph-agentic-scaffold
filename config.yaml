@@ -198,20 +198,24 @@ specialists:
   #   prompt_file: "file_operations_prompt.md"
   #   description: "DEPRECATED - use batch_processor_specialist"
 
-  navigator_browser_specialist:
-    type: "hybrid"
-    prompt_file: "navigator_browser_specialist_prompt.md"
-    description: "Browses live websites. Navigates URLs, clicks elements, fills forms, reads page content."
-    # ADR-CORE-051: surf-mcp browser tools
-    tools:
-      navigator:
-        - session_create
-        - session_destroy
-        - goto
-        - click
-        - type
-        - read
-        - snapshot
+  # navigator_browser_specialist — DISABLED pending surf-mcp integration
+  # Interactive browser automation via Fara visual grounding (ADR-CORE-027).
+  # Currently unnecessary: PD's web_search (searxng) + web_fetch (webfetch-mcp)
+  # cover research use cases. Re-enable when surf-mcp is tested and deployed.
+  # navigator_browser_specialist:
+  #   type: "hybrid"
+  #   prompt_file: "navigator_browser_specialist_prompt.md"
+  #   description: "Browses live websites interactively. Navigates URLs, clicks elements, fills forms, reads page content. For web search/research, use project_director."
+  #   # ADR-CORE-051: surf-mcp browser tools
+  #   tools:
+  #     navigator:
+  #       - session_create
+  #       - session_destroy
+  #       - goto
+  #       - click
+  #       - type
+  #       - read
+  #       - snapshot
 
   batch_processor_specialist:
     type: "llm"
@@ -364,7 +368,7 @@ specialists:
   project_director:
     type: "llm"
     prompt_file: "project_director_prompt.md"
-    description: "Executes multi-step tasks requiring filesystem access, terminal commands, or iterative tool use. Reads, creates, moves, and organizes files and directories."
+    description: "Executes multi-step tasks requiring web research, filesystem access, terminal commands, or iterative tool use. Searches the web, fetches URLs, reads, creates, moves, and organizes files and directories."
     tags: ["planning", "research", "complex_tasks"]
     # Tool permissions (enables external_mcp_client injection)
     max_iterations: 50 
