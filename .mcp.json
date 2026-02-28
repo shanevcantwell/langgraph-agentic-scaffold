@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "memory": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v",
+        "/home/shane/github/shanevcantwell/langgraph-agentic-scaffold/.graphs:/graphs",
+        "-e",
+        "MEMORY_FILE_PATH=/graphs/memory.jsonl",
+        "mcp/memory"
+      ]
+    }
+  }
+}

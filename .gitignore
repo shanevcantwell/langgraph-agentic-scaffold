@@ -62,6 +62,7 @@ langgraph-agentic-scaffold.code-workspace
 config.yaml
 .continue/*
 .docker_tmp/
+.claude/mcp.json
 
 # output
 data/*
@@ -72,3 +73,6 @@ workspace/
 
 # integration test docs and temp files
 tests/
+
+# documentation scratchpad
+docs/scratchpad
