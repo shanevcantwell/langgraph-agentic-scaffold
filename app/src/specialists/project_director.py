@@ -109,6 +109,12 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
         },
         "required": ["prompt"],
     },
+    # #232: DONE must be in the schema so prompt-prix can intercept it.
+    # Empty properties — deliverables go to artifacts via write_artifact.
+    "DONE": {
+        "type": "object",
+        "properties": {},
+    },
 }
 
 
@@ -518,6 +524,13 @@ class ProjectDirector(BaseSpecialist):
         )
         # Artifact tools (ADR-076 — read + write artifacts mid-execution)
         tools.update(artifact_tool_defs())
+        # #232: DONE must be in tools dict so build_tool_schemas includes it.
+        # prompt-prix intercepts DONE before it reaches _dispatch_tool_call.
+        tools["DONE"] = ToolDef(
+            service="local", function="DONE",
+            description="Signal task completion. Call after writing your deliverable to artifacts via write_artifact.",
+            is_external=False,
+        )
         return tools
 
     # ─── Prompt & config helpers ───────────────────────────────────────

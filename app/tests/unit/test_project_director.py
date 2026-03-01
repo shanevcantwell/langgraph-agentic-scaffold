@@ -10,7 +10,7 @@ import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from langchain_core.messages import HumanMessage, AIMessage
 
-from app.src.specialists.project_director import ProjectDirector
+from app.src.specialists.project_director import ProjectDirector, _TOOL_PARAMS
 
 
 @pytest.fixture
@@ -300,6 +300,43 @@ class TestSummarizeTool:
         assert td.service == "summarizer_specialist"
         assert td.function == "summarize"
         assert td.is_external is False
+
+
+class TestDoneSchema:
+    """#232: DONE must be in PD's tools + params so prompt-prix can intercept it."""
+
+    @pytest.fixture
+    def director(self, mock_specialist_config):
+        return ProjectDirector("project_director", mock_specialist_config)
+
+    def test_build_tools_has_done(self, director):
+        """_build_tools() includes 'DONE'."""
+        tools = director._build_tools()
+        assert "DONE" in tools
+
+    def test_done_tool_def(self, director):
+        """DONE ToolDef is local, not external."""
+        tools = director._build_tools()
+        td = tools["DONE"]
+        assert td.service == "local"
+        assert td.function == "DONE"
+        assert td.is_external is False
+
+    def test_done_in_tool_params(self):
+        """DONE has an entry in _TOOL_PARAMS with empty properties."""
+        from app.src.specialists.project_director import _TOOL_PARAMS
+        assert "DONE" in _TOOL_PARAMS
+        assert _TOOL_PARAMS["DONE"]["properties"] == {}
+
+    def test_done_in_built_schemas(self, director):
+        """DONE appears in the schemas sent to prompt-prix."""
+        from app.src.mcp.react_step import build_tool_schemas
+        from app.src.mcp.artifact_tools import ARTIFACT_TOOL_PARAMS
+        tools = director._build_tools()
+        all_params = {**_TOOL_PARAMS, **ARTIFACT_TOOL_PARAMS}
+        schemas = build_tool_schemas(tools, all_params)
+        schema_names = [s["function"]["name"] for s in schemas]
+        assert "DONE" in schema_names
 
 
 class TestCompletionSignal:

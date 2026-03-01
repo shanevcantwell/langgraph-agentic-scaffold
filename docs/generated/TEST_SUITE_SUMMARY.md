@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 852 |
+| Unit | 74 | 856 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1133** |
+| **Total** | **109** | **1137** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -2082,6 +2082,14 @@
   - *_build_tools() includes 'summarize'.*
 - **`test_summarize_tool_def`**
   - *summarize ToolDef points to summarizer_specialist MCP service.*
+- **`test_build_tools_has_done`**
+  - *_build_tools() includes 'DONE'.*
+- **`test_done_tool_def`**
+  - *DONE ToolDef is local, not external.*
+- **`test_done_in_tool_params`**
+  - *DONE has an entry in _TOOL_PARAMS with empty properties.*
+- **`test_done_in_built_schemas`**
+  - *DONE appears in the schemas sent to prompt-prix.*
 - **`test_success_writes_completed_signal`**
   - *_build_success_result writes completion_signal with status COMPLETED.*
 - **`test_error_writes_error_signal`**
