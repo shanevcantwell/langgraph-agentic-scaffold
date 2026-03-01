@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 849 |
+| Unit | 74 | 851 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1130** |
+| **Total** | **109** | **1132** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -756,7 +756,12 @@
 - **`test_write_visible_to_list`**
 - **`test_write_visible_to_retrieve`**
 - **`test_write_returns_char_count`**
-- **`test_write_empty_content`**
+- **`test_write_empty_content_rejected`**
+  - *Empty content is rejected with an error — prevents ghost artifacts.*
+- **`test_write_whitespace_only_rejected`**
+  - *Whitespace-only content is rejected — prevents ghost artifacts.*
+- **`test_dispatch_empty_args_rejected`**
+  - *write_artifact called with {} args doesn't create ghost artifact.*
 - **`test_generated_name_is_three_words`**
 - **`test_generated_name_avoids_existing`**
 - **`test_collision_no_conflict`**

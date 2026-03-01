@@ -120,6 +120,8 @@ def write_artifact(artifacts: dict, content: str, key: str = "") -> str:
     Returns:
         Confirmation string with the actual artifact key assigned.
     """
+    if not content or not content.strip():
+        return "Error: write_artifact called with empty content. Nothing written."
     existing = set(artifacts.keys())
     if key:
         actual_key = _resolve_collision(existing, key)

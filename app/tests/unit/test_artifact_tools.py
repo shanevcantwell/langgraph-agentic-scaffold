@@ -259,11 +259,26 @@ class TestWriteArtifact:
         result = write_artifact(artifacts, "x" * 42, key="data")
         assert "42 chars" in result
 
-    def test_write_empty_content(self):
+    def test_write_empty_content_rejected(self):
+        """Empty content is rejected with an error — prevents ghost artifacts."""
         artifacts = {}
         result = write_artifact(artifacts, "", key="empty")
-        assert "0 chars" in result
-        assert artifacts["empty"] == ""
+        assert "Error" in result
+        assert "empty" not in artifacts
+
+    def test_write_whitespace_only_rejected(self):
+        """Whitespace-only content is rejected — prevents ghost artifacts."""
+        artifacts = {}
+        result = write_artifact(artifacts, "   \n  ", key="blank")
+        assert "Error" in result
+        assert "blank" not in artifacts
+
+    def test_dispatch_empty_args_rejected(self):
+        """write_artifact called with {} args doesn't create ghost artifact."""
+        artifacts = {}
+        result = dispatch_artifact_tool("write_artifact", {}, artifacts)
+        assert "Error" in result
+        assert len(artifacts) == 0
 
 
 # =============================================================================
