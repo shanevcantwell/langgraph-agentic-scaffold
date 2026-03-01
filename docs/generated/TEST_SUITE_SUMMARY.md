@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 851 |
+| Unit | 74 | 852 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1132** |
+| **Total** | **109** | **1133** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -2088,6 +2088,8 @@
   - *_build_error_result writes completion_signal with status ERROR.*
 - **`test_stagnation_writes_blocked_signal`**
   - *_build_stagnation_result writes completion_signal with status BLOCKED.*
+- **`test_stagnation_reads_sentinel_args`**
+  - *Stagnation message extracts repeated_tool from STAGNATION sentinel entry.*
 - **`test_partial_writes_partial_signal`**
   - *_build_partial_result writes completion_signal with status PARTIAL.*
 - **`test_completion_signal_coexists_with_other_artifacts`**

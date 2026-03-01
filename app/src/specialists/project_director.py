@@ -587,15 +587,18 @@ class ProjectDirector(BaseSpecialist):
         self, trace: List[Dict[str, Any]],
         captured_artifacts: dict,
     ) -> Dict[str, Any]:
-        # Find the repeated pattern for the message
+        # Find the repeated tool from the STAGNATION sentinel entry or the
+        # preceding trace entry.  The sentinel (appended by the react loop)
+        # carries repeated_tool / repeated_args in its args dict.
         last_tc = trace[-1].get("tool_call", {}) if trace else {}
-        tool_name = last_tc.get("name", "unknown")
-        tool_args = last_tc.get("args", {})
+        sentinel_args = last_tc.get("args", {})
+        tool_name = sentinel_args.get("repeated_tool") or last_tc.get("name", "unknown")
+        tool_args = sentinel_args.get("repeated_args") or sentinel_args
 
         stagnation_message = (
-            f"I encountered a problem: I was repeatedly calling '{tool_name}' "
-            f"with the same arguments ({tool_args}) without making progress. "
-            f"This may indicate the task requires a different approach.\n\n"
+            f"[Scaffold] Stagnation detected: '{tool_name}' was called "
+            f"repeatedly with the same arguments ({tool_args}) without progress. "
+            f"The task may require a different approach.\n\n"
             f"Progress before stagnation:\n{self._summarize_trace(trace)}"
         )
 

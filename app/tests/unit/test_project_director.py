@@ -349,6 +349,37 @@ class TestCompletionSignal:
         assert signal["status"] == "BLOCKED"
         assert "web_search" in signal["summary"]
 
+    def test_stagnation_reads_sentinel_args(self, director):
+        """Stagnation message extracts repeated_tool from STAGNATION sentinel entry."""
+        captured = {"user_request": "Research AI safety"}
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "web_search", "args": {"query": "AI safety"}},
+                "observation": "result",
+                "success": True,
+            },
+            {
+                "iteration": 1,
+                "tool_call": {
+                    "id": "terminal", "name": "STAGNATION",
+                    "args": {"repeated_tool": "web_search", "repeated_args": {"query": "AI safety"}},
+                },
+                "observation": "Repeating web_search with same args — halting",
+                "success": False,
+            },
+        ]
+
+        result = director._build_stagnation_result(trace, captured_artifacts=captured)
+
+        signal = result["artifacts"]["completion_signal"]
+        summary = signal["summary"]
+        # Main message must say "web_search", not "STAGNATION"
+        first_line = summary.split("\n")[0]
+        assert "web_search" in first_line
+        assert "STAGNATION" not in first_line
+        assert "Scaffold" in first_line
+
     def test_partial_writes_partial_signal(self, director):
         """_build_partial_result writes completion_signal with status PARTIAL."""
         captured = {"user_request": "Research AI safety"}
