@@ -128,6 +128,30 @@ class ExitInterviewSpecialist(BaseSpecialist):
         user_request = artifacts.get("user_request", "")
         routing_history = state.get("routing_history", [])
 
+        # #225: Signal-based fast path — read PD's completion signal
+        completion_signal = artifacts.get("completion_signal")
+        if completion_signal:
+            status = completion_signal.get("status")
+            summary = completion_signal.get("summary", "")
+
+            if status == "COMPLETED":
+                logger.info("--- EI Fast Path: PD signaled COMPLETED. Accepting. ---")
+                return self._build_signal_complete_result(summary)
+
+            if status == "PARTIAL":
+                logger.info("--- EI Fast Path: PD signaled PARTIAL. Routing for retry. ---")
+                return self._build_signal_retry_result(summary)
+
+            if status == "BLOCKED":
+                logger.info("--- EI Fast Path: PD signaled BLOCKED (stagnation). Aborting. ---")
+                return self._build_signal_abort_result(summary)
+
+            if status == "ERROR":
+                logger.info("--- EI Fast Path: PD signaled ERROR. Aborting. ---")
+                return self._build_signal_abort_result(summary)
+
+        # No signal or unrecognized status — fall through to existing verification chain
+
         # #203: Read run_id for fork cancellation propagation
         run_id = state.get("run_id")
         # ADR-CORE-045: Read fork depth for recursion limit enforcement
@@ -587,5 +611,56 @@ class ExitInterviewSpecialist(BaseSpecialist):
                     "is_complete": True,
                     "reasoning": "prompt-prix unavailable — cannot verify, defaulting to complete",
                 },
+            },
+        }
+
+    # ─── #225: Signal-based fast-path results ─────────────────────────────
+
+    def _build_signal_complete_result(self, summary: str) -> Dict[str, Any]:
+        """PD signaled COMPLETED — accept without verification."""
+        return {
+            "messages": [AIMessage(content=f"Task verified complete (signal): {summary}")],
+            "task_is_complete": True,
+            "artifacts": {
+                "exit_interview_result": {
+                    "is_complete": True,
+                    "reasoning": f"PD completion signal: COMPLETED. {summary}",
+                },
+            },
+            "scratchpad": {},
+        }
+
+    def _build_signal_retry_result(self, summary: str) -> Dict[str, Any]:
+        """PD signaled PARTIAL (max_iterations) — retry through Facilitator."""
+        return {
+            "messages": [AIMessage(content=f"Task partially complete (signal): {summary}")],
+            "task_is_complete": False,
+            "artifacts": {
+                "exit_interview_result": {
+                    "is_complete": False,
+                    "reasoning": f"PD completion signal: PARTIAL (max_iterations). {summary}",
+                    "missing_elements": "PD ran out of iterations but was making progress.",
+                    "recommended_specialists": ["project_director"],
+                },
+            },
+            "scratchpad": {
+                "recommended_specialists": ["project_director"],
+                "exit_interview_incomplete": True,
+            },
+        }
+
+    def _build_signal_abort_result(self, summary: str) -> Dict[str, Any]:
+        """PD signaled BLOCKED/ERROR — terminate cleanly."""
+        return {
+            "messages": [AIMessage(content=f"Task cannot continue (signal): {summary}")],
+            "task_is_complete": True,
+            "artifacts": {
+                "exit_interview_result": {
+                    "is_complete": False,
+                    "reasoning": f"PD completion signal: {summary}",
+                },
+            },
+            "scratchpad": {
+                "termination_reason": summary,
             },
         }

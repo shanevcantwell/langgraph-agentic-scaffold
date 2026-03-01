@@ -381,10 +381,10 @@ class TestExtractForkResult:
 
 
 class TestPDForkIntegration:
-    """Tests for fork() integration in ProjectDirector."""
+    """Tests for delegate() (renamed from fork #225) integration in ProjectDirector."""
 
     def test_fork_in_build_tools(self):
-        """fork ToolDef is present in PD's tool table."""
+        """delegate ToolDef is present in PD's tool table (#225 rename)."""
         from app.src.specialists.project_director import ProjectDirector
 
         pd = ProjectDirector("project_director", {
@@ -393,24 +393,24 @@ class TestPDForkIntegration:
         })
         tools = pd._build_tools()
 
-        assert "fork" in tools
-        assert tools["fork"].service == "las"
-        assert tools["fork"].function == "fork"
-        assert tools["fork"].is_external is False
+        assert "delegate" in tools
+        assert tools["delegate"].service == "las"
+        assert tools["delegate"].function == "delegate"
+        assert tools["delegate"].is_external is False
 
     def test_fork_in_tool_params(self):
-        """fork parameter schema includes expected_artifacts."""
+        """delegate parameter schema includes expected_artifacts (#225 rename)."""
         from app.src.specialists.project_director import _TOOL_PARAMS
 
-        assert "fork" in _TOOL_PARAMS
-        assert "prompt" in _TOOL_PARAMS["fork"]["properties"]
-        assert "context" in _TOOL_PARAMS["fork"]["properties"]
-        assert "expected_artifacts" in _TOOL_PARAMS["fork"]["properties"]
-        assert "prompt" in _TOOL_PARAMS["fork"]["required"]
+        assert "delegate" in _TOOL_PARAMS
+        assert "prompt" in _TOOL_PARAMS["delegate"]["properties"]
+        assert "context" in _TOOL_PARAMS["delegate"]["properties"]
+        assert "expected_artifacts" in _TOOL_PARAMS["delegate"]["properties"]
+        assert "prompt" in _TOOL_PARAMS["delegate"]["required"]
 
     @patch("app.src.mcp.fork.dispatch_fork")
     def test_dispatch_routes_fork(self, mock_dispatch_fork):
-        """_dispatch_tool_call routes fork to dispatch_fork with compiled_graph."""
+        """_dispatch_tool_call routes delegate to dispatch_fork (#225 rename)."""
         from app.src.specialists.project_director import ProjectDirector
 
         mock_dispatch_fork.return_value = {
@@ -425,7 +425,7 @@ class TestPDForkIntegration:
         tools = pd._build_tools()
 
         pending = {
-            "name": "fork",
+            "name": "delegate",
             "args": {
                 "prompt": "Evaluate this proposal",
                 "context": "Proposal content here",
@@ -446,7 +446,7 @@ class TestPDForkIntegration:
 
     @patch("app.src.mcp.fork.dispatch_fork")
     def test_dispatch_fork_without_context(self, mock_dispatch_fork):
-        """_dispatch_tool_call routes fork correctly when context is omitted."""
+        """_dispatch_tool_call routes delegate correctly when context is omitted."""
         from app.src.specialists.project_director import ProjectDirector
 
         mock_dispatch_fork.return_value = {
@@ -461,7 +461,7 @@ class TestPDForkIntegration:
         tools = pd._build_tools()
 
         pending = {
-            "name": "fork",
+            "name": "delegate",
             "args": {"prompt": "Simple task"},
         }
 
@@ -494,7 +494,7 @@ class TestPDForkIntegration:
         tools = pd._build_tools()
 
         pending = {
-            "name": "fork",
+            "name": "delegate",
             "args": {
                 "prompt": "Check the file",
                 "expected_artifacts": ["status"],

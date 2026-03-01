@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 834 |
+| Unit | 74 | 849 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1115** |
+| **Total** | **109** | **1130** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1083,6 +1083,18 @@
   - *Without config, uses DEFAULT_MAX_ITERATIONS (8).*
 - **`test_config_overrides_default`**
   - *config.yaml max_iterations overrides the class default.*
+- **`test_completed_signal_accepts`**
+  - *COMPLETED signal → task_is_complete=True, routes to END.*
+- **`test_partial_signal_retries`**
+  - *PARTIAL signal → task_is_complete=False, routes PD for retry.*
+- **`test_blocked_signal_aborts`**
+  - *BLOCKED signal → task_is_complete=True + termination_reason.*
+- **`test_error_signal_aborts`**
+  - *ERROR signal → task_is_complete=True + termination_reason.*
+- **`test_no_signal_falls_through`**
+  - *No completion_signal → existing verification chain runs.*
+- **`test_unrecognized_status_falls_through`**
+  - *Unknown status in completion_signal → falls through to verification chain.*
 
 ## `app/tests/unit/test_external_mcp_config.py`
 
@@ -1251,13 +1263,13 @@
 - **`test_expected_artifacts_single_key`**
   - *Single expected artifact returns clean result.*
 - **`test_fork_in_build_tools`**
-  - *fork ToolDef is present in PD's tool table.*
+  - *delegate ToolDef is present in PD's tool table (#225 rename).*
 - **`test_fork_in_tool_params`**
-  - *fork parameter schema includes expected_artifacts.*
+  - *delegate parameter schema includes expected_artifacts (#225 rename).*
 - **`test_dispatch_routes_fork`**
-  - *_dispatch_tool_call routes fork to dispatch_fork with compiled_graph.*
+  - *_dispatch_tool_call routes delegate to dispatch_fork (#225 rename).*
 - **`test_dispatch_fork_without_context`**
-  - *_dispatch_tool_call routes fork correctly when context is omitted.*
+  - *_dispatch_tool_call routes delegate correctly when context is omitted.*
 - **`test_dispatch_fork_with_expected_artifacts`**
   - *_dispatch_tool_call passes expected_artifacts through to both functions.*
 - **`test_fork_in_build_tools`**
@@ -2057,6 +2069,24 @@
   - *ADR-077: Stagnation signals don't pollute the artifacts dict.*
 - **`test_build_tools_includes_artifact_tools`**
   - *ADR-076: PD's tool set includes artifact read/write tools.*
+- **`test_build_tools_has_delegate_not_fork`**
+  - *_build_tools() includes 'delegate', not 'fork'.*
+- **`test_delegate_tool_def`**
+  - *delegate ToolDef points to las service with correct function.*
+- **`test_build_tools_has_summarize`**
+  - *_build_tools() includes 'summarize'.*
+- **`test_summarize_tool_def`**
+  - *summarize ToolDef points to summarizer_specialist MCP service.*
+- **`test_success_writes_completed_signal`**
+  - *_build_success_result writes completion_signal with status COMPLETED.*
+- **`test_error_writes_error_signal`**
+  - *_build_error_result writes completion_signal with status ERROR.*
+- **`test_stagnation_writes_blocked_signal`**
+  - *_build_stagnation_result writes completion_signal with status BLOCKED.*
+- **`test_partial_writes_partial_signal`**
+  - *_build_partial_result writes completion_signal with status PARTIAL.*
+- **`test_completion_signal_coexists_with_other_artifacts`**
+  - *completion_signal doesn't clobber other captured artifacts.*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 

@@ -257,3 +257,123 @@ class TestArtifactPropagation:
         assert "write_artifact" in tools
         assert tools["write_artifact"].is_external is False
         assert tools["write_artifact"].service == "local"
+
+
+class TestDelegateRename:
+    """#225: fork() renamed to delegate() to align with model training data."""
+
+    @pytest.fixture
+    def director(self, mock_specialist_config):
+        return ProjectDirector("project_director", mock_specialist_config)
+
+    def test_build_tools_has_delegate_not_fork(self, director):
+        """_build_tools() includes 'delegate', not 'fork'."""
+        tools = director._build_tools()
+        assert "delegate" in tools
+        assert "fork" not in tools
+
+    def test_delegate_tool_def(self, director):
+        """delegate ToolDef points to las service with correct function."""
+        tools = director._build_tools()
+        td = tools["delegate"]
+        assert td.service == "las"
+        assert td.function == "delegate"
+        assert td.is_external is False
+
+
+class TestSummarizeTool:
+    """#225: summarize() tool for context hygiene."""
+
+    @pytest.fixture
+    def director(self, mock_specialist_config):
+        return ProjectDirector("project_director", mock_specialist_config)
+
+    def test_build_tools_has_summarize(self, director):
+        """_build_tools() includes 'summarize'."""
+        tools = director._build_tools()
+        assert "summarize" in tools
+
+    def test_summarize_tool_def(self, director):
+        """summarize ToolDef points to summarizer_specialist MCP service."""
+        tools = director._build_tools()
+        td = tools["summarize"]
+        assert td.service == "summarizer_specialist"
+        assert td.function == "summarize"
+        assert td.is_external is False
+
+
+class TestCompletionSignal:
+    """#225: PD writes completion_signal artifact on all exit paths."""
+
+    @pytest.fixture
+    def director(self, mock_specialist_config):
+        return ProjectDirector("project_director", mock_specialist_config)
+
+    def test_success_writes_completed_signal(self, director):
+        """_build_success_result writes completion_signal with status COMPLETED."""
+        captured = {"user_request": "Research AI safety"}
+        trace = []
+
+        result = director._build_success_result("All done.", trace, captured_artifacts=captured)
+
+        signal = result["artifacts"]["completion_signal"]
+        assert signal["status"] == "COMPLETED"
+        assert signal["summary"] == "All done."
+
+    def test_error_writes_error_signal(self, director):
+        """_build_error_result writes completion_signal with status ERROR."""
+        captured = {"user_request": "Research AI safety"}
+        trace = []
+
+        result = director._build_error_result("Connection failed", trace, captured_artifacts=captured)
+
+        signal = result["artifacts"]["completion_signal"]
+        assert signal["status"] == "ERROR"
+        assert signal["summary"] == "Connection failed"
+
+    def test_stagnation_writes_blocked_signal(self, director):
+        """_build_stagnation_result writes completion_signal with status BLOCKED."""
+        captured = {"user_request": "Research AI safety"}
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "web_search", "args": {"query": "AI safety"}},
+                "observation": "result",
+                "success": True,
+            },
+        ]
+
+        result = director._build_stagnation_result(trace, captured_artifacts=captured)
+
+        signal = result["artifacts"]["completion_signal"]
+        assert signal["status"] == "BLOCKED"
+        assert "web_search" in signal["summary"]
+
+    def test_partial_writes_partial_signal(self, director):
+        """_build_partial_result writes completion_signal with status PARTIAL."""
+        captured = {"user_request": "Research AI safety"}
+        trace = [
+            {
+                "iteration": 0,
+                "tool_call": {"id": "1", "name": "web_search", "args": {"query": "AI safety"}},
+                "observation": "result",
+                "success": True,
+            },
+        ]
+
+        result = director._build_partial_result(trace, max_iter=5, captured_artifacts=captured)
+
+        signal = result["artifacts"]["completion_signal"]
+        assert signal["status"] == "PARTIAL"
+        assert isinstance(signal["summary"], str)
+
+    def test_completion_signal_coexists_with_other_artifacts(self, director):
+        """completion_signal doesn't clobber other captured artifacts."""
+        captured = {"user_request": "Sort files", "observations": "important data"}
+        trace = []
+
+        result = director._build_success_result("Done!", trace, captured_artifacts=captured)
+
+        assert result["artifacts"]["observations"] == "important data"
+        assert result["artifacts"]["user_request"] == "Sort files"
+        assert result["artifacts"]["completion_signal"]["status"] == "COMPLETED"

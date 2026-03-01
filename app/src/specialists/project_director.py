@@ -82,7 +82,15 @@ _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
         "properties": {"command": {"type": "string", "description": "Shell command to execute"}},
         "required": ["command"],
     },
-    "fork": {
+    "summarize": {
+        "type": "object",
+        "properties": {
+            "text": {"type": "string", "description": "Text to summarize"},
+            "max_length": {"type": "integer", "description": "Max summary length in chars (default 1000)"},
+        },
+        "required": ["text"],
+    },
+    "delegate": {
         "type": "object",
         "properties": {
             "prompt": {
@@ -299,7 +307,7 @@ class ProjectDirector(BaseSpecialist):
                         "success": not observation.startswith("Error:"),
                         "thought": thought,
                     }
-                    if tool_name == "fork" and getattr(self, '_last_fork_metadata', None):
+                    if tool_name == "delegate" and getattr(self, '_last_fork_metadata', None):
                         trace_entry["fork_metadata"] = self._last_fork_metadata
                         self._last_fork_metadata = None
                     trace.append(trace_entry)
@@ -403,8 +411,8 @@ class ProjectDirector(BaseSpecialist):
 
             return result
 
-        # fork() — recursive LAS invocation (ADR-045)
-        if tool_def.service == "las" and tool_def.function == "fork":
+        # delegate() — recursive LAS invocation (ADR-045, renamed from fork #225)
+        if tool_def.service == "las" and tool_def.function == "delegate":
             from ..mcp.fork import dispatch_fork, extract_fork_result
             expected = tool_args.get("expected_artifacts")
             child_state = dispatch_fork(
@@ -488,15 +496,23 @@ class ProjectDirector(BaseSpecialist):
                 description="Execute a shell command. Args: command (str). Allowed: mv, mkdir, cp, touch, ls, cat, head, tail, grep, find, wc, sort.",
             ),
         }
-        # fork() — recursive LAS invocation (ADR-045)
-        tools["fork"] = ToolDef(
-            service="las", function="fork",
+        # summarize() — context hygiene via SummarizerSpecialist MCP (#225)
+        tools["summarize"] = ToolDef(
+            service="summarizer_specialist", function="summarize",
             description=(
-                "Spawn a fresh LAS subagent to handle a subtask with its own "
-                "context window. Use when processing multiple independent items "
-                "that each need LLM reasoning — each fork gets clean context, "
-                "preventing accumulation. The subagent has all the same tools "
-                "you do, including fork()."
+                "Summarize text via LLM. Use to condense web_fetch results or "
+                "delegate outputs before writing artifacts. Keeps your context lean."
+            ),
+            is_external=False,
+        )
+        # delegate() — recursive LAS invocation (ADR-045, renamed from fork #225)
+        tools["delegate"] = ToolDef(
+            service="las", function="delegate",
+            description=(
+                "Hand off an independent subtask to a fresh agent with its own "
+                "context window. Use when the subtask needs LLM reasoning and you "
+                "only need a summary back — not for deterministic operations "
+                "(use run_command instead)."
             ),
             is_external=False,
         )
@@ -535,6 +551,11 @@ class ProjectDirector(BaseSpecialist):
         self, final_response: str, trace: List[Dict[str, Any]],
         captured_artifacts: dict,
     ) -> Dict[str, Any]:
+        # #225: Structural completion signal — EI reads this instead of re-deriving
+        captured_artifacts["completion_signal"] = {
+            "status": "COMPLETED",
+            "summary": final_response,
+        }
         return {
             "messages": [AIMessage(content=final_response)],
             "artifacts": dict(captured_artifacts),
@@ -548,6 +569,11 @@ class ProjectDirector(BaseSpecialist):
         self, error_msg: str, trace: List[Dict[str, Any]],
         captured_artifacts: dict,
     ) -> Dict[str, Any]:
+        # #225: Structural completion signal
+        captured_artifacts["completion_signal"] = {
+            "status": "ERROR",
+            "summary": error_msg,
+        }
         return {
             "messages": [AIMessage(content=error_msg)],
             "artifacts": dict(captured_artifacts),
@@ -573,6 +599,11 @@ class ProjectDirector(BaseSpecialist):
             f"Progress before stagnation:\n{self._summarize_trace(trace)}"
         )
 
+        # #225: Structural completion signal
+        captured_artifacts["completion_signal"] = {
+            "status": "BLOCKED",
+            "summary": stagnation_message,
+        }
         return {
             "messages": [AIMessage(content=stagnation_message)],
             "artifacts": dict(captured_artifacts),
@@ -593,6 +624,11 @@ class ProjectDirector(BaseSpecialist):
     ) -> Dict[str, Any]:
         partial_msg = self._synthesize_partial(trace, max_iter)
 
+        # #225: Structural completion signal
+        captured_artifacts["completion_signal"] = {
+            "status": "PARTIAL",
+            "summary": partial_msg,
+        }
         return {
             "messages": [AIMessage(content=partial_msg)],
             "artifacts": dict(captured_artifacts),

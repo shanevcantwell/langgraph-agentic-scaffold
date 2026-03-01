@@ -616,3 +616,152 @@ class TestMaxIterationsConfig:
             config_override={"max_iterations": 12},
         )
         assert ei._get_max_iterations() == 12
+
+
+# =============================================================================
+# #225: Signal-Based Fast Path
+# =============================================================================
+
+class TestSignalBasedFastPath:
+    """
+    #225: EI reads PD's completion_signal artifact and short-circuits
+    the SA exit_plan + react_step verification chain.
+    """
+
+    def test_completed_signal_accepts(self, exit_interview):
+        """COMPLETED signal → task_is_complete=True, routes to END."""
+        state = {
+            "artifacts": {
+                "user_request": "Research AI safety",
+                "completion_signal": {
+                    "status": "COMPLETED",
+                    "summary": "Full report written to artifacts.",
+                },
+            },
+            "routing_history": ["project_director", "signal_processor_specialist"],
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is True
+        ei_result = result["artifacts"]["exit_interview_result"]
+        assert ei_result["is_complete"] is True
+        assert "COMPLETED" in ei_result["reasoning"]
+
+    def test_partial_signal_retries(self, exit_interview):
+        """PARTIAL signal → task_is_complete=False, routes PD for retry."""
+        state = {
+            "artifacts": {
+                "user_request": "Research AI safety",
+                "completion_signal": {
+                    "status": "PARTIAL",
+                    "summary": "Hit 50 iteration limit, 3 of 5 sources analyzed.",
+                },
+            },
+            "routing_history": ["project_director"],
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is False
+        ei_result = result["artifacts"]["exit_interview_result"]
+        assert ei_result["is_complete"] is False
+        assert "PARTIAL" in ei_result["reasoning"]
+        assert ei_result["recommended_specialists"] == ["project_director"]
+        assert result["scratchpad"]["recommended_specialists"] == ["project_director"]
+        assert result["scratchpad"]["exit_interview_incomplete"] is True
+
+    def test_blocked_signal_aborts(self, exit_interview):
+        """BLOCKED signal → task_is_complete=True + termination_reason."""
+        state = {
+            "artifacts": {
+                "user_request": "Research AI safety",
+                "completion_signal": {
+                    "status": "BLOCKED",
+                    "summary": "Stagnation: repeated web_search with same args.",
+                },
+            },
+            "routing_history": ["project_director"],
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is True
+        ei_result = result["artifacts"]["exit_interview_result"]
+        assert ei_result["is_complete"] is False
+        assert "termination_reason" in result["scratchpad"]
+
+    def test_error_signal_aborts(self, exit_interview):
+        """ERROR signal → task_is_complete=True + termination_reason."""
+        state = {
+            "artifacts": {
+                "user_request": "Research AI safety",
+                "completion_signal": {
+                    "status": "ERROR",
+                    "summary": "MCP connection timeout after 3 retries.",
+                },
+            },
+            "routing_history": ["project_director"],
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is True
+        ei_result = result["artifacts"]["exit_interview_result"]
+        assert ei_result["is_complete"] is False
+        assert "termination_reason" in result["scratchpad"]
+        assert "MCP connection timeout" in result["scratchpad"]["termination_reason"]
+
+    def test_no_signal_falls_through(self, react_ready_ei):
+        """No completion_signal → existing verification chain runs."""
+        state = {
+            "artifacts": {
+                "user_request": "Research AI safety",
+            },
+            "routing_history": ["project_director"],
+        }
+
+        # EI requires at least one real tool call before DONE.
+        # Simulate: first call returns a tool call, second returns DONE.
+        with patch(
+            "app.src.specialists.exit_interview_specialist.call_react_step",
+            side_effect=[
+                _make_react_step_tool_call("list_artifacts", {}),
+                _make_react_step_done(
+                    is_complete=True,
+                    reasoning="Verified complete",
+                ),
+            ],
+        ) as mock_react:
+            result = react_ready_ei._execute_logic(state)
+
+        assert mock_react.call_count == 2
+        assert result["task_is_complete"] is True
+
+    def test_unrecognized_status_falls_through(self, react_ready_ei):
+        """Unknown status in completion_signal → falls through to verification chain."""
+        state = {
+            "artifacts": {
+                "user_request": "Research AI safety",
+                "completion_signal": {
+                    "status": "UNKNOWN_STATUS",
+                    "summary": "Something unexpected.",
+                },
+            },
+            "routing_history": ["project_director"],
+        }
+
+        with patch(
+            "app.src.specialists.exit_interview_specialist.call_react_step",
+            side_effect=[
+                _make_react_step_tool_call("list_artifacts", {}),
+                _make_react_step_done(
+                    is_complete=True,
+                    reasoning="Verified complete",
+                ),
+            ],
+        ) as mock_react:
+            result = react_ready_ei._execute_logic(state)
+
+        assert mock_react.call_count == 2
+        assert result["task_is_complete"] is True
