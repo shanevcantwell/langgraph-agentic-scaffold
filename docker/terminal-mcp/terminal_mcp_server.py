@@ -222,6 +222,7 @@ async def run_command(command: str, timeout_ms: int = 30000, cwd: str = WORKSPAC
         result = subprocess.run(
             command,
             shell=True,
+            executable="/bin/bash",  # #234: dash doesn't support brace expansion
             capture_output=True,
             text=True,
             timeout=timeout_ms / 1000,
