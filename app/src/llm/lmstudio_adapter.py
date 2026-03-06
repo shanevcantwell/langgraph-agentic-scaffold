@@ -30,7 +30,7 @@ class LMStudioAdapter(BaseAdapter):
     # #219: Harmony format control tokens (gpt-oss o200k_harmony encoding, IDs 200002-200012).
     # These wrap the model's multi-channel output and must be stripped before JSON parsing.
     _HARMONY_TOKEN_RE = re.compile(r'<\|(?:start|end|channel|message|constrain|call|return)\|>')
-    def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str):
+    def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str, api_key: Optional[str] = None):
         super().__init__(model_config)
         if not base_url:
             raise ValueError(
@@ -38,7 +38,7 @@ class LMStudioAdapter(BaseAdapter):
                 "Please set the LMSTUDIO_BASE_URL environment variable in your .env file."
             )
         self._base_url = base_url
-        self._api_key = os.getenv("LMSTUDIO_API_KEY", "not-needed")
+        self._api_key = api_key or os.getenv("LMSTUDIO_API_KEY", "not-needed")
         self.client = OpenAI(base_url=self._base_url, api_key=self._api_key)
         self.system_prompt = system_prompt
         if '/' in self.model_name or '\\' in self.model_name:
@@ -106,7 +106,8 @@ class LMStudioAdapter(BaseAdapter):
         }
         return cls(model_config=model_config,
                    base_url=provider_config["base_url"],
-                   system_prompt=system_prompt)
+                   system_prompt=system_prompt,
+                   api_key=provider_config.get("api_key"))
 
     @staticmethod
     def _resolve_schema_refs(node: Any, defs: Dict[str, Any]) -> Any:

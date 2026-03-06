@@ -948,3 +948,53 @@ class TestHarmonyTokenStripping:
         )
         kwargs = adapter._build_request_kwargs(request)
         assert "response_format" not in kwargs
+
+
+# --- #235: Per-server authentication token ---
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_api_key_from_constructor(mock_openai_client):
+    """Explicit api_key passed to constructor takes priority."""
+    adapter = LMStudioAdapter(
+        model_config={"api_identifier": MOCK_MODEL_NAME},
+        base_url=MOCK_BASE_URL,
+        system_prompt="",
+        api_key="my-server-token",
+    )
+    assert adapter.api_key == "my-server-token"
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_api_key_fallback_to_env(mock_openai_client, monkeypatch):
+    """Falls back to LMSTUDIO_API_KEY env var when no explicit key."""
+    monkeypatch.setenv("LMSTUDIO_API_KEY", "env-token")
+    adapter = LMStudioAdapter(
+        model_config={"api_identifier": MOCK_MODEL_NAME},
+        base_url=MOCK_BASE_URL,
+        system_prompt="",
+    )
+    assert adapter.api_key == "env-token"
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_api_key_fallback_to_not_needed(mock_openai_client, monkeypatch):
+    """Falls back to 'not-needed' when no explicit key and no env var."""
+    monkeypatch.delenv("LMSTUDIO_API_KEY", raising=False)
+    adapter = LMStudioAdapter(
+        model_config={"api_identifier": MOCK_MODEL_NAME},
+        base_url=MOCK_BASE_URL,
+        system_prompt="",
+    )
+    assert adapter.api_key == "not-needed"
+
+
+@patch('app.src.llm.lmstudio_adapter.OpenAI')
+def test_from_config_passes_api_key(mock_openai_client):
+    """from_config extracts api_key from provider_config and passes it through."""
+    provider_config = {
+        "api_identifier": MOCK_MODEL_NAME,
+        "base_url": MOCK_BASE_URL,
+        "api_key": "config-token",
+    }
+    adapter = LMStudioAdapter.from_config(provider_config, system_prompt="")
+    assert adapter.api_key == "config-token"

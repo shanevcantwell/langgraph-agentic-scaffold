@@ -302,3 +302,54 @@ class TestAdapterFactoryPool:
 
         # Cleanup
         factory._pool_loop.call_soon_threadsafe(factory._pool_loop.stop)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# #235: Per-server authentication token
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestApiKey:
+    def test_api_key_propagated_to_parent(self):
+        """api_key passed to PooledLMStudioAdapter reaches parent's _api_key."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher()
+        model_config = {"api_identifier": MOCK_MODEL_NAME, "parameters": {}}
+        adapter = PooledLMStudioAdapter(
+            model_config=model_config,
+            system_prompt="",
+            pool=pool,
+            dispatcher=dispatcher,
+            loop=loop,
+            api_key="pool-server-token",
+        )
+        assert adapter.api_key == "pool-server-token"
+        loop.close()
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_api_key_used_in_per_request_client(self, mock_run_coro, mock_openai):
+        """Per-request OpenAI client is created with the configured api_key."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher()
+        model_config = {"api_identifier": MOCK_MODEL_NAME, "parameters": {}}
+        adapter = PooledLMStudioAdapter(
+            model_config=model_config,
+            system_prompt="",
+            pool=pool,
+            dispatcher=dispatcher,
+            loop=loop,
+            api_key="my-token",
+        )
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "ok"
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
+        adapter.invoke(request)
+
+        mock_openai.assert_called_with(base_url=f"{MOCK_SERVER_URL}/v1", api_key="my-token")
+        loop.close()

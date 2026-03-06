@@ -242,6 +242,7 @@ class AdapterFactory:
                 pool=self._pool,
                 dispatcher=self._dispatcher,
                 loop=self._pool_loop,
+                api_key=provider_config.get("api_key"),
             )
             return adapter
 

@@ -46,9 +46,10 @@ class PooledLMStudioAdapter(LMStudioAdapter):
         pool: ServerPool,
         dispatcher: ConcurrentDispatcher,
         loop: asyncio.AbstractEventLoop,
+        api_key: Optional[str] = None,
     ):
         # Initialize parent with placeholder URL — we override invoke() to use pool
-        super().__init__(model_config=model_config, base_url=_POOL_MANAGED_URL, system_prompt=system_prompt)
+        super().__init__(model_config=model_config, base_url=_POOL_MANAGED_URL, system_prompt=system_prompt, api_key=api_key)
         self._pool = pool
         self._dispatcher = dispatcher
         self._loop = loop
