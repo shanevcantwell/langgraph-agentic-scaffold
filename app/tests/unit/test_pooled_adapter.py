@@ -14,10 +14,10 @@ MOCK_MODEL_NAME = "test-model/test-gguf"
 MOCK_SERVER_URL = "http://gpu0:1234"
 
 
-def _make_pool_and_dispatcher(server_url=MOCK_SERVER_URL):
+def _make_pool_and_dispatcher(server_url=MOCK_SERVER_URL, api_key=None):
     """Create mock pool, dispatcher, and event loop for testing."""
     pool = MagicMock()
-    pool.servers = {server_url: MagicMock(active_requests=0)}
+    pool.servers = {server_url: MagicMock(active_requests=0, api_key=api_key)}
 
     dispatcher = MagicMock()
 
@@ -140,11 +140,14 @@ class TestInvoke:
     @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
     def test_creates_client_with_acquired_url(self, mock_run_coro, mock_openai):
         """OpenAI client is created with the URL returned by the pool."""
+        acquired_url = "http://gpu1:5678"
         pool, dispatcher, loop = _make_pool_and_dispatcher()
+        # Add the acquired URL to pool's servers dict so api_key lookup works
+        pool.servers[acquired_url] = MagicMock(api_key=None)
         adapter = _make_adapter(pool, dispatcher, loop)
 
         mock_future = MagicMock()
-        mock_future.result.return_value = "http://gpu1:5678"
+        mock_future.result.return_value = acquired_url
         mock_run_coro.return_value = mock_future
 
         mock_client = mock_openai.return_value
@@ -155,8 +158,8 @@ class TestInvoke:
         adapter.invoke(request)
 
         # Verify adapter appends /v1 to the pool's bare server URL
-        mock_openai.assert_called_with(base_url="http://gpu1:5678/v1", api_key="not-needed")
-        pool.release_server.assert_called_once_with("http://gpu1:5678")
+        mock_openai.assert_called_with(base_url=f"{acquired_url}/v1", api_key="not-needed")
+        pool.release_server.assert_called_once_with(acquired_url)
         loop.close()
 
     @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
@@ -328,8 +331,8 @@ class TestApiKey:
     @patch('app.src.llm.pooled_adapter.OpenAI')
     @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
     def test_api_key_used_in_per_request_client(self, mock_run_coro, mock_openai):
-        """Per-request OpenAI client is created with the configured api_key."""
-        pool, dispatcher, loop = _make_pool_and_dispatcher()
+        """Per-request OpenAI client uses per-server api_key from pool."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(api_key="server-token")
         model_config = {"api_identifier": MOCK_MODEL_NAME, "parameters": {}}
         adapter = PooledLMStudioAdapter(
             model_config=model_config,
@@ -337,7 +340,7 @@ class TestApiKey:
             pool=pool,
             dispatcher=dispatcher,
             loop=loop,
-            api_key="my-token",
+            api_key="adapter-fallback",
         )
 
         mock_future = MagicMock()
@@ -351,5 +354,6 @@ class TestApiKey:
         request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
         adapter.invoke(request)
 
-        mock_openai.assert_called_with(base_url=f"{MOCK_SERVER_URL}/v1", api_key="my-token")
+        # Per-server key takes priority over adapter-level fallback
+        mock_openai.assert_called_with(base_url=f"{MOCK_SERVER_URL}/v1", api_key="server-token")
         loop.close()

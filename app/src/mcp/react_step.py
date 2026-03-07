@@ -56,7 +56,8 @@ def call_react_step(
     trace: List[Dict[str, Any]],
     tool_schemas: List[Dict[str, Any]],
     call_counter: int = 0,
-    timeout: float = 600.0,
+    timeout: float = 60.0,
+    api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Call react_step via prompt-prix MCP and parse the result.
@@ -71,19 +72,23 @@ def call_react_step(
 
     On error, returns a dict with completed=True and final_response=error message.
     """
+    args = {
+        "model_id": model_id,
+        "system_prompt": system_prompt,
+        "initial_message": task_prompt,
+        "trace": trace,
+        "mock_tools": None,
+        "tools": tool_schemas,
+        "call_counter": call_counter,
+    }
+    if api_key:
+        args["api_key"] = api_key
+
     raw_result = sync_call_external_mcp(
         external_mcp_client,
         "prompt-prix",
         "react_step",
-        {
-            "model_id": model_id,
-            "system_prompt": system_prompt,
-            "initial_message": task_prompt,
-            "trace": trace,
-            "mock_tools": None,
-            "tools": tool_schemas,
-            "call_counter": call_counter,
-        },
+        args,
         timeout=timeout,
     )
     return parse_react_step_result(raw_result)

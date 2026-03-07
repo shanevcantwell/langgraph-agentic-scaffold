@@ -90,7 +90,9 @@ class PooledLMStudioAdapter(LMStudioAdapter):
             try:
                 # Create client for the acquired server
                 # Pool stores server-level URLs (no /v1 suffix); OpenAI SDK needs /v1
-                client = OpenAI(base_url=f"{server_url}/v1", api_key=self._api_key)
+                # Use per-server api_key from pool (v0.4.0) — each server has its own token
+                server_api_key = self._pool.servers[server_url].api_key or self._api_key
+                client = OpenAI(base_url=f"{server_url}/v1", api_key=server_api_key)
                 completion = client.chat.completions.create(**api_kwargs, timeout=self.timeout)
                 return self._parse_completion(completion, request, api_kwargs, start_time)
 

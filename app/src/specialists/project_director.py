@@ -219,6 +219,7 @@ class ProjectDirector(BaseSpecialist):
         task_prompt = self._build_task_prompt(user_request, state)
         model_id = getattr(self.llm_adapter, 'model_name', None) or "default"
         system_prompt = getattr(self.llm_adapter, 'system_prompt', "") or ""
+        api_key = getattr(self.llm_adapter, '_api_key', None)
         max_iterations = self._get_max_iterations()
 
         # #170: Fresh trace each invocation — no resumption from prior runs.
@@ -249,7 +250,7 @@ class ProjectDirector(BaseSpecialist):
                     trace=trace,
                     tool_schemas=tool_schemas,
                     call_counter=call_counter,
-                    timeout=600.0,
+                    api_key=api_key,
                 )
 
                 call_counter = result.get("call_counter", call_counter)

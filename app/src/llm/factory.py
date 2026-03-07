@@ -80,10 +80,10 @@ class AdapterFactory:
         providers, so the pool knows about all available servers regardless of which
         specialists use the pooled adapter.
         """
-        from local_inference_pool import ServerPool, ConcurrentDispatcher
+        from local_inference_pool import ServerPool, ServerConfig, ConcurrentDispatcher
 
-        # Collect all unique server URLs from LMStudio-type providers
-        server_urls = set()
+        # Collect unique servers from LMStudio-type providers, preserving api_key
+        server_configs: dict[str, ServerConfig] = {}
         for provider_config in self.full_config.get("llm_providers", {}).values():
             if provider_config.get("type") in ("lmstudio", "lmstudio_pool"):
                 url = provider_config.get("base_url")
@@ -92,15 +92,19 @@ class AdapterFactory:
                     clean_url = url.rstrip("/")
                     if clean_url.endswith("/v1"):
                         clean_url = clean_url[:-3]
-                    server_urls.add(clean_url)
+                    if clean_url not in server_configs:
+                        server_configs[clean_url] = ServerConfig(
+                            url=clean_url,
+                            api_key=provider_config.get("api_key"),
+                        )
 
-        if not server_urls:
+        if not server_configs:
             logger.warning("AdapterFactory: lmstudio_pool providers found but no server URLs resolved. "
                            "Check LMSTUDIO_SERVERS env var.")
             return
 
         # Create pool and dispatcher
-        self._pool = ServerPool(list(server_urls))
+        self._pool = ServerPool(list(server_configs.values()))
         self._dispatcher = ConcurrentDispatcher(self._pool)
 
         # Start dedicated event loop thread for async pool operations
@@ -113,7 +117,7 @@ class AdapterFactory:
         )
         self._pool_thread.start()
 
-        logger.info(f"AdapterFactory: Initialized shared ServerPool with {len(server_urls)} servers: {sorted(server_urls)}")
+        logger.info(f"AdapterFactory: Initialized shared ServerPool with {len(server_configs)} servers: {sorted(server_configs.keys())}")
 
     def refresh_pool_manifests(self) -> None:
         """Refresh model manifests from all servers in the pool.

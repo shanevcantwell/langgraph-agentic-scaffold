@@ -27,12 +27,10 @@ architecture: "default"
 #     type: "lmstudio"
 #     server: "rtx3090"  # → fast GPU for routing
 #     api_identifier: "qwen3-30b-a3b"
-#     api_key: "${LMSTUDIO_RTX3090_KEY}"  # Per-server auth token (env var expanded by config_loader)
 #   lmstudio_specialist:
 #     type: "lmstudio"
 #     server: "rtx8000"  # → bigger GPU for specialists
 #     api_identifier: "qwen3-30b"
-#     api_key: "${LMSTUDIO_RTX8000_KEY}"  # Omit for no auth (defaults to "not-needed")
 #
 # If no `server` is specified, falls back to LMSTUDIO_BASE_URL env var.
 #

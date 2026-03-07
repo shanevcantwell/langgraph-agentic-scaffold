@@ -636,7 +636,7 @@ class TestPoolSlotConservation:
         import asyncio
 
         pool_mock = MagicMock()
-        pool_mock.servers = ["http://server1:1234"]
+        pool_mock.servers = {"http://server1:1234": MagicMock(api_key=None)}
         dispatcher_mock = MagicMock()
         loop_mock = MagicMock()
 
@@ -672,7 +672,7 @@ class TestPoolSlotConservation:
     def test_pool_release_on_exception(self):
         """I7: Slot released even when HTTP call throws."""
         pool_mock = MagicMock()
-        pool_mock.servers = ["http://server1:1234"]
+        pool_mock.servers = {"http://server1:1234": MagicMock(api_key=None)}
         dispatcher_mock = MagicMock()
         loop_mock = MagicMock()
 
@@ -705,7 +705,10 @@ class TestPoolSlotConservation:
         on module-level functions.
         """
         pool_mock = MagicMock()
-        pool_mock.servers = ["http://server1:1234", "http://server2:1234"]
+        pool_mock.servers = {
+            "http://server1:1234": MagicMock(api_key=None),
+            "http://server2:1234": MagicMock(api_key=None),
+        }
         dispatcher_mock = MagicMock()
         loop_mock = MagicMock()
 
