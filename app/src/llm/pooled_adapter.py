@@ -102,6 +102,7 @@ class PooledLMStudioAdapter(LMStudioAdapter):
                 raise RateLimitError(error_message) from e
 
             except (APIConnectionError, PermissionDeniedError, httpx.ProxyError) as e:
+                self._pool.report_server_error(server_url, str(e))
                 clean_message = (
                     f"A network error occurred connecting to {server_url}. "
                     "This is often due to a proxy blocking the request. "

@@ -40,7 +40,7 @@ dependencies = [
     "pip-tools",
     "tiktoken", # For token counting and context pruning
     "pillow",  # Image manipulation for vision model scaling (FaraService, ImageSpecialist)
-    "local-inference-pool @ git+https://github.com/shanevcantwell/local-inference-pool.git@v0.4.0",  # Shared GPU pool (ADR-CORE-068)
+    "local-inference-pool @ git+https://github.com/shanevcantwell/local-inference-pool.git@v0.6.0",  # Shared GPU pool (ADR-CORE-068)
     # e.g., "langchain-google-genai", "langchain-openai", "langchain-community"
 ]
 

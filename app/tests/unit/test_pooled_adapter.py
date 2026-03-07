@@ -312,6 +312,64 @@ class TestAdapterFactoryPool:
 # ─────────────────────────────────────────────────────────────────────
 
 
+# ─────────────────────────────────────────────────────────────────────
+# v0.6.0: Health feedback — report_server_error on transport failures
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestHealthFeedback:
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_connection_error_reports_server_dead(self, mock_run_coro, mock_openai):
+        """APIConnectionError triggers report_server_error to mark server dead."""
+        from openai import APIConnectionError
+        pool, dispatcher, loop = _make_pool_and_dispatcher()
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.side_effect = APIConnectionError(
+            request=MagicMock()
+        )
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
+        from app.src.llm.adapter import ProxyError
+        with pytest.raises(ProxyError):
+            adapter.invoke(request)
+
+        pool.report_server_error.assert_called_once()
+        args = pool.report_server_error.call_args
+        assert args[0][0] == MOCK_SERVER_URL
+        # Slot still released in finally (safe no-op after report_server_error)
+        pool.release_server.assert_called_once_with(MOCK_SERVER_URL)
+        loop.close()
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_generic_error_does_not_report_server_dead(self, mock_run_coro, mock_openai):
+        """Non-transport errors (e.g. BadRequestError) do NOT mark server dead."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher()
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.side_effect = Exception("Something unexpected")
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
+        with pytest.raises(LLMInvocationError):
+            adapter.invoke(request)
+
+        pool.report_server_error.assert_not_called()
+        pool.release_server.assert_called_once_with(MOCK_SERVER_URL)
+        loop.close()
+
+
 class TestApiKey:
     def test_api_key_propagated_to_parent(self):
         """api_key passed to PooledLMStudioAdapter reaches parent's _api_key."""
