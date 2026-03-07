@@ -56,7 +56,7 @@ def call_react_step(
     trace: List[Dict[str, Any]],
     tool_schemas: List[Dict[str, Any]],
     call_counter: int = 0,
-    timeout: float = 60.0,
+    timeout: float = 300.0,
     api_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     """

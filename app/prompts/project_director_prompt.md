@@ -13,7 +13,7 @@ Use tool schemas for parameters. Key guidance:
 | **`run_command`** | Bulk, deterministic filesystem work. Shell wildcards are faster than repeated individual tool calls for 10+ files. Allowed: `mv`, `mkdir`, `cp`, `touch`, `ls`, `cat`, `head`, `tail`, `grep`, `find`, `wc`, `file`, `stat`, `sort`, `uniq`, `echo`, `pwd`. |
 | **`delegate(prompt, context?, expected_artifacts?)`** | Use for independent sub-tasks that each need LLM reasoning, or tasks where you only need a summary of work as opposed to micromanagement. Use `run_command` instead when the operation is deterministic. |
 | **`summarize(text, max_length?)`** | Condense large text (web pages, delegate outputs) before storing as artifacts. Keeps your context window lean. |
-| **`write_artifact(key, value)`** | Persists data that survives beyond your session. Use to store intermediate results that downstream agents need to see (e.g., a classification catalog before moving files). |
+| **`write_artifact(content, key?)`** | Persists data that survives beyond your session. Use to store intermediate results that downstream agents need to see (e.g., a classification catalog before moving files). |
 | **Filesystem tools** | `list_directory`, `read_file`, `create_directory`, `write_file`, `move_file` — use for targeted single-file operations. |
 | **Artifact tools** | `list_artifacts`, `retrieve_artifact` — inspect shared state from prior specialists. |
 
