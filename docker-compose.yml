@@ -135,8 +135,8 @@ services:
     stdin_open: true  # Required for MCP stdio transport
     tty: true
     environment:
-      # LM Studio / Fara Configuration - reuse existing LMSTUDIO_SERVERS
-      - LMSTUDIO_SERVERS=${LMSTUDIO_SERVERS}
+      # Local inference servers for Fara vision model
+      - LOCAL_INFERENCE_SERVERS=${LOCAL_INFERENCE_SERVERS}
       - FARA_MODEL_IDS=${FARA_MODEL_IDS:-microsoft_fara-7b}
       - FARA_MAX_FAILURES=${FARA_MAX_FAILURES:-2}
       - FARA_MIN_CONFIDENCE=${FARA_MIN_CONFIDENCE:-0.7}
@@ -196,10 +196,10 @@ services:
     stdin_open: true  # Required for MCP stdio transport
     tty: true
     environment:
-      - LM_STUDIO_SERVER_1=${LM_STUDIO_SERVER_1}
-      - LM_STUDIO_SERVER_1_KEY=${LMSTUDIO_RTX3090_KEY}
-      - LM_STUDIO_SERVER_2=${LM_STUDIO_SERVER_2}
-      - LM_STUDIO_SERVER_2_KEY=
+      - LOCAL_INFERENCE_SERVER_1=${LOCAL_INFERENCE_SERVER_1}
+      - LOCAL_INFERENCE_SERVER_1_KEY=${LOCAL_RTX3090_KEY}
+      - LOCAL_INFERENCE_SERVER_2=${LOCAL_INFERENCE_SERVER_2}
+      - LOCAL_INFERENCE_SERVER_2_KEY=
     volumes:
       - ./tests/prompt-prix:/app/las-tests:ro  # LAS-specific eval test files
     extra_hosts:
