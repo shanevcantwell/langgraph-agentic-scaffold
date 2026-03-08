@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage
 from .adapter import BaseAdapter, StandardizedLLMRequest
-from .adapters import GeminiAdapter, LMStudioAdapter, PooledLMStudioAdapter  # Import all possible adapters
+from .adapters import GeminiAdapter, LocalInferenceAdapter, LMStudioAdapter, PooledLocalInferenceAdapter  # Import all possible adapters
 from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
 
 logger = logging.getLogger(__name__)
@@ -17,10 +17,11 @@ logger = logging.getLogger(__name__)
 # string manipulation and makes the factory easily extensible.
 ADAPTER_REGISTRY = {
     "gemini": GeminiAdapter,
-    "lmstudio": LMStudioAdapter,
-    "lmstudio_pool": PooledLMStudioAdapter,  # Shared GPU pool (ADR-CORE-068)
-    "gemini_webui": GeminiWebUIAdapter,  # Web UI adapter for distillation (ADR-DISTILL-006)
-    # "ollama": OllamaAdapter, # Example for future extension
+    "local": LocalInferenceAdapter,             # Generic OpenAI-compatible local inference
+    "local_pool": PooledLocalInferenceAdapter,   # Pool dispatch (inherits LMStudio quirks, harmless on non-LMS)
+    "lmstudio": LMStudioAdapter,                 # LM Studio with Harmony/ref/content quirks
+    "lmstudio_pool": PooledLocalInferenceAdapter, # Backward compat alias for local_pool
+    "gemini_webui": GeminiWebUIAdapter,           # Web UI adapter for distillation (ADR-DISTILL-006)
 }
 
 # --- Provider Dependency Requirements ---
@@ -62,14 +63,15 @@ class AdapterFactory:
         self._pool_loop: Optional[asyncio.AbstractEventLoop] = None
         self._pool_thread: Optional[threading.Thread] = None
 
-        # Initialize shared pool if any lmstudio_pool providers exist
+        # Initialize shared pool if any pool providers exist
         if self._has_pool_providers():
             self._init_pool()
 
     def _has_pool_providers(self) -> bool:
-        """Check if any llm_providers use the 'lmstudio_pool' type."""
+        """Check if any llm_providers use a pool type."""
+        pool_types = {"local_pool", "lmstudio_pool"}
         for provider_config in self.full_config.get("llm_providers", {}).values():
-            if provider_config.get("type") == "lmstudio_pool":
+            if provider_config.get("type") in pool_types:
                 return True
         return False
 
@@ -82,10 +84,11 @@ class AdapterFactory:
         """
         from local_inference_pool import ServerPool, ServerConfig, ConcurrentDispatcher
 
-        # Collect unique servers from LMStudio-type providers, preserving api_key
+        # Collect unique servers from local inference providers, preserving api_key
+        local_types = {"local", "local_pool", "lmstudio", "lmstudio_pool"}
         server_configs: dict[str, ServerConfig] = {}
         for provider_config in self.full_config.get("llm_providers", {}).values():
-            if provider_config.get("type") in ("lmstudio", "lmstudio_pool"):
+            if provider_config.get("type") in local_types:
                 url = provider_config.get("base_url")
                 if url:
                     # Strip /v1 suffix — pool manages base URLs, adapter appends /v1
@@ -99,8 +102,8 @@ class AdapterFactory:
                         )
 
         if not server_configs:
-            logger.warning("AdapterFactory: lmstudio_pool providers found but no server URLs resolved. "
-                           "Check LMSTUDIO_SERVERS env var.")
+            logger.warning("AdapterFactory: Pool providers found but no server URLs resolved. "
+                           "Check LOCAL_INFERENCE_SERVERS (or LMSTUDIO_SERVERS) env var.")
             return
 
         # Create pool and dispatcher
@@ -223,10 +226,10 @@ class AdapterFactory:
             return None
 
         # ADR-CORE-068: Pooled adapters get pool/dispatcher/loop injected by factory
-        if base_provider_type == "lmstudio_pool":
+        if base_provider_type in ("local_pool", "lmstudio_pool"):
             if not self._pool or not self._dispatcher or not self._pool_loop:
                 logger.error(
-                    f"AdapterFactory: Provider '{binding_key}' uses 'lmstudio_pool' but shared pool "
+                    f"AdapterFactory: Provider '{binding_key}' uses '{base_provider_type}' but shared pool "
                     "is not initialized. Check that server URLs are configured."
                 )
                 return None
@@ -240,7 +243,7 @@ class AdapterFactory:
             if "max_image_size_mb" in provider_config:
                 model_config["max_image_size_mb"] = provider_config["max_image_size_mb"]
 
-            adapter = PooledLMStudioAdapter(
+            adapter = PooledLocalInferenceAdapter(
                 model_config=model_config,
                 system_prompt=system_prompt,
                 pool=self._pool,
@@ -288,10 +291,10 @@ def ping_provider(provider_key: str, provider_config: Dict[str, Any]) -> Dict[st
     }
 
     provider_type = provider_config.get("type")
-    # ADR-CORE-068: For pinging, lmstudio_pool uses the same connectivity as lmstudio.
+    # ADR-CORE-068: For pinging, pool types use their base adapter's connectivity.
     # The pool manages slot routing at runtime; ping just validates the server is reachable.
-    if provider_type == "lmstudio_pool":
-        provider_type = "lmstudio"
+    if provider_type in ("local_pool", "lmstudio_pool"):
+        provider_type = "lmstudio" if provider_type == "lmstudio_pool" else "local"
     AdapterClass = ADAPTER_REGISTRY.get(provider_type)
 
     if not AdapterClass:

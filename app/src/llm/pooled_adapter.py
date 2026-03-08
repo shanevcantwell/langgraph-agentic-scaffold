@@ -1,13 +1,16 @@
 # app/src/llm/pooled_adapter.py
-"""PooledLMStudioAdapter — LMStudioAdapter backed by a shared ServerPool (ADR-CORE-068).
+"""PooledLocalInferenceAdapter — LMStudioAdapter backed by a shared ServerPool (ADR-CORE-068).
 
 Instead of each specialist owning its own OpenAI client pointing at a single server,
-PooledLMStudioAdapter acquires a server slot from the shared pool for each request.
+PooledLocalInferenceAdapter acquires a server slot from the shared pool for each request.
 This prevents JIT model swap collisions and provides load balancing across servers.
 
 The pool and dispatcher are created once by AdapterFactory and shared across all
-PooledLMStudioAdapter instances. Each instance retains its own system prompt
+PooledLocalInferenceAdapter instances. Each instance retains its own system prompt
 and model config — only the transport (which server to hit) is shared.
+
+Inherits from LMStudioAdapter, so LM Studio quirks (Harmony stripping, $ref inlining,
+content:"") are applied. These are no-ops on non-LM-Studio servers.
 """
 
 import asyncio
@@ -29,12 +32,13 @@ logger = logging.getLogger(__name__)
 _POOL_MANAGED_URL = "http://pool-managed"
 
 
-class PooledLMStudioAdapter(LMStudioAdapter):
+class PooledLocalInferenceAdapter(LMStudioAdapter):
     """LMStudioAdapter backed by a shared ServerPool for slot management.
 
     Inherits all request formatting, schema enforcement, and response parsing from
-    LMStudioAdapter. Overrides invoke() to acquire a server slot from the pool,
-    make the HTTP call to the acquired server, then release the slot.
+    LMStudioAdapter (which inherits from LocalInferenceAdapter). Overrides invoke()
+    to acquire a server slot from the pool, make the HTTP call to the acquired server,
+    then release the slot.
 
     Construction is handled by AdapterFactory, not from_config().
     """
@@ -57,7 +61,7 @@ class PooledLMStudioAdapter(LMStudioAdapter):
         self.client = None
 
         logger.info(
-            f"INITIALIZED PooledLMStudioAdapter for model '{self.model_name}' "
+            f"INITIALIZED PooledLocalInferenceAdapter for model '{self.model_name}' "
             f"with shared pool ({len(pool.servers)} servers)."
         )
 
@@ -78,7 +82,7 @@ class PooledLMStudioAdapter(LMStudioAdapter):
             server_url = future.result(timeout=self.timeout)
         except TimeoutError:
             raise LLMInvocationError(
-                f"PooledLMStudioAdapter: Timed out waiting for server slot "
+                f"PooledLocalInferenceAdapter: Timed out waiting for server slot "
                 f"for model '{model_id}' after {self.timeout}s"
             )
 
@@ -97,7 +101,7 @@ class PooledLMStudioAdapter(LMStudioAdapter):
                 return self._parse_completion(completion, request, api_kwargs, start_time)
 
             except OpenAIRateLimitError as e:
-                error_message = f"LMStudio API rate limit exceeded on {server_url}: {e}"
+                error_message = f"API rate limit exceeded on {server_url}: {e}"
                 logger.error(error_message, exc_info=True)
                 raise RateLimitError(error_message) from e
 
@@ -114,26 +118,26 @@ class PooledLMStudioAdapter(LMStudioAdapter):
             except BadRequestError as e:
                 if "context length" in str(e).lower():
                     error_message = (
-                        f"LMStudio API context length error on {server_url}: {e}. "
+                        f"API context length error on {server_url}: {e}. "
                         "This can happen if the configured 'context_window' is too large for the loaded model."
                     )
                     logger.error(error_message, exc_info=True)
                     raise LLMInvocationError(error_message) from e
                 else:
-                    logger.error(f"LMStudio API BadRequestError on {server_url}: {e}", exc_info=True)
-                    raise LLMInvocationError(f"LMStudio API BadRequestError: {e}") from e
+                    logger.error(f"API BadRequestError on {server_url}: {e}", exc_info=True)
+                    raise LLMInvocationError(f"API BadRequestError: {e}") from e
 
             except Exception as e:
-                logger.error(f"LMStudio API error on {server_url}: {e}", exc_info=True)
-                raise LLMInvocationError(f"LMStudio API error: {e}") from e
+                logger.error(f"API error on {server_url}: {e}", exc_info=True)
+                raise LLMInvocationError(f"API error: {e}") from e
         finally:
             # CRITICAL: Always release the slot. A leaked slot is a silent deadlock.
             self._pool.release_server(server_url)
 
     @classmethod
-    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> "PooledLMStudioAdapter":
+    def from_config(cls, provider_config: Dict[str, Any], system_prompt: str) -> "PooledLocalInferenceAdapter":
         """Not used — pool/dispatcher/loop are injected by AdapterFactory."""
         raise NotImplementedError(
-            "PooledLMStudioAdapter is created by AdapterFactory with shared pool injection, "
-            "not via from_config(). Use provider type 'lmstudio_pool' in config."
+            "PooledLocalInferenceAdapter is created by AdapterFactory with shared pool injection, "
+            "not via from_config(). Use provider type 'local_pool' or 'lmstudio_pool' in config."
         )

@@ -35,7 +35,7 @@ def test_init_fails_on_missing_api_identifier():
     with pytest.raises(TypeError, match="argument of type 'NoneType' is not iterable"):
         LMStudioAdapter(model_config={}, base_url=MOCK_BASE_URL, system_prompt="")
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_invoke_sends_correct_request(mock_openai_client, mock_model_config):
     """Tests that the invoke method constructs and sends the correct request to the client."""
     # Arrange
@@ -66,7 +66,7 @@ def test_invoke_sends_correct_request(mock_openai_client, mock_model_config):
     assert call_kwargs['temperature'] == 0.7
     assert result.get('text_response') == "LLM response text"
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_invoke_handles_json_parsing(mock_openai_client, mock_model_config):
     """Tests that the invoke method correctly parses JSON from a messy response string."""
     # Arrange
@@ -85,7 +85,7 @@ def test_invoke_handles_json_parsing(mock_openai_client, mock_model_config):
     assert result.get('json_response') == {"key": "value"}
     assert result.get('text_response') is None
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_invoke_raises_llm_invocation_error(mock_openai_client, mock_model_config):
     """Tests that LLMInvocationError is raised when the client call fails."""
     # Arrange
@@ -96,7 +96,7 @@ def test_invoke_raises_llm_invocation_error(mock_openai_client, mock_model_confi
     request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
 
     # Act & Assert
-    with pytest.raises(LLMInvocationError, match="LMStudio API error: API call failed"):
+    with pytest.raises(LLMInvocationError, match="API error: API call failed"):
         adapter.invoke(request)
 
 @pytest.mark.parametrize("raised_exception", [
@@ -104,7 +104,7 @@ def test_invoke_raises_llm_invocation_error(mock_openai_client, mock_model_confi
     PermissionDeniedError("Access Denied", response=MagicMock(), body=None),
     httpx.ProxyError("Proxy connection failed")
 ])
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_invoke_raises_proxy_error_on_connection_issues(mock_openai_client, mock_model_config, raised_exception):
     """
     Tests that the LMStudio adapter correctly catches various connection-related
@@ -129,7 +129,7 @@ def test_invoke_raises_proxy_error_on_connection_issues(mock_openai_client, mock
 # Image Handling Tests (Issue #16)
 # =============================================================================
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_skips_empty_data(mock_openai_client, mock_model_config):
     """Tests that empty string image_data is treated as 'no image' (skips injection)."""
     adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
@@ -152,7 +152,7 @@ def test_image_injection_skips_empty_data(mock_openai_client, mock_model_config)
     assert isinstance(user_message['content'], str)
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_rejects_whitespace_only_data(mock_openai_client, mock_model_config):
     """Tests that whitespace-only image data raises ValueError."""
     adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
@@ -166,7 +166,7 @@ def test_image_injection_rejects_whitespace_only_data(mock_openai_client, mock_m
         adapter.invoke(request)
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_rejects_oversized_image(mock_openai_client, mock_model_config):
     """Tests that oversized image data raises ValueError with helpful message."""
     # Configure a small limit for testing (1MB)
@@ -185,7 +185,7 @@ def test_image_injection_rejects_oversized_image(mock_openai_client, mock_model_
         adapter.invoke(request)
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_accepts_valid_sized_image(mock_openai_client, mock_model_config):
     """Tests that valid-sized image data passes size check and proceeds to injection."""
     mock_model_config["max_image_size_mb"] = 10
@@ -213,7 +213,7 @@ def test_image_injection_accepts_valid_sized_image(mock_openai_client, mock_mode
     assert user_message['content'][1]['type'] == 'image_url'
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_rejects_empty_message_content(mock_openai_client, mock_model_config):
     """Tests that empty message content raises ValueError when injecting image."""
     adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
@@ -237,7 +237,7 @@ class StructuredOutputSchema(BaseModel):
     value: int
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_structured_output_raises_on_invalid_json(mock_openai_client, mock_model_config):
     """
     Issue #123: When output_model_class is set, adapter should raise error
@@ -258,7 +258,7 @@ def test_structured_output_raises_on_invalid_json(mock_openai_client, mock_model
         adapter.invoke(request)
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_text_response_extracts_json_when_present(mock_openai_client, mock_model_config):
     """
     Issue #123: When NO output_model_class is set (text mode), adapter should
@@ -282,7 +282,7 @@ def test_text_response_extracts_json_when_present(mock_openai_client, mock_model
     assert "Here is the result" in result.get("text_response", "")
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_text_response_no_json_returns_text_only(mock_openai_client, mock_model_config):
     """
     Issue #123: When NO output_model_class is set and response has no JSON,
@@ -311,23 +311,33 @@ def test_text_response_no_json_returns_text_only(mock_openai_client, mock_model_
 class TestResolveSchemaRefs:
     """Tests for LMStudioAdapter._resolve_schema_refs — inlines $defs/$ref."""
 
-    def test_no_refs_unchanged(self):
+    @pytest.fixture
+    def adapter(self):
+        """Create a minimal LMStudioAdapter for testing instance methods."""
+        with patch('app.src.llm.local_inference_adapter.OpenAI'):
+            return LMStudioAdapter(
+                model_config={"api_identifier": "test-model"},
+                base_url=MOCK_BASE_URL,
+                system_prompt=""
+            )
+
+    def test_no_refs_unchanged(self, adapter):
         """Schema without $ref passes through unchanged."""
         node = {"type": "string", "description": "A simple param"}
-        result = LMStudioAdapter._resolve_schema_refs(node, {})
+        result = adapter._resolve_schema_refs(node, {})
         assert result == node
 
-    def test_direct_ref_resolved(self):
+    def test_direct_ref_resolved(self, adapter):
         """A bare $ref node is replaced with the definition."""
         defs = {
             "Foo": {"type": "object", "properties": {"x": {"type": "integer"}}}
         }
         node = {"$ref": "#/$defs/Foo"}
-        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        result = adapter._resolve_schema_refs(node, defs)
         assert result == {"type": "object", "properties": {"x": {"type": "integer"}}}
         assert "$ref" not in str(result)
 
-    def test_ref_in_items_resolved(self):
+    def test_ref_in_items_resolved(self, adapter):
         """$ref inside array items is resolved (the ParallelCall pattern)."""
         defs = {
             "ParallelCall": {
@@ -344,12 +354,12 @@ class TestResolveSchemaRefs:
             "items": {"$ref": "#/$defs/ParallelCall"},
             "description": "List of calls"
         }
-        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        result = adapter._resolve_schema_refs(node, defs)
         assert result["items"]["type"] == "object"
         assert result["items"]["properties"]["tool"]["type"] == "string"
         assert "$ref" not in json.dumps(result)
 
-    def test_nested_refs_resolved_recursively(self):
+    def test_nested_refs_resolved_recursively(self, adapter):
         """Refs within refs are resolved recursively."""
         defs = {
             "Inner": {"type": "string", "description": "inner"},
@@ -359,28 +369,28 @@ class TestResolveSchemaRefs:
             }
         }
         node = {"$ref": "#/$defs/Outer"}
-        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        result = adapter._resolve_schema_refs(node, defs)
         assert result["properties"]["nested"]["type"] == "string"
         assert "$ref" not in json.dumps(result)
 
-    def test_list_elements_resolved(self):
+    def test_list_elements_resolved(self, adapter):
         """$ref inside a list (e.g., anyOf) is resolved."""
         defs = {"Foo": {"type": "integer"}}
         node = [{"$ref": "#/$defs/Foo"}, {"type": "string"}]
-        result = LMStudioAdapter._resolve_schema_refs(node, defs)
+        result = adapter._resolve_schema_refs(node, defs)
         assert result == [{"type": "integer"}, {"type": "string"}]
 
-    def test_missing_def_left_as_is(self):
+    def test_missing_def_left_as_is(self, adapter):
         """$ref pointing to a missing definition is left unchanged."""
         node = {"$ref": "#/$defs/NonExistent"}
-        result = LMStudioAdapter._resolve_schema_refs(node, {})
+        result = adapter._resolve_schema_refs(node, {})
         assert result == {"$ref": "#/$defs/NonExistent"}
 
 
 class TestBuildToolCallSchemaRefFree:
     """Verify _build_tool_call_schema produces $ref-free output for LM Studio."""
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_nested_model_schema_has_no_refs(self, mock_openai_client, mock_model_config):
         """_build_tool_call_schema must produce $ref/$defs-free output for nested Pydantic models."""
         adapter = LMStudioAdapter(
@@ -414,7 +424,7 @@ class TestBuildToolCallSchemaRefFree:
 class TestBuildToolCallSchemaOneOf:
     """Verify _build_tool_call_schema produces per-tool oneOf variants."""
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_multi_tool_schema_uses_oneOf(self, mock_openai_client, mock_model_config):
         """Multi-tool schema should use oneOf inside actions array items."""
         adapter = LMStudioAdapter(
@@ -440,7 +450,7 @@ class TestBuildToolCallSchemaOneOf:
         # 2 tools + DONE = 3 variants
         assert len(items["oneOf"]) == 3
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_each_variant_has_only_own_params(self, mock_openai_client, mock_model_config):
         """create_directory variant should have path but NOT command."""
         adapter = LMStudioAdapter(
@@ -468,7 +478,7 @@ class TestBuildToolCallSchemaOneOf:
         assert "command" in rc_variant["properties"]
         assert "path" not in rc_variant["properties"]
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_variants_have_additionalProperties_false(self, mock_openai_client, mock_model_config):
         """Each variant should block extra fields."""
         adapter = LMStudioAdapter(
@@ -485,7 +495,7 @@ class TestBuildToolCallSchemaOneOf:
         for variant in schema["properties"]["actions"]["items"]["oneOf"]:
             assert variant.get("additionalProperties") is False
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_single_tool_has_no_DONE_variant(self, mock_openai_client, mock_model_config):
         """Single-tool schema should not include DONE."""
         adapter = LMStudioAdapter(
@@ -504,7 +514,7 @@ class TestBuildToolCallSchemaOneOf:
         assert len(variants) == 1
         assert variants[0]["properties"]["tool_name"]["const"] == "Route"
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_DONE_variant_has_only_tool_name(self, mock_openai_client, mock_model_config):
         """DONE variant should have tool_name and nothing else."""
         adapter = LMStudioAdapter(
@@ -528,7 +538,7 @@ class TestBuildToolCallSchemaOneOf:
         assert set(done_variant["properties"].keys()) == {"tool_name"}
         assert done_variant["required"] == ["tool_name"]
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_schema_required_has_actions_not_action(self, mock_openai_client, mock_model_config):
         """Schema should require 'actions' (array), not 'action' (singular)."""
         adapter = LMStudioAdapter(
@@ -573,7 +583,7 @@ class TestParseCompletionActionsArray:
         api_kwargs = adapter._build_request_kwargs(request)
         return request, api_kwargs
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_single_action_in_array(self, mock_openai_client, mock_model_config):
         """Single action in array produces one tool_call."""
         adapter = LMStudioAdapter(
@@ -602,7 +612,7 @@ class TestParseCompletionActionsArray:
         assert result["tool_calls"][0]["name"] == "read_file"
         assert result["tool_calls"][0]["args"] == {"path": "/tmp/a.txt"}
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_multiple_actions_in_array(self, mock_openai_client, mock_model_config):
         """Multiple actions produce multiple tool_calls for concurrent dispatch."""
         adapter = LMStudioAdapter(
@@ -636,7 +646,7 @@ class TestParseCompletionActionsArray:
         # Each should have a unique ID
         assert result["tool_calls"][0]["id"] != result["tool_calls"][1]["id"]
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_done_in_array(self, mock_openai_client, mock_model_config):
         """DONE action in array returns text_response."""
         adapter = LMStudioAdapter(
@@ -665,7 +675,7 @@ class TestParseCompletionActionsArray:
         assert result["text_response"] == "All files sorted successfully."
         assert "tool_calls" not in result
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_mixed_done_and_tools_done_wins(self, mock_openai_client, mock_model_config):
         """DONE takes priority over concurrent tool calls in mixed array."""
         adapter = LMStudioAdapter(
@@ -697,7 +707,7 @@ class TestParseCompletionActionsArray:
         assert result["text_response"] == "Done."
         assert "tool_calls" not in result
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_fallback_to_singular_action(self, mock_openai_client, mock_model_config):
         """Old singular 'action' format still works as backward compat fallback."""
         adapter = LMStudioAdapter(
@@ -725,7 +735,7 @@ class TestParseCompletionActionsArray:
         assert len(result["tool_calls"]) == 1
         assert result["tool_calls"][0]["name"] == "read_file"
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_reasoning_threaded_as_text_response(self, mock_openai_client, mock_model_config):
         """Reasoning field should be passed through as text_response for thought capture."""
         adapter = LMStudioAdapter(
@@ -751,7 +761,7 @@ class TestParseCompletionActionsArray:
 
         assert result["text_response"] == "I need to read both files to understand their contents"
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_param_stripping_per_action(self, mock_openai_client, mock_model_config):
         """Param stripping is applied independently to each action in the array."""
         adapter = LMStudioAdapter(
@@ -833,7 +843,7 @@ class TestHarmonyTokenStripping:
     Harmony tokens before JSON parsing.
     """
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_strip_harmony_tokens_from_structured_output(self, mock_openai):
         """Harmony-wrapped SystemPlan JSON should parse correctly after stripping."""
         adapter = LMStudioAdapter(
@@ -860,7 +870,7 @@ class TestHarmonyTokenStripping:
         assert parsed["plan_summary"] == "Categorize files."
         assert len(parsed["execution_steps"]) == 3
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_strip_harmony_tokens_from_tool_response(self, mock_openai):
         """Harmony-wrapped tool call JSON should parse correctly after stripping."""
         adapter = LMStudioAdapter(
@@ -880,7 +890,7 @@ class TestHarmonyTokenStripping:
         parsed = json.loads(stripped[start:])
         assert parsed["actions"][0]["tool_name"] == "list_directory"
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_strip_preserves_clean_json(self, mock_openai):
         """When no Harmony tokens are present, content passes through unchanged."""
         adapter = LMStudioAdapter(
@@ -893,7 +903,7 @@ class TestHarmonyTokenStripping:
         stripped = adapter._strip_harmony_tokens(clean_json)
         assert stripped == clean_json
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_skip_schema_enforcement_omits_response_format(self, mock_openai):
         """When skip_schema_enforcement=True, _build_request_kwargs should NOT set response_format."""
         adapter = LMStudioAdapter(
@@ -916,7 +926,7 @@ class TestHarmonyTokenStripping:
         kwargs = adapter._build_request_kwargs(request)
         assert "response_format" not in kwargs
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_schema_enforcement_default_false(self, mock_openai):
         """skip_schema_enforcement defaults to False when not specified in config."""
         adapter = LMStudioAdapter(
@@ -926,7 +936,7 @@ class TestHarmonyTokenStripping:
         )
         assert adapter.skip_schema_enforcement is False
 
-    @patch('app.src.llm.lmstudio_adapter.OpenAI')
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_skip_schema_enforcement_with_tools_omits_response_format(self, mock_openai):
         """When skip_schema_enforcement=True, tool requests also skip response_format."""
         adapter = LMStudioAdapter(
@@ -952,7 +962,7 @@ class TestHarmonyTokenStripping:
 
 # --- #235: Per-server authentication token ---
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_api_key_from_constructor(mock_openai_client):
     """Explicit api_key passed to constructor takes priority."""
     adapter = LMStudioAdapter(
@@ -964,7 +974,7 @@ def test_api_key_from_constructor(mock_openai_client):
     assert adapter.api_key == "my-server-token"
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_api_key_fallback_to_env(mock_openai_client, monkeypatch):
     """Falls back to LMSTUDIO_API_KEY env var when no explicit key."""
     monkeypatch.setenv("LMSTUDIO_API_KEY", "env-token")
@@ -976,7 +986,7 @@ def test_api_key_fallback_to_env(mock_openai_client, monkeypatch):
     assert adapter.api_key == "env-token"
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_api_key_fallback_to_not_needed(mock_openai_client, monkeypatch):
     """Falls back to 'not-needed' when no explicit key and no env var."""
     monkeypatch.delenv("LMSTUDIO_API_KEY", raising=False)
@@ -988,7 +998,7 @@ def test_api_key_fallback_to_not_needed(mock_openai_client, monkeypatch):
     assert adapter.api_key == "not-needed"
 
 
-@patch('app.src.llm.lmstudio_adapter.OpenAI')
+@patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_from_config_passes_api_key(mock_openai_client):
     """from_config extracts api_key from provider_config and passes it through."""
     provider_config = {

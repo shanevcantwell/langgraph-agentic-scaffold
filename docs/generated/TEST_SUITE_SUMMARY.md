@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 856 |
+| Unit | 74 | 872 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1137** |
+| **Total** | **109** | **1153** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1100,6 +1100,16 @@
   - *No completion_signal → existing verification chain runs.*
 - **`test_unrecognized_status_falls_through`**
   - *Unknown status in completion_signal → falls through to verification chain.*
+- **`test_artifact_present_accepts`**
+  - *Declared artifact exists and is non-empty → task_is_complete=True.*
+- **`test_artifact_missing_falls_through`**
+  - *Declared artifact not in state → falls through to legacy verification.*
+- **`test_artifact_empty_falls_through`**
+  - *Declared artifact exists but is empty → falls through.*
+- **`test_no_mapping_for_specialist_falls_through`**
+  - *Specialist has no produces_artifacts declaration → falls through.*
+- **`test_signal_takes_priority_over_artifact`**
+  - *completion_signal is checked before produces_artifacts — signal wins.*
 
 ## `app/tests/unit/test_external_mcp_config.py`
 
@@ -1588,6 +1598,14 @@
   - *Issue #123: When NO output_model_class is set (text mode), adapter should*
 - **`test_text_response_no_json_returns_text_only`**
   - *Issue #123: When NO output_model_class is set and response has no JSON,*
+- **`test_api_key_from_constructor`**
+  - *Explicit api_key passed to constructor takes priority.*
+- **`test_api_key_fallback_to_env`**
+  - *Falls back to LMSTUDIO_API_KEY env var when no explicit key.*
+- **`test_api_key_fallback_to_not_needed`**
+  - *Falls back to 'not-needed' when no explicit key and no env var.*
+- **`test_from_config_passes_api_key`**
+  - *from_config extracts api_key from provider_config and passes it through.*
 - **`test_no_refs_unchanged`**
   - *Schema without $ref passes through unchanged.*
 - **`test_direct_ref_resolved`**
@@ -1974,7 +1992,7 @@
 ## `app/tests/unit/test_pooled_adapter.py`
 
 - **`test_inherits_from_lmstudio_adapter`**
-  - *PooledLMStudioAdapter inherits all formatting/schema methods from LMStudioAdapter.*
+  - *PooledLocalInferenceAdapter inherits all formatting/schema methods from LMStudioAdapter.*
 - **`test_from_config_raises`**
   - *from_config() is not the construction path — raises NotImplementedError.*
 - **`test_client_is_none`**
@@ -1999,6 +2017,14 @@
   - *AdapterFactory does NOT create pool when only 'lmstudio' providers exist.*
 - **`test_factory_strips_v1_from_urls`**
   - *Pool server URLs have /v1 stripped (pool manages base URLs).*
+- **`test_connection_error_reports_server_dead`**
+  - *APIConnectionError triggers report_server_error to mark server dead.*
+- **`test_generic_error_does_not_report_server_dead`**
+  - *Non-transport errors (e.g. BadRequestError) do NOT mark server dead.*
+- **`test_api_key_propagated_to_parent`**
+  - *api_key passed to PooledLocalInferenceAdapter reaches parent's _api_key.*
+- **`test_api_key_used_in_per_request_client`**
+  - *Per-request OpenAI client uses per-server api_key from pool.*
 
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 
@@ -2102,6 +2128,12 @@
   - *_build_partial_result writes completion_signal with status PARTIAL.*
 - **`test_completion_signal_coexists_with_other_artifacts`**
   - *completion_signal doesn't clobber other captured artifacts.*
+- **`test_large_file_at_depth_0_returns_gate_message`**
+  - *read_file returning >2KB at fork_depth==0 → size gate error with delegate() hint.*
+- **`test_large_file_at_depth_1_returns_full_content`**
+  - *read_file returning >2KB at fork_depth==1 → full content (child has fresh context).*
+- **`test_small_file_at_depth_0_returns_full_content`**
+  - *read_file returning <2KB at fork_depth==0 → full content (under threshold).*
 
 ## `app/tests/unit/test_prompt_specialist.py`
 
@@ -2313,11 +2345,13 @@
 
 - **`test_minimal_call`**
 - **`test_artifacts_include_user_request`**
-- **`test_prior_messages_prepended_to_current`**
+- **`test_prior_messages_merged_into_goal`**
+  - *Prior context is merged into the single user message, not separate messages.*
 - **`test_hard_cap_last_six_messages`**
-  - *Only last 6 prior messages (3 user/assistant pairs) are kept.*
+  - *Only last 6 prior messages are kept before merging.*
 - **`test_empty_content_skipped`**
-- **`test_unknown_role_skipped`**
+- **`test_unknown_role_included_if_has_content`**
+  - *All roles with content are merged — role distinction no longer matters.*
 - **`test_none_prior_messages_no_effect`**
 - **`test_empty_list_prior_messages_no_effect`**
 - **`test_conversation_id_stored_in_artifacts`**

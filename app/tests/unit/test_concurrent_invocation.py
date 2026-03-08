@@ -614,15 +614,15 @@ class TestPoolSlotConservation:
     """I7: Total release() calls equals total acquire() calls."""
 
     def _make_pooled_adapter(self, pool_mock, dispatcher_mock, loop_mock):
-        """Create a PooledLMStudioAdapter with mocked pool infrastructure."""
-        from app.src.llm.pooled_adapter import PooledLMStudioAdapter
+        """Create a PooledLocalInferenceAdapter with mocked pool infrastructure."""
+        from app.src.llm.pooled_adapter import PooledLocalInferenceAdapter
 
         model_config = {
             "api_identifier": "test-model",
             "context_window": 4096,
         }
 
-        adapter = PooledLMStudioAdapter(
+        adapter = PooledLocalInferenceAdapter(
             model_config=model_config,
             system_prompt="Test system prompt",
             pool=pool_mock,

@@ -138,17 +138,17 @@ class ConfigLoader:
         else:
             return config
 
-    def _parse_lmstudio_servers(self) -> dict:
+    def _parse_local_servers(self) -> dict:
         """
-        Parse LMSTUDIO_SERVERS env var into a name→URL mapping.
+        Parse LOCAL_INFERENCE_SERVERS (or LMSTUDIO_SERVERS fallback) env var into a name→URL mapping.
 
         Format: "name1=url1,name2=url2" (uses = separator since URLs contain :)
-        Example: "rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1"
+        Example: "rtx3090=http://192.168.1.100:8081/v1,rtx8000=http://192.168.1.101:1234/v1"
 
         Returns:
             Dict mapping server names to URLs, e.g. {"rtx3090": "http://...", "rtx8000": "http://..."}
         """
-        servers_str = os.getenv("LMSTUDIO_SERVERS", "")
+        servers_str = os.getenv("LOCAL_INFERENCE_SERVERS") or os.getenv("LMSTUDIO_SERVERS", "")
         if not servers_str:
             return {}
 
@@ -159,10 +159,10 @@ class ConfigLoader:
                 name, url = entry.split("=", 1)  # Split on first = only
                 server_map[name.strip()] = url.strip()
             else:
-                logger.warning(f"Invalid LMSTUDIO_SERVERS entry (missing '='): {entry}")
+                logger.warning(f"Invalid LOCAL_INFERENCE_SERVERS entry (missing '='): {entry}")
 
         if server_map:
-            logger.debug(f"Parsed LMSTUDIO_SERVERS: {list(server_map.keys())}")
+            logger.debug(f"Parsed local inference servers: {list(server_map.keys())}")
         return server_map
 
     def _resolve_provider_env_vars(self, providers: dict):
@@ -179,25 +179,25 @@ class ConfigLoader:
                 if not api_key:
                     logger.warning(f"GOOGLE_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
                 provider_config["api_key"] = api_key
-            elif provider_type in ("lmstudio", "lmstudio_pool"):
+            elif provider_type in ("local", "local_pool", "lmstudio", "lmstudio_pool"):
                 # Distributed inference: Check for named server reference
-                # .env: LMSTUDIO_SERVERS="rtx3090=http://...,rtx8000=http://..."
+                # .env: LOCAL_INFERENCE_SERVERS="rtx3090=http://...,rtx8000=http://..."
                 # user_settings.yaml: server: "rtx3090"
-                # For lmstudio_pool: base_url is used for pool server discovery and ping validation
+                # For pool types: base_url is used for pool server discovery and ping validation
                 server_name = provider_config.get("server")
                 if server_name:
-                    server_map = self._parse_lmstudio_servers()
+                    server_map = self._parse_local_servers()
                     if server_name in server_map:
                         provider_config["base_url"] = server_map[server_name]
                         logger.debug(f"Provider '{provider_key}' using server '{server_name}' → {server_map[server_name]}")
                     else:
-                        logger.warning(f"Server '{server_name}' not found in LMSTUDIO_SERVERS. Available: {list(server_map.keys())}")
+                        logger.warning(f"Server '{server_name}' not found in LOCAL_INFERENCE_SERVERS. Available: {list(server_map.keys())}")
                         provider_config["base_url"] = None
                 else:
-                    # Fall back to default LMSTUDIO_BASE_URL
-                    base_url = os.getenv("LMSTUDIO_BASE_URL")
+                    # Fall back to default LOCAL_INFERENCE_BASE_URL (or LMSTUDIO_BASE_URL)
+                    base_url = os.getenv("LOCAL_INFERENCE_BASE_URL") or os.getenv("LMSTUDIO_BASE_URL")
                     if not base_url:
-                        logger.warning(f"LMSTUDIO_BASE_URL not found for provider '{provider_key}'. This provider may be unusable.")
+                        logger.warning(f"LOCAL_INFERENCE_BASE_URL not found for provider '{provider_key}'. This provider may be unusable.")
                     provider_config["base_url"] = base_url
 
     def _merge_configs(self, blueprint: dict, user_settings: dict) -> dict:

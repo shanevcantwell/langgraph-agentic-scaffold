@@ -1,10 +1,10 @@
-"""Tests for PooledLMStudioAdapter — pool integration, slot management, error handling."""
+"""Tests for PooledLocalInferenceAdapter — pool integration, slot management, error handling."""
 
 import asyncio
 import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
 
-from app.src.llm.pooled_adapter import PooledLMStudioAdapter
+from app.src.llm.pooled_adapter import PooledLocalInferenceAdapter
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.utils.errors import LLMInvocationError
 from langchain_core.messages import HumanMessage
@@ -33,12 +33,12 @@ def _make_pool_and_dispatcher(server_url=MOCK_SERVER_URL, api_key=None):
 
 
 def _make_adapter(pool, dispatcher, loop, model_name=MOCK_MODEL_NAME):
-    """Create a PooledLMStudioAdapter with mocked pool infrastructure."""
+    """Create a PooledLocalInferenceAdapter with mocked pool infrastructure."""
     model_config = {
         "api_identifier": model_name,
         "parameters": {"temperature": 0.7},
     }
-    return PooledLMStudioAdapter(
+    return PooledLocalInferenceAdapter(
         model_config=model_config,
         system_prompt="Test prompt",
         pool=pool,
@@ -54,7 +54,7 @@ def _make_adapter(pool, dispatcher, loop, model_name=MOCK_MODEL_NAME):
 
 class TestConstruction:
     def test_inherits_from_lmstudio_adapter(self):
-        """PooledLMStudioAdapter inherits all formatting/schema methods from LMStudioAdapter."""
+        """PooledLocalInferenceAdapter inherits all formatting/schema methods from LMStudioAdapter."""
         from app.src.llm.lmstudio_adapter import LMStudioAdapter
         pool, dispatcher, loop = _make_pool_and_dispatcher()
         adapter = _make_adapter(pool, dispatcher, loop)
@@ -64,7 +64,7 @@ class TestConstruction:
     def test_from_config_raises(self):
         """from_config() is not the construction path — raises NotImplementedError."""
         with pytest.raises(NotImplementedError, match="AdapterFactory"):
-            PooledLMStudioAdapter.from_config({}, "")
+            PooledLocalInferenceAdapter.from_config({}, "")
 
     def test_client_is_none(self):
         """Parent's self.client is set to None — we create per-request clients."""
@@ -372,10 +372,10 @@ class TestHealthFeedback:
 
 class TestApiKey:
     def test_api_key_propagated_to_parent(self):
-        """api_key passed to PooledLMStudioAdapter reaches parent's _api_key."""
+        """api_key passed to PooledLocalInferenceAdapter reaches parent's _api_key."""
         pool, dispatcher, loop = _make_pool_and_dispatcher()
         model_config = {"api_identifier": MOCK_MODEL_NAME, "parameters": {}}
-        adapter = PooledLMStudioAdapter(
+        adapter = PooledLocalInferenceAdapter(
             model_config=model_config,
             system_prompt="",
             pool=pool,
@@ -392,7 +392,7 @@ class TestApiKey:
         """Per-request OpenAI client uses per-server api_key from pool."""
         pool, dispatcher, loop = _make_pool_and_dispatcher(api_key="server-token")
         model_config = {"api_identifier": MOCK_MODEL_NAME, "parameters": {}}
-        adapter = PooledLMStudioAdapter(
+        adapter = PooledLocalInferenceAdapter(
             model_config=model_config,
             system_prompt="",
             pool=pool,
