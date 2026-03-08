@@ -765,3 +765,125 @@ class TestSignalBasedFastPath:
 
         assert mock_react.call_count == 2
         assert result["task_is_complete"] is True
+
+
+# =============================================================================
+# #243: Artifact-Presence Fast Path for Spoke Specialists
+# =============================================================================
+
+class TestArtifactPresenceFastPath:
+    """
+    #243: Spoke specialists declare produces_artifacts in config.
+    EI checks artifact existence and fast-paths to complete without LLM.
+    """
+
+    def test_artifact_present_accepts(self, exit_interview):
+        """Declared artifact exists and is non-empty → task_is_complete=True."""
+        exit_interview.set_produces_artifacts({"web_builder": ["html_document.html"]})
+
+        state = {
+            "artifacts": {
+                "user_request": "Build a dashboard",
+                "html_document.html": "<html><body>Dashboard</body></html>",
+            },
+            "routing_history": ["web_builder"],
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        assert result["task_is_complete"] is True
+        ei_result = result["artifacts"]["exit_interview_result"]
+        assert ei_result["is_complete"] is True
+        assert "web_builder" in ei_result["reasoning"]
+        assert "html_document.html" in ei_result["reasoning"]
+
+    def test_artifact_missing_falls_through(self, react_ready_ei):
+        """Declared artifact not in state → falls through to legacy verification."""
+        react_ready_ei.set_produces_artifacts({"web_builder": ["html_document.html"]})
+
+        state = {
+            "artifacts": {
+                "user_request": "Build a dashboard",
+            },
+            "routing_history": ["web_builder"],
+        }
+
+        with patch(
+            "app.src.specialists.exit_interview_specialist.call_react_step",
+            side_effect=[
+                _make_react_step_tool_call("list_artifacts", {}),
+                _make_react_step_done(False, "No HTML produced", missing_elements="html_document.html"),
+            ],
+        ) as mock_react:
+            result = react_ready_ei._execute_logic(state)
+
+        # Should have fallen through to react_step
+        assert mock_react.call_count == 2
+        assert result["task_is_complete"] is False
+
+    def test_artifact_empty_falls_through(self, react_ready_ei):
+        """Declared artifact exists but is empty → falls through."""
+        react_ready_ei.set_produces_artifacts({"web_builder": ["html_document.html"]})
+
+        state = {
+            "artifacts": {
+                "user_request": "Build a dashboard",
+                "html_document.html": "",
+            },
+            "routing_history": ["web_builder"],
+        }
+
+        with patch(
+            "app.src.specialists.exit_interview_specialist.call_react_step",
+            side_effect=[
+                _make_react_step_tool_call("list_artifacts", {}),
+                _make_react_step_done(False, "Empty HTML", missing_elements="Content missing"),
+            ],
+        ) as mock_react:
+            result = react_ready_ei._execute_logic(state)
+
+        assert mock_react.call_count == 2
+
+    def test_no_mapping_for_specialist_falls_through(self, react_ready_ei):
+        """Specialist has no produces_artifacts declaration → falls through."""
+        react_ready_ei.set_produces_artifacts({"web_builder": ["html_document.html"]})
+
+        state = {
+            "artifacts": {
+                "user_request": "Sort files",
+            },
+            "routing_history": ["project_director"],
+        }
+
+        with patch(
+            "app.src.specialists.exit_interview_specialist.call_react_step",
+            side_effect=[
+                _make_react_step_tool_call("list_directory", {"path": "/workspace"}),
+                _make_react_step_done(True, "Files sorted"),
+            ],
+        ) as mock_react:
+            result = react_ready_ei._execute_logic(state)
+
+        assert mock_react.call_count == 2
+
+    def test_signal_takes_priority_over_artifact(self, exit_interview):
+        """completion_signal is checked before produces_artifacts — signal wins."""
+        exit_interview.set_produces_artifacts({"web_builder": ["html_document.html"]})
+
+        state = {
+            "artifacts": {
+                "user_request": "Build a dashboard",
+                "html_document.html": "<html>content</html>",
+                "completion_signal": {
+                    "status": "BLOCKED",
+                    "summary": "Stagnation detected.",
+                },
+            },
+            "routing_history": ["web_builder"],
+        }
+
+        result = exit_interview._execute_logic(state)
+
+        # Signal path should win — BLOCKED aborts
+        assert result["task_is_complete"] is True
+        assert "termination_reason" in result["scratchpad"]

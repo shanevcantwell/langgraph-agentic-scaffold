@@ -445,3 +445,71 @@ class TestCompletionSignal:
         assert result["artifacts"]["observations"] == "important data"
         assert result["artifacts"]["user_request"] == "Sort files"
         assert result["artifacts"]["completion_signal"]["status"] == "COMPLETED"
+
+
+# =============================================================================
+# #244: read_file Size Gate (delegate encouragement)
+# =============================================================================
+
+class TestReadFileSizeGate:
+    """
+    #244: Large read_file results at fork_depth==0 are replaced with an error
+    message suggesting delegate(). Children (fork_depth>0) get the full result.
+    """
+
+    @pytest.fixture
+    def director(self, mock_specialist_config):
+        pd = ProjectDirector("project_director", mock_specialist_config)
+        pd.external_mcp_client = MagicMock()
+        return pd
+
+    def test_large_file_at_depth_0_returns_gate_message(self, director):
+        """read_file returning >2KB at fork_depth==0 → size gate error with delegate() hint."""
+        large_content = "x" * 3000  # 3KB, exceeds _READ_FILE_SIZE_LIMIT
+        tools = director._build_tools()
+        pending = {"name": "read_file", "args": {"path": "/workspace/docs/ADR-CORE-055.md"}}
+
+        with patch(
+            "app.src.specialists.project_director.dispatch_external_tool",
+            return_value=large_content,
+        ):
+            result = director._dispatch_tool_call(
+                pending, tools, [], {}, fork_depth=0,
+            )
+
+        assert "too large" in result
+        assert "delegate()" in result
+        assert "ADR-CORE-055.md" in result
+        assert large_content not in result  # Content should NOT be returned
+
+    def test_large_file_at_depth_1_returns_full_content(self, director):
+        """read_file returning >2KB at fork_depth==1 → full content (child has fresh context)."""
+        large_content = "x" * 3000
+        tools = director._build_tools()
+        pending = {"name": "read_file", "args": {"path": "/workspace/docs/ADR-CORE-055.md"}}
+
+        with patch(
+            "app.src.specialists.project_director.dispatch_external_tool",
+            return_value=large_content,
+        ):
+            result = director._dispatch_tool_call(
+                pending, tools, [], {}, fork_depth=1,
+            )
+
+        assert result == large_content
+
+    def test_small_file_at_depth_0_returns_full_content(self, director):
+        """read_file returning <2KB at fork_depth==0 → full content (under threshold)."""
+        small_content = "x" * 1000  # 1KB, under limit
+        tools = director._build_tools()
+        pending = {"name": "read_file", "args": {"path": "/workspace/small.txt"}}
+
+        with patch(
+            "app.src.specialists.project_director.dispatch_external_tool",
+            return_value=small_content,
+        ):
+            result = director._dispatch_tool_call(
+                pending, tools, [], {}, fork_depth=0,
+            )
+
+        assert result == small_content

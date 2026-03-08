@@ -424,6 +424,17 @@ class GraphBuilder:
             self.specialists[ei_name].set_routable_specialists(list(available_specialists.keys()))
             logger.info(f"ExitInterview: injected {len(available_specialists)} routable specialist names")
 
+        # #243: Inject produces_artifacts mapping into EI for artifact-presence fast-path
+        if ei_name in self.specialists and hasattr(self.specialists[ei_name], 'set_produces_artifacts'):
+            artifact_map = {
+                name: conf.get("produces_artifacts", [])
+                for name, conf in configs.items()
+                if conf.get("produces_artifacts")
+            }
+            if artifact_map:
+                self.specialists[ei_name].set_produces_artifacts(artifact_map)
+                logger.info(f"ExitInterview: injected produces_artifacts for {list(artifact_map.keys())}")
+
         specialist_table = self._build_specialist_table(available_specialists)
         dynamic_system_prompt = base_prompt.replace("{{SPECIALIST_TABLE}}", specialist_table)
         binding_key = router_config.get("llm_config")

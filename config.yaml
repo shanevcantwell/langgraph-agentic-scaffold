@@ -181,6 +181,8 @@ specialists:
     prompt_file: "web_builder_prompt.md"
     description: "Generates or modifies web UIs: HTML, CSS, JavaScript, or Gradio Python applications."
     tags: ["vision_capable"]
+    # #243: Declared output artifacts — EI uses this for artifact-presence fast-path
+    produces_artifacts: ["html_document.html"]
     # SA MCP integration: calls create_plan() directly instead of requiring artifact redirect
     tools:
       systems_architect:

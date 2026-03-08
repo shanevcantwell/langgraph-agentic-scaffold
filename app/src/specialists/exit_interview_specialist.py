@@ -116,10 +116,15 @@ class ExitInterviewSpecialist(BaseSpecialist):
     DEFAULT_MAX_ITERATIONS = 8  # Read-only verification; shouldn't need many steps
 
     _routable_specialists: List[str] = []
+    _produces_artifacts: Dict[str, List[str]] = {}
 
     def set_routable_specialists(self, names: List[str]) -> None:
         """Inject routable specialist names (from graph_builder) for DONE schema enum."""
         self._routable_specialists = list(names)
+
+    def set_produces_artifacts(self, mapping: Dict[str, List[str]]) -> None:
+        """Inject specialist→expected output artifacts mapping (from graph_builder) for fast-path."""
+        self._produces_artifacts = dict(mapping)
 
     # ─── Main execution ──────────────────────────────────────────────────
 
@@ -150,7 +155,14 @@ class ExitInterviewSpecialist(BaseSpecialist):
                 logger.info("--- EI Fast Path: PD signaled ERROR. Aborting. ---")
                 return self._build_signal_abort_result(summary)
 
-        # No signal or unrecognized status — fall through to existing verification chain
+        # #243: Artifact-presence fast-path for spoke specialists
+        last_specialist = routing_history[-1] if routing_history else None
+        expected = self._produces_artifacts.get(last_specialist, [])
+        if expected and all(artifacts.get(key) for key in expected):
+            logger.info(f"--- EI Artifact Fast Path: {last_specialist} produced {expected}. Accepting. ---")
+            return self._build_artifact_complete_result(last_specialist, expected)
+
+        # No signal, no artifact match — fall through to existing verification chain
 
         # #203: Read run_id for fork cancellation propagation
         run_id = state.get("run_id")
@@ -665,4 +677,22 @@ class ExitInterviewSpecialist(BaseSpecialist):
             "scratchpad": {
                 "termination_reason": summary,
             },
+        }
+
+    # ─── #243: Artifact-presence fast-path result ────────────────────────
+
+    def _build_artifact_complete_result(self, specialist: str, artifacts_found: list) -> Dict[str, Any]:
+        """Spoke specialist produced its declared artifacts — accept without LLM verification."""
+        return {
+            "messages": [AIMessage(
+                content=f"Task verified complete (artifact presence): {specialist} produced {', '.join(artifacts_found)}"
+            )],
+            "task_is_complete": True,
+            "artifacts": {
+                "exit_interview_result": {
+                    "is_complete": True,
+                    "reasoning": f"Artifact-presence fast-path: {specialist} declared produces_artifacts {artifacts_found}, all present and non-empty.",
+                },
+            },
+            "scratchpad": {},
         }

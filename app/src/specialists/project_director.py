@@ -28,6 +28,10 @@ from ..resilience.cycle_detection import detect_cycle_with_pattern
 
 logger = logging.getLogger(__name__)
 
+# #244: Size gate for read_file — encourage delegate() over context-stuffing.
+# Only fires at fork_depth == 0 (parent PD). Children have fresh context.
+_READ_FILE_SIZE_LIMIT = 2048  # chars (~500 tokens)
+
 
 # Tool parameter schemas for OpenAI function calling format
 _TOOL_PARAMS: Dict[str, Dict[str, Any]] = {
@@ -411,6 +415,16 @@ class ProjectDirector(BaseSpecialist):
             if not result.startswith("Error:"):
                 if tool_def.function == "list_directory":
                     result = _enrich_list_directory_result(result, tool_args.get("path", ""))
+                # #244: Size gate — nudge parent PD toward delegate() for large files
+                elif tool_def.function == "read_file" and fork_depth == 0 and len(result) > _READ_FILE_SIZE_LIMIT:
+                    path = tool_args.get("path", "unknown")
+                    filename = path.rsplit("/", 1)[-1] if "/" in path else path
+                    result = (
+                        f"File {path} is too large ({len(result)} chars, ~{len(result) // 4} tokens) "
+                        f"to read into this context. "
+                        f"Use delegate() to process this file in a separate context. Example:\n"
+                        f'delegate(prompt="Process {filename}", context="{path}")'
+                    )
             else:
                 if tool_def.service == "filesystem":
                     failed_path = tool_args.get("path") or tool_args.get("source") or ""
