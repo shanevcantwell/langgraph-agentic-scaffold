@@ -466,8 +466,8 @@ async function executeWorkflow() {
         if (parts.length > 0) {
             const ts = new Date(page.timestamp).toLocaleTimeString();
             priorMessages.push({
-                role: 'assistant',
-                content: `[Prior Run ${ts}]\n\n${parts.join('\n\n')}`
+                role: 'user',
+                content: `[Prior Run Context — ${ts}]\n\n${parts.join('\n\n')}`
             });
         }
     }
@@ -1926,7 +1926,13 @@ function renderProgressEntry(entry) {
     const specialist = (entry.specialist || 'project_director').replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase();
     const tool = entry.tool || 'unknown';
 
-    // Fork entries get special rendering
+    // #250: Delegate start (pre-dispatch, no fork_metadata yet)
+    if (tool === 'delegate' && !entry.fork_metadata) {
+        addThoughtStreamEntry(specialist, entry.args_summary || 'Delegating to child run...', 'lifecycle');
+        return;
+    }
+
+    // Fork entries get special rendering (delegate completion with fork_metadata)
     if (entry.fork_metadata) {
         const fm = entry.fork_metadata;
         const route = (fm.child_routing_history || []).join(' \u2192 ');

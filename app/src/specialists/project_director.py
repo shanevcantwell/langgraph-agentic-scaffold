@@ -301,6 +301,18 @@ class ProjectDirector(BaseSpecialist):
                 for tc in pending:
                     tool_name = tc.get("name", "unknown")
                     tool_args = tc.get("args", {})
+
+                    # #250: Publish delegate start event before blocking child run
+                    if run_id and tool_name == "delegate":
+                        publish_progress(run_id, {
+                            "specialist": self.specialist_name,
+                            "iteration": iteration,
+                            "tool": "delegate",
+                            "args_summary": json.dumps(tool_args, default=str)[:200],
+                            "success": True,
+                            "observation_preview": "Starting child run...",
+                        })
+
                     observation = self._dispatch_tool_call(
                         tc, tools, successful_paths, captured_artifacts,
                         run_id=run_id, fork_depth=fork_depth,

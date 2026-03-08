@@ -58,20 +58,18 @@ def create_initial_state(
         ... )
     """
     # ADR-CORE-075: Build message list with prior conversation context
+    # Prior run context is injected into the user message (not as separate messages)
+    # to avoid chat-template violations — Qwen3.5's Jinja template requires
+    # the first non-system message to be role:user. Separate AIMessages before
+    # the user message trigger "No user query found in messages."
     messages = []
     if prior_messages:
-        # Hard cap: last 3 user/assistant pairs (6 messages)
         capped = prior_messages[-6:]
-        for msg in capped:
-            role = msg.get("role", "")
-            content = msg.get("content", "")
-            if not content:
-                continue
-            if role == "user":
-                messages.append(HumanMessage(content=content))
-            elif role == "assistant":
-                messages.append(AIMessage(content=content))
-    # Current turn is always appended last
+        context_parts = [msg.get("content", "") for msg in capped if msg.get("content")]
+        if context_parts:
+            context_block = "\n\n---\n\n".join(context_parts)
+            goal = f"[Context from prior runs]\n\n{context_block}\n\n---\n\n[Current request]\n\n{goal}"
+    # Current turn is always the single user message
     messages.append(HumanMessage(content=goal, name=user_name))
 
     # Build core state structure

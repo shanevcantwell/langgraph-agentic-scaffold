@@ -28,6 +28,12 @@ Use tool schemas for parameters. Key guidance:
 
 ---
 
+### Context Is Limited
+
+You're working with the confines of 32Ktok-64Ktok maximum context window. Strategize using delegate() to complete a subtask to get back only a summary of the steps being completed. Pay attention to the context hint about recursive call depth you are at and take that into account when decomposing task completion into subtasks.
+
+---
+
 ### Context Is Ephemeral
 
 When you call `DONE`, **all context held by this PD disappears**. The verifier only sees the filesystem and artifacts — never your intermediate observations.

@@ -23,25 +23,27 @@ class TestCreateInitialStateBaseline:
 
 
 class TestPriorMessages:
-    """ADR-CORE-075: prior_messages threading."""
+    """ADR-CORE-075: prior_messages merged into goal message for chat-template safety."""
 
-    def test_prior_messages_prepended_to_current(self):
+    def test_prior_messages_merged_into_goal(self):
+        """Prior context is merged into the single user message, not separate messages."""
         prior = [
             {"role": "user", "content": "First question"},
             {"role": "assistant", "content": "First answer"},
         ]
         state = create_initial_state("Follow-up", prior_messages=prior)
         msgs = state["messages"]
-        assert len(msgs) == 3
+        # Single merged message
+        assert len(msgs) == 1
         assert isinstance(msgs[0], HumanMessage)
-        assert msgs[0].content == "First question"
-        assert isinstance(msgs[1], AIMessage)
-        assert msgs[1].content == "First answer"
-        assert isinstance(msgs[2], HumanMessage)
-        assert msgs[2].content == "Follow-up"
+        assert "First question" in msgs[0].content
+        assert "First answer" in msgs[0].content
+        assert "Follow-up" in msgs[0].content
+        assert "[Context from prior runs]" in msgs[0].content
+        assert "[Current request]" in msgs[0].content
 
     def test_hard_cap_last_six_messages(self):
-        """Only last 6 prior messages (3 user/assistant pairs) are kept."""
+        """Only last 6 prior messages are kept before merging."""
         prior = [
             {"role": "user", "content": f"Q{i}"}
             if i % 2 == 0
@@ -50,10 +52,11 @@ class TestPriorMessages:
         ]
         state = create_initial_state("Latest", prior_messages=prior)
         msgs = state["messages"]
-        # 6 capped + 1 current = 7
-        assert len(msgs) == 7
-        # First kept message should be from index 4 (10-6=4)
-        assert msgs[0].content == "Q4"
+        assert len(msgs) == 1
+        # First 4 messages (indices 0-3) should be dropped; index 4 onward kept
+        assert "Q4" in msgs[0].content
+        assert "Q0" not in msgs[0].content
+        assert "Latest" in msgs[0].content
 
     def test_empty_content_skipped(self):
         prior = [
@@ -63,31 +66,33 @@ class TestPriorMessages:
         ]
         state = create_initial_state("Follow-up", prior_messages=prior)
         msgs = state["messages"]
-        # Empty assistant content skipped, so: Real question + Another question + Follow-up
-        assert len(msgs) == 3
-        assert msgs[0].content == "Real question"
-        assert msgs[1].content == "Another question"
-        assert msgs[2].content == "Follow-up"
+        assert len(msgs) == 1
+        assert "Real question" in msgs[0].content
+        assert "Another question" in msgs[0].content
+        assert "Follow-up" in msgs[0].content
 
-    def test_unknown_role_skipped(self):
+    def test_unknown_role_included_if_has_content(self):
+        """All roles with content are merged — role distinction no longer matters."""
         prior = [
             {"role": "system", "content": "You are helpful"},
             {"role": "user", "content": "Hello"},
         ]
         state = create_initial_state("Follow-up", prior_messages=prior)
         msgs = state["messages"]
-        # system role skipped
-        assert len(msgs) == 2
-        assert msgs[0].content == "Hello"
-        assert msgs[1].content == "Follow-up"
+        assert len(msgs) == 1
+        assert "You are helpful" in msgs[0].content
+        assert "Hello" in msgs[0].content
+        assert "Follow-up" in msgs[0].content
 
     def test_none_prior_messages_no_effect(self):
         state = create_initial_state("Hello", prior_messages=None)
         assert len(state["messages"]) == 1
+        assert state["messages"][0].content == "Hello"
 
     def test_empty_list_prior_messages_no_effect(self):
         state = create_initial_state("Hello", prior_messages=[])
         assert len(state["messages"]) == 1
+        assert state["messages"][0].content == "Hello"
 
 
 class TestConversationId:

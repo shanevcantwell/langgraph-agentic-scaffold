@@ -57,8 +57,11 @@ class DefaultResponderSpecialist(BaseSpecialist):
 
         # Per the termination sequence, this specialist signals completion
         # by adding its final message and setting the `task_is_complete` flag.
+        # #245: Write final_user_response.md so EndSpecialist skips LLM synthesis.
+        # Terminal specialists produce self-contained responses — no synthesis needed.
         return {
             "messages": [ai_message],
             "task_is_complete": True,
+            "artifacts": {"final_user_response.md": text_response},
             "scratchpad": {"user_response_snippets": [text_response]}
         }
