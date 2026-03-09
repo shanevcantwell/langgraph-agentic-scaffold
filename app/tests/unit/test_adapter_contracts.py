@@ -43,6 +43,16 @@ MALFORMED_RESPONSES = [
         {"key": "test", "value": 123},
         id="json_in_markdown_surrounded_by_text"
     ),
+    pytest.param(
+        "```json\n{\n  \"key\": \"test\",\n  \"value\": 123\n}\n```",
+        {"key": "test", "value": 123},
+        id="json_object_in_multiline_markdown_block"
+    ),
+    pytest.param(
+        "Here is the result:\n```javascript\n{\"key\": \"test\", \"value\": 123}\n```",
+        {"key": "test", "value": 123},
+        id="json_in_non_json_fence"
+    ),
 ]
 
 # --- Contract Test ---

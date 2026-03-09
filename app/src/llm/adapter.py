@@ -70,27 +70,43 @@ class BaseAdapter(ABC):
 
     def _robustly_parse_json_from_text(self, text: str) -> Optional[Dict[str, Any]]:
         """
-        A concrete helper to robustly extract a JSON object from a string that might
-        contain extraneous text or be wrapped in markdown code blocks.
+        Robustly extract a JSON object from text that may contain markdown fences
+        or surrounding explanatory text.
         """
         if not isinstance(text, str):
             return None
 
-        # Pattern to find JSON within markdown code blocks (```json ... ```)
-        match = re.search(r"```(?:json)?\s*({.*?})\s*```", text, re.DOTALL)
-        if match:
-            text = match.group(1)
+        stripped = text.strip()
 
-        try:
-            return cast(Dict[str, Any], json.loads(text))
-        except json.JSONDecodeError:
-            # Fallback to finding the first '{' and last '}'
+        # First prefer any fenced block content, regardless of declared language.
+        # This handles valid JSON objects wrapped in ```json ... ``` or plain ``` ... ```.
+        fenced_blocks = re.findall(r"```(?:[\w+-]+)?\s*(.*?)\s*```", stripped, re.DOTALL)
+        for block in fenced_blocks:
             try:
-                start_index = text.find('{')
-                end_index = text.rfind('}')
-                if start_index != -1 and end_index != -1 and end_index > start_index:
-                    json_str = text[start_index:end_index+1]
-                    return cast(Dict[str, Any], json.loads(json_str))
-            except (json.JSONDecodeError, IndexError):
-                return None
+                parsed = json.loads(block.strip())
+                if isinstance(parsed, dict):
+                    return cast(Dict[str, Any], parsed)
+            except json.JSONDecodeError:
+                continue
+
+        # Try parsing the whole string directly.
+        try:
+            parsed = json.loads(stripped)
+            if isinstance(parsed, dict):
+                return cast(Dict[str, Any], parsed)
+        except json.JSONDecodeError:
+            pass
+
+        # Fallback to finding the first JSON object in the text.
+        try:
+            start_index = stripped.find('{')
+            end_index = stripped.rfind('}')
+            if start_index != -1 and end_index != -1 and end_index > start_index:
+                json_str = stripped[start_index:end_index+1]
+                parsed = json.loads(json_str)
+                if isinstance(parsed, dict):
+                    return cast(Dict[str, Any], parsed)
+        except (json.JSONDecodeError, IndexError):
+            return None
+
         return None
