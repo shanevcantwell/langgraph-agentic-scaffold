@@ -21,13 +21,12 @@ import threading
 import time
 from typing import Dict, Any, List, Optional
 
-from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
-import httpx
+from openai import OpenAI
 from langchain_core.messages import BaseMessage
 
 from local_inference_pool import ServerPool, ConcurrentDispatcher
 
-from .adapter import StandardizedLLMRequest, LLMInvocationError, RateLimitError, ProxyError
+from .adapter import StandardizedLLMRequest, LLMInvocationError
 from .local_inference_adapter import LocalInferenceAdapter
 from .server_quirks import get_quirks, ServerQuirks
 
@@ -168,45 +167,19 @@ class PooledLocalInferenceAdapter(LocalInferenceAdapter):
             api_kwargs = self._build_request_kwargs(request)
             start_time = time.perf_counter()
 
-            try:
-                # Create client for the acquired server
-                # Pool stores server-level URLs (no /v1 suffix); OpenAI SDK needs /v1
-                # Use per-server api_key from pool (v0.4.0) — each server has its own token
-                server_api_key = self._pool.servers[server_url].api_key or self._api_key
-                client = OpenAI(base_url=f"{server_url}/v1", api_key=server_api_key)
-                completion = client.chat.completions.create(**api_kwargs, timeout=self.timeout)
-                return self._parse_completion(completion, request, api_kwargs, start_time)
+            # Create client for the acquired server
+            # Pool stores server-level URLs (no /v1 suffix); OpenAI SDK needs /v1
+            # Use per-server api_key from pool (v0.4.0) — each server has its own token
+            server_api_key = self._pool.servers[server_url].api_key or self._api_key
+            client = OpenAI(base_url=f"{server_url}/v1", api_key=server_api_key)
 
-            except OpenAIRateLimitError as e:
-                error_message = f"API rate limit exceeded on {server_url}: {e}"
-                logger.error(error_message, exc_info=True)
-                raise RateLimitError(error_message) from e
-
-            except (APIConnectionError, PermissionDeniedError, httpx.ProxyError) as e:
-                self._pool.report_server_error(server_url, str(e))
-                clean_message = (
-                    f"A network error occurred connecting to {server_url}. "
-                    "This is often due to a proxy blocking the request. "
-                    "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted."
-                )
-                logger.error(f"{clean_message} Original error: {e}", exc_info=True)
-                raise ProxyError(clean_message) from e
-
-            except BadRequestError as e:
-                if "context length" in str(e).lower():
-                    error_message = (
-                        f"API context length error on {server_url}: {e}. "
-                        "This can happen if the configured 'context_window' is too large for the loaded model."
-                    )
-                    logger.error(error_message, exc_info=True)
-                    raise LLMInvocationError(error_message) from e
-                else:
-                    logger.error(f"API BadRequestError on {server_url}: {e}", exc_info=True)
-                    raise LLMInvocationError(f"API BadRequestError: {e}") from e
-
-            except Exception as e:
-                logger.error(f"API error on {server_url}: {e}", exc_info=True)
-                raise LLMInvocationError(f"API error: {e}") from e
+            return self._call_with_error_handling(
+                lambda: client.chat.completions.create(**api_kwargs, timeout=self.timeout),
+                request, api_kwargs, start_time,
+                server_url=server_url,
+                on_connection_error=lambda e: self._pool.report_server_error(server_url, str(e)),
+                capture_errors=False,  # Pooled path doesn't capture traces on errors (see #TBD)
+            )
         finally:
             # CRITICAL: Always release the slot. A leaked slot is a silent deadlock.
             self._pool.release_server(server_url)

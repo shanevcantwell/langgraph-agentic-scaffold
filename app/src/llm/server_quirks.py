@@ -127,6 +127,8 @@ class ServerQuirks:
 # Registry — maps server_type string to its quirk set
 # ---------------------------------------------------------------------------
 
+# One entry per server software — get_quirks() strips "_pool" suffix so
+# "lmstudio_pool" resolves to "lmstudio", etc.
 QUIRKS_REGISTRY: Dict[Optional[str], ServerQuirks] = {
     "lmstudio": ServerQuirks(
         preprocess_response=strip_harmony_tokens,
@@ -135,21 +137,7 @@ QUIRKS_REGISTRY: Dict[Optional[str], ServerQuirks] = {
         skip_schema_enforcement=False,
         extra_body_injections=_no_extra_body,
     ),
-    "lmstudio_pool": ServerQuirks(
-        preprocess_response=strip_harmony_tokens,
-        resolve_schema_refs=inline_schema_refs,
-        format_messages_post=force_empty_content_on_tool_calls,
-        skip_schema_enforcement=False,
-        extra_body_injections=_no_extra_body,
-    ),
     "llama_server": ServerQuirks(
-        preprocess_response=_noop_preprocess,
-        resolve_schema_refs=inline_schema_refs,
-        format_messages_post=_noop_format_messages,
-        skip_schema_enforcement=True,
-        extra_body_injections=_llama_server_extra_body,
-    ),
-    "llama_server_pool": ServerQuirks(
         preprocess_response=_noop_preprocess,
         resolve_schema_refs=inline_schema_refs,
         format_messages_post=_noop_format_messages,
@@ -168,5 +156,10 @@ QUIRKS_REGISTRY: Dict[Optional[str], ServerQuirks] = {
 
 
 def get_quirks(server_type: Optional[str]) -> ServerQuirks:
-    """Look up quirks for a server type, falling back to generic."""
-    return QUIRKS_REGISTRY.get(server_type, QUIRKS_REGISTRY[None])
+    """Look up quirks for a server type, falling back to generic.
+
+    Strips '_pool' suffix so pool provider types (e.g. 'lmstudio_pool')
+    resolve to the same quirk set as their non-pooled counterpart.
+    """
+    normalized = server_type.removesuffix("_pool") if server_type else server_type
+    return QUIRKS_REGISTRY.get(normalized, QUIRKS_REGISTRY[None])

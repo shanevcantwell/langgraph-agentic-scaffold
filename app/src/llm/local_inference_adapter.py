@@ -638,48 +638,90 @@ class LocalInferenceAdapter(BaseAdapter):
             capture_trace(request, result, latency_ms, self.model_name)
             return result
 
+    def _call_with_error_handling(
+        self,
+        api_call,
+        request: StandardizedLLMRequest,
+        api_kwargs: Dict[str, Any],
+        start_time: float,
+        server_url: Optional[str] = None,
+        on_connection_error=None,
+        capture_errors: bool = True,
+    ) -> Dict[str, Any]:
+        """Execute an OpenAI API call with standardized error handling.
+
+        Wraps the call in a try/except chain that maps OpenAI exceptions to
+        LAS-specific error types. Shared by LocalInferenceAdapter.invoke() and
+        PooledLocalInferenceAdapter.invoke() to avoid duplicating this logic.
+
+        Args:
+            api_call: Zero-arg callable that performs the API call and returns a completion.
+            request: The original request (for trace capture).
+            api_kwargs: The kwargs dict (for _parse_completion).
+            start_time: perf_counter timestamp for latency measurement.
+            server_url: If set, included in error messages for diagnostics.
+            on_connection_error: Optional callback(e) invoked before raising on connection errors.
+            capture_errors: If True, capture_trace on error paths (default True).
+        """
+        url_ctx = f" on {server_url}" if server_url else ""
+        try:
+            completion = api_call()
+            return self._parse_completion(completion, request, api_kwargs, start_time)
+
+        except OpenAIRateLimitError as e:
+            error_message = f"API rate limit exceeded{url_ctx}: {e}"
+            logger.error(error_message, exc_info=True)
+            if capture_errors:
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, {"error": error_message}, latency_ms, self.model_name)
+            raise RateLimitError(error_message) from e
+
+        except (APIConnectionError, PermissionDeniedError, httpx.ProxyError) as e:
+            if on_connection_error:
+                on_connection_error(e)
+            clean_message = (
+                f"A network error occurred{' connecting to ' + server_url if server_url else ''}, "
+                "which is often due to a proxy blocking the request. "
+                "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted."
+            )
+            logger.error(f"{clean_message} Original error: {e}", exc_info=True)
+            if capture_errors:
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
+            raise ProxyError(clean_message) from e
+
+        except BadRequestError as e:
+            if "context length" in str(e).lower():
+                error_message = (
+                    f"API context length error{url_ctx}: {e}. This can happen if the configured "
+                    "'context_window' in config.yaml is too large for the loaded model."
+                )
+                logger.error(error_message, exc_info=True)
+                if capture_errors:
+                    latency_ms = int((time.perf_counter() - start_time) * 1000)
+                    capture_trace(request, {"error": error_message}, latency_ms, self.model_name)
+                raise LLMInvocationError(error_message) from e
+            else:
+                logger.error(f"API BadRequestError{url_ctx}: {e}", exc_info=True)
+                if capture_errors:
+                    latency_ms = int((time.perf_counter() - start_time) * 1000)
+                    capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
+                raise LLMInvocationError(f"API BadRequestError: {e}") from e
+
+        except Exception as e:
+            logger.error(f"API error{url_ctx}: {e}", exc_info=True)
+            if capture_errors:
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
+            raise LLMInvocationError(f"API error: {e}") from e
+
     def invoke(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
         """
         Invokes the model via OpenAI-compatible chat completions API.
         """
         api_kwargs = self._build_request_kwargs(request)
         start_time = time.perf_counter()
-
-        try:
-            completion = self.client.chat.completions.create(**api_kwargs, timeout=self.timeout)
-            return self._parse_completion(completion, request, api_kwargs, start_time)
-
-        except OpenAIRateLimitError as e:
-            error_message = f"API rate limit exceeded: {e}"
-            logger.error(error_message, exc_info=True)
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-            capture_trace(request, {"error": error_message}, latency_ms, self.model_name)
-            raise RateLimitError(error_message) from e
-
-        except (APIConnectionError, PermissionDeniedError, httpx.ProxyError) as e:
-            clean_message = ("A network error occurred, which is often due to a proxy blocking the request. "
-                             "Please check your proxy's 'squid.conf' to ensure the destination is whitelisted.")
-            logger.error(f"{clean_message} Original error: {e}", exc_info=True)
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-            capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
-            raise ProxyError(clean_message) from e
-
-        except BadRequestError as e:
-            if "context length" in str(e).lower():
-                error_message = (f"API context length error: {e}. This can happen if the configured "
-                                 f"'context_window' in config.yaml is too large for the loaded model.")
-                logger.error(error_message, exc_info=True)
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, {"error": error_message}, latency_ms, self.model_name)
-                raise LLMInvocationError(error_message) from e
-            else:
-                logger.error(f"API BadRequestError: {e}", exc_info=True)
-                latency_ms = int((time.perf_counter() - start_time) * 1000)
-                capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
-                raise LLMInvocationError(f"API BadRequestError: {e}") from e
-
-        except Exception as e:
-            logger.error(f"API error during invoke: {e}", exc_info=True)
-            latency_ms = int((time.perf_counter() - start_time) * 1000)
-            capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
-            raise LLMInvocationError(f"API error: {e}") from e
+        return self._call_with_error_handling(
+            lambda: self.client.chat.completions.create(**api_kwargs, timeout=self.timeout),
+            request, api_kwargs, start_time,
+        )
