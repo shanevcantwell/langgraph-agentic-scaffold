@@ -65,7 +65,9 @@ class PooledLocalInferenceAdapter(LocalInferenceAdapter):
         self._pool = pool
         self._dispatcher = dispatcher
         self._loop = loop
-        # Don't use parent's self.client — we create per-request clients
+        # Parent's __init__ creates an OpenAI client with _POOL_MANAGED_URL placeholder.
+        # We discard it — pooled adapters create per-request clients in invoke().
+        # The wasted HTTP client is one per adapter at startup, not per-request.
         self.client = None
         # Thread-local quirk storage — invoke() sets per-request, hooks read it.
         # Uses threading.local() (same pattern as TraceAccumulator in tracing.py)

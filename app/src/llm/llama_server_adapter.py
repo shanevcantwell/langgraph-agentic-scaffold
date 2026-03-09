@@ -5,17 +5,19 @@ Adds quirks that work around llama-server-specific behavior:
 1. Schema enforcement skipped — llama-server's grammar converter can't handle
    oneOf schemas in response_format: json_schema. Falls back to prompt-based
    JSON + robust parser.
-2. $ref inlining — same limitation as LM Studio; Pydantic-generated $defs/$ref
-   must be flattened.
-3. Thinking mode disabled — llama-server rejects assistant messages when
+2. Thinking mode disabled — llama-server rejects assistant messages when
    Qwen3.5's thinking mode is enabled. Injects chat_template_kwargs to
    disable per-request.
+
+Note: $ref inlining is handled by server_quirks.py for the pooled path.
+The non-pooled LlamaServerAdapter skips schema enforcement entirely, so
+_resolve_schema_refs is never reached.
 """
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .local_inference_adapter import LocalInferenceAdapter
-from .server_quirks import inline_schema_refs, _llama_server_extra_body
+from .server_quirks import _llama_server_extra_body
 
 logger = logging.getLogger(__name__)
 
@@ -28,18 +30,18 @@ class LlamaServerAdapter(LocalInferenceAdapter):
     llama-server deviates from the standard OpenAI chat completions protocol.
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        model_config: Dict[str, Any],
+        base_url: str,
+        system_prompt: str,
+        api_key: Optional[str] = None,
+    ):
         # Force skip_schema_enforcement — llama-server can't handle oneOf in json_schema
-        if "model_config" in kwargs:
-            kwargs["model_config"] = dict(kwargs["model_config"])
-            kwargs["model_config"]["skip_schema_enforcement"] = True
-        elif args:
-            # model_config is the first positional arg
-            args = list(args)
-            args[0] = dict(args[0])
-            args[0]["skip_schema_enforcement"] = True
-            args = tuple(args)
-        super().__init__(*args, **kwargs)
+        model_config = dict(model_config)  # defensive copy
+        model_config["skip_schema_enforcement"] = True
+        super().__init__(model_config=model_config, base_url=base_url,
+                         system_prompt=system_prompt, api_key=api_key)
 
     # --- Hook overrides ---
     # Note: _resolve_schema_refs is NOT overridden here. LlamaServerAdapter forces
