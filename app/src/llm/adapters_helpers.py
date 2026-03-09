@@ -1,6 +1,5 @@
 # app/src/llm/adapters_helpers.py
-import json
-from typing import List, Dict, Any
+from typing import List
 from langchain_core.messages import BaseMessage, HumanMessage
 
 from google.genai import types
@@ -54,50 +53,3 @@ def format_gemini_messages(messages: List[BaseMessage], static_system_prompt: st
         gemini_contents.append(content)
 
     return gemini_contents
-
-
-def format_openai_messages(messages: List[BaseMessage], static_system_prompt: str) -> List[Dict[str, Any]]:
-    """
-    Prepares a list of LangChain messages for an OpenAI-compatible API.
-
-    This function converts LangChain messages into the format expected by
-    OpenAI's Chat Completions API, including handling system, user, assistant,
-    and tool messages correctly. It combines static and runtime system prompts
-    into a single system message, which is critical for components like the
-    RouterSpecialist.
-
-    Args:
-        messages: The list of LangChain BaseMessage objects.
-        static_system_prompt: The static system prompt configured for the specialist.
-
-    Returns:
-        A list of dictionaries formatted for the OpenAI API.
-    """
-    # Collect all system instructions: static (from init) and dynamic (from runtime messages).
-    all_system_contents = [static_system_prompt] if static_system_prompt else []
-    runtime_system_contents = [msg.content for msg in messages if msg.type == 'system']
-    all_system_contents.extend(runtime_system_contents)
-
-    # Combine all system content into a single message, filtering out any empty strings.
-    final_system_content = "\n\n".join(filter(None, all_system_contents))
-
-    api_messages = []
-    if final_system_content:
-        api_messages.append({"role": "system", "content": final_system_content})
-
-    # Process the rest of the messages, skipping the SystemMessages we've already handled.
-    for msg in messages:
-        if msg.type == 'system':
-            continue  # Already processed
-        elif msg.type == 'human':
-            api_messages.append({"role": "user", "content": msg.content})
-        elif msg.type == 'ai':
-            ai_msg_dict = {"role": "assistant", "content": msg.content or ""}
-            if msg.tool_calls:
-                ai_msg_dict["tool_calls"] = msg.tool_calls
-                ai_msg_dict["content"] = None  # Per OpenAI spec, content is null when tool_calls are present
-            api_messages.append(ai_msg_dict)
-        elif msg.type == 'tool':
-            api_messages.append({"role": "tool", "content": msg.content, "tool_call_id": str(msg.tool_call_id)})
-
-    return api_messages
