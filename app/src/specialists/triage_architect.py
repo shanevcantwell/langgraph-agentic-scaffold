@@ -1,6 +1,6 @@
 import logging
 from typing import Dict, Any, List
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 from pydantic import ValidationError
 from .base import BaseSpecialist
 from ..interface.context_schema import ContextPlan
@@ -92,10 +92,14 @@ class TriageArchitect(BaseSpecialist):
             return self._fallback_plan(str(e))
 
     def _fallback_plan(self, reason: str) -> Dict[str, Any]:
-        """Return a minimal valid ContextPlan when LLM output is unusable (#154)."""
+        """Return a minimal valid ContextPlan when LLM output is unusable (#154).
+
+        Writes to scratchpad only — NOT messages. Error metadata is operational
+        state, not conversation content. Writing AIMessage here would pollute
+        downstream specialists' inputs (see #258, #259).
+        """
         fallback = ContextPlan(reasoning=f"Triage fallback: {reason}")
         return {
-            "messages": [AIMessage(content=f"[Triage] {reason}")],
             "scratchpad": {
                 "triage_reasoning": fallback.reasoning,
                 "triage_actions": [],

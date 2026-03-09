@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 79 | 932 |
+| Unit | 79 | 933 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **114** | **1213** |
+| **Total** | **114** | **1214** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1687,6 +1687,8 @@
   - *When skip_schema_enforcement=True, tool requests also skip response_format.*
 - **`test_recovers_valid_json_from_code_fenced_500`**
   - *InternalServerError with code-fenced valid JSON → recovery succeeds.*
+- **`test_recovers_from_unwrapped_body_format`**
+  - *OpenAI client unwraps error envelope — body is {'code', 'message', 'type'} not {'error': {...}}.*
 - **`test_non_parseable_500_still_raises`**
   - *InternalServerError with unparseable content → raises LLMInvocationError.*
 - **`test_non_grammar_500_still_raises`**

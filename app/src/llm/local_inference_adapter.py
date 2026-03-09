@@ -712,7 +712,12 @@ class LocalInferenceAdapter(BaseAdapter):
             # #255: Grammar parse errors (e.g. code-fenced JSON) return 500 with
             # the valid response embedded in the error body message. Try to recover.
             error_body = getattr(e, 'body', None)
-            error_message = error_body.get('error', {}).get('message', '') if isinstance(error_body, dict) else ''
+            # OpenAI client unwraps the outer 'error' envelope — body is already
+            # {'code': 500, 'message': '...', 'type': 'server_error'}
+            if isinstance(error_body, dict):
+                error_message = error_body.get('message', '') or error_body.get('error', {}).get('message', '')
+            else:
+                error_message = str(e)
             if "Failed to parse input" in error_message:
                 recovered = self._robustly_parse_json_from_text(error_message)
                 if recovered:

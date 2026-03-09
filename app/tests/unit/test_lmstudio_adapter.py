@@ -1061,6 +1061,43 @@ class TestGrammarParseRecovery:
         assert result["json_response"]["actions"] == []
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_recovers_from_unwrapped_body_format(self, mock_openai, adapter):
+        """OpenAI client unwraps error envelope — body is {'code', 'message', 'type'} not {'error': {...}}."""
+        from openai import InternalServerError
+        # Real openai client sends body WITHOUT the outer 'error' wrapper
+        error_body = {
+            "code": 500,
+            "message": 'Failed to parse input at pos 403: ```json\n{"reasoning": "Clear question", "actions": []}\n```',
+            "type": "server_error"
+        }
+        response = MagicMock()
+        response.status_code = 500
+        response.json.return_value = error_body
+        error = InternalServerError(
+            message="Internal Server Error",
+            response=response,
+            body=error_body,
+        )
+        adapter.client.chat.completions.create.side_effect = error
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="test")],
+            output_model_class=type("ContextPlan", (BaseModel,), {
+                "__annotations__": {"reasoning": str, "actions": list}
+            }),
+        )
+
+        import time
+        api_kwargs = adapter._build_request_kwargs(request)
+        result = adapter._call_with_error_handling(
+            lambda: adapter.client.chat.completions.create(**api_kwargs),
+            request, api_kwargs, time.perf_counter(),
+        )
+
+        assert result["json_response"]["reasoning"] == "Clear question"
+        assert result["json_response"]["actions"] == []
+
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_non_parseable_500_still_raises(self, mock_openai, adapter):
         """InternalServerError with unparseable content → raises LLMInvocationError."""
         from openai import InternalServerError
