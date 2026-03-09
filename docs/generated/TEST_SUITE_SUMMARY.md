@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 74 | 872 |
+| Unit | 78 | 908 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **109** | **1153** |
+| **Total** | **113** | **1189** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1956,6 +1956,54 @@
   - *Tests that procedural specialists emit trace entries even without LLM calls.*
 - **`test_safe_executor_emits_trace_for_mcp_delegating_specialist`**
   - *ADR-073 Phase 1: All specialists emit traces unconditionally.*
+
+## `app/tests/unit/test_openai_request_adapter.py`
+
+- **`test_single_user_message`**
+- **`test_multi_turn_conversation`**
+- **`test_system_messages_excluded_from_prior`**
+- **`test_default_model`**
+- **`test_simple_model`**
+- **`test_custom_model`**
+- **`test_text_and_image`**
+- **`test_multiple_text_parts`**
+- **`test_non_data_url_ignored`**
+- **`test_conversation_id_passed_through`**
+- **`test_no_conversation_id`**
+- **`test_empty_messages`**
+- **`test_only_assistant_messages`**
+- **`test_single_user_no_prior`**
+
+## `app/tests/unit/test_openai_response_formatter.py`
+
+- **`test_basic_response_with_artifact`**
+- **`test_no_artifact_falls_back_to_message`**
+- **`test_empty_state`**
+- **`test_model_passed_through`**
+- **`test_response_has_usage`**
+- **`test_interrupt_as_regular_content`**
+- **`test_error_in_scratchpad`**
+- **`test_response_clean`**
+
+## `app/tests/unit/test_openai_schema.py`
+
+- **`test_minimal_request`**
+- **`test_streaming_request`**
+- **`test_multimodal_content`**
+- **`test_conversation_id`**
+- **`test_multi_turn_messages`**
+- **`test_response_structure`**
+- **`test_response_has_id_and_created`**
+- **`test_response_serialization`**
+- **`test_chunk_structure`**
+- **`test_finish_chunk`**
+- **`test_role_chunk`**
+- **`test_chunk_json_serialization`**
+- **`test_response_no_las_metadata`**
+- **`test_chunk_no_las_metadata`**
+
+## `app/tests/unit/test_openai_translator.py`
+
 
 ## `app/tests/unit/test_parallel_reducer.py`
 

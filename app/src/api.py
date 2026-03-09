@@ -20,6 +20,10 @@ from .utils.errors import WorkflowError
 from .utils.cancellation_manager import CancellationManager
 from langsmith import Client
 from .interface.translator import AgUiTranslator
+from .interface.openai_schema import ChatCompletionRequest
+from .interface.openai_request_adapter import translate_request
+from .interface.openai_response_formatter import format_sync_response
+from .interface.openai_translator import OpenAiTranslator
 
 langsmith_client: Optional[Client] = None
 logger = logging.getLogger(__name__)
@@ -671,6 +675,144 @@ async def stream_graph_events(request: InvokeRequest):
         logger.error(f"Workflow streaming error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")
 
+
+## ---------------------------------------------------------------------------
+## Chat Head — OpenAI-compatible endpoints (ADR-UI-003: Two-Headed Architecture)
+## ---------------------------------------------------------------------------
+
+# Track active run IDs for observability head discovery (GET /v1/runs/active)
+_active_runs: Dict[str, Any] = {}
+
+
+@app.post("/v1/chat/completions")
+async def chat_completions(request: ChatCompletionRequest):
+    """
+    OpenAI-compatible chat completion endpoint.
+
+    Supports both streaming (stream: true) and non-streaming (stream: false).
+    Produces spec-compliant responses with no vendor extensions.
+
+    The model field is a routing profile selector (e.g., 'las-default', 'las-simple').
+    """
+    if not workflow_runner:
+        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
+
+    kwargs = translate_request(request)
+    logger.info(f"OpenAI chat completion: model={request.model}, stream={request.stream}, goal='{kwargs['goal'][:80]}'")
+
+    if request.stream:
+        return await _openai_stream(request, kwargs)
+    else:
+        return await _openai_sync(request, kwargs)
+
+
+async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
+    """Handle non-streaming chat completion."""
+    try:
+        run_id = str(uuid.uuid4())
+        _active_runs[run_id] = {"model": request.model, "status": "running"}
+
+        final_state = workflow_runner.run(
+            goal=kwargs["goal"],
+            text_to_process=kwargs.get("text_to_process"),
+            image_to_process=kwargs.get("image_to_process"),
+            use_simple_chat=kwargs.get("use_simple_chat", False),
+            run_id=run_id,
+        )
+
+        _active_runs[run_id]["status"] = "completed"
+        return format_sync_response(final_state, request, run_id=run_id)
+
+    except WorkflowError as e:
+        logger.error(f"OpenAI sync error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Workflow error: {e}")
+    finally:
+        _active_runs.pop(run_id, None)
+
+
+async def _openai_stream(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
+    """Handle streaming chat completion."""
+    try:
+        raw_stream = workflow_runner.run_streaming(
+            goal=kwargs["goal"],
+            text_to_process=kwargs.get("text_to_process"),
+            image_to_process=kwargs.get("image_to_process"),
+            use_simple_chat=kwargs.get("use_simple_chat", False),
+            conversation_id=kwargs.get("conversation_id"),
+            prior_messages=kwargs.get("prior_messages"),
+        )
+
+        translator = OpenAiTranslator(model=request.model)
+
+        async def stream_with_tracking():
+            run_id = None
+            try:
+                async for sse_line in translator.translate(raw_stream):
+                    # Capture run_id for active runs tracking
+                    if run_id is None and translator.run_id:
+                        run_id = translator.run_id
+                        _active_runs[run_id] = {"model": request.model, "status": "streaming"}
+                    yield sse_line
+            finally:
+                if run_id:
+                    _active_runs.pop(run_id, None)
+
+        return StreamingResponse(
+            stream_with_tracking(),
+            media_type="text/event-stream",
+        )
+    except WorkflowError as e:
+        logger.error(f"OpenAI streaming error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")
+
+
+@app.get("/v1/models")
+def list_models():
+    """
+    Returns available LAS routing profiles as OpenAI model objects.
+
+    The model name is a routing profile selector, not an actual LLM model identifier.
+    Actual LLM model info is observability data visible via state snapshots.
+    """
+    profiles = [
+        {"id": "las-default", "description": "Full specialist routing (triage → SA → PD → EI)"},
+        {"id": "las-simple", "description": "Simple chat mode (single ChatSpecialist)"},
+    ]
+
+    return {
+        "object": "list",
+        "data": [
+            {
+                "id": p["id"],
+                "object": "model",
+                "created": 0,
+                "owned_by": "las",
+            }
+            for p in profiles
+        ],
+    }
+
+
+@app.get("/v1/runs/active")
+def get_active_runs():
+    """
+    Returns currently active run IDs for observability head discovery.
+
+    This is the glue between the two heads (ADR-UI-003): when a run is initiated
+    from an external client (e.g., AnythingLLM via /v1/chat/completions),
+    V.E.G.A.S. needs to know the run_id to attach its observability panels.
+    """
+    return {
+        "runs": [
+            {"run_id": rid, **info}
+            for rid, info in _active_runs.items()
+        ]
+    }
+
+
+## ---------------------------------------------------------------------------
+## Observability Head — existing endpoints (unchanged)
+## ---------------------------------------------------------------------------
 
 @app.get("/v1/progress/{run_id}")
 async def get_progress(run_id: str):
