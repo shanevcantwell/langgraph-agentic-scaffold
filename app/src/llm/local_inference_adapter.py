@@ -427,6 +427,10 @@ class LocalInferenceAdapter(BaseAdapter):
             schema_source = request.output_model_class
             logger.info(f"{self.__class__.__name__}: Invoking in JSON Schema enforcement mode with schema {schema_source.__name__}.")
             schema = schema_source.model_json_schema()
+            # Inline $defs/$ref — llama-server can't resolve nested refs (llama.cpp #8073) (#260)
+            defs = schema.pop("$defs", {})
+            if defs:
+                schema = self._resolve_schema_refs(schema, defs)
             api_kwargs["response_format"] = {
                 "type": "json_schema",
                 "json_schema": {

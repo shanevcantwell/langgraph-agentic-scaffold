@@ -139,6 +139,49 @@ class TestRefInlining:
         assert "Item name" in resolved_json
         assert "Item value" in resolved_json
 
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_output_model_class_refs_inlined_in_response_format(self, mock_openai):
+        """output_model_class with nested models → response_format has no $ref/$defs (#260).
+
+        This is the bug path: _build_request_kwargs was sending raw Pydantic schemas
+        with $defs/$ref to llama-server, which can't resolve them (llama.cpp #8073).
+        """
+        adapter = LlamaServerAdapter(
+            model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+
+        class InnerAction(BaseModel):
+            action_type: str = Field(description="Type of action")
+            target: str = Field(description="Target of action")
+
+        class PlanWithNested(BaseModel):
+            reasoning: str = Field(description="Why")
+            actions: list[InnerAction] = Field(description="Actions to take")
+
+        # Verify raw schema HAS $defs/$ref (precondition)
+        raw_schema = PlanWithNested.model_json_schema()
+        raw_json = json.dumps(raw_schema)
+        assert "$defs" in raw_json, "Precondition: Pydantic should generate $defs for nested models"
+        assert "$ref" in raw_json, "Precondition: Pydantic should generate $ref for nested models"
+
+        # Build request kwargs — should inline refs
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Plan something")],
+            output_model_class=PlanWithNested,
+        )
+        kwargs = adapter._build_request_kwargs(request)
+
+        # Verify the schema sent to the API has no $ref/$defs
+        sent_schema = kwargs["response_format"]["json_schema"]["schema"]
+        sent_json = json.dumps(sent_schema)
+        assert "$ref" not in sent_json, f"$ref found in sent schema: {sent_json}"
+        assert "$defs" not in sent_json, f"$defs found in sent schema: {sent_json}"
+        # Verify inlined content is present
+        assert "Type of action" in sent_json
+        assert "Target of action" in sent_json
+
 
 # =============================================================================
 # No thinking mode injection (#255 — use --reasoning-format none launch flag)

@@ -17,6 +17,7 @@ import logging
 from typing import Dict, Any, Optional
 
 from .local_inference_adapter import LocalInferenceAdapter
+from .server_quirks import inline_schema_refs
 
 logger = logging.getLogger(__name__)
 
@@ -41,3 +42,7 @@ class LlamaServerAdapter(LocalInferenceAdapter):
     ):
         super().__init__(model_config=model_config, base_url=base_url,
                          system_prompt=system_prompt, api_key=api_key)
+
+    def _resolve_schema_refs(self, node: Any, defs: Dict[str, Any]) -> Any:
+        """Inline $ref pointers — llama-server can't resolve nested refs (llama.cpp #8073)."""
+        return inline_schema_refs(node, defs)
