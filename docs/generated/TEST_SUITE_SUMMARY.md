@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 79 | 924 |
+| Unit | 79 | 932 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **114** | **1205** |
+| **Total** | **114** | **1213** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1543,22 +1543,22 @@
 
 ## `app/tests/unit/test_llama_server_adapter.py`
 
-- **`test_forces_skip_schema_enforcement`**
-  - *LlamaServerAdapter always forces skip_schema_enforcement=True.*
-- **`test_forces_skip_even_when_config_says_false`**
-  - *skip_schema_enforcement=False in config is overridden to True.*
 - **`test_inherits_from_local_inference_adapter`**
   - *LlamaServerAdapter is a LocalInferenceAdapter, NOT LMStudioAdapter.*
-- **`test_no_response_format_with_tools`**
-  - *Tool requests should NOT include response_format (grammar can't handle oneOf).*
-- **`test_no_response_format_with_output_model`**
-  - *Structured output requests should NOT include response_format.*
+- **`test_schema_enforcement_enabled_by_default`**
+  - *LlamaServerAdapter does NOT skip schema enforcement (#255).*
+- **`test_respects_explicit_skip_schema`**
+  - *Config can explicitly skip schema enforcement if needed.*
+- **`test_response_format_with_tools`**
+  - *Tool requests SHOULD include response_format (grammar enforcement ON).*
+- **`test_response_format_with_output_model`**
+  - *Structured output requests SHOULD include response_format.*
 - **`test_refs_resolved_by_inline_schema_refs`**
   - *inline_schema_refs() from server_quirks resolves $ref pointers.*
-- **`test_extra_body_has_thinking_disabled`**
-  - *Request kwargs should include chat_template_kwargs to disable thinking.*
-- **`test_extra_body_merges_with_existing`**
-  - *Thinking mode params should merge with existing extra_body (e.g., top_k).*
+- **`test_no_chat_template_kwargs_in_extra_body`**
+  - *Request kwargs should NOT include chat_template_kwargs (#255).*
+- **`test_extra_body_preserves_user_params`**
+  - *User-specified extra_body params (e.g., top_k) still pass through.*
 - **`test_from_config_creates_adapter`**
   - *from_config should create a working LlamaServerAdapter.*
 
@@ -1685,6 +1685,12 @@
   - *skip_schema_enforcement defaults to False when not specified in config.*
 - **`test_skip_schema_enforcement_with_tools_omits_response_format`**
   - *When skip_schema_enforcement=True, tool requests also skip response_format.*
+- **`test_recovers_valid_json_from_code_fenced_500`**
+  - *InternalServerError with code-fenced valid JSON → recovery succeeds.*
+- **`test_non_parseable_500_still_raises`**
+  - *InternalServerError with unparseable content → raises LLMInvocationError.*
+- **`test_non_grammar_500_still_raises`**
+  - *InternalServerError without 'Failed to parse input' → raises normally.*
 
 ## `app/tests/unit/test_mcp_client.py`
 
@@ -2096,10 +2102,10 @@
   - *Per-request OpenAI client uses per-server api_key from pool.*
 - **`test_lmstudio_quirks_skip_schema_false`**
   - *LM Studio servers should NOT skip schema enforcement.*
-- **`test_llama_server_quirks_skip_schema_true`**
-  - *llama-server should skip schema enforcement (grammar can't handle oneOf).*
-- **`test_llama_server_quirks_inject_thinking_disabled`**
-  - *llama-server should inject chat_template_kwargs to disable thinking mode.*
+- **`test_llama_server_quirks_schema_enforcement_on`**
+  - *llama-server should keep schema enforcement ON (#255 — GBNF reference impl).*
+- **`test_llama_server_quirks_no_thinking_injection`**
+  - *llama-server should NOT inject chat_template_kwargs (#255 — use launch flag).*
 - **`test_generic_quirks_no_schema_skip`**
   - *Generic server (server_type=None) should NOT skip schema enforcement.*
 - **`test_quirks_cleared_after_request`**
@@ -2108,6 +2114,16 @@
   - *AdapterFactory initializes pool when llama_server_pool providers exist.*
 - **`test_factory_passes_server_type_for_lmstudio_pool`**
   - *AdapterFactory sets server_type on ServerConfig for lmstudio_pool providers.*
+- **`test_explicit_server_type_propagated_to_pool`**
+  - *Explicit server_type in provider config overrides type-derived value.*
+- **`test_server_type_falls_back_to_provider_type`**
+  - *When server_type is not specified, derives from provider type (backwards compat).*
+- **`test_explicit_server_type_activates_correct_quirks`**
+  - *local_pool + server_type='llama_server' should enable schema enforcement, no thinking injection (#255).*
+- **`test_config_schema_accepts_server_type`**
+  - *LLMProviderConfig validates server_type field.*
+- **`test_config_schema_server_type_optional`**
+  - *server_type defaults to None when not specified.*
 
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 

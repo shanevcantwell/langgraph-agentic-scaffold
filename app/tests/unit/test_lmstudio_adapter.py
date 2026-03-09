@@ -993,3 +993,131 @@ def test_from_config_passes_api_key(mock_openai_client):
     }
     adapter = LMStudioAdapter.from_config(provider_config, system_prompt="")
     assert adapter.api_key == "config-token"
+
+
+# =============================================================================
+# #255: Grammar Parse Error Recovery (InternalServerError with code-fenced JSON)
+# =============================================================================
+
+class TestGrammarParseRecovery:
+    """Verify _call_with_error_handling recovers valid JSON from grammar parse 500s.
+
+    When a server enforces JSON schema via grammar (PEG/GBNF), the model may wrap
+    its JSON in markdown code fences. The server rejects this with a 500, but the
+    valid JSON is embedded in the error message and can be recovered.
+    """
+
+    @pytest.fixture
+    def adapter(self):
+        with patch('app.src.llm.local_inference_adapter.OpenAI'):
+            return LMStudioAdapter(
+                model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
+                base_url=MOCK_BASE_URL,
+                system_prompt="Test"
+            )
+
+    def _make_internal_server_error(self, json_content: str) -> "InternalServerError":
+        """Build an InternalServerError matching llama-server's grammar parse failure format."""
+        from openai import InternalServerError
+        error_body = {
+            "error": {
+                "code": 500,
+                "message": f"Failed to parse input at pos 403: ```json\n{json_content}\n```",
+                "type": "server_error"
+            }
+        }
+        response = MagicMock()
+        response.status_code = 500
+        response.json.return_value = error_body
+        error = InternalServerError(
+            message="Internal Server Error",
+            response=response,
+            body=error_body,
+        )
+        return error
+
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_recovers_valid_json_from_code_fenced_500(self, mock_openai, adapter):
+        """InternalServerError with code-fenced valid JSON → recovery succeeds."""
+        valid_json = '{"reasoning": "Simple greeting", "actions": []}'
+        error = self._make_internal_server_error(valid_json)
+        adapter.client.chat.completions.create.side_effect = error
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="ping")],
+            output_model_class=type("ContextPlan", (BaseModel,), {
+                "__annotations__": {"reasoning": str, "actions": list}
+            }),
+        )
+
+        import time
+        api_kwargs = adapter._build_request_kwargs(request)
+        result = adapter._call_with_error_handling(
+            lambda: adapter.client.chat.completions.create(**api_kwargs),
+            request, api_kwargs, time.perf_counter(),
+        )
+
+        assert result["json_response"]["reasoning"] == "Simple greeting"
+        assert result["json_response"]["actions"] == []
+
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_non_parseable_500_still_raises(self, mock_openai, adapter):
+        """InternalServerError with unparseable content → raises LLMInvocationError."""
+        from openai import InternalServerError
+        error_body = {
+            "error": {
+                "code": 500,
+                "message": "Failed to parse input at pos 12: not valid json at all {{{",
+                "type": "server_error"
+            }
+        }
+        response = MagicMock()
+        response.status_code = 500
+        response.json.return_value = error_body
+        error = InternalServerError(
+            message="Internal Server Error",
+            response=response,
+            body=error_body,
+        )
+        adapter.client.chat.completions.create.side_effect = error
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="hello")])
+
+        import time
+        api_kwargs = adapter._build_request_kwargs(request)
+        with pytest.raises(LLMInvocationError, match="API error"):
+            adapter._call_with_error_handling(
+                lambda: adapter.client.chat.completions.create(**api_kwargs),
+                request, api_kwargs, time.perf_counter(),
+            )
+
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_non_grammar_500_still_raises(self, mock_openai, adapter):
+        """InternalServerError without 'Failed to parse input' → raises normally."""
+        from openai import InternalServerError
+        error_body = {
+            "error": {
+                "code": 500,
+                "message": "CUDA out of memory",
+                "type": "server_error"
+            }
+        }
+        response = MagicMock()
+        response.status_code = 500
+        response.json.return_value = error_body
+        error = InternalServerError(
+            message="Internal Server Error",
+            response=response,
+            body=error_body,
+        )
+        adapter.client.chat.completions.create.side_effect = error
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="hello")])
+
+        import time
+        api_kwargs = adapter._build_request_kwargs(request)
+        with pytest.raises(LLMInvocationError, match="API error"):
+            adapter._call_with_error_handling(
+                lambda: adapter.client.chat.completions.create(**api_kwargs),
+                request, api_kwargs, time.perf_counter(),
+            )

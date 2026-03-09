@@ -14,7 +14,7 @@ import time
 import tiktoken
 from uuid import uuid4
 from typing import Dict, Any, List, Optional, Type
-from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError
+from openai import OpenAI, RateLimitError as OpenAIRateLimitError, BadRequestError, APIConnectionError, PermissionDeniedError, InternalServerError
 import httpx
 from langchain_core.messages import BaseMessage, HumanMessage
 from pydantic import BaseModel
@@ -707,6 +707,31 @@ class LocalInferenceAdapter(BaseAdapter):
                     latency_ms = int((time.perf_counter() - start_time) * 1000)
                     capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
                 raise LLMInvocationError(f"API BadRequestError: {e}") from e
+
+        except InternalServerError as e:
+            # #255: Grammar parse errors (e.g. code-fenced JSON) return 500 with
+            # the valid response embedded in the error body message. Try to recover.
+            error_body = getattr(e, 'body', None)
+            error_message = error_body.get('error', {}).get('message', '') if isinstance(error_body, dict) else ''
+            if "Failed to parse input" in error_message:
+                recovered = self._robustly_parse_json_from_text(error_message)
+                if recovered:
+                    latency_ms = int((time.perf_counter() - start_time) * 1000)
+                    logger.warning(
+                        f"Recovered valid JSON from grammar parse error{url_ctx} "
+                        f"(latency={latency_ms}ms). Server's grammar rejected code-fenced output."
+                    )
+                    result = {"json_response": self._post_process_json_response(recovered, request.output_model_class)}
+                    if capture_errors:
+                        capture_trace(request, result, latency_ms, self.model_name)
+                    return result
+
+            # Non-recoverable 500 — fall through to generic handler
+            logger.error(f"API InternalServerError{url_ctx}: {e}", exc_info=True)
+            if capture_errors:
+                latency_ms = int((time.perf_counter() - start_time) * 1000)
+                capture_trace(request, {"error": str(e)}, latency_ms, self.model_name)
+            raise LLMInvocationError(f"API error: {e}") from e
 
         except Exception as e:
             logger.error(f"API error{url_ctx}: {e}", exc_info=True)

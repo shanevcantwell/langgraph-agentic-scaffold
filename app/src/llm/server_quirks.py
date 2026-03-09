@@ -95,16 +95,6 @@ def _no_extra_body() -> Dict[str, Any]:
     return {}
 
 
-def _llama_server_extra_body() -> Dict[str, Any]:
-    """Inject chat_template_kwargs to disable thinking mode per-request.
-
-    llama-server rejects assistant messages when Qwen3.5's thinking mode is
-    enabled. Per-request control is documented as unreliable (llama.cpp #13160),
-    so if this doesn't work, require --reasoning-format none as a launch flag.
-    """
-    return {"chat_template_kwargs": {"enable_thinking": False}}
-
-
 # ---------------------------------------------------------------------------
 # ServerQuirks dataclass
 # ---------------------------------------------------------------------------
@@ -141,8 +131,8 @@ QUIRKS_REGISTRY: Dict[Optional[str], ServerQuirks] = {
         preprocess_response=_noop_preprocess,
         resolve_schema_refs=inline_schema_refs,
         format_messages_post=_noop_format_messages,
-        skip_schema_enforcement=True,
-        extra_body_injections=_llama_server_extra_body,
+        skip_schema_enforcement=False,
+        extra_body_injections=_no_extra_body,
     ),
     # Generic — all pass-through, no quirks
     None: ServerQuirks(

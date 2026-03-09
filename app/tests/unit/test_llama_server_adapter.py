@@ -1,4 +1,4 @@
-"""Tests for LlamaServerAdapter — llama-server protocol quirks (#253)."""
+"""Tests for LlamaServerAdapter — llama-server protocol quirks (#253, #255)."""
 
 import json
 import pytest
@@ -20,30 +20,6 @@ MOCK_BASE_URL = "http://fake-llama-server:8080/v1"
 
 class TestConstruction:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_forces_skip_schema_enforcement(self, mock_openai):
-        """LlamaServerAdapter always forces skip_schema_enforcement=True."""
-        adapter = LlamaServerAdapter(
-            model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
-            base_url=MOCK_BASE_URL,
-            system_prompt="test"
-        )
-        assert adapter.skip_schema_enforcement is True
-
-    @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_forces_skip_even_when_config_says_false(self, mock_openai):
-        """skip_schema_enforcement=False in config is overridden to True."""
-        adapter = LlamaServerAdapter(
-            model_config={
-                "api_identifier": MOCK_MODEL_NAME,
-                "parameters": {},
-                "skip_schema_enforcement": False,
-            },
-            base_url=MOCK_BASE_URL,
-            system_prompt="test"
-        )
-        assert adapter.skip_schema_enforcement is True
-
-    @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_inherits_from_local_inference_adapter(self, mock_openai):
         """LlamaServerAdapter is a LocalInferenceAdapter, NOT LMStudioAdapter."""
         from app.src.llm.local_inference_adapter import LocalInferenceAdapter
@@ -56,16 +32,40 @@ class TestConstruction:
         assert isinstance(adapter, LocalInferenceAdapter)
         assert not isinstance(adapter, LMStudioAdapter)
 
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_schema_enforcement_enabled_by_default(self, mock_openai):
+        """LlamaServerAdapter does NOT skip schema enforcement (#255)."""
+        adapter = LlamaServerAdapter(
+            model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+        assert adapter.skip_schema_enforcement is False
+
+    @patch('app.src.llm.local_inference_adapter.OpenAI')
+    def test_respects_explicit_skip_schema(self, mock_openai):
+        """Config can explicitly skip schema enforcement if needed."""
+        adapter = LlamaServerAdapter(
+            model_config={
+                "api_identifier": MOCK_MODEL_NAME,
+                "parameters": {},
+                "skip_schema_enforcement": True,
+            },
+            base_url=MOCK_BASE_URL,
+            system_prompt="test"
+        )
+        assert adapter.skip_schema_enforcement is True
+
 
 # =============================================================================
-# Schema enforcement skipped
+# Schema enforcement enabled (#255 — llama-server is GBNF reference impl)
 # =============================================================================
 
 
 class TestSchemaEnforcement:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_no_response_format_with_tools(self, mock_openai):
-        """Tool requests should NOT include response_format (grammar can't handle oneOf)."""
+    def test_response_format_with_tools(self, mock_openai):
+        """Tool requests SHOULD include response_format (grammar enforcement ON)."""
         adapter = LlamaServerAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
@@ -80,11 +80,12 @@ class TestSchemaEnforcement:
             tools=[read_file],
         )
         kwargs = adapter._build_request_kwargs(request)
-        assert "response_format" not in kwargs
+        assert "response_format" in kwargs
+        assert kwargs["response_format"]["type"] == "json_schema"
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_no_response_format_with_output_model(self, mock_openai):
-        """Structured output requests should NOT include response_format."""
+    def test_response_format_with_output_model(self, mock_openai):
+        """Structured output requests SHOULD include response_format."""
         adapter = LlamaServerAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
@@ -99,7 +100,8 @@ class TestSchemaEnforcement:
             output_model_class=FakeSchema,
         )
         kwargs = adapter._build_request_kwargs(request)
-        assert "response_format" not in kwargs
+        assert "response_format" in kwargs
+        assert kwargs["response_format"]["type"] == "json_schema"
 
 
 # =============================================================================
@@ -111,10 +113,9 @@ class TestRefInlining:
     def test_refs_resolved_by_inline_schema_refs(self):
         """inline_schema_refs() from server_quirks resolves $ref pointers.
 
-        LlamaServerAdapter skips schema enforcement entirely (skip_schema_enforcement=True),
-        so _resolve_schema_refs is never reached via _build_tool_call_schema in production.
-        The pooled path applies ref inlining via ServerQuirks. This test validates the
-        shared inline_schema_refs() function directly.
+        llama-server doesn't support JSON Schema $defs/$ref. The pooled path
+        applies ref inlining via ServerQuirks. This test validates the shared
+        inline_schema_refs() function directly.
         """
         from app.src.llm.server_quirks import inline_schema_refs
 
@@ -140,14 +141,19 @@ class TestRefInlining:
 
 
 # =============================================================================
-# Thinking mode disabled
+# No thinking mode injection (#255 — use --reasoning-format none launch flag)
 # =============================================================================
 
 
-class TestThinkingMode:
+class TestNoThinkingInjection:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_extra_body_has_thinking_disabled(self, mock_openai):
-        """Request kwargs should include chat_template_kwargs to disable thinking."""
+    def test_no_chat_template_kwargs_in_extra_body(self, mock_openai):
+        """Request kwargs should NOT include chat_template_kwargs (#255).
+
+        Thinking mode control moved to llama-server launch flag
+        (--reasoning-format none) because per-request enable_thinking
+        conflicts with assistant message prefill.
+        """
         adapter = LlamaServerAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
@@ -159,12 +165,13 @@ class TestThinkingMode:
         )
         kwargs = adapter._build_request_kwargs(request)
 
-        assert "extra_body" in kwargs
-        assert kwargs["extra_body"].get("chat_template_kwargs") == {"enable_thinking": False}
+        # No extra_body at all, or no chat_template_kwargs in it
+        extra_body = kwargs.get("extra_body", {})
+        assert "chat_template_kwargs" not in extra_body
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_extra_body_merges_with_existing(self, mock_openai):
-        """Thinking mode params should merge with existing extra_body (e.g., top_k)."""
+    def test_extra_body_preserves_user_params(self, mock_openai):
+        """User-specified extra_body params (e.g., top_k) still pass through."""
         adapter = LlamaServerAdapter(
             model_config={
                 "api_identifier": MOCK_MODEL_NAME,
@@ -180,9 +187,8 @@ class TestThinkingMode:
         kwargs = adapter._build_request_kwargs(request)
 
         assert "extra_body" in kwargs
-        # Both top_k and thinking disable should be present
         assert kwargs["extra_body"]["top_k"] == 40
-        assert kwargs["extra_body"]["chat_template_kwargs"] == {"enable_thinking": False}
+        assert "chat_template_kwargs" not in kwargs["extra_body"]
 
 
 # =============================================================================
@@ -200,5 +206,5 @@ class TestFromConfig:
             "api_key": "test-key",
         }
         adapter = LlamaServerAdapter.from_config(provider_config, system_prompt="test")
-        assert adapter.skip_schema_enforcement is True
+        assert adapter.skip_schema_enforcement is False
         assert adapter.api_key == "test-key"

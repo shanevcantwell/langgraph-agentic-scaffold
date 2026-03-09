@@ -100,9 +100,10 @@ class AdapterFactory:
                     clean_url = url.rstrip("/")
                     if clean_url.endswith("/v1"):
                         clean_url = clean_url[:-3]
-                    # Derive server_type from provider type for pool quirk dispatch
+                    # Determine server_type for pool quirk dispatch (#255)
+                    # Explicit server_type overrides derivation from provider type
                     provider_type = provider_config.get("type")
-                    server_type = provider_type  # e.g. "lmstudio_pool", "llama_server"
+                    server_type = provider_config.get("server_type") or provider_type
                     if clean_url not in server_configs:
                         sc_kwargs = {"url": clean_url, "api_key": provider_config.get("api_key")}
                         if _lip_has_server_type:

@@ -459,8 +459,8 @@ class TestQuirkSelection:
 
     @patch('app.src.llm.pooled_adapter.OpenAI')
     @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
-    def test_llama_server_quirks_skip_schema_true(self, mock_run_coro, mock_openai):
-        """llama-server should skip schema enforcement (grammar can't handle oneOf)."""
+    def test_llama_server_quirks_schema_enforcement_on(self, mock_run_coro, mock_openai):
+        """llama-server should keep schema enforcement ON (#255 — GBNF reference impl)."""
         pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="llama_server_pool")
         adapter = _make_adapter(pool, dispatcher, loop)
 
@@ -482,15 +482,16 @@ class TestQuirkSelection:
         )
         adapter.invoke(request)
 
-        # llama-server quirks: schema enforcement should be OFF (no response_format)
+        # llama-server quirks (#255): schema enforcement ON
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert "response_format" not in call_kwargs
+        assert "response_format" in call_kwargs
+        assert call_kwargs["response_format"]["type"] == "json_schema"
         loop.close()
 
     @patch('app.src.llm.pooled_adapter.OpenAI')
     @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
-    def test_llama_server_quirks_inject_thinking_disabled(self, mock_run_coro, mock_openai):
-        """llama-server should inject chat_template_kwargs to disable thinking mode."""
+    def test_llama_server_quirks_no_thinking_injection(self, mock_run_coro, mock_openai):
+        """llama-server should NOT inject chat_template_kwargs (#255 — use launch flag)."""
         pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="llama_server_pool")
         adapter = _make_adapter(pool, dispatcher, loop)
 
@@ -506,8 +507,7 @@ class TestQuirkSelection:
         adapter.invoke(request)
 
         call_kwargs = mock_client.chat.completions.create.call_args[1]
-        assert "extra_body" in call_kwargs
-        assert call_kwargs["extra_body"].get("chat_template_kwargs") == {"enable_thinking": False}
+        assert "chat_template_kwargs" not in call_kwargs.get("extra_body", {})
         loop.close()
 
     @patch('app.src.llm.pooled_adapter.OpenAI')
@@ -612,3 +612,117 @@ class TestQuirkSelection:
 
         # Cleanup
         factory._pool_loop.call_soon_threadsafe(factory._pool_loop.stop)
+
+
+# ─────────────────────────────────────────────────────────────────────
+# #255: Explicit server_type decoupled from provider type
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestExplicitServerType:
+    """server_type field overrides derivation from provider type (#255)."""
+
+    def test_explicit_server_type_propagated_to_pool(self):
+        """Explicit server_type in provider config overrides type-derived value."""
+        from app.src.llm.factory import AdapterFactory
+        from local_inference_pool import ServerConfig
+
+        if "server_type" not in ServerConfig.model_fields:
+            pytest.skip("LIP v0.7.0+ required for server_type support")
+
+        config = {
+            "llm_providers": {
+                "my_router": {
+                    "type": "local_pool",
+                    "server_type": "llama_server",
+                    "base_url": "http://gpu0:8080/v1",
+                    "api_identifier": "test-model",
+                }
+            },
+            "specialists": {},
+        }
+        factory = AdapterFactory(config)
+        server_config = factory._pool.servers["http://gpu0:8080"]
+        # Explicit server_type should override "local_pool"
+        assert server_config.server_type == "llama_server"
+
+        # Cleanup
+        factory._pool_loop.call_soon_threadsafe(factory._pool_loop.stop)
+
+    def test_server_type_falls_back_to_provider_type(self):
+        """When server_type is not specified, derives from provider type (backwards compat)."""
+        from app.src.llm.factory import AdapterFactory
+        from local_inference_pool import ServerConfig
+
+        if "server_type" not in ServerConfig.model_fields:
+            pytest.skip("LIP v0.7.0+ required for server_type support")
+
+        config = {
+            "llm_providers": {
+                "pooled": {
+                    "type": "lmstudio_pool",
+                    "base_url": "http://gpu0:1234/v1",
+                    "api_identifier": "test-model",
+                }
+            },
+            "specialists": {},
+        }
+        factory = AdapterFactory(config)
+        server_config = factory._pool.servers["http://gpu0:1234"]
+        assert server_config.server_type == "lmstudio_pool"
+
+        # Cleanup
+        factory._pool_loop.call_soon_threadsafe(factory._pool_loop.stop)
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_explicit_server_type_activates_correct_quirks(self, mock_run_coro, mock_openai):
+        """local_pool + server_type='llama_server' should enable schema enforcement, no thinking injection (#255)."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="llama_server")
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = '{"reasoning":"test","actions":[]}'
+
+        from pydantic import BaseModel, Field
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Hello")],
+            tools=[read_file],
+        )
+        adapter.invoke(request)
+
+        # llama_server quirks (#255): schema enforcement ON, no thinking injection
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "response_format" in call_kwargs
+        assert call_kwargs["response_format"]["type"] == "json_schema"
+        assert "chat_template_kwargs" not in call_kwargs.get("extra_body", {})
+        loop.close()
+
+    def test_config_schema_accepts_server_type(self):
+        """LLMProviderConfig validates server_type field."""
+        from app.src.utils.config_schema import LLMProviderConfig
+
+        config = LLMProviderConfig(
+            type="local_pool",
+            server_type="llama_server",
+            api_identifier="test-model",
+        )
+        assert config.server_type == "llama_server"
+
+    def test_config_schema_server_type_optional(self):
+        """server_type defaults to None when not specified."""
+        from app.src.utils.config_schema import LLMProviderConfig
+
+        config = LLMProviderConfig(
+            type="local_pool",
+            api_identifier="test-model",
+        )
+        assert config.server_type is None
