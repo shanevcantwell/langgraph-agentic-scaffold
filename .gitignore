@@ -76,3 +76,10 @@ workspace/
 
 # documentation scratchpad
 docs/scratchpad
+
+# KGs
+.graphs/
+scripts/run_*.py
+prompts/memory_distillation_prompt.md
+.gitignore
+.gitignore
