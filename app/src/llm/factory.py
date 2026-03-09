@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, List, Optional, Tuple
 from langchain_core.messages import HumanMessage
 from .adapter import BaseAdapter, StandardizedLLMRequest
-from .adapters import GeminiAdapter, LocalInferenceAdapter, LMStudioAdapter, PooledLocalInferenceAdapter  # Import all possible adapters
+from .adapters import GeminiAdapter, LocalInferenceAdapter, LMStudioAdapter, LlamaServerAdapter, PooledLocalInferenceAdapter  # Import all possible adapters
 from .gemini_webui_adapter import GeminiWebUIAdapter # Distillation adapter
 
 logger = logging.getLogger(__name__)
@@ -18,9 +18,11 @@ logger = logging.getLogger(__name__)
 ADAPTER_REGISTRY = {
     "gemini": GeminiAdapter,
     "local": LocalInferenceAdapter,             # Generic OpenAI-compatible local inference
-    "local_pool": PooledLocalInferenceAdapter,   # Pool dispatch (inherits LMStudio quirks, harmless on non-LMS)
+    "local_pool": PooledLocalInferenceAdapter,   # Pool dispatch with per-server quirks (#253)
     "lmstudio": LMStudioAdapter,                 # LM Studio with Harmony/ref/content quirks
-    "lmstudio_pool": PooledLocalInferenceAdapter, # Backward compat alias for local_pool
+    "lmstudio_pool": PooledLocalInferenceAdapter, # Pool dispatch, LM Studio quirks via server_type
+    "llama_server": LlamaServerAdapter,           # llama-server with schema skip/thinking quirks (#253)
+    "llama_server_pool": PooledLocalInferenceAdapter,  # Pool dispatch, llama-server quirks via server_type
     "gemini_webui": GeminiWebUIAdapter,           # Web UI adapter for distillation (ADR-DISTILL-006)
 }
 
@@ -69,7 +71,7 @@ class AdapterFactory:
 
     def _has_pool_providers(self) -> bool:
         """Check if any llm_providers use a pool type."""
-        pool_types = {"local_pool", "lmstudio_pool"}
+        pool_types = {"local_pool", "lmstudio_pool", "llama_server_pool"}
         for provider_config in self.full_config.get("llm_providers", {}).values():
             if provider_config.get("type") in pool_types:
                 return True
@@ -78,14 +80,17 @@ class AdapterFactory:
     def _init_pool(self) -> None:
         """Initialize the shared ServerPool, ConcurrentDispatcher, and event loop thread.
 
-        Collects all unique LMStudio server URLs from both 'lmstudio' and 'lmstudio_pool'
-        providers, so the pool knows about all available servers regardless of which
-        specialists use the pooled adapter.
+        Collects all unique server URLs from local inference providers, so the pool
+        knows about all available servers regardless of which specialists use the
+        pooled adapter. Each server gets a server_type from its provider config (#253).
         """
         from local_inference_pool import ServerPool, ServerConfig, ConcurrentDispatcher
 
-        # Collect unique servers from local inference providers, preserving api_key
-        local_types = {"local", "local_pool", "lmstudio", "lmstudio_pool"}
+        # Check if installed LIP version supports server_type (#253, v0.7.0+)
+        _lip_has_server_type = "server_type" in ServerConfig.model_fields
+
+        # Collect unique servers from local inference providers, preserving api_key and server_type
+        local_types = {"local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool"}
         server_configs: dict[str, ServerConfig] = {}
         for provider_config in self.full_config.get("llm_providers", {}).values():
             if provider_config.get("type") in local_types:
@@ -95,10 +100,19 @@ class AdapterFactory:
                     clean_url = url.rstrip("/")
                     if clean_url.endswith("/v1"):
                         clean_url = clean_url[:-3]
+                    # Derive server_type from provider type for pool quirk dispatch
+                    provider_type = provider_config.get("type")
+                    server_type = provider_type  # e.g. "lmstudio_pool", "llama_server"
                     if clean_url not in server_configs:
-                        server_configs[clean_url] = ServerConfig(
-                            url=clean_url,
-                            api_key=provider_config.get("api_key"),
+                        sc_kwargs = {"url": clean_url, "api_key": provider_config.get("api_key")}
+                        if _lip_has_server_type:
+                            sc_kwargs["server_type"] = server_type
+                        server_configs[clean_url] = ServerConfig(**sc_kwargs)
+                    elif _lip_has_server_type and getattr(server_configs[clean_url], 'server_type', None) != server_type:
+                        existing_type = getattr(server_configs[clean_url], 'server_type', None)
+                        logger.warning(
+                            f"AdapterFactory: Server {clean_url} configured with conflicting types: "
+                            f"'{existing_type}' and '{server_type}'. Using first seen: '{existing_type}'."
                         )
 
         if not server_configs:
@@ -226,7 +240,7 @@ class AdapterFactory:
             return None
 
         # ADR-CORE-068: Pooled adapters get pool/dispatcher/loop injected by factory
-        if base_provider_type in ("local_pool", "lmstudio_pool"):
+        if base_provider_type in ("local_pool", "lmstudio_pool", "llama_server_pool"):
             if not self._pool or not self._dispatcher or not self._pool_loop:
                 logger.error(
                     f"AdapterFactory: Provider '{binding_key}' uses '{base_provider_type}' but shared pool "
@@ -293,8 +307,9 @@ def ping_provider(provider_key: str, provider_config: Dict[str, Any]) -> Dict[st
     provider_type = provider_config.get("type")
     # ADR-CORE-068: For pinging, pool types use their base adapter's connectivity.
     # The pool manages slot routing at runtime; ping just validates the server is reachable.
-    if provider_type in ("local_pool", "lmstudio_pool"):
-        provider_type = "lmstudio" if provider_type == "lmstudio_pool" else "local"
+    if provider_type in ("local_pool", "lmstudio_pool", "llama_server_pool"):
+        ping_type_map = {"lmstudio_pool": "lmstudio", "llama_server_pool": "llama_server", "local_pool": "local"}
+        provider_type = ping_type_map.get(provider_type, "local")
     AdapterClass = ADAPTER_REGISTRY.get(provider_type)
 
     if not AdapterClass:

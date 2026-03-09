@@ -279,7 +279,7 @@ specialist_model_bindings:
 
 
 def test_lmstudio_servers_parsing(mocker):
-    """Tests that LMSTUDIO_SERVERS env var is parsed correctly."""
+    """Tests that LOCAL_INFERENCE_SERVERS env var is parsed correctly."""
     def mock_open_side_effect(file, mode='r', encoding=None):
         if 'config.yaml' in str(file):
             return mock_open(read_data=CONFIG_WITH_LMSTUDIO)().__enter__()
@@ -290,8 +290,8 @@ def test_lmstudio_servers_parsing(mocker):
     mocker.patch("builtins.open", side_effect=mock_open_side_effect)
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch.dict("os.environ", {
-        "LMSTUDIO_SERVERS": "rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "LOCAL_INFERENCE_SERVERS": "rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1",
+        "LOCAL_INFERENCE_BASE_URL": "http://localhost:1234/v1"
     })
 
     loader = ConfigLoader()
@@ -300,7 +300,7 @@ def test_lmstudio_servers_parsing(mocker):
     # Check that server references resolve correctly
     assert config["llm_providers"]["lmstudio_router"]["base_url"] == "http://192.168.1.100:1234/v1"
     assert config["llm_providers"]["lmstudio_specialist"]["base_url"] == "http://192.168.1.101:1234/v1"
-    # Provider without server should fall back to LMSTUDIO_BASE_URL
+    # Provider without server should fall back to LOCAL_INFERENCE_BASE_URL
     assert config["llm_providers"]["lmstudio_local"]["base_url"] == "http://localhost:1234/v1"
 
 
@@ -326,8 +326,8 @@ specialist_model_bindings:
     mocker.patch("builtins.open", side_effect=mock_open_side_effect)
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch.dict("os.environ", {
-        "LMSTUDIO_SERVERS": "rtx3090=http://192.168.1.100:1234/v1",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "LOCAL_INFERENCE_SERVERS": "rtx3090=http://192.168.1.100:1234/v1",
+        "LOCAL_INFERENCE_BASE_URL": "http://localhost:1234/v1"
     })
 
     loader = ConfigLoader()
@@ -338,7 +338,7 @@ specialist_model_bindings:
 
 
 def test_lmstudio_servers_empty(mocker):
-    """Tests fallback to LMSTUDIO_BASE_URL when LMSTUDIO_SERVERS is empty."""
+    """Tests fallback when LOCAL_INFERENCE_SERVERS is empty — server reference should resolve to None."""
     user_settings_with_server = """
 llm_providers:
   lmstudio_router:
@@ -359,19 +359,19 @@ specialist_model_bindings:
     mocker.patch("builtins.open", side_effect=mock_open_side_effect)
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch.dict("os.environ", {
-        "LMSTUDIO_SERVERS": "",  # Empty
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "LOCAL_INFERENCE_SERVERS": "",  # Empty
+        "LOCAL_INFERENCE_BASE_URL": "http://localhost:1234/v1"
     })
 
     loader = ConfigLoader()
     config = loader.get_config()
 
-    # With empty LMSTUDIO_SERVERS, server reference should result in None
+    # With empty LOCAL_INFERENCE_SERVERS, server reference should result in None
     assert config["llm_providers"]["lmstudio_router"]["base_url"] is None
 
 
 def test_lmstudio_servers_with_spaces(mocker):
-    """Tests that LMSTUDIO_SERVERS handles whitespace gracefully."""
+    """Tests that LOCAL_INFERENCE_SERVERS handles whitespace gracefully."""
     def mock_open_side_effect(file, mode='r', encoding=None):
         if 'config.yaml' in str(file):
             return mock_open(read_data=CONFIG_WITH_LMSTUDIO)().__enter__()
@@ -383,8 +383,8 @@ def test_lmstudio_servers_with_spaces(mocker):
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch.dict("os.environ", {
         # Extra whitespace around entries
-        "LMSTUDIO_SERVERS": " rtx3090 = http://192.168.1.100:1234/v1 , rtx8000 = http://192.168.1.101:1234/v1 ",
-        "LMSTUDIO_BASE_URL": "http://localhost:1234/v1"
+        "LOCAL_INFERENCE_SERVERS": " rtx3090 = http://192.168.1.100:1234/v1 , rtx8000 = http://192.168.1.101:1234/v1 ",
+        "LOCAL_INFERENCE_BASE_URL": "http://localhost:1234/v1"
     })
 
     loader = ConfigLoader()

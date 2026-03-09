@@ -843,14 +843,9 @@ class TestHarmonyTokenStripping:
     Harmony tokens before JSON parsing.
     """
 
-    @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_strip_harmony_tokens_from_structured_output(self, mock_openai):
+    def test_strip_harmony_tokens_from_structured_output(self):
         """Harmony-wrapped SystemPlan JSON should parse correctly after stripping."""
-        adapter = LMStudioAdapter(
-            model_config={"api_identifier": "gpt-oss-20b", "parameters": {}},
-            base_url=MOCK_BASE_URL,
-            system_prompt="You are a systems architect."
-        )
+        from app.src.llm.server_quirks import strip_harmony_tokens
 
         # Simulate Harmony-wrapped response
         harmony_text = (
@@ -859,7 +854,7 @@ class TestHarmonyTokenStripping:
             '"execution_steps":["Read files","Create dirs","Move files"],'
             '"acceptance_criteria":"Each subdirectory contains at least two files."}'
         )
-        stripped = adapter._strip_harmony_tokens(harmony_text)
+        stripped = strip_harmony_tokens(harmony_text)
 
         # Should be parseable as JSON after stripping
         # (robust parser handles leftover channel labels like "final SystemPlan")
@@ -870,37 +865,27 @@ class TestHarmonyTokenStripping:
         assert parsed["plan_summary"] == "Categorize files."
         assert len(parsed["execution_steps"]) == 3
 
-    @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_strip_harmony_tokens_from_tool_response(self, mock_openai):
+    def test_strip_harmony_tokens_from_tool_response(self):
         """Harmony-wrapped tool call JSON should parse correctly after stripping."""
-        adapter = LMStudioAdapter(
-            model_config={"api_identifier": "gpt-oss-20b", "parameters": {}},
-            base_url=MOCK_BASE_URL,
-            system_prompt="test"
-        )
+        from app.src.llm.server_quirks import strip_harmony_tokens
 
         harmony_text = (
             '<|start|>assistant<|channel|>final <|constrain|>json<|message|>'
             '{"reasoning":"Need to list files","actions":[{"tool_name":"list_directory","path":"/workspace"}]}'
         )
-        stripped = adapter._strip_harmony_tokens(harmony_text)
+        stripped = strip_harmony_tokens(harmony_text)
 
         import json
         start = stripped.find('{')
         parsed = json.loads(stripped[start:])
         assert parsed["actions"][0]["tool_name"] == "list_directory"
 
-    @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_strip_preserves_clean_json(self, mock_openai):
+    def test_strip_preserves_clean_json(self):
         """When no Harmony tokens are present, content passes through unchanged."""
-        adapter = LMStudioAdapter(
-            model_config={"api_identifier": "qwen3-30b", "parameters": {}},
-            base_url=MOCK_BASE_URL,
-            system_prompt="test"
-        )
+        from app.src.llm.server_quirks import strip_harmony_tokens
 
         clean_json = '{"plan_summary":"A plan.","execution_steps":["Step 1"]}'
-        stripped = adapter._strip_harmony_tokens(clean_json)
+        stripped = strip_harmony_tokens(clean_json)
         assert stripped == clean_json
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')

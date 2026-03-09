@@ -6,6 +6,7 @@ import json
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.llm.local_inference_adapter import LocalInferenceAdapter
 from app.src.llm.lmstudio_adapter import LMStudioAdapter
+from app.src.llm.llama_server_adapter import LlamaServerAdapter
 # GeminiAdapter is disabled - no API key available
 # from app.src.llm.gemini_adapter import GeminiAdapter
 from app.src.utils.errors import LLMInvocationError
@@ -19,8 +20,8 @@ class MockOutputSchema(BaseModel):
 
 # --- Adapter Fixtures ---
 
-# Test both LocalInferenceAdapter (generic) and LMStudioAdapter (subclass with quirks)
-@pytest.fixture(params=[LocalInferenceAdapter, LMStudioAdapter])
+# Test all LocalInferenceAdapter subclasses (generic, LMStudio quirks, llama-server quirks)
+@pytest.fixture(params=[LocalInferenceAdapter, LMStudioAdapter, LlamaServerAdapter])
 def adapter_class(request):
     """Fixture to provide different adapter classes to the tests."""
     return request.param

@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 78 | 908 |
+| Unit | 79 | 924 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **113** | **1189** |
+| **Total** | **114** | **1205** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -934,13 +934,13 @@
 - **`test_env_var_substitution_required_missing`**
   - *Tests that missing required env var (no default) raises ConfigError.*
 - **`test_lmstudio_servers_parsing`**
-  - *Tests that LMSTUDIO_SERVERS env var is parsed correctly.*
+  - *Tests that LOCAL_INFERENCE_SERVERS env var is parsed correctly.*
 - **`test_lmstudio_servers_missing_server_name`**
   - *Tests warning when server name not found in LMSTUDIO_SERVERS.*
 - **`test_lmstudio_servers_empty`**
-  - *Tests fallback to LMSTUDIO_BASE_URL when LMSTUDIO_SERVERS is empty.*
+  - *Tests fallback when LOCAL_INFERENCE_SERVERS is empty — server reference should resolve to None.*
 - **`test_lmstudio_servers_with_spaces`**
-  - *Tests that LMSTUDIO_SERVERS handles whitespace gracefully.*
+  - *Tests that LOCAL_INFERENCE_SERVERS handles whitespace gracefully.*
 
 ## `app/tests/unit/test_context_engineering_graph.py`
 
@@ -1541,6 +1541,27 @@
 - **`test_progressive_loop_detection_mixed_specialists_with_iteration`**
   - *MIXED ROUTING: Non-iterative specialist A interspersed with iterative specialist B.*
 
+## `app/tests/unit/test_llama_server_adapter.py`
+
+- **`test_forces_skip_schema_enforcement`**
+  - *LlamaServerAdapter always forces skip_schema_enforcement=True.*
+- **`test_forces_skip_even_when_config_says_false`**
+  - *skip_schema_enforcement=False in config is overridden to True.*
+- **`test_inherits_from_local_inference_adapter`**
+  - *LlamaServerAdapter is a LocalInferenceAdapter, NOT LMStudioAdapter.*
+- **`test_no_response_format_with_tools`**
+  - *Tool requests should NOT include response_format (grammar can't handle oneOf).*
+- **`test_no_response_format_with_output_model`**
+  - *Structured output requests should NOT include response_format.*
+- **`test_refs_resolved_by_inline_schema_refs`**
+  - *inline_schema_refs() from server_quirks resolves $ref pointers.*
+- **`test_extra_body_has_thinking_disabled`**
+  - *Request kwargs should include chat_template_kwargs to disable thinking.*
+- **`test_extra_body_merges_with_existing`**
+  - *Thinking mode params should merge with existing extra_body (e.g., top_k).*
+- **`test_from_config_creates_adapter`**
+  - *from_config should create a working LlamaServerAdapter.*
+
 ## `app/tests/unit/test_llm_factory.py`
 
 - **`test_factory_creates_adapter_for_llm_specialist`**
@@ -2039,8 +2060,8 @@
 
 ## `app/tests/unit/test_pooled_adapter.py`
 
-- **`test_inherits_from_lmstudio_adapter`**
-  - *PooledLocalInferenceAdapter inherits all formatting/schema methods from LMStudioAdapter.*
+- **`test_inherits_from_local_inference_adapter`**
+  - *PooledLocalInferenceAdapter inherits from LocalInferenceAdapter, NOT LMStudioAdapter (#253).*
 - **`test_from_config_raises`**
   - *from_config() is not the construction path — raises NotImplementedError.*
 - **`test_client_is_none`**
@@ -2073,6 +2094,20 @@
   - *api_key passed to PooledLocalInferenceAdapter reaches parent's _api_key.*
 - **`test_api_key_used_in_per_request_client`**
   - *Per-request OpenAI client uses per-server api_key from pool.*
+- **`test_lmstudio_quirks_skip_schema_false`**
+  - *LM Studio servers should NOT skip schema enforcement.*
+- **`test_llama_server_quirks_skip_schema_true`**
+  - *llama-server should skip schema enforcement (grammar can't handle oneOf).*
+- **`test_llama_server_quirks_inject_thinking_disabled`**
+  - *llama-server should inject chat_template_kwargs to disable thinking mode.*
+- **`test_generic_quirks_no_schema_skip`**
+  - *Generic server (server_type=None) should NOT skip schema enforcement.*
+- **`test_quirks_cleared_after_request`**
+  - *_active_quirks should be None after invoke completes.*
+- **`test_factory_creates_pool_for_llama_server_pool`**
+  - *AdapterFactory initializes pool when llama_server_pool providers exist.*
+- **`test_factory_passes_server_type_for_lmstudio_pool`**
+  - *AdapterFactory sets server_type on ServerConfig for lmstudio_pool providers.*
 
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 

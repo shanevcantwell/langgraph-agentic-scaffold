@@ -14,10 +14,10 @@ MOCK_MODEL_NAME = "test-model/test-gguf"
 MOCK_SERVER_URL = "http://gpu0:1234"
 
 
-def _make_pool_and_dispatcher(server_url=MOCK_SERVER_URL, api_key=None):
+def _make_pool_and_dispatcher(server_url=MOCK_SERVER_URL, api_key=None, server_type=None):
     """Create mock pool, dispatcher, and event loop for testing."""
     pool = MagicMock()
-    pool.servers = {server_url: MagicMock(active_requests=0, api_key=api_key)}
+    pool.servers = {server_url: MagicMock(active_requests=0, api_key=api_key, server_type=server_type)}
 
     dispatcher = MagicMock()
 
@@ -53,12 +53,14 @@ def _make_adapter(pool, dispatcher, loop, model_name=MOCK_MODEL_NAME):
 
 
 class TestConstruction:
-    def test_inherits_from_lmstudio_adapter(self):
-        """PooledLocalInferenceAdapter inherits all formatting/schema methods from LMStudioAdapter."""
+    def test_inherits_from_local_inference_adapter(self):
+        """PooledLocalInferenceAdapter inherits from LocalInferenceAdapter, NOT LMStudioAdapter (#253)."""
+        from app.src.llm.local_inference_adapter import LocalInferenceAdapter
         from app.src.llm.lmstudio_adapter import LMStudioAdapter
         pool, dispatcher, loop = _make_pool_and_dispatcher()
         adapter = _make_adapter(pool, dispatcher, loop)
-        assert isinstance(adapter, LMStudioAdapter)
+        assert isinstance(adapter, LocalInferenceAdapter)
+        assert not isinstance(adapter, LMStudioAdapter)
         loop.close()
 
     def test_from_config_raises(self):
@@ -415,3 +417,198 @@ class TestApiKey:
         # Per-server key takes priority over adapter-level fallback
         mock_openai.assert_called_with(base_url=f"{MOCK_SERVER_URL}/v1", api_key="server-token")
         loop.close()
+
+
+# ─────────────────────────────────────────────────────────────────────
+# #253: Per-server quirk selection
+# ─────────────────────────────────────────────────────────────────────
+
+
+class TestQuirkSelection:
+    """Verify quirks are applied per-endpoint based on server_type from pool."""
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_lmstudio_quirks_skip_schema_false(self, mock_run_coro, mock_openai):
+        """LM Studio servers should NOT skip schema enforcement."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="lmstudio_pool")
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "ok"
+
+        from pydantic import BaseModel, Field
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Hello")],
+            tools=[read_file],
+        )
+        adapter.invoke(request)
+
+        # LM Studio quirks: schema enforcement should be ON (response_format present)
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "response_format" in call_kwargs
+        loop.close()
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_llama_server_quirks_skip_schema_true(self, mock_run_coro, mock_openai):
+        """llama-server should skip schema enforcement (grammar can't handle oneOf)."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="llama_server_pool")
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = '{"reasoning":"test","actions":[{"tool_name":"read_file","path":"/tmp/a"}]}'
+
+        from pydantic import BaseModel, Field
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Hello")],
+            tools=[read_file],
+        )
+        adapter.invoke(request)
+
+        # llama-server quirks: schema enforcement should be OFF (no response_format)
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "response_format" not in call_kwargs
+        loop.close()
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_llama_server_quirks_inject_thinking_disabled(self, mock_run_coro, mock_openai):
+        """llama-server should inject chat_template_kwargs to disable thinking mode."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="llama_server_pool")
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "ok"
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
+        adapter.invoke(request)
+
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "extra_body" in call_kwargs
+        assert call_kwargs["extra_body"].get("chat_template_kwargs") == {"enable_thinking": False}
+        loop.close()
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_generic_quirks_no_schema_skip(self, mock_run_coro, mock_openai):
+        """Generic server (server_type=None) should NOT skip schema enforcement."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(server_type=None)
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "ok"
+
+        from pydantic import BaseModel, Field
+        class read_file(BaseModel):
+            path: str = Field(description="File path")
+
+        request = StandardizedLLMRequest(
+            messages=[HumanMessage(content="Hello")],
+            tools=[read_file],
+        )
+        adapter.invoke(request)
+
+        # Generic: schema enforcement should be ON
+        call_kwargs = mock_client.chat.completions.create.call_args[1]
+        assert "response_format" in call_kwargs
+        loop.close()
+
+    @patch('app.src.llm.pooled_adapter.OpenAI')
+    @patch('app.src.llm.pooled_adapter.asyncio.run_coroutine_threadsafe')
+    def test_quirks_cleared_after_request(self, mock_run_coro, mock_openai):
+        """_active_quirks should be None after invoke completes."""
+        pool, dispatcher, loop = _make_pool_and_dispatcher(server_type="lmstudio_pool")
+        adapter = _make_adapter(pool, dispatcher, loop)
+
+        mock_future = MagicMock()
+        mock_future.result.return_value = MOCK_SERVER_URL
+        mock_run_coro.return_value = mock_future
+
+        mock_client = mock_openai.return_value
+        mock_client.chat.completions.create.return_value.choices[0].message.tool_calls = None
+        mock_client.chat.completions.create.return_value.choices[0].message.content = "ok"
+
+        request = StandardizedLLMRequest(messages=[HumanMessage(content="Hello")])
+        adapter.invoke(request)
+
+        assert adapter._active_quirks is None
+        loop.close()
+
+    def test_factory_creates_pool_for_llama_server_pool(self):
+        """AdapterFactory initializes pool when llama_server_pool providers exist."""
+        from app.src.llm.factory import AdapterFactory
+
+        config = {
+            "llm_providers": {
+                "pooled": {
+                    "type": "llama_server_pool",
+                    "base_url": "http://gpu0:8080/v1",
+                    "api_identifier": "test-model",
+                }
+            },
+            "specialists": {},
+        }
+        factory = AdapterFactory(config)
+        assert factory._pool is not None
+        assert factory._dispatcher is not None
+
+        # Verify server_type was set on the ServerConfig (requires LIP v0.7.0+)
+        from local_inference_pool import ServerConfig
+        if "server_type" in ServerConfig.model_fields:
+            server_config = factory._pool.servers["http://gpu0:8080"]
+            assert server_config.server_type == "llama_server_pool"
+
+        # Cleanup
+        factory._pool_loop.call_soon_threadsafe(factory._pool_loop.stop)
+
+    def test_factory_passes_server_type_for_lmstudio_pool(self):
+        """AdapterFactory sets server_type on ServerConfig for lmstudio_pool providers."""
+        from app.src.llm.factory import AdapterFactory
+        from local_inference_pool import ServerConfig
+
+        if "server_type" not in ServerConfig.model_fields:
+            pytest.skip("LIP v0.7.0+ required for server_type support")
+
+        config = {
+            "llm_providers": {
+                "pooled": {
+                    "type": "lmstudio_pool",
+                    "base_url": "http://gpu0:1234/v1",
+                    "api_identifier": "test-model",
+                }
+            },
+            "specialists": {},
+        }
+        factory = AdapterFactory(config)
+        server_config = factory._pool.servers["http://gpu0:1234"]
+        assert server_config.server_type == "lmstudio_pool"
+
+        # Cleanup
+        factory._pool_loop.call_soon_threadsafe(factory._pool_loop.stop)

@@ -179,7 +179,7 @@ class ConfigLoader:
                 if not api_key:
                     logger.warning(f"GOOGLE_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
                 provider_config["api_key"] = api_key
-            elif provider_type in ("local", "local_pool", "lmstudio", "lmstudio_pool"):
+            elif provider_type in ("local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool"):
                 # Distributed inference: Check for named server reference
                 # .env: LOCAL_INFERENCE_SERVERS="rtx3090=http://...,rtx8000=http://..."
                 # user_settings.yaml: server: "rtx3090"

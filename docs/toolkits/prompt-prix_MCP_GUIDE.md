@@ -109,7 +109,7 @@ await external_client.disconnect_all()
 | `analyze_trajectory()` | ReAct trajectory quality assessment |
 | `compare_trajectories()` | Cross-trajectory comparison |
 
-prompt-prix manages its own LM Studio connections (two servers via `LM_STUDIO_SERVER_1`/`LM_STUDIO_SERVER_2` env vars). Its pool operates independently from LAS's `PooledLMStudioAdapter` — see ADR-068 accepted risk.
+prompt-prix manages its own LM Studio connections (two servers via `LOCAL_INFERENCE_SERVER_1`/`LOCAL_INFERENCE_SERVER_2` env vars). Its pool operates independently from LAS's `PooledLMStudioAdapter` — see ADR-068 accepted risk.
 
 Timeout: 600s (covers worst-case 300s queue wait + 300s inference).
 
