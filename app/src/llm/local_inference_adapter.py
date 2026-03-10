@@ -448,17 +448,8 @@ class LocalInferenceAdapter(BaseAdapter):
         else:
             logger.info(f"{self.__class__.__name__}: Invoking in Text mode.")
 
-        # Merge extra_body: start with instance-level, then layer on per-request overrides.
-        merged_extra = dict(self.extra_body) if self.extra_body else {}
-
-        # llama.cpp #20345: grammar enforcement is silently skipped when thinking is
-        # enabled. Suppress thinking per-request when response_format is active.
-        # LM Studio ignores unknown extra_body keys, so this is safe for all backends.
-        if "response_format" in api_kwargs:
-            merged_extra["chat_template_kwargs"] = {"enable_thinking": False}
-
-        if merged_extra:
-            api_kwargs["extra_body"] = merged_extra
+        if self.extra_body:
+            api_kwargs["extra_body"] = self.extra_body
 
         return api_kwargs
 
