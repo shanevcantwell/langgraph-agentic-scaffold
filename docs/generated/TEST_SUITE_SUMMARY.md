@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 79 | 933 |
+| Unit | 79 | 934 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **114** | **1214** |
+| **Total** | **114** | **1215** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1555,6 +1555,8 @@
   - *Structured output requests SHOULD include response_format.*
 - **`test_refs_resolved_by_inline_schema_refs`**
   - *inline_schema_refs() from server_quirks resolves $ref pointers.*
+- **`test_output_model_class_refs_inlined_in_response_format`**
+  - *output_model_class with nested models → response_format has no $ref/$defs (#260).*
 - **`test_no_chat_template_kwargs_in_extra_body`**
   - *Request kwargs should NOT include chat_template_kwargs (#255).*
 - **`test_extra_body_preserves_user_params`**
@@ -1685,10 +1687,10 @@
   - *skip_schema_enforcement defaults to False when not specified in config.*
 - **`test_skip_schema_enforcement_with_tools_omits_response_format`**
   - *When skip_schema_enforcement=True, tool requests also skip response_format.*
-- **`test_recovers_valid_json_from_code_fenced_500`**
-  - *InternalServerError with code-fenced valid JSON → recovery succeeds.*
-- **`test_recovers_from_unwrapped_body_format`**
-  - *OpenAI client unwraps error envelope — body is {'code', 'message', 'type'} not {'error': {...}}.*
+- **`test_code_fenced_500_raises_llm_invocation_error`**
+  - *InternalServerError with code-fenced valid JSON → raises LLMInvocationError (#261).*
+- **`test_unwrapped_body_500_raises_llm_invocation_error`**
+  - *InternalServerError with unwrapped body format → raises LLMInvocationError (#261).*
 - **`test_non_parseable_500_still_raises`**
   - *InternalServerError with unparseable content → raises LLMInvocationError.*
 - **`test_non_grammar_500_still_raises`**

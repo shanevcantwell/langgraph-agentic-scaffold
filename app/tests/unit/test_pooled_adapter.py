@@ -699,11 +699,12 @@ class TestExplicitServerType:
         )
         adapter.invoke(request)
 
-        # llama_server quirks (#255): schema enforcement ON, no thinking injection
+        # llama_server quirks (#255): schema enforcement ON
+        # Thinking suppressed per-request when response_format is active (llama.cpp#20345)
         call_kwargs = mock_client.chat.completions.create.call_args[1]
         assert "response_format" in call_kwargs
         assert call_kwargs["response_format"]["type"] == "json_schema"
-        assert "chat_template_kwargs" not in call_kwargs.get("extra_body", {})
+        assert call_kwargs["extra_body"]["chat_template_kwargs"] == {"enable_thinking": False}
         loop.close()
 
     def test_config_schema_accepts_server_type(self):

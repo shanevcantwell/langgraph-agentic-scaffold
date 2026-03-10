@@ -348,6 +348,12 @@ class LocalInferenceAdapter(BaseAdapter):
                     "tool_call_id": str(msg.tool_call_id)
                 })
 
+        # llama-server rejects trailing assistant messages as prefill when thinking
+        # is enabled (400 "incompatible with enable_thinking"). Strip defensively.
+        if api_messages and api_messages[-1].get("role") == "assistant":
+            logger.debug("Stripping trailing assistant message to avoid prefill rejection.")
+            api_messages.pop()
+
         return api_messages
 
     def _build_request_kwargs(self, request: StandardizedLLMRequest) -> Dict[str, Any]:
@@ -442,8 +448,17 @@ class LocalInferenceAdapter(BaseAdapter):
         else:
             logger.info(f"{self.__class__.__name__}: Invoking in Text mode.")
 
-        if self.extra_body:
-            api_kwargs["extra_body"] = self.extra_body
+        # Merge extra_body: start with instance-level, then layer on per-request overrides.
+        merged_extra = dict(self.extra_body) if self.extra_body else {}
+
+        # llama.cpp #20345: grammar enforcement is silently skipped when thinking is
+        # enabled. Suppress thinking per-request when response_format is active.
+        # LM Studio ignores unknown extra_body keys, so this is safe for all backends.
+        if "response_format" in api_kwargs:
+            merged_extra["chat_template_kwargs"] = {"enable_thinking": False}
+
+        if merged_extra:
+            api_kwargs["extra_body"] = merged_extra
 
         return api_kwargs
 
@@ -713,29 +728,10 @@ class LocalInferenceAdapter(BaseAdapter):
                 raise LLMInvocationError(f"API BadRequestError: {e}") from e
 
         except InternalServerError as e:
-            # #255: Grammar parse errors (e.g. code-fenced JSON) return 500 with
-            # the valid response embedded in the error body message. Try to recover.
-            error_body = getattr(e, 'body', None)
-            # OpenAI client unwraps the outer 'error' envelope — body is already
-            # {'code': 500, 'message': '...', 'type': 'server_error'}
-            if isinstance(error_body, dict):
-                error_message = error_body.get('message', '') or error_body.get('error', {}).get('message', '')
-            else:
-                error_message = str(e)
-            if "Failed to parse input" in error_message:
-                recovered = self._robustly_parse_json_from_text(error_message)
-                if recovered:
-                    latency_ms = int((time.perf_counter() - start_time) * 1000)
-                    logger.warning(
-                        f"Recovered valid JSON from grammar parse error{url_ctx} "
-                        f"(latency={latency_ms}ms). Server's grammar rejected code-fenced output."
-                    )
-                    result = {"json_response": self._post_process_json_response(recovered, request.output_model_class)}
-                    if capture_errors:
-                        capture_trace(request, result, latency_ms, self.model_name)
-                    return result
-
-            # Non-recoverable 500 — fall through to generic handler
+            # #261: Grammar parse errors surface as 500s — let them propagate.
+            # Previously this handler extracted JSON from error bodies and
+            # promoted them to successful responses, creating an observability
+            # blind spot (model_id: "no_llm_call", response_text: null).
             logger.error(f"API InternalServerError{url_ctx}: {e}", exc_info=True)
             if capture_errors:
                 latency_ms = int((time.perf_counter() - start_time) * 1000)

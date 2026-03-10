@@ -6,10 +6,9 @@ schema enforcement natively. The only quirk needed is $ref inlining — llama-se
 doesn't support JSON Schema $defs/$ref, so Pydantic-generated schemas must be
 flattened before sending.
 
-Thinking mode: if using a model with thinking (e.g. Qwen3.5), launch llama-server
-with `--reasoning-format none` to disable thinking at the server level. Per-request
-`chat_template_kwargs` control is unreliable (llama.cpp #13160) and conflicts with
-assistant message prefill.
+Thinking mode: grammar enforcement is incompatible with thinking in llama-server
+(ggml-org/llama.cpp#20345). When response_format is set, the adapter automatically
+suppresses thinking via chat_template_kwargs to work around this.
 
 Note: $ref inlining is handled by server_quirks.py for the pooled path.
 """
@@ -30,7 +29,7 @@ class LlamaServerAdapter(LocalInferenceAdapter):
     for the adapter registry. Schema enforcement stays ON — llama-server handles
     it natively via GBNF grammar.
 
-    For thinking-capable models, require `--reasoning-format none` as a launch flag.
+    Thinking is suppressed per-request when response_format is active (llama.cpp#20345).
     """
 
     def __init__(

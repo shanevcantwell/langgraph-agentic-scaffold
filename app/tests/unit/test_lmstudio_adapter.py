@@ -1000,11 +1000,11 @@ def test_from_config_passes_api_key(mock_openai_client):
 # =============================================================================
 
 class TestGrammarParseRecovery:
-    """Verify _call_with_error_handling recovers valid JSON from grammar parse 500s.
+    """Verify _call_with_error_handling propagates grammar parse 500s (#261).
 
-    When a server enforces JSON schema via grammar (PEG/GBNF), the model may wrap
-    its JSON in markdown code fences. The server rejects this with a 500, but the
-    valid JSON is embedded in the error message and can be recovered.
+    Grammar parse 500s (model wraps JSON in fences, PEG rejects) used to be
+    silently recovered. Since #261 removed the error-swallowing handler, all
+    InternalServerError 500s now propagate as LLMInvocationError.
     """
 
     @pytest.fixture
@@ -1037,8 +1037,8 @@ class TestGrammarParseRecovery:
         return error
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_recovers_valid_json_from_code_fenced_500(self, mock_openai, adapter):
-        """InternalServerError with code-fenced valid JSON → recovery succeeds."""
+    def test_code_fenced_500_raises_llm_invocation_error(self, mock_openai, adapter):
+        """InternalServerError with code-fenced valid JSON → raises LLMInvocationError (#261)."""
         valid_json = '{"reasoning": "Simple greeting", "actions": []}'
         error = self._make_internal_server_error(valid_json)
         adapter.client.chat.completions.create.side_effect = error
@@ -1052,19 +1052,16 @@ class TestGrammarParseRecovery:
 
         import time
         api_kwargs = adapter._build_request_kwargs(request)
-        result = adapter._call_with_error_handling(
-            lambda: adapter.client.chat.completions.create(**api_kwargs),
-            request, api_kwargs, time.perf_counter(),
-        )
-
-        assert result["json_response"]["reasoning"] == "Simple greeting"
-        assert result["json_response"]["actions"] == []
+        with pytest.raises(LLMInvocationError, match="API error"):
+            adapter._call_with_error_handling(
+                lambda: adapter.client.chat.completions.create(**api_kwargs),
+                request, api_kwargs, time.perf_counter(),
+            )
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_recovers_from_unwrapped_body_format(self, mock_openai, adapter):
-        """OpenAI client unwraps error envelope — body is {'code', 'message', 'type'} not {'error': {...}}."""
+    def test_unwrapped_body_500_raises_llm_invocation_error(self, mock_openai, adapter):
+        """InternalServerError with unwrapped body format → raises LLMInvocationError (#261)."""
         from openai import InternalServerError
-        # Real openai client sends body WITHOUT the outer 'error' wrapper
         error_body = {
             "code": 500,
             "message": 'Failed to parse input at pos 403: ```json\n{"reasoning": "Clear question", "actions": []}\n```',
@@ -1089,13 +1086,11 @@ class TestGrammarParseRecovery:
 
         import time
         api_kwargs = adapter._build_request_kwargs(request)
-        result = adapter._call_with_error_handling(
-            lambda: adapter.client.chat.completions.create(**api_kwargs),
-            request, api_kwargs, time.perf_counter(),
-        )
-
-        assert result["json_response"]["reasoning"] == "Clear question"
-        assert result["json_response"]["actions"] == []
+        with pytest.raises(LLMInvocationError, match="API error"):
+            adapter._call_with_error_handling(
+                lambda: adapter.client.chat.completions.create(**api_kwargs),
+                request, api_kwargs, time.perf_counter(),
+            )
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_non_parseable_500_still_raises(self, mock_openai, adapter):
