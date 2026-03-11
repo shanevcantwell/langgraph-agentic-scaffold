@@ -1147,6 +1147,11 @@ function renderArtifactsWithCheckboxes(artifacts, pageIndex) {
         const pre = document.createElement('pre');
         if (typeof value === 'object') {
             pre.textContent = JSON.stringify(value, null, 2);
+        } else if (key.endsWith('.html') || strVal.startsWith('<!DOCTYPE') || strVal.startsWith('<html')) {
+            // #263: Hide HTML source to prevent CSS leakage; user has RENDER/SAVE buttons
+            pre.textContent = `HTML document (${formatBytes(size)}) — click RENDER to view.`;
+            pre.style.opacity = '0.6';
+            pre.style.fontStyle = 'italic';
         } else {
             pre.textContent = decodeHtmlEntities(String(value));
         }

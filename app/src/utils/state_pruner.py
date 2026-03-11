@@ -122,6 +122,9 @@ def generate_success_report(report_data: SuccessReport) -> str:
             # Skip the final response artifact as it's displayed prominently elsewhere.
             if key == "final_user_response.md":
                 continue
+            # #263: CSS leaks into report markdown via marked.parse(); user has RENDER button
+            if key == "html_document.html":
+                continue
 
             # Handle Images
             if key.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp')) or (isinstance(value, str) and value.startswith('data:image')):
