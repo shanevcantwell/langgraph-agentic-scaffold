@@ -1,6 +1,6 @@
 # ADR-CORE-022: The Heap — Filesystem-Backed Cognitive Memory
 
-**Status:** Accepted  
+**Status:** Completed
 **Date:** 2025-12-03  
 **Context:** langgraph-agentic-scaffold (LAS)  
 **Layer:** Infrastructure (Foundation)  

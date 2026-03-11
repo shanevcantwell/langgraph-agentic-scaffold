@@ -1,6 +1,6 @@
 # ADR-CORE-053: Config-Driven Specialist Menu Exclusion
 
-**Status:** Proposed
+**Status:** Completed
 **Date:** 2026-01-25
 **Closes:** Issue #63
 **Relates To:** ADR-CORE-028 (Centralized Specialist Exclusion Logic), ADR-CORE-016 (Menu Filter Pattern)

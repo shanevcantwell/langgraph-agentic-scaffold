@@ -1,6 +1,6 @@
 # **ADR-OBS-001: System Observability and Archival Strategy**
 
-** * *Status: * * Proposed**  
+**Status:** Completed
 ** * *Date: * * 2025-10-01**
 
 ---

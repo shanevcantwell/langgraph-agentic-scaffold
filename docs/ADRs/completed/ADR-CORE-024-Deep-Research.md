@@ -1,6 +1,6 @@
 # ADR-CORE-024: Deep Research — Focused Investigation Pattern
 
-**Status:** Proposed
+**Status:** Completed
 **Date:** 2025-12-03
 **Context:** langgraph-agentic-scaffold (LAS)
 **Layer:** Application (Workflow)

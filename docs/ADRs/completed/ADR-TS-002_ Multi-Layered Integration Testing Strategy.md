@@ -1,6 +1,6 @@
 # ADR-TS-002: Multi-Layered Integration Testing Strategy
 
-**Status:** Proposed **Date:** 2025-10-01
+**Status:** Completed **Date:** 2025-10-01
 
 ## Context
 

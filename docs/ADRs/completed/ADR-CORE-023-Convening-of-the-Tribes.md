@@ -1,6 +1,6 @@
 # ADR-CORE-023: Convening of the Tribes — Multi-Model Orchestration
 
-**Status:** Accepted  
+**Status:** Completed
 **Date:** 2025-12-03  
 **Context:** langgraph-agentic-scaffold (LAS)  
 **Layer:** Orchestration (Policy)  

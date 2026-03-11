@@ -1,6 +1,6 @@
 # ADR-CORE-042: Specialist Clarification Pattern ("Raise Hand")
 
-**Status:** Proposed (v2 consideration)
+**Status:** Completed
 **Created:** 2024-12-27
 **Context:** Observed during image_specialist execution requesting UI clarification
 **Prerequisites:** ADR-CORE-018 (implemented 2026-01-20)

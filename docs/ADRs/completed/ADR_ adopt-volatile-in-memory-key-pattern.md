@@ -2,7 +2,7 @@
 
 # ADR-001: Adopt Volatile In-Memory Key Pattern for At-Rest Data Security
 
-**Status:** Accepted
+**Status:** Completed
 
 ## Context
 

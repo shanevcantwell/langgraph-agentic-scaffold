@@ -1,6 +1,6 @@
 ## **Refactor ChiefOfStaff into GraphBuilder and GraphOrchestrator**
 
-**Status:** Proposed
+**Status:** Completed
 
 ---
 

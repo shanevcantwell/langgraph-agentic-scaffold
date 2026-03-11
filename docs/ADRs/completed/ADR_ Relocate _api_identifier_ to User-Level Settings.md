@@ -1,6 +1,6 @@
 ### **ADR: Relocate `api_identifier` to User-Level Settings**
 
-*   **Status:** Accepted
+*   **Status:** Completed
 *   **Date:** 2025-09-17
 *   **Deciders:** System Architecture Team
 
