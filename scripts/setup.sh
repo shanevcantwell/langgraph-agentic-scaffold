@@ -17,7 +17,7 @@ cd "$PROJECT_ROOT"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
 echo -e "${BLUE}║  LangGraph Agentic Scaffold - Interactive Setup           ║${NC}"
-echo -e "${BLUE}║  Version: 0.1.0-alpha                                      ║${NC}"
+echo -e "${BLUE}║  Version: 0.2.0                                           ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
@@ -104,8 +104,8 @@ if [ "$SURF_MCP_AVAILABLE" = false ]; then
     echo ""
     echo "surf-mcp provides browser automation via visual grounding (Fara-7B)."
     echo "This enables specialists to:"
-    echo "  • Navigate web pages using natural language"
-    echo "  • Click buttons, fill forms without CSS selectors"
+    echo "  - Navigate web pages using natural language"
+    echo "  - Click buttons, fill forms without CSS selectors"
     echo ""
     echo "Note: surf-mcp is browser-only. For filesystem, use FileSpecialist."
     echo ""
@@ -131,19 +131,17 @@ fi
 echo ""
 echo -e "${BLUE}[3/6] Choose your LLM provider:${NC}"
 echo ""
-echo "1) Google Gemini (Recommended for Alpha)"
+echo "1) Google Gemini (Recommended to start)"
 echo "   - Fastest setup (just need API key)"
 echo "   - Generous free tier (1500 requests/day)"
-echo "   - Tested extensively with this scaffold"
 echo "   - Get API key: https://makersuite.google.com/app/apikey"
 echo ""
-echo "2) LM Studio (Local/Offline)"
-echo "   - Zero API costs"
-echo "   - Runs completely offline"
-echo "   - Requires: LM Studio + downloaded model (~4-8GB)"
-echo "   - Download: https://lmstudio.ai"
+echo "2) Local Inference (LM Studio / llama-server / vLLM)"
+echo "   - Zero API costs, runs offline"
+echo "   - Any OpenAI-compatible server works"
+echo "   - Requires a running server + loaded model"
 echo ""
-echo "3) Hybrid (Gemini + LM Studio)"
+echo "3) Hybrid (Gemini + Local)"
 echo "   - Best of both worlds"
 echo "   - Requires both setups above"
 echo ""
@@ -158,7 +156,7 @@ echo -e "${BLUE}[4/6] Configuration setup...${NC}"
 
 # Initialize config variables
 GOOGLE_API_KEY=""
-LMSTUDIO_BASE_URL=""
+LOCAL_INFERENCE_URL=""
 DEFAULT_PROVIDER=""
 ROUTER_PROVIDER=""
 
@@ -172,19 +170,17 @@ case $PROVIDER_CHOICE in
         ;;
     2)
         echo ""
-        echo "LM Studio Setup:"
-        echo "1. Download and install LM Studio from https://lmstudio.ai"
-        echo "2. Download a model (recommended: Llama 3 8B Instruct)"
-        echo "3. Start the local server (look for 'Start Server' button)"
-        echo "4. Note the server URL (usually http://localhost:1234/v1)"
+        echo "Local Inference Setup:"
+        echo "Start your server (LM Studio, llama-server, vLLM, etc.) and load a model."
+        echo "The default URL is http://localhost:1234/v1 (LM Studio's default)."
         echo ""
-        read -p "Enter LM Studio base URL [http://localhost:1234/v1]: " LMSTUDIO_INPUT
-        LMSTUDIO_BASE_URL=${LMSTUDIO_INPUT:-"http://localhost:1234/v1"}
+        read -p "Enter server base URL [http://localhost:1234/v1]: " LOCAL_INPUT
+        LOCAL_INFERENCE_URL=${LOCAL_INPUT:-"http://localhost:1234/v1"}
 
         # If using Docker, convert localhost to host.docker.internal
         if [ "$INSTALL_MODE" = "1" ]; then
-            LMSTUDIO_BASE_URL=$(echo $LMSTUDIO_BASE_URL | sed 's/localhost/host.docker.internal/')
-            echo -e "${YELLOW}Note:${NC} Docker mode detected. Using $LMSTUDIO_BASE_URL"
+            LOCAL_INFERENCE_URL=$(echo $LOCAL_INFERENCE_URL | sed 's/localhost/host.docker.internal/')
+            echo -e "${YELLOW}Note:${NC} Docker mode detected. Using $LOCAL_INFERENCE_URL"
         fi
 
         DEFAULT_PROVIDER="lmstudio_specialist"
@@ -195,11 +191,11 @@ case $PROVIDER_CHOICE in
         echo "Enter your Google API key:"
         read -p "> " GOOGLE_API_KEY
         echo ""
-        read -p "Enter LM Studio base URL [http://localhost:1234/v1]: " LMSTUDIO_INPUT
-        LMSTUDIO_BASE_URL=${LMSTUDIO_INPUT:-"http://localhost:1234/v1"}
+        read -p "Enter local server base URL [http://localhost:1234/v1]: " LOCAL_INPUT
+        LOCAL_INFERENCE_URL=${LOCAL_INPUT:-"http://localhost:1234/v1"}
 
         if [ "$INSTALL_MODE" = "1" ]; then
-            LMSTUDIO_BASE_URL=$(echo $LMSTUDIO_BASE_URL | sed 's/localhost/host.docker.internal/')
+            LOCAL_INFERENCE_URL=$(echo $LOCAL_INFERENCE_URL | sed 's/localhost/host.docker.internal/')
         fi
 
         DEFAULT_PROVIDER="gemini_flash"
@@ -241,11 +237,14 @@ GOOGLE_API_KEY="$GOOGLE_API_KEY"
 EOF
 fi
 
-if [ -n "$LMSTUDIO_BASE_URL" ]; then
+if [ -n "$LOCAL_INFERENCE_URL" ]; then
     cat >> .env << EOF
-# LM Studio (Local)
-LMSTUDIO_BASE_URL="$LMSTUDIO_BASE_URL"
-# LMSTUDIO_TIMEOUT=180
+# Local Inference Server (LM Studio, llama-server, vLLM, etc.)
+LOCAL_INFERENCE_BASE_URL="$LOCAL_INFERENCE_URL"
+# LOCAL_INFERENCE_TIMEOUT=180
+
+# Distributed inference (multiple GPUs/machines):
+# LOCAL_INFERENCE_SERVERS="rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:8081/v1"
 
 EOF
 fi
@@ -268,6 +267,10 @@ echo -e "${GREEN}✓${NC} Created .env"
 cat > user_settings.yaml << EOF
 # Auto-generated by setup.sh on $(date)
 # You can edit this file to customize model assignments
+# See user_settings.yaml.example for all options
+
+architecture: "default"
+max_image_size_mb: 10
 
 llm_providers:
 EOF
@@ -283,8 +286,10 @@ if [ -n "$GOOGLE_API_KEY" ]; then
 EOF
 fi
 
-if [ -n "$LMSTUDIO_BASE_URL" ]; then
+if [ -n "$LOCAL_INFERENCE_URL" ]; then
     cat >> user_settings.yaml << EOF
+  # type: "lmstudio" works for LM Studio and most local servers.
+  # Use type: "local" for llama-server/vLLM, "local_pool" for multi-GPU.
   lmstudio_router:
     type: "lmstudio"
     api_identifier: "local-model"
@@ -298,12 +303,14 @@ cat >> user_settings.yaml << EOF
 
 specialist_model_bindings:
   router_specialist: "$ROUTER_PROVIDER"
-  prompt_triage_specialist: "$DEFAULT_PROVIDER"
+  prompt_triage_specialist: "$ROUTER_PROVIDER"
+  triage_architect: "$ROUTER_PROVIDER"
+  default_responder_specialist: "$ROUTER_PROVIDER"
   chat_specialist: "$DEFAULT_PROVIDER"
   systems_architect: "$DEFAULT_PROVIDER"
   prompt_specialist: "$DEFAULT_PROVIDER"
-  open_interpreter_specialist: "$DEFAULT_PROVIDER"
-  end_specialist: "$DEFAULT_PROVIDER"
+  exit_interview_specialist: "$DEFAULT_PROVIDER"
+  summarizer_specialist: "$DEFAULT_PROVIDER"
 
   # Tiered chat subgraph (parallel execution)
   progenitor_alpha_specialist: "$DEFAULT_PROVIDER"
@@ -313,6 +320,12 @@ default_llm_config: "$DEFAULT_PROVIDER"
 
 # UI module (default: gradio_app)
 ui_module: "gradio_app"
+
+# Checkpointing (required for human-in-the-loop)
+checkpointing:
+  enabled: false
+  backend: "sqlite"
+  sqlite_path: "./data/checkpoints.db"
 EOF
 
 echo -e "${GREEN}✓${NC} Created user_settings.yaml"
@@ -371,7 +384,7 @@ fi
 # ============================================================================
 echo ""
 echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}║  ✓ Setup Complete! Your agentic system is ready.          ║${NC}"
+echo -e "${GREEN}║  Setup Complete! Your agentic system is ready.            ║${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BLUE}Next Steps:${NC}"
@@ -379,13 +392,14 @@ echo ""
 
 if [ "$INSTALL_MODE" = "1" ]; then
     echo "Access your system:"
-    echo "  • Web UI:  http://localhost:5003"
-    echo "  • API:     http://localhost:8000/docs"
+    echo "  - Web UI (VEGAS):  http://localhost:3000"
+    echo "  - Gradio UI:       http://localhost:5003"
+    echo "  - API Docs:        http://localhost:8000/docs"
     echo ""
     echo "Useful commands:"
-    echo "  • View logs:     docker compose logs -f app"
-    echo "  • Stop system:   docker compose down"
-    echo "  • Restart:       docker compose restart app"
+    echo "  - View logs:     docker compose logs -f app"
+    echo "  - Stop system:   docker compose down"
+    echo "  - Restart:       docker compose restart app"
     echo ""
 else
     echo "Activate the virtual environment:"
@@ -398,16 +412,16 @@ else
 fi
 
 echo "Documentation:"
-echo "  • Developer's Guide:  ./docs/DEVELOPERS_GUIDE.md"
-echo "  • Create Specialist:  ./docs/CREATING_A_NEW_SPECIALIST.md"
+echo "  - Developer's Guide:  ./docs/DEVELOPERS_GUIDE.md"
+echo "  - Configuration:      ./docs/CONFIGURATION_GUIDE.md"
 echo ""
 
 if [ -n "$GOOGLE_API_KEY" ]; then
     echo -e "${YELLOW}Note:${NC} Using Gemini Flash (1500 free requests/day)"
 fi
 
-if [ -n "$LMSTUDIO_BASE_URL" ]; then
-    echo -e "${YELLOW}Note:${NC} Ensure LM Studio server is running at $LMSTUDIO_BASE_URL"
+if [ -n "$LOCAL_INFERENCE_URL" ]; then
+    echo -e "${YELLOW}Note:${NC} Ensure your local inference server is running at $LOCAL_INFERENCE_URL"
 fi
 
 if [ "$SURF_MCP_AVAILABLE" = true ]; then
@@ -416,4 +430,4 @@ if [ "$SURF_MCP_AVAILABLE" = true ]; then
 fi
 
 echo ""
-echo "Happy building! 🚀"
+echo "Happy building!"

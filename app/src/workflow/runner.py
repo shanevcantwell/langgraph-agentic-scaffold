@@ -146,10 +146,11 @@ class WorkflowRunner:
                     f"Pre-flight check failed: Provider '{binding_key}' is type 'gemini' but "
                     "the GOOGLE_API_KEY environment variable is not set."
                 )
-            elif provider_type in ("lmstudio", "lmstudio_pool") and not provider_config.get("base_url"):
+            elif provider_type in ("local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool") and not provider_config.get("base_url"):
                 raise ConfigError(
-                    f"Pre-flight check failed: Provider '{binding_key}' is type 'lmstudio' but "
-                    "the LMSTUDIO_BASE_URL environment variable is not set."
+                    f"Pre-flight check failed: Provider '{binding_key}' is type '{provider_type}' but "
+                    "no base_url resolved. Set LOCAL_INFERENCE_BASE_URL in .env, or use "
+                    "LOCAL_INFERENCE_SERVERS with a 'server:' key in user_settings.yaml."
                 )
 
         workflow_config = self.config.get("workflow", {})

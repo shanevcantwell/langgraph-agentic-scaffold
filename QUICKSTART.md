@@ -12,7 +12,7 @@ Choose **ONE** of the following:
 Plus, choose your LLM provider:
 
 - **Google Gemini** (Easiest) - Free tier: 1500 requests/day - [Get API key](https://makersuite.google.com/app/apikey)
-- **LM Studio** (Offline) - Zero cost, runs locally - [Download here](https://lmstudio.ai)
+- **Local Inference** (Offline) - Zero cost, runs locally - Any OpenAI-compatible server: [LM Studio](https://lmstudio.ai), [llama-server](https://github.com/ggml-org/llama.cpp), [vLLM](https://docs.vllm.ai/)
 
 ---
 
@@ -56,7 +56,8 @@ The installer will:
 
 Once setup completes, access your agentic system:
 
-- **Web UI**: http://localhost:5003
+- **Web UI (VEGAS)**: http://localhost:3000
+- **Gradio UI**: http://localhost:5003
 - **API Docs**: http://localhost:8000/docs
 
 ### Try Your First Query
@@ -141,13 +142,13 @@ docker compose down
 docker compose up --build -d
 ```
 
-### Docker: Can't connect to LM Studio
+### Docker: Can't connect to local inference server
 
-If using LM Studio with Docker, the installer automatically converts `localhost` to `host.docker.internal`.
+If using a local inference server with Docker, the installer automatically converts `localhost` to `host.docker.internal`.
 
 Verify in `.env`:
 ```bash
-LMSTUDIO_BASE_URL="http://host.docker.internal:1234/v1"
+LOCAL_INFERENCE_BASE_URL="http://host.docker.internal:1234/v1"
 ```
 
 ### Python: Import errors
@@ -161,10 +162,10 @@ source ./.venv_agents/bin/activate  # Linux/Mac
 pip install -e '.[dev]'
 ```
 
-### LM Studio: Model not responding
+### Local Inference: Model not responding
 
-1. Ensure LM Studio server is running (look for green "Server Running" indicator)
-2. Check that a model is loaded (you should see it in the server panel)
+1. Ensure your inference server is running (LM Studio, llama-server, vLLM, etc.)
+2. Check that a model is loaded
 3. Test the connection:
    ```bash
    curl http://localhost:1234/v1/models

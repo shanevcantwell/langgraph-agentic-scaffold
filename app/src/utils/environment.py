@@ -29,7 +29,7 @@ def get_environment_context() -> dict:
     """
     return {
         "is_docker": is_docker(),
-        "has_lmstudio_url": bool(os.environ.get("LMSTUDIO_BASE_URL")),
-        "has_gemini_key": bool(os.environ.get("GEMINI_API_KEY")),
+        "has_local_inference_url": bool(os.environ.get("LOCAL_INFERENCE_BASE_URL") or os.environ.get("LMSTUDIO_BASE_URL")),
+        "has_gemini_key": bool(os.environ.get("GOOGLE_API_KEY")),
         "langchain_tracing": os.environ.get("LANGCHAIN_TRACING_V2") == "true",
     }

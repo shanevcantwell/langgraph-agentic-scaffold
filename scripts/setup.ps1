@@ -10,7 +10,7 @@ Set-Location $ProjectRoot
 
 Write-Host "╔════════════════════════════════════════════════════════════╗" -ForegroundColor Blue
 Write-Host "║  LangGraph Agentic Scaffold - Interactive Setup           ║" -ForegroundColor Blue
-Write-Host "║  Version: 0.1.0-alpha (Windows)                           ║" -ForegroundColor Blue
+Write-Host "║  Version: 0.2.0                                           ║" -ForegroundColor Blue
 Write-Host "╚════════════════════════════════════════════════════════════╝" -ForegroundColor Blue
 Write-Host ""
 
@@ -89,19 +89,17 @@ $InstallMode = Read-Host "Enter choice ($($ValidChoices -join ' or '))"
 Write-Host ""
 Write-Host "[3/6] Choose your LLM provider:" -ForegroundColor Blue
 Write-Host ""
-Write-Host "1) Google Gemini (Recommended for Alpha)"
+Write-Host "1) Google Gemini (Recommended to start)"
 Write-Host "   - Fastest setup (just need API key)"
 Write-Host "   - Generous free tier (1500 requests/day)"
-Write-Host "   - Tested extensively with this scaffold"
 Write-Host "   - Get API key: https://makersuite.google.com/app/apikey"
 Write-Host ""
-Write-Host "2) LM Studio (Local/Offline)"
-Write-Host "   - Zero API costs"
-Write-Host "   - Runs completely offline"
-Write-Host "   - Requires: LM Studio + downloaded model (~4-8GB)"
-Write-Host "   - Download: https://lmstudio.ai"
+Write-Host "2) Local Inference (LM Studio / llama-server / vLLM)"
+Write-Host "   - Zero API costs, runs offline"
+Write-Host "   - Any OpenAI-compatible server works"
+Write-Host "   - Requires a running server + loaded model"
 Write-Host ""
-Write-Host "3) Hybrid (Gemini + LM Studio)"
+Write-Host "3) Hybrid (Gemini + Local)"
 Write-Host "   - Best of both worlds"
 Write-Host "   - Requires both setups above"
 Write-Host ""
@@ -115,7 +113,7 @@ Write-Host ""
 Write-Host "[4/6] Configuration setup..." -ForegroundColor Blue
 
 $GoogleApiKey = ""
-$LmStudioBaseUrl = ""
+$LocalInferenceUrl = ""
 $DefaultProvider = ""
 $RouterProvider = ""
 
@@ -128,18 +126,16 @@ switch ($ProviderChoice) {
     }
     "2" {
         Write-Host ""
-        Write-Host "LM Studio Setup:"
-        Write-Host "1. Download and install LM Studio from https://lmstudio.ai"
-        Write-Host "2. Download a model (recommended: Llama 3 8B Instruct)"
-        Write-Host "3. Start the local server (look for 'Start Server' button)"
-        Write-Host "4. Note the server URL (usually http://localhost:1234/v1)"
+        Write-Host "Local Inference Setup:"
+        Write-Host "Start your server (LM Studio, llama-server, vLLM, etc.) and load a model."
+        Write-Host "The default URL is http://localhost:1234/v1 (LM Studio's default)."
         Write-Host ""
-        $LmStudioInput = Read-Host "Enter LM Studio base URL [http://localhost:1234/v1]"
-        $LmStudioBaseUrl = if ($LmStudioInput) { $LmStudioInput } else { "http://localhost:1234/v1" }
+        $LocalInput = Read-Host "Enter server base URL [http://localhost:1234/v1]"
+        $LocalInferenceUrl = if ($LocalInput) { $LocalInput } else { "http://localhost:1234/v1" }
 
         if ($InstallMode -eq "1") {
-            $LmStudioBaseUrl = $LmStudioBaseUrl -replace "localhost", "host.docker.internal"
-            Write-Host "Note: Docker mode detected. Using $LmStudioBaseUrl" -ForegroundColor Yellow
+            $LocalInferenceUrl = $LocalInferenceUrl -replace "localhost", "host.docker.internal"
+            Write-Host "Note: Docker mode detected. Using $LocalInferenceUrl" -ForegroundColor Yellow
         }
 
         $DefaultProvider = "lmstudio_specialist"
@@ -149,11 +145,11 @@ switch ($ProviderChoice) {
         Write-Host ""
         $GoogleApiKey = Read-Host "Enter your Google API key"
         Write-Host ""
-        $LmStudioInput = Read-Host "Enter LM Studio base URL [http://localhost:1234/v1]"
-        $LmStudioBaseUrl = if ($LmStudioInput) { $LmStudioInput } else { "http://localhost:1234/v1" }
+        $LocalInput = Read-Host "Enter local server base URL [http://localhost:1234/v1]"
+        $LocalInferenceUrl = if ($LocalInput) { $LocalInput } else { "http://localhost:1234/v1" }
 
         if ($InstallMode -eq "1") {
-            $LmStudioBaseUrl = $LmStudioBaseUrl -replace "localhost", "host.docker.internal"
+            $LocalInferenceUrl = $LocalInferenceUrl -replace "localhost", "host.docker.internal"
         }
 
         $DefaultProvider = "gemini_flash"
@@ -202,11 +198,14 @@ GOOGLE_API_KEY="$GoogleApiKey"
 "@
 }
 
-if ($LmStudioBaseUrl) {
+if ($LocalInferenceUrl) {
     $EnvContent += @"
-# LM Studio (Local)
-LMSTUDIO_BASE_URL="$LmStudioBaseUrl"
-# LMSTUDIO_TIMEOUT=180
+# Local Inference Server (LM Studio, llama-server, vLLM, etc.)
+LOCAL_INFERENCE_BASE_URL="$LocalInferenceUrl"
+# LOCAL_INFERENCE_TIMEOUT=180
+
+# Distributed inference (multiple GPUs/machines):
+# LOCAL_INFERENCE_SERVERS="rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:8081/v1"
 
 "@
 }
@@ -230,12 +229,17 @@ Write-Host "✓ Created .env" -ForegroundColor Green
 $UserSettingsContent = @"
 # Auto-generated by setup.ps1 on $(Get-Date)
 # You can edit this file to customize model assignments
+# See user_settings.yaml.example for all options
+
+architecture: "default"
+max_image_size_mb: 10
 
 llm_providers:
 "@
 
 if ($GoogleApiKey) {
     $UserSettingsContent += @"
+
   gemini_flash:
     type: "gemini"
     api_identifier: "gemini-2.5-flash"
@@ -245,8 +249,11 @@ if ($GoogleApiKey) {
 "@
 }
 
-if ($LmStudioBaseUrl) {
+if ($LocalInferenceUrl) {
     $UserSettingsContent += @"
+
+  # type: "lmstudio" works for LM Studio and most local servers.
+  # Use type: "local" for llama-server/vLLM, "local_pool" for multi-GPU.
   lmstudio_router:
     type: "lmstudio"
     api_identifier: "local-model"
@@ -260,12 +267,14 @@ $UserSettingsContent += @"
 
 specialist_model_bindings:
   router_specialist: "$RouterProvider"
-  prompt_triage_specialist: "$DefaultProvider"
+  prompt_triage_specialist: "$RouterProvider"
+  triage_architect: "$RouterProvider"
+  default_responder_specialist: "$RouterProvider"
   chat_specialist: "$DefaultProvider"
   systems_architect: "$DefaultProvider"
   prompt_specialist: "$DefaultProvider"
-  open_interpreter_specialist: "$DefaultProvider"
-  end_specialist: "$DefaultProvider"
+  exit_interview_specialist: "$DefaultProvider"
+  summarizer_specialist: "$DefaultProvider"
 
   # Tiered chat subgraph (parallel execution)
   progenitor_alpha_specialist: "$DefaultProvider"
@@ -275,6 +284,12 @@ default_llm_config: "$DefaultProvider"
 
 # UI module (default: gradio_app)
 ui_module: "gradio_app"
+
+# Checkpointing (required for human-in-the-loop)
+checkpointing:
+  enabled: false
+  backend: "sqlite"
+  sqlite_path: "./data/checkpoints.db"
 "@
 
 $UserSettingsContent | Out-File -FilePath "user_settings.yaml" -Encoding UTF8
@@ -320,7 +335,7 @@ if ($InstallMode -eq "1") {
 # ============================================================================
 Write-Host ""
 Write-Host "╔════════════════════════════════════════════════════════════╗" -ForegroundColor Green
-Write-Host "║  ✓ Setup Complete! Your agentic system is ready.          ║" -ForegroundColor Green
+Write-Host "║  Setup Complete! Your agentic system is ready.            ║" -ForegroundColor Green
 Write-Host "╚════════════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "Next Steps:" -ForegroundColor Blue
@@ -328,13 +343,14 @@ Write-Host ""
 
 if ($InstallMode -eq "1") {
     Write-Host "Access your system:"
-    Write-Host "  • Web UI:  http://localhost:5003"
-    Write-Host "  • API:     http://localhost:8000/docs"
+    Write-Host "  - Web UI (VEGAS):  http://localhost:3000"
+    Write-Host "  - Gradio UI:       http://localhost:5003"
+    Write-Host "  - API Docs:        http://localhost:8000/docs"
     Write-Host ""
     Write-Host "Useful commands:"
-    Write-Host "  • View logs:     docker compose logs -f app"
-    Write-Host "  • Stop system:   docker compose down"
-    Write-Host "  • Restart:       docker compose restart app"
+    Write-Host "  - View logs:     docker compose logs -f app"
+    Write-Host "  - Stop system:   docker compose down"
+    Write-Host "  - Restart:       docker compose restart app"
     Write-Host ""
 } else {
     Write-Host "Activate the virtual environment:"
@@ -347,17 +363,17 @@ if ($InstallMode -eq "1") {
 }
 
 Write-Host "Documentation:"
-Write-Host "  • Developer's Guide:  .\docs\DEVELOPERS_GUIDE.md"
-Write-Host "  • Create Specialist:  .\docs\CREATING_A_NEW_SPECIALIST.md"
+Write-Host "  - Developer's Guide:  .\docs\DEVELOPERS_GUIDE.md"
+Write-Host "  - Configuration:      .\docs\CONFIGURATION_GUIDE.md"
 Write-Host ""
 
 if ($GoogleApiKey) {
     Write-Host "Note: Using Gemini Flash (1500 free requests/day)" -ForegroundColor Yellow
 }
 
-if ($LmStudioBaseUrl) {
-    Write-Host "Note: Ensure LM Studio server is running at $LmStudioBaseUrl" -ForegroundColor Yellow
+if ($LocalInferenceUrl) {
+    Write-Host "Note: Ensure your local inference server is running at $LocalInferenceUrl" -ForegroundColor Yellow
 }
 
 Write-Host ""
-Write-Host "Happy building! 🚀"
+Write-Host "Happy building!"

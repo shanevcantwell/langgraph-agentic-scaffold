@@ -88,20 +88,20 @@ def main():
             continue
 
         ptype = config.get("type")
-        if ptype == "lmstudio":
-            base_url = os.getenv("LMSTUDIO_BASE_URL")
+        local_types = {"local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool"}
+        if ptype in local_types:
+            base_url = os.getenv("LOCAL_INFERENCE_BASE_URL") or os.getenv("LMSTUDIO_BASE_URL")
             if not base_url:
-                print(f"ERROR: Provider '{name}' is lmstudio but LMSTUDIO_BASE_URL not set.")
+                print(f"ERROR: Provider '{name}' is '{ptype}' but LOCAL_INFERENCE_BASE_URL not set.")
                 continue
-            
-            # LM Studio base url usually ends in /v1, we want to check /v1/models
-            # Handle trailing slash
+
+            # Base url usually ends in /v1, we want to check /v1/models
             base_url = base_url.rstrip('/')
             check_url_target = f"{base_url}/models"
-            
+
             if check_url_target not in checked_urls:
-                if not check_url(check_url_target, f"LM Studio ({base_url})"):
-                    print("CRITICAL: Cannot reach LM Studio. Is it running? Is 'host.docker.internal' working?")
+                if not check_url(check_url_target, f"Local Inference ({base_url})"):
+                    print("CRITICAL: Cannot reach local inference server. Is it running? Is 'host.docker.internal' working?")
                     sys.exit(1)
                 checked_urls.add(check_url_target)
 
