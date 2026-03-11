@@ -77,7 +77,7 @@ No specialist can self-declare "done." Termination flows through four stages:
 
 Different models for different roles, all runtime-configurable. Router might be Qwen on an RTX-3090, Project Director might be Gemini Pro, chat progenitors might be Gemini + Claude for adversarial validation. No code changes — just `user_settings.yaml`.
 
-Adapters for local inference (LM Studio / llama.cpp), Gemini, Anthropic, and OpenAI. Named server references support distributed inference across multiple GPU machines.
+Adapters for local inference (LM Studio / llama-server) and Gemini. Named server references support distributed inference across multiple GPU machines.
 
 ---
 
@@ -93,7 +93,7 @@ LAS is the composition layer for independently-developed AI services, each a sel
 | **[local-inference-pool](https://github.com/shanevcantwell/local-inference-pool)** | Multi-GPU compute substrate with JIT-swap guard and least-loaded balancing. |
 | **[it-tools-mcp](https://github.com/shanevcantwell/it-tools-mcp)** | 119 IT utility tools for data transformation and analysis. |
 
-Repo boundaries are **context firewalls** — separate repos prevent AI assistants from accidentally growing or damaging code that exceeds their context window.
+**Repo boundaries are context firewalls.** Each service lives in its own repository because AI coding assistants will grow, refactor, and occasionally damage any code within their context window. Separate repos make that structurally impossible — a specialist working in LAS literally cannot see prompt-prix source code. This is a deliberate architectural choice, not organizational preference.
 
 ---
 
@@ -109,13 +109,19 @@ Repo boundaries are **context firewalls** — separate repos prevent AI assistan
 
 ## Running It
 
+### Prerequisites
+
+- **Docker and Docker Compose** (recommended path)
+- **At least one inference endpoint** — a local model server (LM Studio or llama-server) or a Gemini API key
+- Python 3.12+ (local path only)
+
 ### Docker (Recommended)
 
 ```bash
 git clone https://github.com/shanevcantwell/langgraph-agentic-scaffold.git
 cd langgraph-agentic-scaffold
 
-cp .env.example .env                          # Add API keys
+cp .env.example .env                          # Add API keys — NEVER commit .env
 cp proxy/squid.conf.example proxy/squid.conf
 cp user_settings.yaml.example user_settings.yaml  # Bind models to specialists
 
@@ -173,17 +179,14 @@ The **V.E.G.A.S. Terminal** provides real-time streaming: semantic thought entri
 | [MCP Guide](./docs/MCP_GUIDE.md) | Model Context Protocol integration |
 | [Specialist Briefings](./docs/specialists/) | Per-specialist technical deep dives |
 | [Developer Docs](./docs/dev/) | Creating specialists, patterns, subgraphs, testing, troubleshooting |
+| [Research Directions](./docs/RESEARCH.md) | Prompt geometry, explicit MoE, context engineering |
 | [ADRs](./docs/ADRs/) | Architectural decisions and design rationale |
 
 ---
 
 ## Research Directions
 
-LAS serves as a workbench for studying how orchestration-layer interventions shape model behavior without touching weights:
-
-- **Prompt geometry** — semantic-chunker measures phrasing geometry in 768-d embedding space. RLHF shapes response space by making regions "cold." Phrasings distant from trained forms may hit unexplored regions.
-- **Explicit MoE as interpretability** — specialist routing decisions are observable analogs of implicit MoE expert selection. TransformerLens can compare external routing with internal expert activation.
-- **Context engineering as physics** — token positions create query-key geometries that determine inference trajectories. The Facilitator constructs the experiential reality for each inference pass.
+LAS doubles as a workbench for studying how orchestration-layer interventions shape model behavior without touching weights. See [Research Directions](./docs/RESEARCH.md) for the full treatment: prompt geometry, explicit MoE as interpretability, context engineering as physics.
 
 ---
 
