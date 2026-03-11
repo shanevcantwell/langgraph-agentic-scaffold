@@ -160,7 +160,7 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
 {
   "providers": [
     {"key": "gemini_pro", "type": "gemini", "model": "gemini-1.5-pro", "is_default": true},
-    {"key": "lmstudio_local", "type": "lmstudio", "model": "llama-3.1", "is_default": false}
+    {"key": "local_default", "type": "local", "model": "llama-3.1", "is_default": false}
   ],
   "current_default": "gemini_pro"
 }
@@ -175,7 +175,7 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
 **Request:**
 ```json
 {
-  "default_llm_config": "lmstudio_local"
+  "default_llm_config": "local_default"
 }
 ```
 
@@ -183,7 +183,7 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
 ```json
 {
   "status": "Configuration updated and workflow reloaded",
-  "overrides": {"default_llm_config": "lmstudio_local"}
+  "overrides": {"default_llm_config": "local_default"}
 }
 ```
 

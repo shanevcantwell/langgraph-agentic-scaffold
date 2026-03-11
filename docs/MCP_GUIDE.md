@@ -39,7 +39,10 @@ class MySpecialist(BaseSpecialist):
 | `systems_architect` | create_plan | Planning service — produces SystemPlan for any specialist (#115) |
 | `summarizer_specialist` | summarize | Text condensation |
 
-> **Note:** Many former internal MCP services (file_specialist, inference_service, fara_service) have been replaced by external MCP containers or absorbed by specialists.
+| `inference_service` | infer, judge_relevance, detect_contradiction, assess_source_quality | Semantic reasoning tools — uses calling specialist's adapter (ADR-CORE-020) |
+| `file_specialist` | read_file, write_file, list_directory | Filesystem operations within workspace |
+
+> **Note:** `fara_service` (visual grounding) was replaced by the external `surf-mcp` container.
 
 ---
 

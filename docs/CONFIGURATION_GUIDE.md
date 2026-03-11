@@ -6,7 +6,7 @@ The system's configuration is a three-tiered hierarchy. Understanding this model
 
 **Tier 1: Secrets (`.env`)**
 *   **File:** `.env`
-*   **Purpose:** Provides raw secrets and environment-specific connection details (e.g., `GOOGLE_API_KEY`, `LMSTUDIO_BASE_URL`).
+*   **Purpose:** Provides raw secrets and environment-specific connection details (e.g., `GOOGLE_API_KEY`, `LOCAL_INFERENCE_BASE_URL`).
 *   **Git:** Ignored.
 
 **Tier 2: Architectural Blueprint (`config.yaml`)**  
@@ -102,29 +102,29 @@ For advanced setups where you want to run different models on different machines
 **Step 1: Define physical machines in `.env` (Tier 1)**
 ```bash
 # Default server (fallback if no named server specified)
-LMSTUDIO_BASE_URL=http://localhost:1234/v1
+LOCAL_INFERENCE_BASE_URL=http://localhost:1234/v1
 
 # Named servers - physical machine names mapped to URLs
 # Format: "name1=url1,name2=url2" (uses = since URLs contain :)
-LMSTUDIO_SERVERS="rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1,basement=http://192.168.1.102:1234/v1"
+LOCAL_SERVERS="rtx3090=http://192.168.1.100:1234/v1,rtx8000=http://192.168.1.101:1234/v1,basement=http://192.168.1.102:1234/v1"
 ```
 
 **Step 2: Reference physical machines in `user_settings.yaml` (Tier 3)**
 ```yaml
 llm_providers:
-  lmstudio_router:
-    type: "lmstudio"
+  local_router:
+    type: "local"
     server: "rtx3090"  # → fast GPU for routing
     api_identifier: "gpt-oss-20b"
 
-  lmstudio_specialist:
-    type: "lmstudio"
+  local_specialist:
+    type: "local"
     server: "rtx8000"  # → bigger GPU for specialists
     api_identifier: "qwen3-30b"
 
-  lmstudio_local:
-    type: "lmstudio"
-    # No server specified → falls back to LMSTUDIO_BASE_URL
+  local_default:
+    type: "local"
+    # No server specified → falls back to LOCAL_INFERENCE_BASE_URL
     api_identifier: "gemma-3-12b"
 ```
 
@@ -133,17 +133,17 @@ llm_providers:
 - `user_settings.yaml` defines **roles** (which provider uses which machine) - changes as you experiment
 - Adding a new provider doesn't require touching `.env`
 - Moving a workload to different hardware only changes `user_settings.yaml`
-- Providers without a `server` field fall back to `LMSTUDIO_BASE_URL`
+- Providers without a `server` field fall back to `LOCAL_INFERENCE_BASE_URL`
 
 ## 1.2 Schema Enforcement Control (#219)
 
-LM Studio's llama.cpp backend uses GBNF grammar-constrained decoding to enforce JSON output structure. Some model families (notably gpt-oss with Harmony format) are incompatible with GBNF grammar because their response-format control tokens are blocked by the JSON grammar, producing garbled output.
+llama.cpp (and consumers like LM Studio) uses GBNF grammar-constrained decoding to enforce JSON output structure. Some model families (notably gpt-oss with Harmony format) are incompatible with GBNF grammar because their response-format control tokens are blocked by the JSON grammar, producing garbled output.
 
 **Per-model flag:**
 ```yaml
 llm_providers:
   my_harmony_model:
-    type: "lmstudio"
+    type: "local"
     api_identifier: "gpt-oss-20b"
     skip_schema_enforcement: true  # Disable GBNF grammar; parse JSON from text
 ```
@@ -179,7 +179,7 @@ architecture: "convening" # Defaults to "default" if omitted
 
 At startup, the system performs several layers of validation before accepting requests:
 
-1. **Configuration Validation**: Verifies environment variables are set (e.g., `GOOGLE_API_KEY`, `LMSTUDIO_BASE_URL`)
+1. **Configuration Validation**: Verifies environment variables are set (e.g., `GOOGLE_API_KEY`, `LOCAL_INFERENCE_BASE_URL`)
 2. **Critical Specialist Loading**: Ensures specialists listed in `workflow.critical_specialists` loaded successfully
 3. **LLM Provider Connectivity**: Pings each bound LLM provider to verify network reachability
 
@@ -192,8 +192,8 @@ The system sends a simple "pong" request to each LLM provider that's bound to a 
 
 Ping failures generate warnings but don't block startup (some providers may be optional). Check logs for messages like:
 ```
-Provider 'lmstudio_router' ping OK (245.3ms)
-Provider 'lmstudio_vision' failed ping: Connection refused
+Provider 'local_router' ping OK (245.3ms)
+Provider 'local_vision' failed ping: Connection refused
 ```
 
 ## 5.0 Specialist Menu Exclusions (ADR-CORE-053)

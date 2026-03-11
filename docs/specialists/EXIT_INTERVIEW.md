@@ -2,7 +2,7 @@
 
 **Purpose:** Technical briefing on the Exit Interview specialist's role as the verification gate before END.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-20 (ADR-045: fork() with conditioning frame + expected_artifacts (#205, #206); ADR-077: signal processor)
+**Updated:** 2026-03-11 (#225: completion_signal fast-path; ADR-045: fork() with conditioning frame + expected_artifacts (#205, #206); ADR-077: signal processor)
 
 ---
 
@@ -11,6 +11,7 @@
 The **Exit Interview (EI)** is a verification agent that gates the END node. Before any workflow terminates, EI inspects the filesystem and artifacts using tools, then renders a structured pass/fail judgment. If the task is incomplete, EI names the missing work and recommends which specialist should handle it.
 
 Key characteristics:
+- **completion_signal fast-path (#225)** — if a specialist writes `completion_signal` to artifacts (with status COMPLETED/PARTIAL/BLOCKED/ERROR), EI resolves immediately without an LLM call or SA MCP. PD writes this on all four exit paths.
 - **react_step tool loop via prompt-prix MCP** — EI owns the loop and tool dispatch; prompt-prix owns the LLM call (#195)
 - **Tool-first verification** — EI must call at least one verification tool before rendering judgment (#193)
 - **Final-state-only observer** — EI cannot see original or intermediate states; it verifies expected end state

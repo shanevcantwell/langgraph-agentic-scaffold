@@ -353,7 +353,7 @@ Separation allows the same structure with different runtime bindings. Supports `
 | `facilitator_specialist.py` | Context assembly, EI feedback surfacing |
 | `project_director.py` | Autonomous ReAct agent with progress publishing |
 | `text_analysis_specialist.py` | Dual-mode (single-pass + react_step MCP) |
-| `lmstudio_adapter.py` | Tool call parsing, request building |
+| `local_inference_adapter.py` | Tool call parsing, request building, protocol fixups |
 | `pooled_adapter.py` | Multi-GPU pool routing |
 | `factory.py` | AdapterFactory, pool lifecycle |
 | `config_loader.py` | Server name resolution, env var injection |
