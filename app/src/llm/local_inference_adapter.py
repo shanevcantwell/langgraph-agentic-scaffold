@@ -4,12 +4,13 @@
 Speaks the standard /v1/chat/completions protocol. Works with llama-server,
 LM Studio, vLLM, or any server exposing the OpenAI chat completions API.
 
-Subclasses (e.g., LMStudioAdapter) can override hooks for server-specific
-quirks without duplicating the core protocol logic.
+All protocol-level fixups (Harmony token stripping, $ref inlining, content=""
+on tool_calls) are applied unconditionally — they're no-ops when not needed.
 """
 import logging
 import json
 import os
+import re
 import time
 import tiktoken
 from uuid import uuid4
@@ -26,16 +27,60 @@ import html
 logger = logging.getLogger(__name__)
 REQUEST_TIMEOUT = 120
 
+# ---------------------------------------------------------------------------
+# Protocol fixups — applied unconditionally (no-ops when not needed)
+# ---------------------------------------------------------------------------
+
+# #219: Harmony format control tokens (gpt-oss o200k_harmony encoding, IDs 200002-200012).
+_HARMONY_TOKEN_RE = re.compile(r'<\|(?:start|end|channel|message|constrain|call|return)\|>')
+
+
+def strip_harmony_tokens(content: str) -> str:
+    """Strip Harmony special tokens from response text.
+
+    gpt-oss models emit multi-channel responses like:
+        <|channel|>final <|constrain|>SystemPlan<|message|>{...json...}
+    This strips the control tokens so JSON extraction can find the payload.
+    No-op if no Harmony tokens are present.
+    """
+    if _HARMONY_TOKEN_RE.search(content):
+        logger.info("Stripping Harmony tokens from response")
+        return _HARMONY_TOKEN_RE.sub('', content)
+    return content
+
+
+def inline_schema_refs(node: Any, defs: Dict[str, Any]) -> Any:
+    """Recursively resolve $ref pointers by inlining definitions from $defs.
+
+    Local inference servers don't support JSON Schema $defs/$ref.
+    Pydantic v2 generates $defs for nested model types (e.g., List[ContextAction]).
+    This walks a schema node and replaces every $ref with the actual definition,
+    producing a flat schema the server can enforce.
+    No-op if no $ref pointers are present.
+    """
+    if isinstance(node, dict):
+        if "$ref" in node and len(node) == 1:
+            ref_path = node["$ref"]  # e.g. "#/$defs/ParallelCall"
+            ref_name = ref_path.split("/")[-1]
+            if ref_name not in defs:
+                return node  # Unknown ref — leave as-is
+            resolved = defs[ref_name]
+            return inline_schema_refs(dict(resolved), defs)
+        return {k: inline_schema_refs(v, defs) for k, v in node.items()}
+
+    if isinstance(node, list):
+        return [inline_schema_refs(item, defs) for item in node]
+
+    return node
+
 
 class LocalInferenceAdapter(BaseAdapter):
     """
     Adapter for OpenAI-compatible local inference servers.
 
     Uses JSON schema enforcement via 'response_format' for tool-calling.
-    Subclasses can override:
-      - _preprocess_response_content() for response text cleanup
-      - _resolve_schema_refs() for JSON schema $ref handling
-      - _format_messages() for message formatting quirks
+    Protocol fixups (Harmony stripping, $ref inlining) are applied
+    unconditionally — they're no-ops when not needed.
     """
 
     def __init__(self, model_config: Dict[str, Any], base_url: str, system_prompt: str, api_key: Optional[str] = None):
@@ -43,10 +88,10 @@ class LocalInferenceAdapter(BaseAdapter):
         if not base_url:
             raise ValueError(
                 "LocalInferenceAdapter requires a 'base_url'. "
-                "Please set the LOCAL_INFERENCE_BASE_URL (or LMSTUDIO_BASE_URL) environment variable in your .env file."
+                "Please set the LOCAL_INFERENCE_BASE_URL environment variable in your .env file."
             )
         self._base_url = base_url
-        self._api_key = api_key or os.getenv("LOCAL_INFERENCE_API_KEY") or os.getenv("LMSTUDIO_API_KEY", "not-needed")
+        self._api_key = api_key or os.getenv("LOCAL_INFERENCE_API_KEY", "not-needed")
         self.client = OpenAI(base_url=self._base_url, api_key=self._api_key)
         self.system_prompt = system_prompt
         if '/' in self.model_name or '\\' in self.model_name:
@@ -60,10 +105,7 @@ class LocalInferenceAdapter(BaseAdapter):
         self.skip_schema_enforcement = self.config.get('skip_schema_enforcement', False)
 
         self.context_window = self.config.get('context_window')  # None = let server handle limits
-        self.timeout = int(
-            os.getenv("LOCAL_INFERENCE_TIMEOUT")
-            or os.getenv("LMSTUDIO_TIMEOUT", str(REQUEST_TIMEOUT))
-        )
+        self.timeout = int(os.getenv("LOCAL_INFERENCE_TIMEOUT", str(REQUEST_TIMEOUT)))
         # #159: Don't send defaults — let the server use per-model presets.
         # Only send parameters explicitly configured in user_settings.yaml.
         all_params = self.config.get('parameters') or {}
@@ -116,24 +158,15 @@ class LocalInferenceAdapter(BaseAdapter):
                    system_prompt=system_prompt,
                    api_key=provider_config.get("api_key"))
 
-    # --- Subclass hooks ---
+    # --- Protocol fixups (unconditional, no-ops when not needed) ---
 
     def _preprocess_response_content(self, content: str) -> str:
-        """Hook for subclasses to preprocess response content before JSON parsing.
-
-        Override in subclasses to strip server-specific control tokens.
-        Base implementation returns content unchanged.
-        """
-        return content
+        """Strip Harmony tokens before JSON parsing. No-op if absent."""
+        return strip_harmony_tokens(content)
 
     def _resolve_schema_refs(self, node: Any, defs: Dict[str, Any]) -> Any:
-        """Hook for subclasses to resolve $ref pointers in JSON schemas.
-
-        Some servers don't support JSON Schema $defs/$ref. Override to inline
-        definitions. Base implementation returns the node unchanged (assumes
-        the server handles $ref natively).
-        """
-        return node
+        """Inline $ref pointers — local servers can't resolve $defs/$ref."""
+        return inline_schema_refs(node, defs)
 
     # --- Core methods ---
 

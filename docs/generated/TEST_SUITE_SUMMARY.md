@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 79 | 934 |
+| Unit | 79 | 922 |
 | Integration | 28 | 189 |
 | Other | 7 | 92 |
-| **Total** | **114** | **1215** |
+| **Total** | **114** | **1203** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1543,10 +1543,10 @@
 
 ## `app/tests/unit/test_llama_server_adapter.py`
 
-- **`test_inherits_from_local_inference_adapter`**
-  - *LlamaServerAdapter is a LocalInferenceAdapter, NOT LMStudioAdapter.*
+- **`test_is_local_inference_adapter`**
+  - *LocalInferenceAdapter is used directly — no subclasses.*
 - **`test_schema_enforcement_enabled_by_default`**
-  - *LlamaServerAdapter does NOT skip schema enforcement (#255).*
+  - *LocalInferenceAdapter does NOT skip schema enforcement (#255).*
 - **`test_respects_explicit_skip_schema`**
   - *Config can explicitly skip schema enforcement if needed.*
 - **`test_response_format_with_tools`**
@@ -1554,7 +1554,7 @@
 - **`test_response_format_with_output_model`**
   - *Structured output requests SHOULD include response_format.*
 - **`test_refs_resolved_by_inline_schema_refs`**
-  - *inline_schema_refs() from server_quirks resolves $ref pointers.*
+  - *inline_schema_refs() resolves $ref pointers.*
 - **`test_output_model_class_refs_inlined_in_response_format`**
   - *output_model_class with nested models → response_format has no $ref/$defs (#260).*
 - **`test_no_chat_template_kwargs_in_extra_body`**
@@ -1562,7 +1562,7 @@
 - **`test_extra_body_preserves_user_params`**
   - *User-specified extra_body params (e.g., top_k) still pass through.*
 - **`test_from_config_creates_adapter`**
-  - *from_config should create a working LlamaServerAdapter.*
+  - *from_config should create a working LocalInferenceAdapter.*
 
 ## `app/tests/unit/test_llm_factory.py`
 
@@ -1624,7 +1624,7 @@
 - **`test_api_key_from_constructor`**
   - *Explicit api_key passed to constructor takes priority.*
 - **`test_api_key_fallback_to_env`**
-  - *Falls back to LMSTUDIO_API_KEY env var when no explicit key.*
+  - *Falls back to LOCAL_INFERENCE_API_KEY env var when no explicit key.*
 - **`test_api_key_fallback_to_not_needed`**
   - *Falls back to 'not-needed' when no explicit key and no env var.*
 - **`test_from_config_passes_api_key`**
@@ -2071,7 +2071,7 @@
 ## `app/tests/unit/test_pooled_adapter.py`
 
 - **`test_inherits_from_local_inference_adapter`**
-  - *PooledLocalInferenceAdapter inherits from LocalInferenceAdapter, NOT LMStudioAdapter (#253).*
+  - *PooledLocalInferenceAdapter inherits from LocalInferenceAdapter.*
 - **`test_from_config_raises`**
   - *from_config() is not the construction path — raises NotImplementedError.*
 - **`test_client_is_none`**
@@ -2090,10 +2090,10 @@
   - *model_id from request is passed to dispatcher.submit().*
 - **`test_falls_back_to_model_name_when_no_model_id`**
   - *Falls back to adapter's model_name when request.model_id is None.*
-- **`test_factory_creates_pool_for_lmstudio_pool_providers`**
-  - *AdapterFactory initializes pool when lmstudio_pool providers exist.*
-- **`test_factory_no_pool_for_lmstudio_only_providers`**
-  - *AdapterFactory does NOT create pool when only 'lmstudio' providers exist.*
+- **`test_factory_creates_pool_for_local_pool_providers`**
+  - *AdapterFactory initializes pool when local_pool providers exist.*
+- **`test_factory_no_pool_for_local_only_providers`**
+  - *AdapterFactory does NOT create pool when only 'local' providers exist.*
 - **`test_factory_strips_v1_from_urls`**
   - *Pool server URLs have /v1 stripped (pool manages base URLs).*
 - **`test_connection_error_reports_server_dead`**
@@ -2104,30 +2104,6 @@
   - *api_key passed to PooledLocalInferenceAdapter reaches parent's _api_key.*
 - **`test_api_key_used_in_per_request_client`**
   - *Per-request OpenAI client uses per-server api_key from pool.*
-- **`test_lmstudio_quirks_skip_schema_false`**
-  - *LM Studio servers should NOT skip schema enforcement.*
-- **`test_llama_server_quirks_schema_enforcement_on`**
-  - *llama-server should keep schema enforcement ON (#255 — GBNF reference impl).*
-- **`test_llama_server_quirks_no_thinking_injection`**
-  - *llama-server should NOT inject chat_template_kwargs (#255 — use launch flag).*
-- **`test_generic_quirks_no_schema_skip`**
-  - *Generic server (server_type=None) should NOT skip schema enforcement.*
-- **`test_quirks_cleared_after_request`**
-  - *_active_quirks should be None after invoke completes.*
-- **`test_factory_creates_pool_for_llama_server_pool`**
-  - *AdapterFactory initializes pool when llama_server_pool providers exist.*
-- **`test_factory_passes_server_type_for_lmstudio_pool`**
-  - *AdapterFactory sets server_type on ServerConfig for lmstudio_pool providers.*
-- **`test_explicit_server_type_propagated_to_pool`**
-  - *Explicit server_type in provider config overrides type-derived value.*
-- **`test_server_type_falls_back_to_provider_type`**
-  - *When server_type is not specified, derives from provider type (backwards compat).*
-- **`test_explicit_server_type_activates_correct_quirks`**
-  - *local_pool + server_type='llama_server' should enable schema enforcement, no thinking injection (#255).*
-- **`test_config_schema_accepts_server_type`**
-  - *LLMProviderConfig validates server_type field.*
-- **`test_config_schema_server_type_optional`**
-  - *server_type defaults to None when not specified.*
 
 ## `app/tests/unit/test_progenitor_alpha_specialist.py`
 

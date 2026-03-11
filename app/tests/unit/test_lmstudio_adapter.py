@@ -3,7 +3,7 @@ import json
 import pytest
 from unittest.mock import patch, MagicMock, call
 
-from app.src.llm.lmstudio_adapter import LMStudioAdapter
+from app.src.llm.local_inference_adapter import LocalInferenceAdapter
 from app.src.llm.adapter import StandardizedLLMRequest
 from app.src.utils.errors import LLMInvocationError, ProxyError
 from langchain_core.messages import HumanMessage
@@ -17,10 +17,7 @@ MOCK_BASE_URL = "http://fake-lmstudio:1234/v1"
 @pytest.fixture
 def mock_env_vars(monkeypatch):
     """Mocks environment variables for tests."""
-    monkeypatch.setenv("LMSTUDIO_BASE_URL", MOCK_BASE_URL)
-    monkeypatch.setenv("LMSTUDIO_SSH_HOST", "fake-host")
-    monkeypatch.setenv("LMSTUDIO_SSH_USER", "fake-user")
-    monkeypatch.setenv("LMSTUDIO_SSH_KEY_PATH", "/fake/path/id_rsa")
+    monkeypatch.setenv("LOCAL_INFERENCE_BASE_URL", MOCK_BASE_URL)
 
 @pytest.fixture
 def mock_model_config():
@@ -33,13 +30,13 @@ def mock_model_config():
 def test_init_fails_on_missing_api_identifier():
     """Tests that initialization fails if 'api_identifier' is missing from the config."""
     with pytest.raises(TypeError, match="argument of type 'NoneType' is not iterable"):
-        LMStudioAdapter(model_config={}, base_url=MOCK_BASE_URL, system_prompt="")
+        LocalInferenceAdapter(model_config={}, base_url=MOCK_BASE_URL, system_prompt="")
 
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_invoke_sends_correct_request(mock_openai_client, mock_model_config):
     """Tests that the invoke method constructs and sends the correct request to the client."""
     # Arrange
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="You are a helpful assistant.")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="You are a helpful assistant.")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     mock_create.return_value.choices[0].message.content = "LLM response text"
@@ -70,7 +67,7 @@ def test_invoke_sends_correct_request(mock_openai_client, mock_model_config):
 def test_invoke_handles_json_parsing(mock_openai_client, mock_model_config):
     """Tests that the invoke method correctly parses JSON from a messy response string."""
     # Arrange
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     mock_create.return_value.choices[0].message.content = "Here is the JSON: ```json\n{\"key\": \"value\"}\n```"
@@ -89,7 +86,7 @@ def test_invoke_handles_json_parsing(mock_openai_client, mock_model_config):
 def test_invoke_raises_llm_invocation_error(mock_openai_client, mock_model_config):
     """Tests that LLMInvocationError is raised when the client call fails."""
     # Arrange
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.side_effect = Exception("API call failed")
 
@@ -111,7 +108,7 @@ def test_invoke_raises_proxy_error_on_connection_issues(mock_openai_client, mock
     exceptions and raises a unified ProxyError.
     """
     # Arrange
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.side_effect = raised_exception
 
@@ -132,7 +129,7 @@ def test_invoke_raises_proxy_error_on_connection_issues(mock_openai_client, mock
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_skips_empty_data(mock_openai_client, mock_model_config):
     """Tests that empty string image_data is treated as 'no image' (skips injection)."""
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     mock_create.return_value.choices[0].message.content = "Response"
@@ -155,7 +152,7 @@ def test_image_injection_skips_empty_data(mock_openai_client, mock_model_config)
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_rejects_whitespace_only_data(mock_openai_client, mock_model_config):
     """Tests that whitespace-only image data raises ValueError."""
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
 
     request = StandardizedLLMRequest(
         messages=[HumanMessage(content="Describe this image")],
@@ -171,7 +168,7 @@ def test_image_injection_rejects_oversized_image(mock_openai_client, mock_model_
     """Tests that oversized image data raises ValueError with helpful message."""
     # Configure a small limit for testing (1MB)
     mock_model_config["max_image_size_mb"] = 1
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
 
     # Create a 2MB base64 string (exceeds 1MB limit)
     oversized_image = "A" * (2 * 1024 * 1024)
@@ -189,7 +186,7 @@ def test_image_injection_rejects_oversized_image(mock_openai_client, mock_model_
 def test_image_injection_accepts_valid_sized_image(mock_openai_client, mock_model_config):
     """Tests that valid-sized image data passes size check and proceeds to injection."""
     mock_model_config["max_image_size_mb"] = 10
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="Test")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     mock_create.return_value.choices[0].message.content = "Image description"
@@ -216,7 +213,7 @@ def test_image_injection_accepts_valid_sized_image(mock_openai_client, mock_mode
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_image_injection_rejects_empty_message_content(mock_openai_client, mock_model_config):
     """Tests that empty message content raises ValueError when injecting image."""
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
 
     request = StandardizedLLMRequest(
         messages=[HumanMessage(content="")],  # Empty message content
@@ -243,7 +240,7 @@ def test_structured_output_raises_on_invalid_json(mock_openai_client, mock_model
     Issue #123: When output_model_class is set, adapter should raise error
     if model fails to produce valid JSON (not silently return empty).
     """
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     mock_create.return_value.choices[0].message.content = "I cannot generate valid JSON for this request."
@@ -264,7 +261,7 @@ def test_text_response_extracts_json_when_present(mock_openai_client, mock_model
     Issue #123: When NO output_model_class is set (text mode), adapter should
     still try to extract JSON from the response if present.
     """
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     # Model returns text that happens to contain JSON
@@ -288,7 +285,7 @@ def test_text_response_no_json_returns_text_only(mock_openai_client, mock_model_
     Issue #123: When NO output_model_class is set and response has no JSON,
     adapter should return text_response only (no empty json_response).
     """
-    adapter = LMStudioAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
+    adapter = LocalInferenceAdapter(model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt="")
     mock_create = mock_openai_client.return_value.chat.completions.create
     mock_create.return_value.choices[0].message.tool_calls = None
     mock_create.return_value.choices[0].message.content = "This is a plain text response with no JSON."
@@ -309,13 +306,13 @@ def test_text_response_no_json_returns_text_only(mock_openai_client, mock_model_
 # =============================================================================
 
 class TestResolveSchemaRefs:
-    """Tests for LMStudioAdapter._resolve_schema_refs — inlines $defs/$ref."""
+    """Tests for LocalInferenceAdapter._resolve_schema_refs — inlines $defs/$ref."""
 
     @pytest.fixture
     def adapter(self):
-        """Create a minimal LMStudioAdapter for testing instance methods."""
+        """Create a minimal LocalInferenceAdapter for testing instance methods."""
         with patch('app.src.llm.local_inference_adapter.OpenAI'):
-            return LMStudioAdapter(
+            return LocalInferenceAdapter(
                 model_config={"api_identifier": "test-model"},
                 base_url=MOCK_BASE_URL,
                 system_prompt=""
@@ -393,7 +390,7 @@ class TestBuildToolCallSchemaRefFree:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_nested_model_schema_has_no_refs(self, mock_openai_client, mock_model_config):
         """_build_tool_call_schema must produce $ref/$defs-free output for nested Pydantic models."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -427,7 +424,7 @@ class TestBuildToolCallSchemaOneOf:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_multi_tool_schema_uses_oneOf(self, mock_openai_client, mock_model_config):
         """Multi-tool schema should use oneOf inside actions array items."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -453,7 +450,7 @@ class TestBuildToolCallSchemaOneOf:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_each_variant_has_only_own_params(self, mock_openai_client, mock_model_config):
         """create_directory variant should have path but NOT command."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -481,7 +478,7 @@ class TestBuildToolCallSchemaOneOf:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_variants_have_additionalProperties_false(self, mock_openai_client, mock_model_config):
         """Each variant should block extra fields."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -498,7 +495,7 @@ class TestBuildToolCallSchemaOneOf:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_single_tool_has_no_DONE_variant(self, mock_openai_client, mock_model_config):
         """Single-tool schema should not include DONE."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -517,7 +514,7 @@ class TestBuildToolCallSchemaOneOf:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_DONE_variant_has_only_tool_name(self, mock_openai_client, mock_model_config):
         """DONE variant should have tool_name and nothing else."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -541,7 +538,7 @@ class TestBuildToolCallSchemaOneOf:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_schema_required_has_actions_not_action(self, mock_openai_client, mock_model_config):
         """Schema should require 'actions' (array), not 'action' (singular)."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config,
             base_url=MOCK_BASE_URL,
             system_prompt="Test"
@@ -586,7 +583,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_single_action_in_array(self, mock_openai_client, mock_model_config):
         """Single action in array produces one tool_call."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -615,7 +612,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_multiple_actions_in_array(self, mock_openai_client, mock_model_config):
         """Multiple actions produce multiple tool_calls for concurrent dispatch."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -649,7 +646,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_done_in_array(self, mock_openai_client, mock_model_config):
         """DONE action in array returns text_response."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -678,7 +675,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_mixed_done_and_tools_done_wins(self, mock_openai_client, mock_model_config):
         """DONE takes priority over concurrent tool calls in mixed array."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -710,7 +707,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_fallback_to_singular_action(self, mock_openai_client, mock_model_config):
         """Old singular 'action' format still works as backward compat fallback."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -738,7 +735,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_reasoning_threaded_as_text_response(self, mock_openai_client, mock_model_config):
         """Reasoning field should be passed through as text_response for thought capture."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -764,7 +761,7 @@ class TestParseCompletionActionsArray:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_param_stripping_per_action(self, mock_openai_client, mock_model_config):
         """Param stripping is applied independently to each action in the array."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config=mock_model_config, base_url=MOCK_BASE_URL, system_prompt=""
         )
         from pydantic import Field
@@ -809,12 +806,12 @@ class TestParserParamFiltering:
         class create_directory(BaseModel):
             path: str = Field(description="Dir path")
 
-        result = LMStudioAdapter._get_known_params_for_tool("create_directory", [create_directory])
+        result = LocalInferenceAdapter._get_known_params_for_tool("create_directory", [create_directory])
         assert result == {"path"}
 
     def test_get_known_params_for_tool_not_found(self):
         """Should return None for unknown tool (permissive fallback)."""
-        result = LMStudioAdapter._get_known_params_for_tool("unknown_tool", [])
+        result = LocalInferenceAdapter._get_known_params_for_tool("unknown_tool", [])
         assert result is None
 
     def test_get_known_params_multi_field_tool(self):
@@ -825,7 +822,7 @@ class TestParserParamFiltering:
             source: str = Field(description="Source")
             destination: str = Field(description="Dest")
 
-        result = LMStudioAdapter._get_known_params_for_tool("move_file", [move_file])
+        result = LocalInferenceAdapter._get_known_params_for_tool("move_file", [move_file])
         assert result == {"source", "destination"}
 
 
@@ -845,7 +842,7 @@ class TestHarmonyTokenStripping:
 
     def test_strip_harmony_tokens_from_structured_output(self):
         """Harmony-wrapped SystemPlan JSON should parse correctly after stripping."""
-        from app.src.llm.server_quirks import strip_harmony_tokens
+        from app.src.llm.local_inference_adapter import strip_harmony_tokens
 
         # Simulate Harmony-wrapped response
         harmony_text = (
@@ -867,7 +864,7 @@ class TestHarmonyTokenStripping:
 
     def test_strip_harmony_tokens_from_tool_response(self):
         """Harmony-wrapped tool call JSON should parse correctly after stripping."""
-        from app.src.llm.server_quirks import strip_harmony_tokens
+        from app.src.llm.local_inference_adapter import strip_harmony_tokens
 
         harmony_text = (
             '<|start|>assistant<|channel|>final <|constrain|>json<|message|>'
@@ -882,7 +879,7 @@ class TestHarmonyTokenStripping:
 
     def test_strip_preserves_clean_json(self):
         """When no Harmony tokens are present, content passes through unchanged."""
-        from app.src.llm.server_quirks import strip_harmony_tokens
+        from app.src.llm.local_inference_adapter import strip_harmony_tokens
 
         clean_json = '{"plan_summary":"A plan.","execution_steps":["Step 1"]}'
         stripped = strip_harmony_tokens(clean_json)
@@ -891,7 +888,7 @@ class TestHarmonyTokenStripping:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_skip_schema_enforcement_omits_response_format(self, mock_openai):
         """When skip_schema_enforcement=True, _build_request_kwargs should NOT set response_format."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={
                 "api_identifier": "gpt-oss-20b",
                 "parameters": {},
@@ -914,7 +911,7 @@ class TestHarmonyTokenStripping:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_schema_enforcement_default_false(self, mock_openai):
         """skip_schema_enforcement defaults to False when not specified in config."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": "qwen3-30b", "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
@@ -924,7 +921,7 @@ class TestHarmonyTokenStripping:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_skip_schema_enforcement_with_tools_omits_response_format(self, mock_openai):
         """When skip_schema_enforcement=True, tool requests also skip response_format."""
-        adapter = LMStudioAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={
                 "api_identifier": "gpt-oss-20b",
                 "parameters": {},
@@ -950,7 +947,7 @@ class TestHarmonyTokenStripping:
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_api_key_from_constructor(mock_openai_client):
     """Explicit api_key passed to constructor takes priority."""
-    adapter = LMStudioAdapter(
+    adapter = LocalInferenceAdapter(
         model_config={"api_identifier": MOCK_MODEL_NAME},
         base_url=MOCK_BASE_URL,
         system_prompt="",
@@ -961,9 +958,9 @@ def test_api_key_from_constructor(mock_openai_client):
 
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_api_key_fallback_to_env(mock_openai_client, monkeypatch):
-    """Falls back to LMSTUDIO_API_KEY env var when no explicit key."""
-    monkeypatch.setenv("LMSTUDIO_API_KEY", "env-token")
-    adapter = LMStudioAdapter(
+    """Falls back to LOCAL_INFERENCE_API_KEY env var when no explicit key."""
+    monkeypatch.setenv("LOCAL_INFERENCE_API_KEY", "env-token")
+    adapter = LocalInferenceAdapter(
         model_config={"api_identifier": MOCK_MODEL_NAME},
         base_url=MOCK_BASE_URL,
         system_prompt="",
@@ -974,8 +971,8 @@ def test_api_key_fallback_to_env(mock_openai_client, monkeypatch):
 @patch('app.src.llm.local_inference_adapter.OpenAI')
 def test_api_key_fallback_to_not_needed(mock_openai_client, monkeypatch):
     """Falls back to 'not-needed' when no explicit key and no env var."""
-    monkeypatch.delenv("LMSTUDIO_API_KEY", raising=False)
-    adapter = LMStudioAdapter(
+    monkeypatch.delenv("LOCAL_INFERENCE_API_KEY", raising=False)
+    adapter = LocalInferenceAdapter(
         model_config={"api_identifier": MOCK_MODEL_NAME},
         base_url=MOCK_BASE_URL,
         system_prompt="",
@@ -991,7 +988,7 @@ def test_from_config_passes_api_key(mock_openai_client):
         "base_url": MOCK_BASE_URL,
         "api_key": "config-token",
     }
-    adapter = LMStudioAdapter.from_config(provider_config, system_prompt="")
+    adapter = LocalInferenceAdapter.from_config(provider_config, system_prompt="")
     assert adapter.api_key == "config-token"
 
 
@@ -1010,7 +1007,7 @@ class TestGrammarParseRecovery:
     @pytest.fixture
     def adapter(self):
         with patch('app.src.llm.local_inference_adapter.OpenAI'):
-            return LMStudioAdapter(
+            return LocalInferenceAdapter(
                 model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
                 base_url=MOCK_BASE_URL,
                 system_prompt="Test"

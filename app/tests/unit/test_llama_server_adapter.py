@@ -1,11 +1,11 @@
-"""Tests for LlamaServerAdapter — llama-server protocol quirks (#253, #255)."""
+"""Tests for LocalInferenceAdapter — llama-server protocol quirks (#253, #255)."""
 
 import json
 import pytest
 from unittest.mock import patch, MagicMock
 from pydantic import BaseModel, Field
 
-from app.src.llm.llama_server_adapter import LlamaServerAdapter
+from app.src.llm.local_inference_adapter import LocalInferenceAdapter
 from app.src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage
 
@@ -20,22 +20,19 @@ MOCK_BASE_URL = "http://fake-llama-server:8080/v1"
 
 class TestConstruction:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
-    def test_inherits_from_local_inference_adapter(self, mock_openai):
-        """LlamaServerAdapter is a LocalInferenceAdapter, NOT LMStudioAdapter."""
-        from app.src.llm.local_inference_adapter import LocalInferenceAdapter
-        from app.src.llm.lmstudio_adapter import LMStudioAdapter
-        adapter = LlamaServerAdapter(
+    def test_is_local_inference_adapter(self, mock_openai):
+        """LocalInferenceAdapter is used directly — no subclasses."""
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
         )
         assert isinstance(adapter, LocalInferenceAdapter)
-        assert not isinstance(adapter, LMStudioAdapter)
 
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_schema_enforcement_enabled_by_default(self, mock_openai):
-        """LlamaServerAdapter does NOT skip schema enforcement (#255)."""
-        adapter = LlamaServerAdapter(
+        """LocalInferenceAdapter does NOT skip schema enforcement (#255)."""
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
@@ -45,7 +42,7 @@ class TestConstruction:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_respects_explicit_skip_schema(self, mock_openai):
         """Config can explicitly skip schema enforcement if needed."""
-        adapter = LlamaServerAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={
                 "api_identifier": MOCK_MODEL_NAME,
                 "parameters": {},
@@ -66,7 +63,7 @@ class TestSchemaEnforcement:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_response_format_with_tools(self, mock_openai):
         """Tool requests SHOULD include response_format (grammar enforcement ON)."""
-        adapter = LlamaServerAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
@@ -86,7 +83,7 @@ class TestSchemaEnforcement:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_response_format_with_output_model(self, mock_openai):
         """Structured output requests SHOULD include response_format."""
-        adapter = LlamaServerAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
@@ -111,13 +108,12 @@ class TestSchemaEnforcement:
 
 class TestRefInlining:
     def test_refs_resolved_by_inline_schema_refs(self):
-        """inline_schema_refs() from server_quirks resolves $ref pointers.
+        """inline_schema_refs() resolves $ref pointers.
 
-        llama-server doesn't support JSON Schema $defs/$ref. The pooled path
-        applies ref inlining via ServerQuirks. This test validates the shared
-        inline_schema_refs() function directly.
+        Local inference servers don't support JSON Schema $defs/$ref.
+        This test validates the inline_schema_refs() function directly.
         """
-        from app.src.llm.server_quirks import inline_schema_refs
+        from app.src.llm.local_inference_adapter import inline_schema_refs
 
         class InnerItem(BaseModel):
             name: str = Field(description="Item name")
@@ -146,7 +142,7 @@ class TestRefInlining:
         This is the bug path: _build_request_kwargs was sending raw Pydantic schemas
         with $defs/$ref to llama-server, which can't resolve them (llama.cpp #8073).
         """
-        adapter = LlamaServerAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
@@ -197,7 +193,7 @@ class TestNoThinkingInjection:
         (--reasoning-format none) because per-request enable_thinking
         conflicts with assistant message prefill.
         """
-        adapter = LlamaServerAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={"api_identifier": MOCK_MODEL_NAME, "parameters": {}},
             base_url=MOCK_BASE_URL,
             system_prompt="test"
@@ -215,7 +211,7 @@ class TestNoThinkingInjection:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_extra_body_preserves_user_params(self, mock_openai):
         """User-specified extra_body params (e.g., top_k) still pass through."""
-        adapter = LlamaServerAdapter(
+        adapter = LocalInferenceAdapter(
             model_config={
                 "api_identifier": MOCK_MODEL_NAME,
                 "parameters": {"top_k": 40},
@@ -242,12 +238,12 @@ class TestNoThinkingInjection:
 class TestFromConfig:
     @patch('app.src.llm.local_inference_adapter.OpenAI')
     def test_from_config_creates_adapter(self, mock_openai):
-        """from_config should create a working LlamaServerAdapter."""
+        """from_config should create a working LocalInferenceAdapter."""
         provider_config = {
             "api_identifier": MOCK_MODEL_NAME,
             "base_url": MOCK_BASE_URL,
             "api_key": "test-key",
         }
-        adapter = LlamaServerAdapter.from_config(provider_config, system_prompt="test")
+        adapter = LocalInferenceAdapter.from_config(provider_config, system_prompt="test")
         assert adapter.skip_schema_enforcement is False
         assert adapter.api_key == "test-key"

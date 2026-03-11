@@ -88,9 +88,8 @@ def main():
             continue
 
         ptype = config.get("type")
-        local_types = {"local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool"}
-        if ptype in local_types:
-            base_url = os.getenv("LOCAL_INFERENCE_BASE_URL") or os.getenv("LMSTUDIO_BASE_URL")
+        if ptype in ("local", "local_pool"):
+            base_url = os.getenv("LOCAL_INFERENCE_BASE_URL")
             if not base_url:
                 print(f"ERROR: Provider '{name}' is '{ptype}' but LOCAL_INFERENCE_BASE_URL not set.")
                 continue

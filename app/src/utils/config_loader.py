@@ -140,7 +140,7 @@ class ConfigLoader:
 
     def _parse_local_servers(self) -> dict:
         """
-        Parse LOCAL_INFERENCE_SERVERS (or LMSTUDIO_SERVERS fallback) env var into a name→URL mapping.
+        Parse LOCAL_INFERENCE_SERVERS env var into a name→URL mapping.
 
         Format: "name1=url1,name2=url2" (uses = separator since URLs contain :)
         Example: "rtx3090=http://192.168.1.100:8081/v1,rtx8000=http://192.168.1.101:1234/v1"
@@ -148,7 +148,7 @@ class ConfigLoader:
         Returns:
             Dict mapping server names to URLs, e.g. {"rtx3090": "http://...", "rtx8000": "http://..."}
         """
-        servers_str = os.getenv("LOCAL_INFERENCE_SERVERS") or os.getenv("LMSTUDIO_SERVERS", "")
+        servers_str = os.getenv("LOCAL_INFERENCE_SERVERS", "")
         if not servers_str:
             return {}
 
@@ -179,7 +179,7 @@ class ConfigLoader:
                 if not api_key:
                     logger.warning(f"GOOGLE_API_KEY not found for provider '{provider_key}'. This provider may be unusable.")
                 provider_config["api_key"] = api_key
-            elif provider_type in ("local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool"):
+            elif provider_type in ("local", "local_pool"):
                 # Distributed inference: Check for named server reference
                 # .env: LOCAL_INFERENCE_SERVERS="rtx3090=http://...,rtx8000=http://..."
                 # user_settings.yaml: server: "rtx3090"
@@ -194,8 +194,7 @@ class ConfigLoader:
                         logger.warning(f"Server '{server_name}' not found in LOCAL_INFERENCE_SERVERS. Available: {list(server_map.keys())}")
                         provider_config["base_url"] = None
                 else:
-                    # Fall back to default LOCAL_INFERENCE_BASE_URL (or LMSTUDIO_BASE_URL)
-                    base_url = os.getenv("LOCAL_INFERENCE_BASE_URL") or os.getenv("LMSTUDIO_BASE_URL")
+                    base_url = os.getenv("LOCAL_INFERENCE_BASE_URL")
                     if not base_url:
                         logger.warning(f"LOCAL_INFERENCE_BASE_URL not found for provider '{provider_key}'. This provider may be unusable.")
                     provider_config["base_url"] = base_url

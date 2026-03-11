@@ -43,7 +43,7 @@ llm_providers:
     type: 'gemini'
     api_identifier: 'gemini-1.5-flash'
   user_provider:
-    type: 'lmstudio'
+    type: 'local'
     api_identifier: 'user-model-id'
 """
 
@@ -263,15 +263,15 @@ specialists:
 USER_SETTINGS_WITH_SERVER = """
 llm_providers:
   lmstudio_router:
-    type: 'lmstudio'
+    type: 'local'
     server: 'rtx3090'
     api_identifier: 'gpt-oss-20b'
   lmstudio_specialist:
-    type: 'lmstudio'
+    type: 'local'
     server: 'rtx8000'
     api_identifier: 'qwen3-30b'
   lmstudio_local:
-    type: 'lmstudio'
+    type: 'local'
     api_identifier: 'gemma-12b'
 specialist_model_bindings:
   router_specialist: 'lmstudio_router'
@@ -309,7 +309,7 @@ def test_lmstudio_servers_missing_server_name(mocker):
     user_settings_bad_server = """
 llm_providers:
   lmstudio_router:
-    type: 'lmstudio'
+    type: 'local'
     server: 'nonexistent'
     api_identifier: 'gpt-oss-20b'
 specialist_model_bindings:
@@ -342,7 +342,7 @@ def test_lmstudio_servers_empty(mocker):
     user_settings_with_server = """
 llm_providers:
   lmstudio_router:
-    type: 'lmstudio'
+    type: 'local'
     server: 'rtx3090'
     api_identifier: 'gpt-oss-20b'
 specialist_model_bindings:

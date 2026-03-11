@@ -8,15 +8,8 @@ class LLMProviderConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")  # Allow provider-specific fields (e.g., session_cookies, rate_limit_delay)
 
-    type: Literal["gemini", "local", "local_pool", "lmstudio", "lmstudio_pool", "llama_server", "llama_server_pool", "ollama", "gemini_webui"] = Field( # The adapter type
+    type: Literal["gemini", "local", "local_pool", "ollama", "gemini_webui"] = Field(
         ..., description="The type of the LLM provider implementation to use."
-    )
-    server_type: Optional[Literal["lmstudio", "llama_server"]] = Field(
-        default=None,
-        description=(
-            "Server software type for quirk selection (e.g., 'lmstudio', 'llama_server'). "
-            "Decoupled from 'type' which selects the adapter/transport. If omitted, derived from 'type'."
-        ),
     )
     api_identifier: Optional[str] = Field(
         None, description="The specific model identifier for the provider's API (e.g., 'gemini-1.5-pro' or 'local-model/nous-hermes-gguf'). Not required for all provider types."

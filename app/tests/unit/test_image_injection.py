@@ -1,7 +1,7 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-from app.src.llm.lmstudio_adapter import LMStudioAdapter
+from app.src.llm.local_inference_adapter import LocalInferenceAdapter
 from app.src.llm.adapter import StandardizedLLMRequest
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -9,7 +9,7 @@ class TestImageInjection:
     def test_lmstudio_adapter_injects_image(self):
         # Setup
         config = {"api_identifier": "test-model", "base_url": "http://localhost:1234"}
-        adapter = LMStudioAdapter(config, base_url="http://localhost:1234", system_prompt="sys")
+        adapter = LocalInferenceAdapter(config, base_url="http://localhost:1234", system_prompt="sys")
         adapter.client = MagicMock()
         
         # Create request with image
@@ -42,7 +42,7 @@ class TestImageInjection:
     def test_lmstudio_adapter_no_image(self):
         # Setup
         config = {"api_identifier": "test-model", "base_url": "http://localhost:1234"}
-        adapter = LMStudioAdapter(config, base_url="http://localhost:1234", system_prompt="sys")
+        adapter = LocalInferenceAdapter(config, base_url="http://localhost:1234", system_prompt="sys")
         adapter.client = MagicMock()
         
         # Create request WITHOUT image

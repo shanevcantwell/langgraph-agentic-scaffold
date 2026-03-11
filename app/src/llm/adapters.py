@@ -6,8 +6,6 @@
 
 from .gemini_adapter import GeminiAdapter
 from .local_inference_adapter import LocalInferenceAdapter
-from .lmstudio_adapter import LMStudioAdapter
-from .llama_server_adapter import LlamaServerAdapter
 from .pooled_adapter import PooledLocalInferenceAdapter
 
 # By importing them here, other parts of the application can do:

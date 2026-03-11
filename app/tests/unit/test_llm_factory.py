@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from app.src.llm.factory import AdapterFactory
-from app.src.llm.adapters import GeminiAdapter, LMStudioAdapter
+from app.src.llm.adapters import GeminiAdapter, LocalInferenceAdapter
 
 @pytest.fixture
 def mock_full_config():
@@ -37,7 +37,7 @@ def mock_full_config():
         },
         "llm_providers": {
             "gemini_provider": {"type": "gemini", "api_identifier": "gemini-pro"},
-            "lmstudio_provider": {"type": "lmstudio", "api_identifier": "lmstudio-model"},
+            "lmstudio_provider": {"type": "local", "api_identifier": "local-model", "base_url": "http://localhost:1234/v1"},
             "unknown_provider": {"type": "future_provider_type"},
         }
     }
@@ -56,10 +56,10 @@ def test_factory_creates_adapter_for_llm_specialist(mock_from_config, adapter_fa
     assert isinstance(adapter, MagicMock)
     mock_from_config.assert_called_once()
 
-@patch('app.src.llm.adapters.LMStudioAdapter.from_config')
+@patch('app.src.llm.local_inference_adapter.LocalInferenceAdapter.from_config')
 def test_factory_creates_adapter_for_hybrid_specialist(mock_from_config, adapter_factory):
     """Tests that an adapter is correctly created for the new 'hybrid' specialist type."""
-    mock_from_config.return_value = MagicMock(spec=LMStudioAdapter)
+    mock_from_config.return_value = MagicMock(spec=LocalInferenceAdapter)
     adapter = adapter_factory.create_adapter("hybrid_specialist", "system prompt")
     assert adapter is not None
     assert isinstance(adapter, MagicMock)
@@ -178,37 +178,36 @@ def test_ping_provider_unknown_type():
     assert "Unknown provider type" in result["error"]
 
 
-@patch('app.src.llm.factory.LMStudioAdapter.from_config')
+@patch('app.src.llm.local_inference_adapter.LocalInferenceAdapter.from_config')
 def test_ping_provider_success(mock_from_config):
     """Tests successful ping returns correct result structure."""
-    # Mock a successful adapter invocation
     mock_adapter = MagicMock()
     mock_adapter.invoke.return_value = {"text_response": "pong"}
     mock_from_config.return_value = mock_adapter
 
     provider_config = {
-        "type": "lmstudio",
+        "type": "local",
         "api_identifier": "test-model",
         "base_url": "http://localhost:1234"
     }
 
-    result = ping_provider("test_lmstudio", provider_config)
+    result = ping_provider("test_local", provider_config)
 
     assert result["success"] is True
-    assert result["provider"] == "test_lmstudio"
-    assert result["type"] == "lmstudio"
+    assert result["provider"] == "test_local"
+    assert result["type"] == "local"
     assert result["response"] == "pong"
     assert result["latency_ms"] is not None
     assert result["error"] is None
 
 
-@patch('app.src.llm.factory.LMStudioAdapter.from_config')
+@patch('app.src.llm.local_inference_adapter.LocalInferenceAdapter.from_config')
 def test_ping_provider_connection_error(mock_from_config):
     """Tests that ping_provider handles connection errors gracefully."""
     mock_from_config.side_effect = Exception("Connection refused")
 
     provider_config = {
-        "type": "lmstudio",
+        "type": "local",
         "api_identifier": "test-model",
         "base_url": "http://localhost:9999"
     }
@@ -221,7 +220,7 @@ def test_ping_provider_connection_error(mock_from_config):
     assert result["latency_ms"] is None
 
 
-@patch('app.src.llm.factory.LMStudioAdapter.from_config')
+@patch('app.src.llm.local_inference_adapter.LocalInferenceAdapter.from_config')
 def test_ping_provider_invoke_error(mock_from_config):
     """Tests that ping_provider handles invocation errors gracefully."""
     mock_adapter = MagicMock()
@@ -229,7 +228,7 @@ def test_ping_provider_invoke_error(mock_from_config):
     mock_from_config.return_value = mock_adapter
 
     provider_config = {
-        "type": "lmstudio",
+        "type": "local",
         "api_identifier": "test-model",
         "base_url": "http://localhost:1234"
     }
