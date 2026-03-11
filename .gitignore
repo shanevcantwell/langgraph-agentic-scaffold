@@ -47,7 +47,6 @@ proxy/*
 !proxy/Dockerfile
 
 # symlink
-docs/ADRs
 .docker-images
 
 # generated
@@ -81,5 +80,3 @@ docs/scratchpad
 .graphs/
 scripts/run_*.py
 prompts/memory_distillation_prompt.md
-.gitignore
-.gitignore
