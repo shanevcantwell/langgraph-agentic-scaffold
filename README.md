@@ -128,7 +128,7 @@ cp user_settings.yaml.example user_settings.yaml  # Bind models to specialists
 docker compose up --build -d
 ```
 
-For local model servers (LM Studio, Ollama), set in `.env`:
+For local model servers (LM Studio, llama-server), set in `.env`:
 ```dotenv
 LOCAL_INFERENCE_BASE_URL="http://host.docker.internal:1234/v1"
 ```
@@ -139,7 +139,7 @@ LOCAL_INFERENCE_BASE_URL="http://host.docker.internal:1234/v1"
 | **API** | `http://localhost:8000/v1/chat/completions` |
 | **API Docs** | `http://localhost:8000/docs` |
 
-The API is **OpenAI-compatible** — any client that speaks the OpenAI REST protocol (`/v1/chat/completions`) can drive LAS directly. This includes curl, the OpenAI SDK, Continue, or any tool that targets the OpenAI API format.
+The API is **OpenAI-compatible** — the full orchestration pipeline (multi-model routing, context curation, governed termination) is exposed behind a standard `/v1/chat/completions` endpoint. Any client that speaks the OpenAI REST protocol gets the entire pipeline without knowing it's there: [Continue](https://github.com/continuedev/continue), [AnythingLLM](https://github.com/Mintplex-Labs/anything-llm), the OpenAI SDK, curl, or any tool that targets the OpenAI API format.
 
 **Configuration changes:** Python code changes are picked up by uvicorn --reload. Dockerfile or pyproject.toml changes require `docker compose up --build -d`.
 
