@@ -181,6 +181,7 @@ The **V.E.G.A.S. Terminal** provides real-time streaming: semantic thought entri
 | [Developer Docs](./docs/dev/) | Creating specialists, patterns, subgraphs, testing, troubleshooting |
 | [Research Directions](./docs/RESEARCH.md) | Prompt geometry, explicit MoE, context engineering |
 | [ADRs](./docs/ADRs/) | Architectural decisions and design rationale |
+| [Changelog](./CHANGELOG.md) | Alpha release history |
 
 ---
 
