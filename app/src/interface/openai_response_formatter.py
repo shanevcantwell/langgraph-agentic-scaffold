@@ -6,7 +6,7 @@ Used for non-streaming (stream: false) responses.
 """
 import time
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 from .openai_schema import (
     ChatCompletionResponse,
     ChatCompletionChoice,
@@ -42,6 +42,7 @@ def format_sync_response(
         content = _extract_last_message_content(final_state)
 
     finish_reason = _determine_finish_reason(final_state, content)
+    reasoning = _extract_all_reasoning(final_state)
 
     response_id = f"chatcmpl-{run_id[:12]}" if run_id else f"chatcmpl-{uuid.uuid4().hex[:12]}"
 
@@ -55,6 +56,7 @@ def format_sync_response(
                 message=ChatCompletionMessage(
                     role="assistant",
                     content=content or "",
+                    reasoning_content=reasoning,
                 ),
                 finish_reason=finish_reason,
             )
@@ -109,3 +111,54 @@ def _determine_finish_reason(final_state: Dict[str, Any], content: str) -> str:
             return "stop"
 
     return "stop"
+
+
+def _extract_all_reasoning(final_state: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract accumulated Thought Stream data from final workflow state.
+
+    Mirrors the streaming translator's per-node extraction but operates on
+    the merged final state. Returns None if no reasoning data found.
+    """
+    parts: List[str] = []
+
+    # Routing history trace
+    routing_history = final_state.get("routing_history", [])
+    if routing_history:
+        route_trace = " → ".join(routing_history)
+        parts.append(f"[ROUTE] {route_trace}")
+
+    # Scratchpad reasoning (accumulated across all specialists via dict merge)
+    scratchpad = final_state.get("scratchpad", {})
+    if isinstance(scratchpad, dict):
+        # Triage recommendations
+        recs = scratchpad.get("recommended_specialists", [])
+        if isinstance(recs, list) and recs:
+            parts.append(f"[TRIAGE] Recommending: {', '.join(recs)}")
+
+        # Router decision
+        if "router_decision" in scratchpad:
+            parts.append(f"[ROUTE] {scratchpad['router_decision']}")
+
+        # Generic *_reasoning and *_decision keys
+        for key, val in scratchpad.items():
+            if key.endswith("_reasoning"):
+                label = key.replace("_reasoning", "").upper().replace("_", " ")
+                parts.append(f"[THINK] {label}: {val}")
+            elif key.endswith("_decision") and key != "router_decision":
+                label = key.replace("_decision", "").upper().replace("_", " ")
+                parts.append(f"[{label}] {val}")
+
+        # Facilitator complete flag
+        if scratchpad.get("facilitator_complete"):
+            parts.append("[OK] FACILITATOR: Context gathering complete")
+
+    # Artifacts — key notification only (content lives in archive/web-ui)
+    artifacts = final_state.get("artifacts", {})
+    if isinstance(artifacts, dict):
+        for art_key in artifacts:
+            if art_key == "final_user_response.md":
+                continue
+            parts.append(f"[ARTIFACT] {art_key}")
+
+    return "\n".join(parts) if parts else None

@@ -1,9 +1,11 @@
 """Tests for OpenAI streaming translator (ADR-UI-003).
 
-Validates that the translator is a FILTER, not a mapper:
-- Most events are silently discarded
-- Only final_user_response.md content and run completion are emitted
-- No las_metadata or vendor extensions appear on chunks
+Validates:
+- Thought Stream data appears in reasoning_content deltas (per-node)
+- final_user_response.md appears in content delta (once)
+- No vendor extensions (las_metadata etc.) on chunks
+- Null fields excluded from serialization (exclude_none)
+- Interrupt and error graceful degradation
 """
 import pytest
 import json
@@ -37,46 +39,26 @@ async def _collect_output(translator, stream):
     return _parse_sse_lines(lines)
 
 
-class TestFilterBehavior:
-    """Verify the translator discards non-content events."""
+def _reasoning_chunks(results):
+    """Extract chunks that carry reasoning_content."""
+    return [r for r in results if isinstance(r, dict)
+            and r["choices"][0]["delta"].get("reasoning_content")]
+
+
+def _content_chunks(results):
+    """Extract chunks that carry content."""
+    return [r for r in results if isinstance(r, dict)
+            and r["choices"][0]["delta"].get("content")]
+
+
+class TestReasoningContent:
+    """Verify Thought Stream data flows through reasoning_content deltas."""
 
     @pytest.mark.asyncio
-    async def test_drops_specialist_lifecycle(self):
-        """Node start/end events should produce no output (except final content)."""
+    async def test_scratchpad_reasoning_in_reasoning_content(self):
+        """Scratchpad *_reasoning and *_decision keys appear in reasoning_content."""
         stream = _mock_stream(
             {"run_id": "test-123"},
-            {"conversation_id": "conv-1"},
-            {"router_specialist": {
-                "scratchpad": {"router_reasoning": "Routing to PD"},
-                "routing_history": ["router_specialist"],
-                "messages": [],
-            }},
-            {"project_director": {
-                "scratchpad": {"pd_reasoning": "Executing tools..."},
-                "artifacts": {"final_user_response.md": "Here is the answer."},
-                "messages": [],
-            }},
-        )
-
-        translator = OpenAiTranslator(model="las-default")
-        results = await _collect_output(translator, stream)
-
-        # Should have: role chunk, content chunk, finish chunk, [DONE]
-        assert len(results) == 4
-        # First: role
-        assert results[0]["choices"][0]["delta"]["role"] == "assistant"
-        # Second: content from final_user_response.md
-        assert results[1]["choices"][0]["delta"]["content"] == "Here is the answer."
-        # Third: finish
-        assert results[2]["choices"][0]["finish_reason"] == "stop"
-        # Fourth: DONE
-        assert results[3] == "[DONE]"
-
-    @pytest.mark.asyncio
-    async def test_no_scratchpad_in_output(self):
-        """Scratchpad data (thoughts, routing decisions) must not appear in output."""
-        stream = _mock_stream(
-            {"run_id": "test-456"},
             {"router_specialist": {
                 "scratchpad": {
                     "router_reasoning": "The user wants analysis...",
@@ -93,30 +75,140 @@ class TestFilterBehavior:
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        # Check no output contains scratchpad data
-        for result in results:
-            if isinstance(result, dict):
-                serialized = json.dumps(result)
-                assert "router_reasoning" not in serialized
-                assert "router_decision" not in serialized
-                assert "recommended_specialists" not in serialized
+        rc = _reasoning_chunks(results)
+        # At least: workflow start, router node, end node, workflow end
+        assert len(rc) >= 3
+
+        # Router reasoning appears in one of the reasoning chunks
+        all_reasoning = " ".join(r["choices"][0]["delta"]["reasoning_content"] for r in rc)
+        assert "router_reasoning" not in all_reasoning  # Raw key should NOT appear
+        assert "The user wants analysis" in all_reasoning  # Content should appear
+        assert "[ROUTE] project_director" in all_reasoning
+        assert "[TRIAGE] Recommending: project_director" in all_reasoning
+        assert "[THINK] ROUTER: The user wants analysis" in all_reasoning
 
     @pytest.mark.asyncio
-    async def test_no_las_metadata(self):
-        """No las_metadata or vendor extensions on any chunk."""
+    async def test_no_reasoning_after_content(self):
+        """Post-content nodes (end_specialist, archiver) must not emit reasoning."""
         stream = _mock_stream(
-            {"run_id": "test-789"},
-            {"specialist": {"artifacts": {"final_user_response.md": "Content."}}},
+            {"run_id": "test-leak"},
+            {"router_specialist": {
+                "scratchpad": {"router_reasoning": "Routing..."},
+            }},
+            {"project_director": {
+                "scratchpad": {"pd_reasoning": "Working..."},
+                "artifacts": {"final_user_response.md": "Here is the answer."},
+            }},
+            # end_specialist fires AFTER content — its reasoning must be suppressed
+            {"end_specialist": {
+                "scratchpad": {},
+                "artifacts": {"archive_report.md": "# Report..."},
+            }},
         )
 
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        for result in results:
-            if isinstance(result, dict):
-                assert "las_metadata" not in result
-                assert "metadata" not in result
-                assert result.get("object") == "chat.completion.chunk"
+        rc = _reasoning_chunks(results)
+        all_reasoning = " ".join(r["choices"][0]["delta"]["reasoning_content"] for r in rc)
+        # end_specialist must not appear in reasoning
+        assert "end_specialist" not in all_reasoning
+        assert "archive_report" not in all_reasoning
+        # Think block must be closed before content
+        assert "</think>" in all_reasoning
+
+        # Content must not contain any reasoning markers
+        cc = _content_chunks(results)
+        assert len(cc) == 1
+        content = cc[0]["choices"][0]["delta"]["content"]
+        assert "[SYS]" not in content
+        assert "Workflow complete" not in content
+
+    @pytest.mark.asyncio
+    async def test_reasoning_not_in_content(self):
+        """Reasoning data must not leak into the content delta."""
+        stream = _mock_stream(
+            {"run_id": "test-456"},
+            {"router_specialist": {
+                "scratchpad": {"router_reasoning": "Routing to PD"},
+                "routing_history": ["router_specialist"],
+                "messages": [],
+            }},
+            {"project_director": {
+                "scratchpad": {"pd_reasoning": "Executing tools..."},
+                "artifacts": {"final_user_response.md": "Here is the answer."},
+                "messages": [],
+            }},
+        )
+
+        translator = OpenAiTranslator(model="las-default")
+        results = await _collect_output(translator, stream)
+
+        cc = _content_chunks(results)
+        assert len(cc) == 1
+        assert cc[0]["choices"][0]["delta"]["content"] == "Here is the answer."
+        # Content must not contain reasoning
+        assert "Routing to PD" not in cc[0]["choices"][0]["delta"]["content"]
+
+    @pytest.mark.asyncio
+    async def test_think_tags_and_workflow_markers(self):
+        """Reasoning is wrapped in <think></think> with workflow start/end markers."""
+        stream = _mock_stream(
+            {"run_id": "test-markers"},
+            {"specialist": {"scratchpad": {}, "artifacts": {}}},
+        )
+
+        translator = OpenAiTranslator()
+        results = await _collect_output(translator, stream)
+
+        rc = _reasoning_chunks(results)
+        all_reasoning = " ".join(r["choices"][0]["delta"]["reasoning_content"] for r in rc)
+        assert "<think>" in all_reasoning
+        assert "</think>" in all_reasoning
+        assert "[SYS] Workflow initiated" in all_reasoning
+        assert "[SYS] Workflow complete" in all_reasoning
+
+    @pytest.mark.asyncio
+    async def test_artifacts_key_only_in_reasoning(self):
+        """Non-content artifacts appear as key notifications only (no content fencing)."""
+        stream = _mock_stream(
+            {"run_id": "test-fence"},
+            {"pd": {
+                "scratchpad": {},
+                "artifacts": {
+                    "html_document.html": "<html><body>Hello</body></html>",
+                    "final_user_response.md": "See the HTML.",
+                },
+            }},
+        )
+
+        translator = OpenAiTranslator()
+        results = await _collect_output(translator, stream)
+
+        rc = _reasoning_chunks(results)
+        all_reasoning = "\n".join(r["choices"][0]["delta"]["reasoning_content"] for r in rc)
+        assert "[ARTIFACT] html_document.html" in all_reasoning
+        # Content must NOT be fenced in reasoning (lives in archive/web-ui)
+        assert "<html><body>Hello</body></html>" not in all_reasoning
+        assert "```html" not in all_reasoning
+
+    @pytest.mark.asyncio
+    async def test_facilitator_complete_in_reasoning(self):
+        """facilitator_complete flag produces [OK] entry in reasoning_content."""
+        stream = _mock_stream(
+            {"run_id": "test-fac"},
+            {"facilitator": {
+                "scratchpad": {"facilitator_complete": True},
+                "artifacts": {},
+            }},
+        )
+
+        translator = OpenAiTranslator()
+        results = await _collect_output(translator, stream)
+
+        rc = _reasoning_chunks(results)
+        all_reasoning = " ".join(r["choices"][0]["delta"]["reasoning_content"] for r in rc)
+        assert "[OK] FACILITATOR: Context gathering complete" in all_reasoning
 
 
 class TestContentEmission:
@@ -132,10 +224,9 @@ class TestContentEmission:
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        content_chunks = [r for r in results if isinstance(r, dict)
-                         and r["choices"][0]["delta"].get("content")]
-        assert len(content_chunks) == 1
-        assert content_chunks[0]["choices"][0]["delta"]["content"] == "The answer is 42."
+        cc = _content_chunks(results)
+        assert len(cc) == 1
+        assert cc[0]["choices"][0]["delta"]["content"] == "The answer is 42."
 
     @pytest.mark.asyncio
     async def test_content_emitted_only_once(self):
@@ -149,11 +240,9 @@ class TestContentEmission:
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        content_chunks = [r for r in results if isinstance(r, dict)
-                         and r["choices"][0]["delta"].get("content")]
-        # Only the first appearance is emitted
-        assert len(content_chunks) == 1
-        assert content_chunks[0]["choices"][0]["delta"]["content"] == "First version."
+        cc = _content_chunks(results)
+        assert len(cc) == 1
+        assert cc[0]["choices"][0]["delta"]["content"] == "First version."
 
     @pytest.mark.asyncio
     async def test_no_content_run(self):
@@ -166,11 +255,34 @@ class TestContentEmission:
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        # Should have: role, finish, DONE (no content chunk)
         finish_chunks = [r for r in results if isinstance(r, dict)
                         and r["choices"][0].get("finish_reason") == "stop"]
         assert len(finish_chunks) == 1
         assert results[-1] == "[DONE]"
+
+
+class TestExcludeNone:
+    """Verify null fields are excluded from serialized output."""
+
+    @pytest.mark.asyncio
+    async def test_no_null_fields_in_sse(self):
+        """Chunks must not contain null-valued fields (exclude_none)."""
+        stream = _mock_stream(
+            {"run_id": "test-none"},
+            {"specialist": {"scratchpad": {}, "artifacts": {}}},
+        )
+
+        translator = OpenAiTranslator()
+        lines = []
+        async for line in translator.translate(stream):
+            lines.append(line)
+
+        for line in lines:
+            if line.startswith("data: ") and not line.startswith("data: [DONE]"):
+                parsed = json.loads(line[6:])
+                serialized = json.dumps(parsed)
+                # No "null" values should appear
+                assert ': null' not in serialized
 
 
 class TestSSEFormat:
@@ -218,8 +330,25 @@ class TestSSEFormat:
         chunk_results = [r for r in results if isinstance(r, dict)]
         ids = set(r["id"] for r in chunk_results)
         models = set(r["model"] for r in chunk_results)
-        assert len(ids) == 1  # All same id
+        assert len(ids) == 1
         assert models == {"las-research"}
+
+    @pytest.mark.asyncio
+    async def test_no_las_metadata(self):
+        """No las_metadata or vendor extensions on any chunk."""
+        stream = _mock_stream(
+            {"run_id": "test-789"},
+            {"specialist": {"artifacts": {"final_user_response.md": "Content."}}},
+        )
+
+        translator = OpenAiTranslator()
+        results = await _collect_output(translator, stream)
+
+        for result in results:
+            if isinstance(result, dict):
+                assert "las_metadata" not in result
+                assert "metadata" not in result
+                assert result.get("object") == "chat.completion.chunk"
 
 
 class TestInterruptHandling:
@@ -235,14 +364,11 @@ class TestInterruptHandling:
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        # Should have: role, interrupt content, finish, DONE
-        content_chunks = [r for r in results if isinstance(r, dict)
-                         and r["choices"][0]["delta"].get("content")]
-        assert len(content_chunks) == 1
-        assert "What format?" in content_chunks[0]["choices"][0]["delta"]["content"]
-        assert "I need more information" in content_chunks[0]["choices"][0]["delta"]["content"]
+        cc = _content_chunks(results)
+        assert len(cc) == 1
+        assert "What format?" in cc[0]["choices"][0]["delta"]["content"]
+        assert "I need more information" in cc[0]["choices"][0]["delta"]["content"]
 
-        # Must end with stop
         finish_chunks = [r for r in results if isinstance(r, dict)
                         and r["choices"][0].get("finish_reason") == "stop"]
         assert len(finish_chunks) == 1
@@ -262,8 +388,7 @@ class TestErrorHandling:
         translator = OpenAiTranslator()
         results = await _collect_output(translator, stream)
 
-        content_chunks = [r for r in results if isinstance(r, dict)
-                         and r["choices"][0]["delta"].get("content")]
-        assert len(content_chunks) == 1
-        assert "Something went wrong" in content_chunks[0]["choices"][0]["delta"]["content"]
+        cc = _content_chunks(results)
+        assert len(cc) == 1
+        assert "Something went wrong" in cc[0]["choices"][0]["delta"]["content"]
         assert results[-1] == "[DONE]"

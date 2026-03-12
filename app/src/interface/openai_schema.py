@@ -53,6 +53,7 @@ class ChatCompletionMessage(BaseModel):
     """A message in a chat completion response."""
     role: str = "assistant"
     content: Optional[str] = None
+    reasoning_content: Optional[str] = None
 
 
 class ChatCompletionChoice(BaseModel):
@@ -85,6 +86,7 @@ class DeltaContent(BaseModel):
     """Delta content for streaming responses."""
     role: Optional[str] = None
     content: Optional[str] = None
+    reasoning_content: Optional[str] = None
 
 
 class ChatCompletionChunkChoice(BaseModel):

@@ -13,7 +13,7 @@ import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
 import gradio as gr
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
@@ -721,7 +721,8 @@ async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
         )
 
         _active_runs[run_id]["status"] = "completed"
-        return format_sync_response(final_state, request, run_id=run_id)
+        response = format_sync_response(final_state, request, run_id=run_id)
+        return JSONResponse(content=response.model_dump(exclude_none=True))
 
     except WorkflowError as e:
         logger.error(f"OpenAI sync error: {e}", exc_info=True)

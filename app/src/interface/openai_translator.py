@@ -1,27 +1,25 @@
 """
 OpenAI streaming translator for the Two-Headed Architecture (ADR-UI-003).
 
-THIS IS A FILTER, NOT A MAPPER.
+Consumes the same WorkflowRunner.run_streaming() events as AgUiTranslator
+and emits spec-compliant ChatCompletionChunk SSE:
 
-It consumes the same WorkflowRunner.run_streaming() events as AgUiTranslator
-but deliberately discards most of them. It only emits ChatCompletionChunk
-objects in two cases:
+    1. Thought Stream data → delta.reasoning_content  (per-node, as specialists execute)
+    2. final_user_response.md → delta.content           (once, when produced)
+    3. Run completes → finish_reason: "stop"
 
-    1. When final_user_response.md appears in artifacts → delta.content
-    2. When the run completes → finish_reason: "stop"
-
-Everything else (specialist lifecycle, routing decisions, thoughts, MCP calls,
-state snapshots, scratchpad data) is silently dropped. That data is served by
-the observability head (/v1/graph/stream/events), not the chat head.
+The reasoning_content field follows the convention established by DeepSeek R1
+and adopted by Qwen, LM Studio, and most OpenAI-compatible clients. Clients
+that don't understand reasoning_content simply ignore it (field omitted when
+null via exclude_none serialization).
 
 For interrupts (clarification needed), the questions are emitted as regular
 content with finish_reason: "stop" (graceful degradation for standard clients).
 """
-import json
 import logging
 import time
 import uuid
-from typing import AsyncGenerator, Dict, Any
+from typing import AsyncGenerator, Dict, Any, List
 
 from .openai_schema import ChatCompletionChunk, ChatCompletionChunkChoice, DeltaContent
 
@@ -48,8 +46,6 @@ class OpenAiTranslator:
         """
         Consumes the raw stream from WorkflowRunner.run_streaming() and yields
         SSE-formatted strings (data: {...}\n\n) suitable for StreamingResponse.
-
-        Most events are silently discarded. Only content and completion are emitted.
         """
         async for chunk in raw_stream:
             # Capture run_id metadata (emitted first by WorkflowRunner)
@@ -59,6 +55,11 @@ class OpenAiTranslator:
                 # Emit initial chunk with role
                 yield self._format_sse(self._make_chunk(
                     delta=DeltaContent(role="assistant"),
+                ))
+                # Workflow start marker — open <think> for clients that
+                # use tag-based reasoning detection (AnythingLLM, etc.)
+                yield self._format_sse(self._make_chunk(
+                    delta=DeltaContent(reasoning_content="<think>\n[SYS] Workflow initiated\n"),
                 ))
                 continue
 
@@ -92,40 +93,112 @@ class OpenAiTranslator:
                 yield "data: [DONE]\n\n"
                 return
 
-            # Process node outputs — look for final_user_response.md
+            # Process node outputs
             for node_name, node_output in chunk.items():
                 if not isinstance(node_output, dict):
                     continue
 
-                # Accumulate artifacts (dict merge, matching GraphState reducer)
+                # --- Reasoning: extract Thought Stream for this node ---
+                # Stop emitting reasoning once content has been sent — late
+                # reasoning (end_specialist, archiver) would leak into the
+                # client's content display on clients that don't separate them.
+                if not self._content_emitted:
+                    reasoning_text = self._extract_node_reasoning(node_name, node_output)
+                    if reasoning_text:
+                        yield self._format_sse(self._make_chunk(
+                            delta=DeltaContent(reasoning_content=reasoning_text),
+                        ))
+
+                # --- Content: accumulate artifacts, emit final_user_response.md ---
                 node_artifacts = node_output.get("artifacts", {})
                 if isinstance(node_artifacts, dict):
                     self._accumulated_artifacts.update(node_artifacts)
 
-                # Check if final_user_response.md just appeared
                 content = node_artifacts.get("final_user_response.md", "")
                 if content and not self._content_emitted:
+                    # Close thinking block before content
+                    yield self._format_sse(self._make_chunk(
+                        delta=DeltaContent(reasoning_content="[SYS] Workflow complete\n</think>"),
+                    ))
                     yield self._format_sse(self._make_chunk(
                         delta=DeltaContent(content=content),
                     ))
                     self._content_emitted = True
 
-                # Everything else (scratchpad, state_timeline, routing_history,
-                # messages, etc.) is silently dropped. The observability head
-                # serves that data.
-
-        # Stream complete — emit finish chunk and DONE sentinel
-        # If no content was emitted, check accumulated artifacts
+        # Stream complete — check accumulated artifacts for late content
         if not self._content_emitted:
             final_content = self._accumulated_artifacts.get("final_user_response.md", "")
             if final_content:
+                yield self._format_sse(self._make_chunk(
+                    delta=DeltaContent(reasoning_content="[SYS] Workflow complete\n</think>"),
+                ))
                 yield self._format_sse(self._make_chunk(
                     delta=DeltaContent(content=final_content),
                 ))
                 self._content_emitted = True
 
+        # If no content was ever produced, close the think block
+        if not self._content_emitted:
+            yield self._format_sse(self._make_chunk(
+                delta=DeltaContent(reasoning_content="[SYS] Workflow complete\n</think>"),
+            ))
+
         yield self._format_sse(self._make_chunk(finish_reason="stop"))
         yield "data: [DONE]\n\n"
+
+    def _extract_node_reasoning(self, node_name: str, node_output: Dict[str, Any]) -> str:
+        """
+        Extract Thought Stream entries from a node output, mirroring the
+        web-ui's handleStreamEvent → addThoughtStreamEntry pipeline.
+
+        Returns a reasoning text block for this node, or empty string if nothing to emit.
+        """
+        parts: List[str] = []
+
+        # Lifecycle start
+        parts.append(f"[SYS] {node_name} starting...")
+
+        # Scratchpad reasoning
+        scratchpad = node_output.get("scratchpad", {})
+        if isinstance(scratchpad, dict):
+            # Triage recommendations
+            recs = scratchpad.get("recommended_specialists", [])
+            if isinstance(recs, list) and recs:
+                parts.append(f"[TRIAGE] Recommending: {', '.join(recs)}")
+
+            # Router decision
+            if "router_decision" in scratchpad:
+                parts.append(f"[ROUTE] {scratchpad['router_decision']}")
+
+            # Generic *_reasoning and *_decision keys
+            for key, val in scratchpad.items():
+                if key.endswith("_reasoning"):
+                    label = key.replace("_reasoning", "").upper().replace("_", " ")
+                    parts.append(f"[THINK] {label}: {val}")
+                elif key.endswith("_decision") and key != "router_decision":
+                    label = key.replace("_decision", "").upper().replace("_", " ")
+                    parts.append(f"[{label}] {val}")
+
+            # Facilitator complete flag
+            if scratchpad.get("facilitator_complete"):
+                parts.append("[OK] FACILITATOR: Context gathering complete")
+
+        # Artifacts — key notification only (content lives in archive/web-ui)
+        node_artifacts = node_output.get("artifacts", {})
+        if isinstance(node_artifacts, dict):
+            for art_key in node_artifacts:
+                if art_key == "final_user_response.md":
+                    continue
+                parts.append(f"[ARTIFACT] {art_key}")
+
+        # Errors
+        if "error" in node_output:
+            parts.append(f"[ERROR] {node_name}: {node_output['error']}")
+
+        # Lifecycle complete
+        parts.append(f"[OK] {node_name} complete")
+
+        return "\n\n".join(parts) + "\n\n"
 
     def _make_chunk(
         self,
@@ -147,8 +220,8 @@ class OpenAiTranslator:
         )
 
     def _format_sse(self, chunk: ChatCompletionChunk) -> str:
-        """Format a chunk as an SSE data line."""
-        return f"data: {chunk.model_dump_json()}\n\n"
+        """Format a chunk as an SSE data line, excluding null fields."""
+        return f"data: {chunk.model_dump_json(exclude_none=True)}\n\n"
 
     def _extract_interrupt_content(self, chunk: Dict[str, Any]) -> str:
         """
