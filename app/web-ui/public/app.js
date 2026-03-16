@@ -65,6 +65,12 @@ const pageNextBtn = document.getElementById('pageNext');
 const pageTimestampEl = document.getElementById('pageTimestamp');
 const selectAllCheckbox = document.getElementById('selectAllContext');
 
+// #267: Headless mode state
+const headlessModeCheckbox = document.getElementById('headlessMode');
+const headlessStatusEl = document.getElementById('headlessStatus');
+let headlessPollInterval = null;
+let headlessEventSource = null;  // Tracks the active headless SSE connection
+
 // ADR-CORE-042: Clarification state and DOM refs
 let pendingThreadId = null;
 const clarificationModal = document.getElementById('clarificationModal');
@@ -2027,4 +2033,114 @@ function renderTraces(runs) {
     rootRuns.forEach(run => {
         // executionTraceEl.appendChild(createTraceNode(run));
     });
+}
+
+
+// ============================================================================
+// HEADLESS MODE — observe externally-initiated runs (#267)
+// ============================================================================
+
+headlessModeCheckbox.addEventListener('change', () => {
+    if (headlessModeCheckbox.checked) {
+        startHeadlessPolling();
+        headlessStatusEl.textContent = 'SCANNING';
+        headlessStatusEl.style.color = 'var(--secondary-color)';
+        logStatus('► HEADLESS MODE: Scanning for external runs...');
+    } else {
+        stopHeadlessMode();
+        headlessStatusEl.textContent = 'OFF';
+        headlessStatusEl.style.color = '';
+        headlessStatusEl.style.opacity = '0.6';
+        logStatus('► HEADLESS MODE: Disabled');
+    }
+});
+
+function startHeadlessPolling() {
+    if (headlessPollInterval) clearInterval(headlessPollInterval);
+
+    headlessPollInterval = setInterval(async () => {
+        // Don't poll if we're already connected to a run (via command panel or headless)
+        if (currentRunId || headlessEventSource) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/runs/active`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const runs = data.runs || [];
+
+            if (runs.length > 0) {
+                // Attach to the first active run
+                const run = runs[0];
+                attachToHeadlessRun(run.run_id, run.model);
+            }
+        } catch (e) {
+            // Silently ignore poll failures
+        }
+    }, 1500);
+}
+
+function attachToHeadlessRun(runId, model) {
+    if (headlessEventSource) return; // Already attached
+
+    logStatus(`► HEADLESS: Attaching to run ${runId.substring(0, 8)}... (${model || 'unknown'})`);
+    headlessStatusEl.textContent = 'ATTACHED';
+    headlessStatusEl.style.color = 'var(--primary-color)';
+    headlessStatusEl.style.opacity = '1';
+
+    // Reset UI panels for the new observation
+    routingLogEl.innerHTML = '';
+    thoughtStreamEl.innerHTML = '<div class="placeholder">OBSERVING EXTERNAL RUN...</div>';
+    systemStatusEl.innerHTML = `► HEADLESS: Observing run ${runId.substring(0, 8)}...`;
+
+    // Reset state trackers
+    thoughtStreamEntries = [];
+    currentArtifacts = {};
+    stateSnapshots = [];
+    snapshotPageIndex = -1;
+
+    // Start progress polling for intra-node updates
+    startProgressPolling(runId);
+
+    // Connect to the AG-UI event stream
+    headlessEventSource = new EventSource(`${API_BASE}/runs/${runId}/events`);
+
+    headlessEventSource.onmessage = (msg) => {
+        try {
+            const event = JSON.parse(msg.data);
+            handleStreamEvent(event);
+        } catch (e) {
+            console.error('Headless SSE parse error:', e);
+        }
+    };
+
+    headlessEventSource.onerror = () => {
+        // Stream ended or errored — detach
+        detachHeadlessRun();
+    };
+}
+
+function detachHeadlessRun() {
+    if (headlessEventSource) {
+        headlessEventSource.close();
+        headlessEventSource = null;
+    }
+    stopProgressPolling();
+    currentRunId = null;
+
+    if (headlessModeCheckbox.checked) {
+        headlessStatusEl.textContent = 'SCANNING';
+        headlessStatusEl.style.color = 'var(--secondary-color)';
+        logStatus('► HEADLESS: Run complete. Scanning for next run...');
+    }
+}
+
+function stopHeadlessMode() {
+    if (headlessPollInterval) {
+        clearInterval(headlessPollInterval);
+        headlessPollInterval = null;
+    }
+    if (headlessEventSource) {
+        headlessEventSource.close();
+        headlessEventSource = null;
+    }
 }

@@ -7,8 +7,10 @@ load_dotenv()
 print("Environment variables from .env file loaded.")
 
 from typing import Dict, List, Optional, Any
+import asyncio
 import json
 import logging
+import os
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,6 +31,50 @@ langsmith_client: Optional[Client] = None
 logger = logging.getLogger(__name__)
 
 workflow_runner: WorkflowRunner | None = None
+
+
+# ---------------------------------------------------------------------------
+# Event Bus — broadcast raw LangGraph events to headless observers (#267)
+# ---------------------------------------------------------------------------
+
+class _EventBus:
+    """
+    Pub/sub for raw LangGraph events keyed by run_id.
+
+    Producers call push() for each event.  Observers call subscribe() to get
+    an asyncio.Queue, then read from it.  A sentinel ``None`` is pushed on
+    close() to signal end-of-stream.
+    """
+
+    def __init__(self):
+        self._subscribers: Dict[str, List[asyncio.Queue]] = {}
+        self._lock = asyncio.Lock()
+
+    async def push(self, run_id: str, event: Dict[str, Any]) -> None:
+        async with self._lock:
+            for q in self._subscribers.get(run_id, []):
+                try:
+                    q.put_nowait(event)
+                except asyncio.QueueFull:
+                    pass  # slow observer — drop event rather than block producer
+
+    async def subscribe(self, run_id: str) -> asyncio.Queue:
+        q: asyncio.Queue = asyncio.Queue(maxsize=256)
+        async with self._lock:
+            self._subscribers.setdefault(run_id, []).append(q)
+        return q
+
+    async def close(self, run_id: str) -> None:
+        """Push sentinel and remove all subscribers for *run_id*."""
+        async with self._lock:
+            queues = self._subscribers.pop(run_id, [])
+        for q in queues:
+            try:
+                q.put_nowait(None)  # sentinel
+            except asyncio.QueueFull:
+                pass
+
+_event_bus = _EventBus()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -732,7 +778,11 @@ async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
 
 
 async def _openai_stream(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
-    """Handle streaming chat completion."""
+    """Handle streaming chat completion.
+
+    #267: Dual-emit — yields OpenAI SSE to the caller AND pushes raw
+    LangGraph events to the event bus so headless V.E.G.A.S. can observe.
+    """
     try:
         raw_stream = workflow_runner.run_streaming(
             goal=kwargs["goal"],
@@ -743,12 +793,27 @@ async def _openai_stream(request: ChatCompletionRequest, kwargs: Dict[str, Any])
             prior_messages=kwargs.get("prior_messages"),
         )
 
+        # Tee the raw stream: feed OpenAI translator AND push to event bus
+        async def _tee_for_headless(stream):
+            bus_run_id = None
+            async for event in stream:
+                # Capture run_id from the first event that carries it
+                if bus_run_id is None and isinstance(event, dict) and "run_id" in event:
+                    bus_run_id = event["run_id"]
+                if bus_run_id:
+                    await _event_bus.push(bus_run_id, event)
+                yield event
+            # Signal end-of-stream to any headless observers
+            if bus_run_id:
+                await _event_bus.close(bus_run_id)
+
+        teed_stream = _tee_for_headless(raw_stream)
         translator = OpenAiTranslator(model=request.model)
 
         async def stream_with_tracking():
             run_id = None
             try:
-                async for sse_line in translator.translate(raw_stream):
+                async for sse_line in translator.translate(teed_stream):
                     # Capture run_id for active runs tracking
                     if run_id is None and translator.run_id:
                         run_id = translator.run_id
@@ -809,6 +874,36 @@ def get_active_runs():
             for rid, info in _active_runs.items()
         ]
     }
+
+
+@app.get("/v1/runs/{run_id}/events")
+async def stream_run_events(run_id: str):
+    """
+    SSE endpoint for headless observation of externally-initiated runs (#267).
+
+    V.E.G.A.S. discovers run IDs via ``GET /v1/runs/active`` then connects
+    here to receive AG-UI events in real time.  The raw LangGraph events are
+    pushed by ``_openai_stream``'s tee and translated to AG-UI format here.
+    """
+    if run_id not in _active_runs:
+        raise HTTPException(status_code=404, detail="Run not found or already completed")
+
+    queue = await _event_bus.subscribe(run_id)
+
+    async def _generate():
+        translator = AgUiTranslator()
+
+        async def _queue_as_stream():
+            while True:
+                event = await queue.get()
+                if event is None:
+                    return  # sentinel — stream ended
+                yield event
+
+        async for ag_event in translator.translate(_queue_as_stream()):
+            yield f"data: {ag_event.model_dump_json()}\n\n"
+
+    return StreamingResponse(_generate(), media_type="text/event-stream")
 
 
 ## ---------------------------------------------------------------------------
