@@ -1,8 +1,34 @@
 # Facilitator Briefing: How Context Gathering Works in LAS
 
-**Purpose:** Technical briefing on the Facilitator specialist's role in the LAS execution flow.
+**Purpose:** Technical briefing on the Facilitator specialist's role and the facilitation *principle* in the LAS execution flow.
 **Audience:** Developers, architects, or AI agents integrating with or extending LAS.
-**Updated:** 2026-02-25 (#223: RESEARCH action wired to webfetch-mcp web_search; ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection; #217: SA fail-fast conditional edge)
+**Updated:** 2026-03-16 (0.3.0: elevated facilitation as architectural principle; #223: RESEARCH action wired to webfetch-mcp web_search; ADR-045: subagent conciseness hint; ADR-077: signal processor, routing_context detection; #217: SA fail-fast conditional edge)
+
+---
+
+## The Facilitation Principle
+
+> **Protect the downstream from having to distrust the upstream.**
+
+Facilitation in LAS is an *architectural principle*, not just a specialist's job description. The principle: every specialist should receive pre-framed input whose intent is unambiguous. No specialist should have to decide whether its input is a directive, a system probe, or content to process — that decision belongs to the caller.
+
+**Gating vs framing.** These are complementary but distinct:
+- **Gating** = should this request proceed? (Triage: ACCEPT/REJECT)
+- **Framing** = what *is* this request, for the specialist that will process it? (Facilitator: context assembly with intent classification)
+
+Both are needed at every specialist boundary. A gate without framing lets ambiguous input through to a specialist that will interpret it in the only way it can — which may not be what the user intended.
+
+**Example failure (observed):** User sends "ping" (a system responsiveness check). Triage ACCEPTs it — correctly, since "greetings and simple queries" are actionable. SA receives the raw user prompt with no framing. SA's contract is "produce a plan for whatever you receive." The model — correctly fulfilling its contract — interprets "ping" as the thing-to-plan-for and produces a plan for an HTTP ping-pong service. The bug isn't in SA or Triage; it's that no facilitation occurred at the Triage → SA boundary.
+
+**Where the principle is currently implemented:**
+- SA → Facilitator → Router → Specialist: `gathered_context` frames all downstream work (#170, ADR-071)
+- Retry path: Facilitator curates prior work + EI feedback so retry specialists don't re-derive context
+
+**Where the principle is currently unimplemented:**
+- Triage → SA: Triage gates but doesn't frame. SA receives the raw user prompt with no intent classification.
+- Router greeting gate → EndSpecialist: deterministic bypass works, but only for exact greeting patterns. System probes ("ping"), trivial queries ("what time is it"), and other non-project inputs fall through to SA.
+
+The Facilitator specialist is the primary *mechanism* for this principle, but the principle applies at all boundaries — including paths where the literal Facilitator node doesn't run.
 
 ---
 
@@ -300,6 +326,7 @@ except Exception as e:
 | Accumulate private context | No (#170) | Specialists produce artifacts; Facilitator curates |
 | Track accumulated work | Yes | Curates `specialist_activity` from scratchpad into `accumulated_work` artifact |
 | Write execution traces | No | PD writes `specialist_activity` to scratchpad; Facilitator reads it directly |
+| Frame input for SA | **Not yet** | Currently unimplemented — SA receives raw user prompt (see Facilitation Principle) |
 
 ---
 
