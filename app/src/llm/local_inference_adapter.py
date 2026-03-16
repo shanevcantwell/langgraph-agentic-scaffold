@@ -251,7 +251,7 @@ class LocalInferenceAdapter(BaseAdapter):
                 },
                 "final_response": {
                     "type": "string",
-                    "description": "Only when any action has tool_name DONE - the final summary"
+                    "description": "Only when any action has tool_name DONE. Write the answer the USER needs — the substantive result of your work. Do NOT narrate what tools you used or steps you took; state what you found, built, or concluded."
                 }
             }
         }

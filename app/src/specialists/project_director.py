@@ -591,6 +591,9 @@ class ProjectDirector(BaseSpecialist):
         self, final_response: str, trace: List[Dict[str, Any]],
         captured_artifacts: dict,
     ) -> Dict[str, Any]:
+        # #266: Write canonical user-facing content artifact.
+        # openai_translator and EndSpecialist both look for this key.
+        captured_artifacts["final_user_response.md"] = final_response
         # #225: Structural completion signal — EI reads this instead of re-deriving
         captured_artifacts["completion_signal"] = {
             "status": "COMPLETED",
@@ -609,6 +612,8 @@ class ProjectDirector(BaseSpecialist):
         self, error_msg: str, trace: List[Dict[str, Any]],
         captured_artifacts: dict,
     ) -> Dict[str, Any]:
+        # #266: User-facing error content (what failed and why, not stack traces)
+        captured_artifacts["final_user_response.md"] = error_msg
         # #225: Structural completion signal
         captured_artifacts["completion_signal"] = {
             "status": "ERROR",
@@ -642,6 +647,8 @@ class ProjectDirector(BaseSpecialist):
             f"Progress before stagnation:\n{self._summarize_trace(trace)}"
         )
 
+        # #266: User-facing stagnation content
+        captured_artifacts["final_user_response.md"] = stagnation_message
         # #225: Structural completion signal
         captured_artifacts["completion_signal"] = {
             "status": "BLOCKED",
@@ -667,6 +674,8 @@ class ProjectDirector(BaseSpecialist):
     ) -> Dict[str, Any]:
         partial_msg = self._synthesize_partial(trace, max_iter)
 
+        # #266: User-facing partial completion content
+        captured_artifacts["final_user_response.md"] = partial_msg
         # #225: Structural completion signal
         captured_artifacts["completion_signal"] = {
             "status": "PARTIAL",

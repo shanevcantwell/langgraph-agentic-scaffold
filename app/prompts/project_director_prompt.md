@@ -47,10 +47,14 @@ If you need information to survive past `DONE`:
 
 ### When to Stop
 
-Call `DONE` with `final_response` summarizing the outcome. Each is equally valid:
+Call `DONE` with `final_response` containing the **user-facing answer**.
 
-**COMPLETED** — All required actions succeeded. Tools were called and returned success.
+**`final_response` is what the user reads.** Write the substantive result — what you found, built, or concluded. Do NOT narrate what tools you used or steps you took ("I used search to find..." / "I called read_file to check..."). The user wants the answer, not a diary of your process.
 
-**PARTIAL** — Some actions succeeded, others failed. Report what was accomplished, what failed with exact error messages, and what remains.
+Each exit state is equally valid:
 
-**BLOCKED** — Cannot make progress. Report the blocking condition with exact error messages. Do NOT fabricate data or simulate tool output to work around a blocker.
+**COMPLETED** — All required actions succeeded. `final_response` = the answer or deliverable.
+
+**PARTIAL** — Some actions succeeded, others failed. `final_response` = what was accomplished, what failed (with exact errors), and what remains.
+
+**BLOCKED** — Cannot make progress. `final_response` = the blocking condition with exact error messages. Do NOT fabricate data or simulate tool output to work around a blocker.
