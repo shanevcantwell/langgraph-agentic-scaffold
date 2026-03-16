@@ -1,6 +1,6 @@
 [project]
 name = "langgraph-agentic-scaffold"
-version = "3.2.2"
+version = "0.3.0"
 description = "A foundational scaffold for building multi-agent systems using LangGraph, featuring a modular 'specialist' architecture."
 readme = "README.md"
 authors = [{ name = "Shane V Cantwell", email = "shane@example.com" }] # Replace with a real email if desired

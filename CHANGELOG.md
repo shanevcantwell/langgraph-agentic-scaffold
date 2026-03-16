@@ -1,5 +1,25 @@
 # Changelog
 
+## Alpha 3 — "I Can Talk To It And Watch It Work" (2026-03-16)
+
+**Milestone: Clean chat output + headless observation.**
+
+### PD Output Tuning (#266)
+- All four PD result builders (`_build_success_result`, `_build_error_result`, `_build_stagnation_result`, `_build_partial_result`) now write `final_user_response.md` — the canonical artifact that `openai_translator` and `EndSpecialist` consume.
+- `final_response` schema description tightened: directs user-facing content, not tool narration.
+- PD system prompt updated: explicit anti-narration directive for DONE `final_response`.
+
+### V.E.G.A.S. Headless Mode (#267)
+- **Event bus**: `_openai_stream` dual-emits — raw LangGraph events pushed to subscribers alongside OpenAI SSE output.
+- **`GET /v1/runs/{run_id}/events`**: New SSE endpoint translates event bus to AG-UI format for headless observers.
+- **Headless toggle**: V.E.G.A.S. polls `/v1/runs/active`, auto-attaches to externally-initiated runs (e.g. from AnythingLLM) with full routing log + thought stream.
+- Existing `/v1/graph/stream/events` path unchanged.
+
+### Smoke Tests (#268)
+- `test_openai_endpoint.py`: Integration tests for sync/streaming completions, models endpoint, and active runs discovery.
+
+---
+
 ## Alpha 2 (2026-03-11)
 
 **891 commits | 262 issues tracked (112 closed) | Aug 2025 – Mar 2026**

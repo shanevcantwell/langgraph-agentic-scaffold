@@ -5,9 +5,9 @@
 | Category | Files | Tests |
 |----------|-------|-------|
 | Unit | 79 | 922 |
-| Integration | 28 | 189 |
+| Integration | 29 | 193 |
 | Other | 7 | 92 |
-| **Total** | **114** | **1203** |
+| **Total** | **115** | **1207** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -352,6 +352,17 @@
 
 ## `app/tests/integration/test_navigator_mcp.py`
 
+
+## `app/tests/integration/test_openai_endpoint.py`
+
+- **`test_models_endpoint`**
+  - *GET /v1/models returns available routing profiles.*
+- **`test_sync_completion`**
+  - *POST /v1/chat/completions (stream=false) returns a valid response.*
+- **`test_streaming_completion`**
+  - *POST /v1/chat/completions (stream=true) yields valid SSE.*
+- **`test_active_runs_endpoint`**
+  - *GET /v1/runs/active returns a valid (possibly empty) run list.*
 
 ## `app/tests/integration/test_parallel_execution.py`
 
