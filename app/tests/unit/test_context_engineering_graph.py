@@ -56,13 +56,14 @@ def test_context_engineering_graph_wiring(
     assert "summarizer_specialist" not in added_nodes
     
     # 2. Verify Edges
-    # Triage -> [SystemsArchitect | END]
+    # #262: Triage -> [SystemsArchitect | Facilitator | END]
     mock_workflow.add_conditional_edges.assert_any_call(
         "triage_architect",
         builder.orchestrator.check_triage_outcome,
         {
             "systems_architect": "systems_architect",
-            "end_specialist": "end_specialist"
+            "facilitator_specialist": "facilitator_specialist",
+            "end_specialist": "end_specialist",
         }
     )
 

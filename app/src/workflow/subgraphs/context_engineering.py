@@ -16,16 +16,20 @@ class ContextEngineeringSubgraph(BaseSubgraph):
         # SA plans from a validated prompt, then Facilitator assembles gathered_context.
 
         if "triage_architect" in self.specialists:
-            # Triage conditional: PASS -> SA, CLARIFY -> END (reject with cause)
+            # #262: Triage three-way routing based on actions content:
+            #   - ask_user only → END (reject with cause)
+            #   - context-gathering actions → SA for planning
+            #   - empty actions → Facilitator directly (skip SA)
             workflow.add_conditional_edges(
                 "triage_architect",
                 self.orchestrator.check_triage_outcome,
                 {
                     "systems_architect": "systems_architect",
-                    CoreSpecialist.END.value: CoreSpecialist.END.value
+                    "facilitator_specialist": "facilitator_specialist",
+                    CoreSpecialist.END.value: CoreSpecialist.END.value,
                 }
             )
-            logger.info("Graph Edge: Added TriageArchitect conditional edge (PASS->SA, CLARIFY->END)")
+            logger.info("Graph Edge: Added TriageArchitect conditional edge (actions->SA, empty->Facilitator, ask_user->END)")
 
         if "systems_architect" in self.specialists and "facilitator_specialist" in self.specialists:
             # #217: SA produces task_plan → Facilitator. SA fails → END (fail-fast).

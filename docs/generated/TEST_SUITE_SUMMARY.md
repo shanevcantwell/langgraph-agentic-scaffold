@@ -4,10 +4,10 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 79 | 922 |
+| Unit | 79 | 923 |
 | Integration | 29 | 193 |
 | Other | 7 | 92 |
-| **Total** | **115** | **1207** |
+| **Total** | **115** | **1208** |
 
 
 ## `app/tests/integration/test_api_streaming_integration.py`
@@ -1384,10 +1384,12 @@
   - *Plan with context-gathering + ask_user routes to SA for planning (not END).*
 - **`test_context_only_plan_routes_to_sa`**
   - *Normal context-gathering plan routes to SA for planning.*
-- **`test_empty_plan_routes_to_sa`**
-  - *Empty triage_actions routes to SA for planning.*
-- **`test_no_triage_actions_routes_to_sa`**
-  - *Missing triage_actions in scratchpad routes to SA for planning.*
+- **`test_empty_plan_routes_to_facilitator`**
+  - *#262: Empty triage_actions skips SA, routes to Facilitator directly.*
+- **`test_no_triage_actions_routes_to_facilitator`**
+  - *#262: Missing triage_actions in scratchpad routes to Facilitator (safe default).*
+- **`test_context_actions_route_to_sa`**
+  - *#262: Non-ask_user actions trigger SA planning.*
 - **`test_subagent_routes_to_ei_on_task_complete`**
   - *When subagent=True and task_is_complete, route to EI (same as non-subagent).*
 - **`test_non_subagent_routes_to_ei_on_task_complete`**

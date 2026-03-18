@@ -424,8 +424,8 @@ class TestCheckTriageOutcome:
         result = orchestrator_instance.check_triage_outcome(state)
         assert result == "systems_architect"
 
-    def test_empty_plan_routes_to_sa(self, orchestrator_instance):
-        """Empty triage_actions routes to SA for planning."""
+    def test_empty_plan_routes_to_facilitator(self, orchestrator_instance):
+        """#262: Empty triage_actions skips SA, routes to Facilitator directly."""
         state = {
             "scratchpad": {
                 "triage_actions": [],
@@ -434,11 +434,25 @@ class TestCheckTriageOutcome:
         }
 
         result = orchestrator_instance.check_triage_outcome(state)
-        assert result == "systems_architect"
+        assert result == "facilitator_specialist"
 
-    def test_no_triage_actions_routes_to_sa(self, orchestrator_instance):
-        """Missing triage_actions in scratchpad routes to SA for planning."""
+    def test_no_triage_actions_routes_to_facilitator(self, orchestrator_instance):
+        """#262: Missing triage_actions in scratchpad routes to Facilitator (safe default)."""
         state = {"scratchpad": {}}
+
+        result = orchestrator_instance.check_triage_outcome(state)
+        assert result == "facilitator_specialist"
+
+    def test_context_actions_route_to_sa(self, orchestrator_instance):
+        """#262: Non-ask_user actions trigger SA planning."""
+        state = {
+            "scratchpad": {
+                "triage_actions": [
+                    {"type": "research", "target": "quantum computing", "description": "User needs research"}
+                ],
+                "triage_reasoning": "Needs context gathering",
+            }
+        }
 
         result = orchestrator_instance.check_triage_outcome(state)
         assert result == "systems_architect"

@@ -32,9 +32,12 @@ class GraphOrchestrator:
 
     def check_triage_outcome(self, state: GraphState) -> str:
         """
-        Decides next step after TriageArchitect.
-        PASS (no actions or non-ask_user actions) -> SystemsArchitect for planning.
-        CLARIFY (ask_user only) -> END (reject with cause).
+        Decides next step after TriageArchitect (#262).
+
+        Three outcomes based on triage_actions content:
+        - ask_user only → END (reject with cause, #179)
+        - Has context-gathering actions → SA for planning
+        - Empty actions → Facilitator directly (skip SA, trivially answerable)
         """
         triage_actions = state.get("scratchpad", {}).get("triage_actions", [])
 
@@ -47,27 +50,29 @@ class GraphOrchestrator:
             # in final_user_response. No interrupt, no in-graph clarification.
             if other_count == 0 and ask_user_count > 0:
                 logger.info(
-                    f"Triage: CLARIFY — ask_user ({ask_user_count} questions). "
+                    f"Triage: REJECT — ask_user ({ask_user_count} questions). "
                     "Rejecting with cause via EndSpecialist."
                 )
                 self._record_im_decision(state, "check_triage_outcome", CoreSpecialist.END.value,
                                          f"ask_user-only ({ask_user_count} questions), rejecting")
                 return CoreSpecialist.END.value
 
-            # Non-ask_user actions present — treat as PASS (vestigial action types
-            # from before classifier rewrite; route to SA regardless)
+            # Context-gathering actions present — route to SA for task planning.
+            # Facilitator will execute these actions after SA produces task_plan.
             logger.info(
-                f"Triage: PASS (with {other_count} legacy actions). "
+                f"Triage: ACCEPT (with {other_count} context actions). "
                 "Routing to SystemsArchitect for planning."
             )
             self._record_im_decision(state, "check_triage_outcome", "systems_architect",
-                                     f"PASS with {other_count} legacy actions")
+                                     f"ACCEPT with {other_count} context actions")
             return "systems_architect"
 
-        logger.info("Triage: PASS (no actions). Routing to SystemsArchitect for planning.")
-        self._record_im_decision(state, "check_triage_outcome", "systems_architect",
-                                 "PASS, no actions")
-        return "systems_architect"
+        # Empty actions — directly answerable query, skip SA planning.
+        # Facilitator handles missing task_plan gracefully (_build_task_context returns []).
+        logger.info("Triage: ACCEPT (no actions, no planning needed). Routing to Facilitator, skipping SA.")
+        self._record_im_decision(state, "check_triage_outcome", "facilitator_specialist",
+                                 "ACCEPT, no actions — skipping SA")
+        return "facilitator_specialist"
 
     def check_sa_outcome(self, state: GraphState) -> str:
         """
