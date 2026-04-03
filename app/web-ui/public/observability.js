@@ -1243,39 +1243,73 @@ function renderTraces(runs) {
 
 
 // =============================================================================
-// INTRA-NODE PROGRESS POLLING
+// INTRA-NODE PROGRESS POLLING (ADR-OBS-002: multi-run tree support)
 // =============================================================================
 
-function startProgressPolling(runId) {
-    if (progressInterval) clearInterval(progressInterval);
-    progressInterval = setInterval(async () => {
+// Track which child run_ids we're actively polling (for delegate tree drilling)
+let _activeChildPolls = new Set();
+
+function startProgressPolling(runId, depth = 0) {
+    if (progressIntervals.has(runId)) return; // Already polling this run
+
+    const intervalId = setInterval(async () => {
         try {
             const resp = await fetch(`${API_BASE}/progress/${runId}`);
             if (!resp.ok) return;
             const data = await resp.json();
             for (const entry of (data.entries || [])) {
-                renderProgressEntry(entry);
+                renderProgressEntry(entry, depth);
             }
         } catch (e) {
             // Silently ignore poll failures (run may have ended)
         }
     }, 2500);
+
+    progressIntervals.set(runId, intervalId);
 }
 
-function stopProgressPolling() {
-    if (progressInterval) {
-        clearInterval(progressInterval);
-        progressInterval = null;
+function stopProgressPolling(runId) {
+    if (runId) {
+        // Stop polling a specific run (e.g. child completed)
+        const intervalId = progressIntervals.get(runId);
+        if (intervalId) {
+            clearInterval(intervalId);
+            progressIntervals.delete(runId);
+        }
+        _activeChildPolls.delete(runId);
+    } else {
+        // Stop all polling (workflow ended)
+        for (const [rid, intervalId] of progressIntervals) {
+            clearInterval(intervalId);
+        }
+        progressIntervals.clear();
+        _activeChildPolls.clear();
     }
 }
 
-function renderProgressEntry(entry) {
+function renderProgressEntry(entry, depth = 0) {
     const specialist = (entry.specialist || 'project_director').replace(/_specialist$/, '').replace(/_/g, ' ').toUpperCase();
     const tool = entry.tool || 'unknown';
 
-    // #250: Delegate start (pre-dispatch, no fork_metadata yet)
+    // Depth badge for child run entries
+    const depthPrefix = depth > 0 ? `[child-${depth}] ` : '';
+
+    // ADR-OBS-002: delegate_child_started — start polling the child's progress
+    if (tool === 'delegate_child_started' && entry.child_run_id) {
+        const childId = entry.child_run_id;
+        if (!_activeChildPolls.has(childId)) {
+            _activeChildPolls.add(childId);
+            startProgressPolling(childId, depth + 1);
+            addThoughtStreamEntry(specialist,
+                `${depthPrefix}Delegating → child ${childId.substring(0, 8)}`,
+                'lifecycle');
+        }
+        return;
+    }
+
+    // #250: Delegate start (pre-dispatch, legacy entry without child_run_id)
     if (tool === 'delegate' && !entry.fork_metadata) {
-        addThoughtStreamEntry(specialist, entry.args_summary || 'Delegating to child run...', 'lifecycle');
+        addThoughtStreamEntry(specialist, `${depthPrefix}${entry.args_summary || 'Delegating to child run...'}`, 'lifecycle');
         return;
     }
 
@@ -1283,7 +1317,11 @@ function renderProgressEntry(entry) {
     if (entry.fork_metadata) {
         const fm = entry.fork_metadata;
         const route = (fm.child_routing_history || []).join(' \u2192 ');
-        addThoughtStreamEntry(specialist, entry.args_summary || tool, 'fork', {
+        // Stop polling the completed child
+        if (fm.child_run_id) {
+            stopProgressPolling(fm.child_run_id);
+        }
+        addThoughtStreamEntry(specialist, `${depthPrefix}${entry.args_summary || tool}`, 'fork', {
             childRunId: fm.child_run_id,
             childRoute: route,
             hadError: fm.had_error,
@@ -1293,19 +1331,19 @@ function renderProgressEntry(entry) {
 
     // _start entries render as lifecycle
     if (tool === '_start') {
-        addThoughtStreamEntry(specialist, entry.args_summary || 'Starting react loop...', 'lifecycle');
+        addThoughtStreamEntry(specialist, `${depthPrefix}${entry.args_summary || 'Starting react loop...'}`, 'lifecycle');
         return;
     }
 
     // Regular tool calls
     if (entry.success) {
-        addThoughtStreamEntry(specialist, `${tool}()`, 'mcp', {
+        addThoughtStreamEntry(specialist, `${depthPrefix}${tool}()`, 'mcp', {
             service: 'react_step',
             method: tool,
             params: entry.args_summary,
         });
     } else {
-        addThoughtStreamEntry(specialist, `${tool}() \u2014 ${(entry.observation_preview || 'failed').substring(0, 100)}`, 'error');
+        addThoughtStreamEntry(specialist, `${depthPrefix}${tool}() \u2014 ${(entry.observation_preview || 'failed').substring(0, 100)}`, 'error');
     }
 }
 

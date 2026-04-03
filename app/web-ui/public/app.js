@@ -63,7 +63,7 @@ let loadedFile = null; // { content: string, type: 'text' | 'image' }
 let abortController = null; // Controller for the fetch request
 let thoughtStreamEntries = []; // Track thought stream entries
 let currentArtifacts = {}; // Track artifacts as they're generated
-let progressInterval = null; // Progress polling interval for intra-node updates
+let progressIntervals = new Map(); // run_id → intervalId for multi-run progress polling
 
 // STATE tab: snapshot accumulator and intra-run paging
 let stateSnapshots = [];       // Accumulates state_snapshot events within current run

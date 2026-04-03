@@ -7,7 +7,7 @@ expected_artifacts (#206), conditioning frame (#205),
 PD integration, and EI integration.
 """
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 
 from app.src.mcp.fork import (
     dispatch_fork,
@@ -442,6 +442,7 @@ class TestPDForkIntegration:
             expected_artifacts=None,
             parent_run_id=None,
             fork_depth=0,
+            child_run_id=ANY,
         )
 
     @patch("app.src.mcp.fork.dispatch_fork")
@@ -475,6 +476,7 @@ class TestPDForkIntegration:
             expected_artifacts=None,
             parent_run_id=None,
             fork_depth=0,
+            child_run_id=ANY,
         )
 
     @patch("app.src.mcp.fork.dispatch_fork")
@@ -511,6 +513,7 @@ class TestPDForkIntegration:
             expected_artifacts=["status"],
             parent_run_id=None,
             fork_depth=0,
+            child_run_id=ANY,
         )
         mock_extract.assert_called_once_with(
             {"artifacts": {"status": "DONE"}},

@@ -446,8 +446,20 @@ class ProjectDirector(BaseSpecialist):
 
         # delegate() — recursive LAS invocation (ADR-045, renamed from fork #225)
         if tool_def.service == "las" and tool_def.function == "delegate":
+            import uuid as _uuid
             from ..mcp.fork import dispatch_fork, extract_fork_result
             expected = tool_args.get("expected_artifacts")
+            # Pre-generate child_run_id so we can publish it BEFORE the
+            # blocking invoke(), enabling live observation (ADR-OBS-002).
+            child_run_id = str(_uuid.uuid4())
+            if run_id:
+                publish_progress(run_id, {
+                    "specialist": self.specialist_name,
+                    "tool": "delegate_child_started",
+                    "child_run_id": child_run_id,
+                    "args_summary": tool_args.get("prompt", "")[:200],
+                    "success": True,
+                })
             child_state = dispatch_fork(
                 compiled_graph=self._compiled_graph,
                 prompt=tool_args.get("prompt", ""),
@@ -455,6 +467,7 @@ class ProjectDirector(BaseSpecialist):
                 expected_artifacts=expected,
                 parent_run_id=run_id,
                 fork_depth=fork_depth,
+                child_run_id=child_run_id,
             )
             observation = extract_fork_result(child_state, expected_artifacts=expected)
             # Capture child metadata for trace enrichment + live UI progress

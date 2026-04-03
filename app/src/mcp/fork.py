@@ -78,6 +78,7 @@ def dispatch_fork(
     fork_depth: int = 0,
     max_depth: int = _DEFAULT_MAX_DEPTH,
     recursion_limit: int = 25,
+    child_run_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Spawn a fresh LAS invocation to handle a subtask.
@@ -101,6 +102,10 @@ def dispatch_fork(
         max_depth: Maximum allowed recursion depth before refusing to fork.
         recursion_limit: LangGraph recursion limit for the child graph
                          (max node transitions per invocation).
+        child_run_id: Pre-generated run ID for the child. When provided by
+                      the caller (e.g. PD), enables the caller to publish
+                      the child_run_id to progress_store before the blocking
+                      invoke() so observers can start polling immediately.
 
     Returns:
         The child's final GraphState dict on success, or a dict with an
@@ -111,7 +116,7 @@ def dispatch_fork(
         logger.warning(f"fork(): {msg}")
         return {"error": msg}
 
-    child_run_id = str(uuid.uuid4())
+    child_run_id = child_run_id or str(uuid.uuid4())
     child_prompt = _build_child_prompt(prompt, expected_artifacts)
 
     logger.info(
