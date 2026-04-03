@@ -10,12 +10,10 @@ from typing import Dict, List, Optional, Any
 import asyncio
 import json
 import logging
-import os
 import uuid
 from contextlib import asynccontextmanager
-from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse, FileResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 import gradio as gr
 from .workflow.runner import WorkflowRunner
 from .utils.errors import WorkflowError
@@ -26,55 +24,15 @@ from .interface.openai_schema import ChatCompletionRequest
 from .interface.openai_request_adapter import translate_request
 from .interface.openai_response_formatter import format_sync_response
 from .interface.openai_translator import OpenAiTranslator
+from .observability import (
+    event_bus, active_runs, observability_router, init_observability,
+)
 
 langsmith_client: Optional[Client] = None
 logger = logging.getLogger(__name__)
 
 workflow_runner: WorkflowRunner | None = None
 
-
-# ---------------------------------------------------------------------------
-# Event Bus — broadcast raw LangGraph events to headless observers (#267)
-# ---------------------------------------------------------------------------
-
-class _EventBus:
-    """
-    Pub/sub for raw LangGraph events keyed by run_id.
-
-    Producers call push() for each event.  Observers call subscribe() to get
-    an asyncio.Queue, then read from it.  A sentinel ``None`` is pushed on
-    close() to signal end-of-stream.
-    """
-
-    def __init__(self):
-        self._subscribers: Dict[str, List[asyncio.Queue]] = {}
-        self._lock = asyncio.Lock()
-
-    async def push(self, run_id: str, event: Dict[str, Any]) -> None:
-        async with self._lock:
-            for q in self._subscribers.get(run_id, []):
-                try:
-                    q.put_nowait(event)
-                except asyncio.QueueFull:
-                    pass  # slow observer — drop event rather than block producer
-
-    async def subscribe(self, run_id: str) -> asyncio.Queue:
-        q: asyncio.Queue = asyncio.Queue(maxsize=256)
-        async with self._lock:
-            self._subscribers.setdefault(run_id, []).append(q)
-        return q
-
-    async def close(self, run_id: str) -> None:
-        """Push sentinel and remove all subscribers for *run_id*."""
-        async with self._lock:
-            queues = self._subscribers.pop(run_id, [])
-        for q in queues:
-            try:
-                q.put_nowait(None)  # sentinel
-            except asyncio.QueueFull:
-                pass
-
-_event_bus = _EventBus()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -109,6 +67,12 @@ async def lifespan(app: FastAPI):
         logger.error(f"Failed to initialize LangSmith client on startup: {e}", exc_info=True)
         langsmith_client = None
 
+    # Initialize observability layer with runtime dependencies
+    init_observability(
+        workflow_runner=workflow_runner,
+        langsmith_client=langsmith_client,
+    )
+
     yield
 
     # Cleanup external MCP containers on shutdown
@@ -131,6 +95,10 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+# Mount observability router (all /v1/runs/*, /v1/progress/*, /v1/traces/*,
+# /v1/graph/topology, /v1/archives/* endpoints)
+app.include_router(observability_router)
 
 # --- Data Contracts ---
 from pydantic import BaseModel, Field
@@ -381,23 +349,6 @@ async def _stream_formatter(generator):
     else:
         yield f"data: {json.dumps({'status': 'Workflow complete.'})}\n\n"
 
-@app.get("/v1/traces/{run_id}")
-async def get_run_trace(run_id: str):
-    """
-    Fetches the LangSmith trace tree for a specific run ID.
-    This allows the frontend to visualize the execution details in real-time.
-    """
-    if not langsmith_client:
-        raise HTTPException(status_code=503, detail="LangSmith client not initialized")
-    
-    try:
-        # Fetch all runs associated with this trace ID (run_id is used as trace_id in runner)
-        runs = list(langsmith_client.list_runs(trace_id=run_id))
-        return {"runs": [r.model_dump() for r in runs]}
-    except Exception as e:
-        logger.error(f"Failed to fetch traces for run {run_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/v1/graph/cancel/{run_id}")
 async def cancel_run(run_id: str):
     """
@@ -406,174 +357,6 @@ async def cancel_run(run_id: str):
     logger.info(f"Received cancellation request for run_id: {run_id}")
     CancellationManager.request_cancellation(run_id)
     return {"status": "Cancellation requested"}
-
-
-@app.get("/v1/graph/topology")
-def get_graph_topology():
-    """
-    Returns the static structure of the graph for UI visualization.
-    Exposes nodes (specialists) and edges (routing relationships).
-
-    Node types:
-    - router: The central routing hub
-    - core_infrastructure: End, archiver, critic (special graph roles)
-    - specialist: User-facing specialists that can be routed to
-    - mcp_only: Services accessible only via MCP (not graph nodes)
-
-    Edge types:
-    - conditional: Router's dynamic routing decisions
-    - completion: Specialist → Router/END based on task_is_complete
-    - terminal: END → graph termination
-    """
-    if not workflow_runner:
-        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
-
-    from .workflow.specialist_categories import SpecialistCategories
-    from .enums import CoreSpecialist
-
-    builder = workflow_runner.builder
-    specialists = builder.specialists
-    allowed_destinations = builder.allowed_destinations
-
-    # Category mapping for subgraph clustering in UI
-    # Based on functional groupings from config.yaml
-    CATEGORY_MAP = {
-        # Orchestration & Planning
-        "router_specialist": "orchestration",
-        "triage_architect": "orchestration",
-        "project_director": "orchestration",
-        "systems_architect": "planning",
-        # Context Engineering
-        "facilitator_specialist": "context",
-        "dialogue_specialist": "context",
-        # Research Pipeline
-        "synthesizer_specialist": "research",
-        # Chat Subgraph
-        "chat_specialist": "chat",
-        "progenitor_alpha_specialist": "chat",
-        "progenitor_bravo_specialist": "chat",
-        "tiered_synthesizer_specialist": "chat",
-        "default_responder_specialist": "chat",
-        # Data & Analysis
-        "text_analysis_specialist": "data",
-        # File Operations
-        "navigator_specialist": "files",
-        "batch_processor_specialist": "files",
-        # Browser (disabled — pending surf-mcp integration)
-        # "navigator_browser_specialist": "browser",
-        # Builders
-        "web_builder": "builders",
-        # Distillation (internal subgraph)
-        "distillation_coordinator_specialist": "distillation",
-        "distillation_prompt_expander_specialist": "distillation",
-        "distillation_prompt_aggregator_specialist": "distillation",
-        "distillation_response_collector_specialist": "distillation",
-        # Utilities
-        "prompt_specialist": "utilities",
-        "image_specialist": "utilities",
-        "prompt_triage_specialist": "utilities",
-        # Core Infrastructure
-        "end_specialist": "core",
-        "archiver_specialist": "core",
-        # MCP-only (not graph nodes)
-        "summarizer_specialist": "mcp_only",
-        "file_specialist": "mcp_only",
-    }
-
-    # Build node list with categorization
-    nodes = []
-    router_name = CoreSpecialist.ROUTER.value
-    node_exclusions = SpecialistCategories.get_node_exclusions()
-
-    for name in specialists:
-        # Determine node type
-        if name == router_name:
-            node_type = "router"
-        elif name in SpecialistCategories.CORE_INFRASTRUCTURE:
-            node_type = "core_infrastructure"
-        elif name in node_exclusions:
-            node_type = "mcp_only"
-        else:
-            node_type = "specialist"
-
-        # Get basic config info for the node
-        spec_config = builder.config.get("specialists", {}).get(name, {})
-
-        # Assign category for subgraph clustering (default to "other")
-        category = CATEGORY_MAP.get(name, "other")
-
-        nodes.append({
-            "id": name,
-            "type": node_type,
-            "category": category,
-            "description": spec_config.get("description", ""),
-            "has_llm": spec_config.get("llm_config") is not None,
-            "is_graph_node": name not in node_exclusions,
-            "is_routable": name in allowed_destinations
-        })
-
-    # Build edge list representing the hub-and-spoke architecture
-    edges = []
-
-    # Router → all routable destinations (conditional edges)
-    for dest in allowed_destinations:
-        edges.append({
-            "source": router_name,
-            "target": dest,
-            "type": "conditional",
-            "label": "route"
-        })
-
-    # Collect subgraph exclusions for hub-spoke wiring
-    subgraph_exclusions = []
-    for subgraph in builder.subgraphs:
-        subgraph_exclusions.extend(subgraph.get_excluded_specialists())
-
-    hub_spoke_exclusions = SpecialistCategories.get_hub_spoke_exclusions(subgraph_exclusions)
-
-    # Specialists → Router/END (completion edges)
-    end_name = CoreSpecialist.END.value
-    for name in specialists:
-        if name in hub_spoke_exclusions or name in node_exclusions:
-            continue
-        # Each specialist can route back to router or to end
-        edges.append({
-            "source": name,
-            "target": router_name,
-            "type": "completion",
-            "label": "continue"
-        })
-        edges.append({
-            "source": name,
-            "target": end_name,
-            "type": "completion",
-            "label": "complete"
-        })
-
-    # END → terminal
-    edges.append({
-        "source": end_name,
-        "target": "__end__",
-        "type": "terminal",
-        "label": "terminate"
-    })
-
-    # Include subgraph info for richer visualization
-    subgraph_info = []
-    for subgraph in builder.subgraphs:
-        subgraph_info.append({
-            "name": type(subgraph).__name__,
-            "managed_specialists": subgraph.get_excluded_specialists(),
-            "router_excluded": subgraph.get_router_excluded_specialists() if hasattr(subgraph, 'get_router_excluded_specialists') else []
-        })
-
-    return {
-        "nodes": nodes,
-        "edges": edges,
-        "subgraphs": subgraph_info,
-        "entry_point": builder.entry_point,
-        "architecture": builder.config.get("architecture", "default")
-    }
 
 
 class ResumeRequest(BaseModel):
@@ -726,9 +509,6 @@ async def stream_graph_events(request: InvokeRequest):
 ## Chat Head — OpenAI-compatible endpoints (ADR-UI-003: Two-Headed Architecture)
 ## ---------------------------------------------------------------------------
 
-# Track active run IDs for observability head discovery (GET /v1/runs/active)
-_active_runs: Dict[str, Any] = {}
-
 
 @app.post("/v1/chat/completions")
 async def chat_completions(request: ChatCompletionRequest):
@@ -756,7 +536,7 @@ async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
     """Handle non-streaming chat completion."""
     try:
         run_id = str(uuid.uuid4())
-        _active_runs[run_id] = {"model": request.model, "status": "running"}
+        active_runs.register(run_id, {"model": request.model, "status": "running"})
 
         final_state = workflow_runner.run(
             goal=kwargs["goal"],
@@ -766,7 +546,7 @@ async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
             run_id=run_id,
         )
 
-        _active_runs[run_id]["status"] = "completed"
+        active_runs.update(run_id, status="completed")
         response = format_sync_response(final_state, request, run_id=run_id)
         return JSONResponse(content=response.model_dump(exclude_none=True))
 
@@ -774,7 +554,7 @@ async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
         logger.error(f"OpenAI sync error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Workflow error: {e}")
     finally:
-        _active_runs.pop(run_id, None)
+        active_runs.deregister(run_id)
 
 
 async def _openai_stream(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
@@ -801,11 +581,11 @@ async def _openai_stream(request: ChatCompletionRequest, kwargs: Dict[str, Any])
                 if bus_run_id is None and isinstance(event, dict) and "run_id" in event:
                     bus_run_id = event["run_id"]
                 if bus_run_id:
-                    await _event_bus.push(bus_run_id, event)
+                    await event_bus.push(bus_run_id, event)
                 yield event
             # Signal end-of-stream to any headless observers
             if bus_run_id:
-                await _event_bus.close(bus_run_id)
+                await event_bus.close(bus_run_id)
 
         teed_stream = _tee_for_headless(raw_stream)
         translator = OpenAiTranslator(model=request.model)
@@ -817,11 +597,11 @@ async def _openai_stream(request: ChatCompletionRequest, kwargs: Dict[str, Any])
                     # Capture run_id for active runs tracking
                     if run_id is None and translator.run_id:
                         run_id = translator.run_id
-                        _active_runs[run_id] = {"model": request.model, "status": "streaming"}
+                        active_runs.register(run_id, {"model": request.model, "status": "streaming"})
                     yield sse_line
             finally:
                 if run_id:
-                    _active_runs.pop(run_id, None)
+                    active_runs.deregister(run_id)
 
         return StreamingResponse(
             stream_with_tracking(),
@@ -859,89 +639,3 @@ def list_models():
     }
 
 
-@app.get("/v1/runs/active")
-def get_active_runs():
-    """
-    Returns currently active run IDs for observability head discovery.
-
-    This is the glue between the two heads (ADR-UI-003): when a run is initiated
-    from an external client (e.g., AnythingLLM via /v1/chat/completions),
-    V.E.G.A.S. needs to know the run_id to attach its observability panels.
-    """
-    return {
-        "runs": [
-            {"run_id": rid, **info}
-            for rid, info in _active_runs.items()
-        ]
-    }
-
-
-@app.get("/v1/runs/{run_id}/events")
-async def stream_run_events(run_id: str):
-    """
-    SSE endpoint for headless observation of externally-initiated runs (#267).
-
-    V.E.G.A.S. discovers run IDs via ``GET /v1/runs/active`` then connects
-    here to receive AG-UI events in real time.  The raw LangGraph events are
-    pushed by ``_openai_stream``'s tee and translated to AG-UI format here.
-    """
-    if run_id not in _active_runs:
-        raise HTTPException(status_code=404, detail="Run not found or already completed")
-
-    queue = await _event_bus.subscribe(run_id)
-
-    async def _generate():
-        translator = AgUiTranslator()
-
-        async def _queue_as_stream():
-            while True:
-                event = await queue.get()
-                if event is None:
-                    return  # sentinel — stream ended
-                yield event
-
-        async for ag_event in translator.translate(_queue_as_stream()):
-            yield f"data: {ag_event.model_dump_json()}\n\n"
-
-    return StreamingResponse(_generate(), media_type="text/event-stream")
-
-
-## ---------------------------------------------------------------------------
-## Observability Head — existing endpoints (unchanged)
-## ---------------------------------------------------------------------------
-
-@app.get("/v1/progress/{run_id}")
-async def get_progress(run_id: str):
-    """
-    Poll for intra-node progress entries during long-running specialist execution.
-    Returns accumulated entries since last poll, then clears them.
-    UI polls this every 2-3s while a run is active.
-    """
-    from .utils.progress_store import drain
-    entries = drain(run_id)
-    return {"entries": entries}
-
-
-@app.get("/v1/archives/{filename}")
-async def download_archive(filename: str):
-    """
-    Serves archive zip files for download.
-    Uses AGENTIC_SCAFFOLD_ARCHIVE_PATH env var (same as ArchiverSpecialist).
-    """
-    # Security: only allow .zip files and prevent path traversal
-    if not filename.endswith(".zip") or "/" in filename or "\\" in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
-
-    # Use same archive path as ArchiverSpecialist for consistency
-    archive_path = os.getenv("AGENTIC_SCAFFOLD_ARCHIVE_PATH", "./logs/archive")
-    archive_dir = Path(os.path.expanduser(archive_path))
-    file_path = archive_dir / filename
-
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="Archive not found")
-
-    return FileResponse(
-        path=file_path,
-        filename=filename,
-        media_type="application/zip"
-    )

@@ -155,6 +155,8 @@ The API is **OpenAI-compatible** — the full orchestration pipeline (multi-mode
 
 ## Observability
 
+The observability layer is an independent module (`app/src/observability/`) that can be developed and tested separately from both task execution and the chat UI. It defines its own FastAPI router, event bus, and active runs registry. The dependency direction is one-way: execution pushes events into observability, never the reverse.
+
 Every workflow produces a timestamped archive in `./logs/archive/`:
 ```
 run_YYYYMMDD_HHMMSS_<hash>.zip
@@ -164,7 +166,7 @@ run_YYYYMMDD_HHMMSS_<hash>.zip
 └── artifacts/           # all produced artifacts
 ```
 
-The **V.E.G.A.S. Terminal** provides real-time streaming: semantic thought entries, tool-by-tool progress during ReAct loops, delegate() breadcrumbs, and an inspector for prompt replay and scratchpad state.
+The **V.E.G.A.S. Terminal** provides real-time streaming: semantic thought entries, tool-by-tool progress during ReAct loops, delegate() breadcrumbs, and an inspector for prompt replay and scratchpad state. The terminal's frontend is split into `observability.js` (rendering, polling, headless mode) and `chat.js` (workflow input) — removing the chat script tag converts it to a pure observability dashboard.
 
 ---
 

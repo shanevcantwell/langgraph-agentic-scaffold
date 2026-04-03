@@ -6,6 +6,19 @@ Base URL: `http://localhost:8000` (configurable)
 
 ---
 
+## Architecture
+
+The API has two independently-developed layers (ADR-UI-003):
+
+| Layer | Module | Endpoints | Purpose |
+|-------|--------|-----------|---------|
+| **Chat** | `app/src/api.py` | `/v1/graph/*`, `/v1/chat/*`, `/v1/models`, `/v1/system/*` | Workflow execution, OpenAI compatibility |
+| **Observability** | `app/src/observability/router.py` | `/v1/runs/*`, `/v1/progress/*`, `/v1/traces/*`, `/v1/graph/topology`, `/v1/archives/*` | Monitoring, traces, archives |
+
+The observability layer is mounted as a FastAPI `APIRouter` — same process, clean module boundary. The **event bus** (`observability/event_bus.py`) and **active runs registry** (`observability/active_runs.py`) are the contract surface: chat heads push events, observability reads them.
+
+---
+
 ## Core Endpoints
 
 ### POST /v1/graph/stream
@@ -103,6 +116,57 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
 
 ---
 
+## OpenAI-Compatible Endpoints (ADR-UI-002)
+
+### POST /v1/chat/completions
+
+**OpenAI-compatible chat endpoint.** Supports streaming and sync. Produces spec-compliant responses with no vendor extensions.
+
+The `model` field is a routing profile selector, not an LLM model identifier.
+
+**Request:**
+```json
+{
+  "model": "las-default",
+  "messages": [{"role": "user", "content": "Analyze this codebase"}],
+  "stream": true
+}
+```
+
+| Model | Behavior |
+|-------|----------|
+| `las-default` | Full specialist routing (triage → SA → PD → EI) |
+| `las-simple` | Simple chat mode (single ChatSpecialist) |
+
+**Streaming response:** Standard OpenAI SSE format:
+```
+data: {"id":"chatcmpl-...","choices":[{"delta":{"content":"..."}}]}
+data: [DONE]
+```
+
+**Sync response:** Standard `ChatCompletion` object.
+
+**Dual-emit (#267):** When streaming, raw LangGraph events are also pushed to the event bus so headless V.E.G.A.S. can observe the run via `GET /v1/runs/{run_id}/events`.
+
+---
+
+### GET /v1/models
+
+**List available routing profiles as OpenAI model objects.**
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {"id": "las-default", "object": "model", "created": 0, "owned_by": "las"},
+    {"id": "las-simple", "object": "model", "created": 0, "owned_by": "las"}
+  ]
+}
+```
+
+---
+
 ## Control Endpoints
 
 ### POST /v1/graph/cancel/{run_id}
@@ -191,6 +255,46 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
 
 ## Observability Endpoints
 
+All observability endpoints are served by `app/src/observability/router.py` (mounted as a FastAPI APIRouter). They can be developed and tested independently of the chat layer.
+
+### GET /v1/runs/active
+
+**Discover active run IDs.** V.E.G.A.S. polls this to find externally-initiated runs (e.g., from AnythingLLM via `/v1/chat/completions`).
+
+**Response:**
+```json
+{
+  "runs": [
+    {"run_id": "abc123", "model": "las-default", "status": "streaming"}
+  ]
+}
+```
+
+---
+
+### GET /v1/runs/{run_id}/events
+
+**SSE stream for headless observation (#267).** Receives AG-UI events in real time for an active run. Raw LangGraph events are pushed by the chat head's tee and translated to AG-UI format.
+
+**Response:** SSE with `AgUiEvent` Pydantic models (JSON serialized). Sentinel `None` signals end-of-stream.
+
+---
+
+### GET /v1/progress/{run_id}
+
+**Poll intra-node progress entries.** Returns accumulated entries since last poll, then clears them. UI polls every 2-3s while a run is active.
+
+**Response:**
+```json
+{
+  "entries": [
+    {"specialist": "project_director", "iteration": 2, "tool": "list_directory", "success": true}
+  ]
+}
+```
+
+---
+
 ### GET /v1/traces/{run_id}
 
 **Fetch LangSmith trace tree.**
@@ -202,6 +306,22 @@ data: {"status": "Workflow complete.", "final_state": {...}, "archive": "...", "
     {"id": "...", "name": "triage_architect", "start_time": "...", "end_time": "..."},
     {"id": "...", "name": "router_specialist", "start_time": "...", "end_time": "..."}
   ]
+}
+```
+
+---
+
+### GET /v1/graph/topology
+
+**Graph structure for Neural Grid visualization.** Returns nodes (specialists), edges (routing relationships), and subgraph clustering info.
+
+**Response:**
+```json
+{
+  "nodes": [{"id": "router_specialist", "type": "router", "category": "orchestration", ...}],
+  "edges": [{"source": "router_specialist", "target": "project_director", "type": "conditional"}],
+  "subgraphs": [{"name": "ChatSubgraph", "managed_specialists": [...]}],
+  "entry_point": "triage_architect"
 }
 ```
 

@@ -222,6 +222,9 @@
         </div>
     </div>
 
+    <!-- Load order matters: app.js (globals) → observability.js (rendering) → chat.js (input) -->
     <script src="app.js"></script>
+    <script src="observability.js"></script>
+    <script src="chat.js"></script>
 </body>
 </html>

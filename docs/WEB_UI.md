@@ -13,10 +13,14 @@ The web UI is a vanilla JS application (no framework) that streams LAS workflow 
 **Key files:**
 | File | Purpose |
 |------|---------|
-| [app.js](../app/web-ui/public/app.js) | All frontend logic — event handling, rendering, state management |
+| [app.js](../app/web-ui/public/app.js) | Shared state, DOM refs, utilities, theme, tab wiring |
+| [observability.js](../app/web-ui/public/observability.js) | Rendering, event handling, polling, headless mode |
+| [chat.js](../app/web-ui/public/chat.js) | Workflow execution, file upload, abort, clarification |
 | [style.css](../app/web-ui/public/style.css) | Themes, layout, component styles |
 | [index.html](../app/web-ui/public/index.html) | DOM structure |
 | [server.js](../app/web-ui/server.js) | Express proxy — serves static files, proxies `/v1/*` to the Python backend |
+
+**Architecture (ADR-UI-003):** The frontend is split into three files loaded in order: `app.js` → `observability.js` → `chat.js`. Removing the `<script src="chat.js">` tag from `index.html` turns V.E.G.A.S. into a pure observability dashboard — no server changes needed. This enables the chat deprecation toggle (WS2 Step 4).
 
 ---
 
