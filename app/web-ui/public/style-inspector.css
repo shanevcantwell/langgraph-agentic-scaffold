@@ -1,0 +1,396 @@
+/* V.E.G.A.S. TERMINAL — Inspector Styles: Prompt Inspector, Tool Chain Viewer, Scratchpad */
+
+/* ============================================================================ */
+/* STATE TAB: PROMPT INSPECTOR & TOOL CHAIN VIEWER                              */
+/* ============================================================================ */
+
+/* Sub-tab switcher (Inspector vs Raw State) */
+.state-sub-tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--secondary-color);
+    padding-bottom: 6px;
+}
+
+.state-sub-btn {
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    padding: 4px 12px;
+    font-family: var(--font-main);
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.state-sub-btn:hover {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.state-sub-btn.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+/* Sub-views (Inspector vs Raw) */
+.state-view {
+    display: none;
+}
+
+.state-view.active {
+    display: block;
+}
+
+/* Snapshot paging bar */
+.snapshot-paging {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    margin-bottom: 8px;
+    border-bottom: 1px dashed var(--secondary-color);
+}
+
+.snapshot-label {
+    font-family: var(--font-main);
+    font-size: 0.95em;
+    color: var(--primary-color);
+    font-weight: bold;
+    flex: 1;
+}
+
+/* Snapshot content area */
+.snapshot-content {
+    overflow-y: auto;
+    overflow-x: hidden;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Snapshot header (specialist name + model + latency) */
+.snapshot-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--primary-color);
+}
+
+.snapshot-specialist-name {
+    font-family: var(--font-main);
+    font-size: 1.3em;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+.snapshot-model-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    background: var(--secondary-color);
+    color: var(--bg-color);
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    border-radius: 3px;
+}
+
+.snapshot-latency {
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    color: var(--text-dim);
+    margin-left: auto;
+}
+
+/* Routing breadcrumb */
+.snapshot-breadcrumb {
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    color: var(--text-dim);
+    padding: 4px 8px;
+    margin-bottom: 12px;
+    border-left: 2px solid var(--secondary-color);
+    word-break: break-word;
+}
+
+/* Prompt Inspector section */
+.prompt-inspector {
+    margin-bottom: 16px;
+}
+
+.inspector-section-title {
+    font-family: var(--font-main);
+    font-size: 1em;
+    color: var(--primary-color);
+    letter-spacing: 2px;
+    margin: 0 0 8px 0;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--secondary-color);
+}
+
+/* Collapsible prompt blocks */
+.prompt-block {
+    margin-bottom: 8px;
+    border: 1px solid var(--secondary-color);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.prompt-block-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    background: var(--panel-bg);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.prompt-block-header:hover {
+    background: rgba(255, 159, 28, 0.08);
+}
+
+.prompt-block-label {
+    font-family: var(--font-main);
+    font-size: 0.9em;
+    font-weight: bold;
+    color: var(--primary-color);
+    letter-spacing: 1px;
+}
+
+.prompt-block-size {
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    color: var(--text-dim);
+}
+
+.prompt-block .toggle-arrow {
+    margin-left: auto;
+    display: inline-block;
+    transition: transform 0.2s;
+    color: var(--text-dim);
+}
+
+.prompt-block.expanded .toggle-arrow {
+    transform: rotate(90deg);
+}
+
+.prompt-block-content {
+    display: none;
+    margin: 0;
+    padding: 10px;
+    max-height: 400px;
+    overflow-y: auto;
+    font-family: var(--font-mono);
+    font-size: 0.8em;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-top: 1px solid var(--secondary-color);
+    background: var(--bg-color);
+    color: var(--primary-color);
+}
+
+.prompt-block.expanded .prompt-block-content {
+    display: block;
+}
+
+.prompt-block-empty {
+    font-style: italic;
+    color: var(--text-dim);
+    padding: 8px;
+    font-size: 0.85em;
+}
+
+/* ===== TOOL CHAIN VIEWER ===== */
+
+.tool-chain-viewer {
+    margin-bottom: 16px;
+}
+
+.tool-chain-timeline {
+    position: relative;
+    padding-left: 20px;
+    border-left: 2px solid var(--secondary-color);
+    margin-left: 8px;
+}
+
+.tool-chain-entry {
+    position: relative;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border: 1px solid var(--secondary-color);
+    border-radius: 4px;
+    background: var(--panel-bg);
+}
+
+/* Timeline dot */
+.tool-chain-entry::before {
+    content: '';
+    position: absolute;
+    left: -27px;
+    top: 12px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--secondary-color);
+    background: var(--bg-color);
+}
+
+.tool-chain-entry.tool-success::before {
+    border-color: #27ae60;
+    background: #27ae60;
+}
+
+.tool-chain-entry.tool-error::before {
+    border-color: var(--alert-color);
+    background: var(--alert-color);
+}
+
+.tool-chain-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.tool-chain-iteration {
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    color: var(--text-dim);
+}
+
+.tool-chain-status {
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.tool-success .tool-chain-status { color: #27ae60; }
+.tool-error .tool-chain-status { color: var(--alert-color); }
+
+.tool-call-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.tool-call-name {
+    font-family: var(--font-mono);
+    font-weight: bold;
+    color: var(--primary-color);
+    font-size: 0.95em;
+}
+
+.tool-call-id {
+    font-family: var(--font-mono);
+    font-size: 0.7em;
+    color: var(--text-dim);
+}
+
+.tool-call-args {
+    margin-top: 4px;
+}
+
+.tool-call-args pre {
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 0.8em;
+    max-height: 150px;
+    overflow-y: auto;
+    border: 1px solid var(--secondary-color);
+    background: var(--bg-color);
+}
+
+/* Tool observation (collapsible) */
+.tool-observation {
+    margin-top: 6px;
+    border: 1px solid var(--secondary-color);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.tool-observation-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: var(--panel-bg);
+    cursor: pointer;
+    user-select: none;
+}
+
+.tool-observation-header:hover {
+    background: rgba(255, 159, 28, 0.05);
+}
+
+.tool-observation-label {
+    font-family: var(--font-main);
+    font-size: 0.8em;
+    color: var(--secondary-color);
+    font-weight: bold;
+}
+
+.tool-observation .toggle-arrow {
+    margin-left: auto;
+    display: inline-block;
+    transition: transform 0.2s;
+    color: var(--text-dim);
+}
+
+.tool-observation.expanded .toggle-arrow {
+    transform: rotate(90deg);
+}
+
+.tool-observation-content {
+    display: none;
+    margin: 0;
+    padding: 6px 8px;
+    font-size: 0.8em;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-top: 1px solid var(--secondary-color);
+    background: var(--bg-color);
+    color: var(--primary-color);
+}
+
+.tool-observation.expanded .tool-observation-content {
+    display: block;
+}
+
+/* Tool thought (future: when react_step persists thought field) */
+.tool-thought {
+    margin-top: 4px;
+    font-size: 0.8em;
+    font-style: italic;
+    color: var(--text-dim);
+    padding: 4px 8px;
+    border-left: 2px solid var(--text-dim);
+}
+
+.tool-thought-label {
+    font-weight: bold;
+    font-style: normal;
+    color: var(--secondary-color);
+}
+
+/* Metadata footer */
+.snapshot-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 0;
+    margin-top: 8px;
+    border-top: 1px dashed var(--secondary-color);
+    font-family: var(--font-mono);
+    font-size: 0.75em;
+    color: var(--text-dim);
+}
+
+.snapshot-im-decision {
+    color: var(--alert-color);
+    font-weight: bold;
+}

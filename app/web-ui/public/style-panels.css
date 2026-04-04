@@ -1,0 +1,309 @@
+/* V.E.G.A.S. TERMINAL — Panel Styles: Neural Grid, Mission Report, Section Nav, Mermaid */
+
+/* ============================================================================ */
+/* ENHANCED NEURAL GRID */
+/* ============================================================================ */
+
+.spec-node {
+    transition: all 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.spec-node.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    box-shadow: 0 0 15px var(--primary-color);
+    animation: pulse 1.5s ease-in-out infinite;
+    transform: scale(1.05);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 0 15px var(--primary-color);
+    }
+    50% {
+        box-shadow: 0 0 25px var(--primary-color), 0 0 35px var(--primary-color);
+    }
+}
+
+.spec-node::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    transition: left 0.5s;
+}
+
+.spec-node.active::after {
+    left: 100%;
+}
+
+/* ============================================================================ */
+/* CONSOLIDATED MISSION REPORT TABS */
+/* ============================================================================ */
+
+.trace-panel .tabs {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 10px;
+}
+
+.trace-panel .tab-btn {
+    padding: 8px 15px;
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    font-family: var(--font-main);
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.trace-panel .tab-btn:hover {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.trace-panel .tab-btn.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.trace-panel .tab-content {
+    display: none;
+    padding: 10px;
+    border: 1px solid var(--secondary-color);
+    min-height: 300px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.trace-panel .tab-content.active {
+    display: block;
+}
+
+/* ============================================================================ */
+/* VERTICAL SECTION NAV (Right-edge scroll-to navigation) */
+/* ============================================================================ */
+
+/* Container for the Final Response tab content - flex layout with nav on right */
+/* Note: Only apply flex when .active - otherwise tab switching breaks */
+#tab-report {
+    flex-direction: row;
+    gap: 0;
+    padding: 0;
+}
+
+#tab-report.active {
+    display: flex;
+}
+
+/* Main scrollable content area */
+#archiveOutput {
+    flex: 1;
+    order: 1; /* Content on left */
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
+    padding: 15px;
+    scroll-behavior: smooth;
+    /* Word-wrap rules for long content */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+/* Vertical nav strip on right edge */
+.subtabs {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    order: 2; /* Nav on right */
+    width: 140px;
+    min-width: 140px;
+    max-width: 140px;
+    padding: 8px 4px;
+    background: var(--panel-bg);
+    border-left: 1px solid var(--secondary-color);
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/* Individual nav button - vertical tab style */
+.section-nav-btn {
+    display: block;
+    width: 100%;
+    padding: 8px 10px;
+    background: transparent;
+    border: none;
+    border-left: 3px solid transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-family: var(--font-main);
+    font-size: 0.8em;
+    text-align: left;
+    transition: all 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.section-nav-btn:hover {
+    color: var(--primary-color);
+    background: rgba(255, 159, 28, 0.08);
+    border-left-color: var(--secondary-color);
+}
+
+.section-nav-btn.active {
+    color: var(--primary-color);
+    background: rgba(255, 159, 28, 0.12);
+    border-left-color: var(--primary-color);
+    font-weight: bold;
+}
+
+/* Report section dividers */
+.report-section {
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    border-bottom: 1px dashed var(--secondary-color);
+}
+
+.report-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.report-section .section-header {
+    color: var(--primary-color);
+    border-bottom: 1px solid var(--secondary-color);
+    padding-bottom: 8px;
+    margin-top: 0;
+    margin-bottom: 15px;
+}
+
+/* Legacy subtab-btn (kept for backward compatibility) */
+.subtab-btn {
+    padding: 5px 12px;
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    cursor: pointer;
+    font-family: var(--font-main);
+    font-size: 0.85em;
+    transition: all 0.2s;
+    opacity: 0.7;
+}
+
+.subtab-btn:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.subtab-btn.active {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+    opacity: 1;
+    font-weight: bold;
+}
+
+/* ============================================================================ */
+/* MERMAID GRAPH VISUALIZATION */
+/* ============================================================================ */
+
+.toggle-btn {
+    background: transparent;
+    border: 1px solid var(--secondary-color);
+    color: var(--secondary-color);
+    padding: 2px 8px;
+    font-size: 0.8em;
+    cursor: pointer;
+    margin-left: 10px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.toggle-btn:hover {
+    background: var(--secondary-color);
+    color: var(--bg-color);
+}
+
+.toggle-btn.active {
+    background: var(--primary-color);
+    color: var(--bg-color);
+    border-color: var(--primary-color);
+}
+
+.graph-view-container {
+    flex: 1;
+    min-height: 200px;
+    max-height: 450px;
+    overflow: auto;
+    background: var(--bg-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 4px;
+    padding: 10px;
+}
+
+.mermaid-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 180px;
+}
+
+.mermaid-container svg {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Mermaid node styling overrides */
+.mermaid-container .node rect,
+.mermaid-container .node circle,
+.mermaid-container .node ellipse,
+.mermaid-container .node polygon {
+    stroke: var(--secondary-color) !important;
+    stroke-width: 2px !important;
+}
+
+.mermaid-container .node.active rect,
+.mermaid-container .node.active circle {
+    stroke: var(--primary-color) !important;
+    stroke-width: 3px !important;
+    filter: drop-shadow(0 0 8px var(--primary-color));
+}
+
+.mermaid-container .edgePath path {
+    stroke: var(--secondary-color) !important;
+    stroke-width: 1.5px !important;
+}
+
+.mermaid-container .edgeLabel {
+    background-color: var(--panel-bg) !important;
+    color: var(--text-dim) !important;
+}
+
+/* Mermaid subgraph (category cluster) styling */
+.mermaid-container .cluster rect {
+    fill: var(--panel-bg) !important;
+    stroke: var(--secondary-color) !important;
+    stroke-width: 1px !important;
+    stroke-dasharray: 4 2 !important;
+    rx: 8px !important;
+    ry: 8px !important;
+}
+
+.mermaid-container .cluster-label .nodeLabel {
+    color: var(--secondary-color) !important;
+    fill: var(--secondary-color) !important;
+    font-size: 0.9em !important;
+    font-weight: bold !important;
+}

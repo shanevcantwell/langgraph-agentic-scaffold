@@ -1,0 +1,231 @@
+/* V.E.G.A.S. TERMINAL — Thought Stream Styles */
+
+/* ============================================================================ */
+/* THOUGHT STREAM PANEL */
+/* ============================================================================ */
+
+.thought-stream-panel {
+    max-height: 400px;
+    min-height: 250px;
+}
+
+.thought-stream-box {
+    height: 350px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-size: 0.9em;
+    line-height: 1.6;
+    padding: 8px;
+    background: var(--panel-bg);
+    border: 1px solid var(--secondary-color);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-word;
+}
+
+.thought-entry {
+    margin-bottom: 6px;
+    padding: 4px 8px;
+    border-left: 2px solid var(--secondary-color);
+    animation: slideIn 0.3s ease-out;
+}
+
+.thought-entry.thought-info {
+    border-left-color: var(--secondary-color);
+}
+
+.thought-entry.thought-success {
+    border-left-color: #27ae60;
+}
+
+.thought-entry.thought-error {
+    border-left-color: var(--alert-color);
+}
+
+.thought-entry.thought-mcp {
+    border-left-color: #3498db;
+}
+
+.thought-time {
+    color: var(--text-dim);
+    margin-right: 8px;
+    font-size: 0.85em;
+}
+
+.thought-specialist {
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-right: 6px;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Enhanced Thought Entry Types */
+.thought-entry.thought-routing {
+    border-left-color: var(--primary-color);
+    background: rgba(255, 159, 28, 0.08);
+}
+
+.thought-entry.thought-routing .thought-route-arrow {
+    color: var(--primary-color);
+    font-weight: bold;
+}
+
+.thought-entry.thought-reasoning {
+    border-left-color: var(--text-dim);
+    background: rgba(154, 170, 191, 0.05);
+    font-size: 0.85em;
+    color: var(--text-dim);
+}
+
+.thought-entry.thought-reasoning.collapsed .thought-content {
+    display: none;
+}
+
+.thought-entry.thought-reasoning .thought-toggle {
+    cursor: pointer;
+    user-select: none;
+    opacity: 0.7;
+    font-size: 0.9em;
+}
+
+.thought-entry.thought-reasoning .thought-toggle:hover {
+    opacity: 1;
+}
+
+.toggle-arrow {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.thought-entry.thought-reasoning:not(.collapsed) .toggle-arrow {
+    transform: rotate(90deg);
+}
+
+.thought-entry.thought-artifact {
+    border-left-color: #9b59b6;
+    background: rgba(155, 89, 182, 0.08);
+}
+
+.thought-entry.thought-mcp {
+    border-left-color: #3498db;
+    background: rgba(52, 152, 219, 0.08);
+}
+
+.thought-mcp-call {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.thought-mcp-service {
+    font-weight: bold;
+    color: #3498db;
+}
+
+.thought-mcp-method {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.9em;
+    color: var(--secondary-color);
+}
+
+.thought-mcp-params {
+    font-family: var(--font-mono), monospace;
+    font-size: 0.85em;
+    color: var(--text-dim);
+    padding-left: 12px;
+    border-left: 1px dashed var(--text-dim);
+    margin-top: 2px;
+}
+
+.thought-entry.thought-lifecycle {
+    border-left-color: var(--secondary-color);
+    font-style: italic;
+    opacity: 0.85;
+}
+
+.thought-badge {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.75em;
+    font-weight: bold;
+    margin-right: 6px;
+    text-transform: uppercase;
+}
+
+.thought-badge.badge-route { background: var(--primary-color); color: var(--bg-color); }
+.thought-badge.badge-mcp { background: #3498db; color: #fff; }
+.thought-badge.badge-think { background: var(--text-dim); color: var(--bg-color); }
+.thought-badge.badge-artifact { background: #9b59b6; color: #fff; }
+.thought-badge.badge-start { background: var(--secondary-color); color: var(--bg-color); }
+.thought-badge.badge-end { background: #27ae60; color: #fff; }
+.thought-badge.badge-error { background: var(--alert-color); color: #fff; }
+.thought-badge.badge-fork { background: #e67e22; color: #fff; }
+
+/* Fork entries in Thought Stream */
+.thought-fork .fork-route {
+    font-size: 0.8em;
+    color: var(--text-dim);
+    margin-top: 2px;
+    font-family: var(--font-main);
+}
+.thought-fork .fork-run-id {
+    font-size: 0.7em;
+    color: var(--text-dim);
+    font-family: var(--font-main);
+    opacity: 0.6;
+}
+.thought-fork.fork-error { border-left: 2px solid var(--alert-color); }
+
+/* Fork breadcrumb in Tool Chain */
+.fork-breadcrumb {
+    margin-top: 6px;
+    padding: 6px 8px;
+    background: rgba(230, 126, 34, 0.08);
+    border: 1px solid rgba(230, 126, 34, 0.3);
+    border-radius: 3px;
+}
+.fork-breadcrumb-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+.fork-breadcrumb-label {
+    font-size: 0.8em;
+    font-weight: bold;
+    color: #e67e22;
+    font-family: var(--font-main);
+}
+.fork-run-id {
+    font-size: 0.75em;
+    font-family: var(--font-main);
+    color: var(--text-dim);
+    opacity: 0.7;
+}
+.fork-routing-path {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+}
+.fork-path-node {
+    font-size: 0.8em;
+    padding: 1px 5px;
+    background: var(--bg-color);
+    border: 1px solid var(--secondary-color);
+    border-radius: 2px;
+    font-family: var(--font-main);
+}
+.fork-path-arrow { color: var(--text-dim); font-size: 0.8em; }
+.fork-error-flag { font-size: 0.75em; color: var(--alert-color); font-weight: bold; }
