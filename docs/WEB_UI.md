@@ -2,7 +2,7 @@
 
 **Purpose:** Technical reference for the V.E.G.A.S. Terminal web UI — layout, data flow, event handling, and observability features.
 **Audience:** Developers extending the UI or debugging display issues.
-**Updated:** 2026-02-21
+**Updated:** 2026-04-03
 
 ---
 
@@ -14,13 +14,18 @@ The web UI is a vanilla JS application (no framework) that streams LAS workflow 
 | File | Purpose |
 |------|---------|
 | [app.js](../app/web-ui/public/app.js) | Shared state, DOM refs, utilities, theme, tab wiring |
-| [observability.js](../app/web-ui/public/observability.js) | Rendering, event handling, polling, headless mode |
+| [obs-core.js](../app/web-ui/public/obs-core.js) | Core primitives: logStatus, addThoughtStreamEntry, artifacts, routing log, neural grid |
+| [obs-graph.js](../app/web-ui/public/obs-graph.js) | Mermaid graph visualization, topology fetch, grid/graph toggle |
+| [obs-inspector.js](../app/web-ui/public/obs-inspector.js) | Snapshot inspector, paging controls, context selection |
+| [obs-report.js](../app/web-ui/public/obs-report.js) | Mission report rendering, code block copy/save toolbars |
+| [obs-events.js](../app/web-ui/public/obs-events.js) | SSE event dispatcher (handleStreamEvent) |
+| [obs-polling.js](../app/web-ui/public/obs-polling.js) | Progress polling (ADR-OBS-002 multi-run), headless mode |
 | [chat.js](../app/web-ui/public/chat.js) | Workflow execution, file upload, abort, clarification |
 | [style.css](../app/web-ui/public/style.css) | Themes, layout, component styles |
 | [index.html](../app/web-ui/public/index.html) | DOM structure |
 | [server.js](../app/web-ui/server.js) | Express proxy — serves static files, proxies `/v1/*` to the Python backend |
 
-**Architecture (ADR-UI-003):** The frontend is split into three files loaded in order: `app.js` → `observability.js` → `chat.js`. Removing the `<script src="chat.js">` tag from `index.html` turns V.E.G.A.S. into a pure observability dashboard — no server changes needed. This enables the chat deprecation toggle (WS2 Step 4).
+**Architecture (ADR-UI-003):** The frontend is split into 8 files loaded in order: `app.js` → `obs-*.js` (6 files) → `chat.js`. Each observability file is under 500 lines (~5K tokens) for efficient AI-assisted development. Removing `chat.js` converts V.E.G.A.S. to a pure observability dashboard.
 
 ---
 
