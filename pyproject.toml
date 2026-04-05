@@ -53,6 +53,7 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-mock",
+    "pytest-cov",  # Test coverage reporting
     "black",
     "ruff",
     "typer[all]", # For the command-line interface
@@ -79,3 +80,28 @@ markers = [
     "fara: marks tests for Fara-7B visual UI verification"
 ]
 asyncio_mode = "auto" # Recommended for pytest-asyncio to handle async tests automatically
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["app/src"]
+omit = [
+    "app/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+]
+branch = true  # Measure branch coverage (if/else paths)
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "pass",
+]
+show_missing = true
+skip_covered = false
+
+[tool.coverage.html]
+directory = "htmlcov"
