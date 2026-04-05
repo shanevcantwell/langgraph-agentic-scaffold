@@ -14,7 +14,7 @@ Key characteristics:
 - **ReAct loop via prompt-prix MCP** — PD owns the loop and tool dispatch; prompt-prix owns the LLM call (#162)
 - **Context consumer, not producer** — receives all context via `gathered_context` from Facilitator (#170)
 - **Fresh trace each invocation** — no resumption of prior traces on retry (#170)
-- **Artifact tools (read + write)** — mid-execution persistence via `write_artifact` (ADR-076). Observations, decisions, and progress survive max_iterations and retries.
+- **Artifact tools (read + write)** — mid-execution persistence via `write_artifact` (ADR-CORE-076). Observations, decisions, and progress survive max_iterations and retries.
 - **Writes `specialist_activity` + `react_trace` to scratchpad** — observability signals for Facilitator (retry context) and state_timeline (archive/SSE)
 - **Live progress publishing** — publishes tool calls to `progress_store` after each react_step iteration for real-time UI polling (see [WEB_UI.md](../WEB_UI.md) "Intra-Node Progress")
 - **Fork metadata capture** — `_last_fork_metadata` pattern attaches child_run_id + child_routing_history to trace entries and progress events
