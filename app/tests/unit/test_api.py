@@ -143,45 +143,8 @@ def test_invoke_graph_sync_invalid_input(client):
     response = client.post("/v1/graph/invoke", json={"wrong_key": "value", "text_to_process": None, "image_to_process": None})
     assert response.status_code == 422 # Unprocessable Entity
 
-@pytest.mark.asyncio
-async def test_stream_graph_async(client, patched_api):
-    """Tests the asynchronous /v1/graph/stream endpoint."""
-    payload = {
-        "input_prompt": "test stream prompt",
-        "text_to_process": None,
-        "image_to_process": None
-    }
-
-    # Act
-    response = client.post("/v1/graph/stream", json=payload)
-
-    # Assert
-    assert response.status_code == 200
-    # The TestClient automatically consumes the stream content
-    # We check that the formatter correctly processed our mock dicts into status updates
-    assert '"status": "Executing specialist: router_specialist..."' in response.text
-    assert '"status": "Executing specialist: file_specialist..."' in response.text
-    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test stream prompt", text_to_process=None, image_to_process=None, use_simple_chat=False, conversation_id=None, prior_messages=None)
-
-@pytest.mark.asyncio
-async def test_stream_graph_async_handles_runner_error(client, patched_api, mocker):
-    """Tests that the stream endpoint returns a 500 if the runner fails."""
-    # Arrange
-    payload = {"input_prompt": "failing stream prompt"}
-    patched_api.workflow_runner.run_streaming.side_effect = WorkflowError("Streaming failed")
-
-    # Act
-    response = client.post("/v1/graph/stream", json=payload)
-
-    # Assert
-    assert response.status_code == 500
-    assert "Workflow streaming error: Streaming failed" in response.json()["detail"]
-
-@pytest.mark.asyncio
-async def test_stream_graph_async_invalid_input(client):
-    """Tests that the stream endpoint returns a 422 for invalid input."""
-    response = client.post("/v1/graph/stream", json={"wrong_key": "value", "text_to_process": None, "image_to_process": None})
-    assert response.status_code == 422 # Unprocessable Entity
+# Tests for POST /v1/graph/stream removed — endpoint removed in ADR-UI-003 WS3.
+# OpenAI-compatible endpoint tests are in test_openai_*.py.
 
 @pytest.mark.asyncio
 async def test_stream_graph_events_async(client, patched_api):

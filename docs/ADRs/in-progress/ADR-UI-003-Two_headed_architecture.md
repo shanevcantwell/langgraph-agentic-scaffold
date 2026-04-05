@@ -217,21 +217,26 @@ The observability layer is now an independent module that can be developed, test
 
 **Client-side extraction:**
 
-The 2146-line `app.js` monolith split into three files loaded in order:
+The frontend split into 8 files, each under 500 lines (~5K tokens):
 
 | File | Lines | Purpose |
 |------|-------|---------|
 | `app.js` | 257 | Shared state, DOM refs, utilities, theme, tabs |
-| `observability.js` | 1423 | Rendering, event handling, polling, headless mode |
+| `obs-core.js` | 227 | Core primitives: logStatus, addThoughtStreamEntry, artifacts, routing |
+| `obs-graph.js` | 191 | Mermaid graph visualization, topology |
+| `obs-inspector.js` | 417 | Snapshot inspector, paging, context selection |
+| `obs-report.js` | 136 | Mission report rendering, code block toolbars |
+| `obs-events.js` | 238 | SSE event handler (handleStreamEvent) |
+| `obs-polling.js` | 258 | Progress polling (ADR-OBS-002), headless mode |
 | `chat.js` | 363 | Workflow execution, file upload, abort, clarification |
 
-**Key property:** Removing the `<script src="chat.js">` tag from `index.html` turns V.E.G.A.S. into a pure observability dashboard. No server changes needed. This is ADR-UI-003 WS2 Step 4 (the toggle) — now it's a one-line HTML change instead of extracting code from a monolith.
+**Key property:** Removing the `<script src="chat.js">` tag from `index.html` turns V.E.G.A.S. into a pure observability dashboard. Headless mode toggle also hides the command bar and expands observability panels (Step 4).
 
 **Dependency direction:** Execution → Observability (push events). The observability module defines the contract surface (`EventBus`, `ActiveRunRegistry`); chat heads call into it. Observability never imports from chat.
 
-### WS3 (Gradio Migration): DEFERRED
+### WS3 (Gradio Migration): COMPLETE
 
-Depends on WS1 being exercised end-to-end. 107-line client change. Not blocked by anything architectural — just not prioritized.
+`app/src/ui/api_client.py` migrated from bespoke `/v1/graph/stream` to OpenAI-compatible `/v1/chat/completions`. Parses `ChatCompletionChunk` SSE. The bespoke `_stream_formatter()` and `POST /v1/graph/stream` endpoint removed from `api.py` (154 lines of dead code). `api.py` reduced from 641 → 487 lines.
 
 ### Architectural outcome
 

@@ -1,12 +1,15 @@
 # app/src/ui/api_client.py
+#
+# Gradio UI API client — uses the OpenAI-compatible endpoint (ADR-UI-003 WS3).
+# Parses ChatCompletionChunk SSE into UI updates.
+#
 import httpx
 import json
 import base64
-from PIL import Image
-import io
 
-STREAM_URL = "http://127.0.0.1:8000/v1/graph/stream"
-RESUME_URL = "http://127.0.0.1:8000/v1/graph/resume"  # ADR-CORE-042
+CHAT_URL = "http://127.0.0.1:8000/v1/chat/completions"
+RESUME_URL = "http://127.0.0.1:8000/v1/graph/resume"  # ADR-CORE-042 (no OpenAI equivalent)
+
 
 class ApiClient:
     """Handles all communication with the backend agentic system API."""
@@ -20,70 +23,79 @@ class ApiClient:
 
     async def invoke_agent_streaming(self, prompt: str, text_file_path: str, image_path: str, use_simple_chat: bool = False):
         """
-        Calls the streaming FastAPI backend and yields updates for the UI.
-        This function is a generator.
+        Calls the OpenAI-compatible streaming endpoint and yields updates for the UI.
         """
-        payload = {"input_prompt": prompt, "use_simple_chat": use_simple_chat}
-        log_history = ""
+        # Build OpenAI ChatCompletionRequest
+        messages = [{"role": "user", "content": prompt}]
+        model = "las-simple" if use_simple_chat else "las-default"
 
+        payload = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+        }
+
+        # File attachments — prepend as system context in messages
         if text_file_path:
             try:
                 with open(text_file_path.name, "r", encoding="utf-8") as f:
-                    payload["text_to_process"] = f.read()
+                    text_content = f.read()
+                messages.insert(0, {"role": "system", "content": f"[Uploaded document]\n{text_content}"})
             except Exception as e:
                 yield {"status": f"Error reading file: {e}"}
                 return
 
         if image_path:
             try:
-                payload["image_to_process"] = self._encode_image_to_base64(image_path.name)
+                b64 = self._encode_image_to_base64(image_path.name)
+                messages.insert(0, {"role": "system", "content": f"[Uploaded image: base64 encoded]\n{b64}"})
             except Exception as e:
                 yield {"status": f"Error reading image: {e}"}
                 return
 
-        try: # Use httpx.AsyncClient for non-blocking streaming
+        accumulated_content = ""
+
+        try:
             async with httpx.AsyncClient(timeout=300.0) as client:
-                async with client.stream("POST", STREAM_URL, json=payload) as response:
+                async with client.stream("POST", CHAT_URL, json=payload) as response:
                     response.raise_for_status()
-                    
+
                     async for line in response.aiter_lines():
-                        if line:
-                            decoded_line = line.strip()
-                            # SSE format is "data: { ... }"
-                            if decoded_line.startswith("data:"):
-                                try:
-                                    data_str = decoded_line[len("data:"):].strip()
-                                    data = json.loads(data_str)
-                                    # The API now sends discrete updates. The client's job
-                                    # is to simply yield them to the UI handler.
-                                    yield data
-                                except json.JSONDecodeError:
-                                    log_history += f"\n[UI-CLIENT-ERROR] Failed to parse JSON from stream: {decoded_line}"
-                                    yield {"logs": log_history}
+                        if not line or not line.strip().startswith("data:"):
+                            continue
 
-                # The backend now sends Server-Sent Events (SSE) with a JSON payload.
-                # We need to parse these events correctly.
+                        data_str = line.strip()[len("data:"):].strip()
 
-            # The final state with artifacts is now sent by the stream itself
-            # No need to construct it separately - the stream sends all required data
-                
+                        # OpenAI stream terminator
+                        if data_str == "[DONE]":
+                            if accumulated_content:
+                                yield {
+                                    "status": "Workflow complete.",
+                                    "final_state": {"routing_history": [], "task_is_complete": True},
+                                    "archive": accumulated_content,
+                                }
+                            break
+
+                        try:
+                            chunk = json.loads(data_str)
+                            # Extract delta content from ChatCompletionChunk
+                            choices = chunk.get("choices", [])
+                            if choices:
+                                delta = choices[0].get("delta", {})
+                                content = delta.get("content", "")
+                                if content:
+                                    accumulated_content += content
+                                    yield {"status": f"Receiving response..."}
+                        except json.JSONDecodeError:
+                            yield {"logs": f"[UI-CLIENT-ERROR] Failed to parse: {data_str[:100]}"}
+
         except Exception as e:
-            yield {"status": f"API Error: {e}", "logs": log_history + f"\nERROR: {e}"}
+            yield {"status": f"API Error: {e}", "logs": f"ERROR: {e}"}
 
     async def resume_workflow(self, thread_id: str, user_input: str):
         """
         ADR-CORE-042: Resume an interrupted workflow with user's clarification.
-
-        When a specialist calls interrupt() to request clarification, the stream
-        yields an interrupt event with a thread_id. This method resumes the workflow
-        with the user's response.
-
-        Args:
-            thread_id: The thread_id from the interrupt event
-            user_input: The user's clarification response
-
-        Yields:
-            Updates from the resumed workflow stream
+        Stays on the bespoke /v1/graph/resume endpoint (no OpenAI equivalent).
         """
         payload = {"thread_id": thread_id, "user_input": user_input}
 

@@ -150,6 +150,12 @@ function renderProgressEntry(entry, depth = 0) {
 // =============================================================================
 
 headlessModeCheckbox.addEventListener('change', () => {
+    // ADR-UI-003 Step 4: Hide command bar in headless mode, reclaim space for observability
+    const commandPanel = document.querySelector('.command-panel');
+    if (commandPanel) {
+        commandPanel.style.display = headlessModeCheckbox.checked ? 'none' : '';
+    }
+
     if (headlessModeCheckbox.checked) {
         startHeadlessPolling();
         headlessStatusEl.textContent = 'SCANNING';
