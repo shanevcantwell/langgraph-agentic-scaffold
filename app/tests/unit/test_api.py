@@ -181,4 +181,15 @@ async def test_stream_graph_events_async(client, patched_api):
     assert found_router
     assert found_file
 
-    patched_api.workflow_runner.run_streaming.assert_called_once_with(goal="test standard stream", text_to_process=None, image_to_process=None, use_simple_chat=False, conversation_id=None, prior_messages=None)
+    # Verify run_streaming was called with correct arguments including run_id (ADR-UI-003)
+    call_args = patched_api.workflow_runner.run_streaming.call_args
+    assert call_args.kwargs["goal"] == "test standard stream"
+    assert call_args.kwargs["text_to_process"] is None
+    assert call_args.kwargs["image_to_process"] is None
+    assert call_args.kwargs["use_simple_chat"] is False
+    assert call_args.kwargs["conversation_id"] is None
+    assert call_args.kwargs["prior_messages"] is None
+    # run_id should be a non-empty string (UUID generated for lifecycle tracking)
+    assert "run_id" in call_args.kwargs
+    assert isinstance(call_args.kwargs["run_id"], str)
+    assert len(call_args.kwargs["run_id"]) > 0

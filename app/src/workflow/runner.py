@@ -240,19 +240,44 @@ class WorkflowRunner:
                 "messages": [HumanMessage(content=goal)], "turn_count": 0,
             }
 
-    async def run_streaming(self, goal: str, text_to_process: str = None, image_to_process: str = None, use_simple_chat: bool = False, conversation_id: str = None, prior_messages: list = None) -> AsyncGenerator[Dict[str, Any], None]:
+    async def run_streaming(
+        self,
+        goal: str,
+        text_to_process: str = None,
+        image_to_process: str = None,
+        use_simple_chat: bool = False,
+        conversation_id: str = None,
+        prior_messages: list = None,
+        run_id: Optional[str] = None
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         Executes the workflow with a given goal and streams back the raw
         LangGraph events. The API layer is responsible for formatting these
         events for the client.
+
+        Args:
+            goal: The user's goal/request
+            text_to_process: Optional text content
+            image_to_process: Optional base64 image
+            use_simple_chat: Whether to use simple chat mode
+            conversation_id: Optional conversation ID for multi-turn (ADR-CORE-075)
+            prior_messages: Optional prior conversation context
+            run_id: Optional run ID for lifecycle tracking. If not provided,
+                   one is generated internally.
         """
         logger.info(f"--- Starting streaming workflow for goal: '{goal}' ---")
 
         # ADR-CORE-075: Generate or reuse conversation_id for multi-turn
         conv_id = conversation_id or str(uuid.uuid4())
 
-        # Generate a unique run_id for this execution to enable trace tracking
-        run_id = uuid.uuid4()
+        # Generate or use provided run_id for this execution
+        # External run_id enables API layer to register the run for observability
+        # before streaming begins (ADR-UI-003: headless observability attachment)
+        if run_id is None:
+            run_id = str(uuid.uuid4())
+        else:
+            # Ensure run_id is a string (may be passed as UUID object)
+            run_id = str(run_id)
 
         initial_state: GraphState = create_initial_state(
             goal=goal,

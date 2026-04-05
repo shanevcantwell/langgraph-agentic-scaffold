@@ -331,9 +331,22 @@ async def stream_graph_events(request: InvokeRequest):
     """
     Streams the workflow execution using the standardized AG-UI event schema.
     This endpoint exposes the AgUiEmitter's output using Server-Sent Events (SSE).
+
+    ADR-UI-003: This endpoint now registers runs in active_runs and pushes
+    events to event_bus so headless V.E.G.A.S. observability can attach.
     """
+    if not workflow_runner:
+        raise HTTPException(status_code=503, detail="Workflow runner not initialized")
+
     try:
-        logger.info(f"Received request to stream standardized events with prompt: '{request.input_prompt}'")
+        # Generate run_id for lifecycle tracking (ADR-UI-003)
+        run_id = str(uuid.uuid4())
+
+        # Register run immediately so observability head can discover it
+        active_runs.register(run_id, {"model": "standard-stream", "status": "streaming"})
+
+        logger.info(f"Received request to stream standardized events with prompt: '{request.input_prompt}' run_id={run_id}")
+
         raw_stream = workflow_runner.run_streaming(
             goal=request.input_prompt,
             text_to_process=request.text_to_process,
@@ -341,9 +354,35 @@ async def stream_graph_events(request: InvokeRequest):
             use_simple_chat=request.use_simple_chat,
             conversation_id=request.conversation_id,
             prior_messages=request.prior_messages,
+            run_id=run_id,  # Pass run_id for consistent tracking
         )
+
+        # Tee the raw stream: feed AgUiTranslator AND push to event_bus
+        async def _tee_for_headless(stream):
+            bus_run_id = None
+            async for event in stream:
+                # Capture run_id from the first event that carries it
+                if bus_run_id is None and isinstance(event, dict) and "run_id" in event:
+                    bus_run_id = event["run_id"]
+                if bus_run_id:
+                    await event_bus.push(bus_run_id, event)
+                yield event
+            # Signal end-of-stream to any headless observers
+            if bus_run_id:
+                await event_bus.close(bus_run_id)
+
+        teed_stream = _tee_for_headless(raw_stream)
+
+        async def stream_with_cleanup():
+            try:
+                async for sse_line in _standard_stream_formatter(teed_stream):
+                    yield sse_line
+            finally:
+                # Deregister run on completion or error
+                active_runs.deregister(run_id)
+
         return StreamingResponse(
-            _standard_stream_formatter(raw_stream),
+            stream_with_cleanup(),
             media_type="text/event-stream",
         )
     except WorkflowError as e:
