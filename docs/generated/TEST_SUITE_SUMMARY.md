@@ -4,11 +4,26 @@
 
 | Category | Files | Tests |
 |----------|-------|-------|
-| Unit | 79 | 923 |
-| Integration | 29 | 193 |
+| Unit | 79 | 994 |
+| Integration | 30 | 237 |
 | Other | 7 | 92 |
-| **Total** | **115** | **1208** |
+| **Total** | **116** | **1323** |
 
+
+## `app/tests/integration/test_adr_ui_003_lifecycle.py`
+
+- **`test_stream_events_registers_run_before_streaming`**
+  - *Integration test: Verifies run is registered in active_runs BEFORE streaming begins.*
+- **`test_stream_events_deregisters_on_success`**
+  - *Integration test: Verifies run is deregistered after successful completion.*
+- **`test_stream_events_deregisters_on_error`**
+  - *Integration test: Verifies run is deregistered even when workflow errors.*
+- **`test_stream_events_tees_to_event_bus`**
+  - *Integration test: Verifies events are teed to event_bus for headless observers.*
+- **`test_stream_events_run_id_passed_through`**
+  - *Integration test: Verifies run_id is consistently used throughout the pipeline.*
+- **`test_stream_events_multiple_runs_isolated`**
+  - *Integration test: Verifies multiple concurrent runs are properly isolated.*
 
 ## `app/tests/integration/test_api_streaming_integration.py`
 
@@ -124,6 +139,30 @@
 
 - **`test_folder`**
   - *Create unique test folder, cleanup after.*
+- **`test_filesystem_mcp_connection`**
+  - *Verify connection to filesystem MCP container succeeds.*
+- **`test_filesystem_mcp_list_tools`**
+  - *Verify filesystem MCP exposes expected tools.*
+- **`test_list_directory`**
+  - *Test list_directory returns file names.*
+- **`test_read_file`**
+  - *Test read_file returns file contents.*
+- **`test_write_file`**
+  - *Test write_file creates file with content.*
+- **`test_create_directory`**
+  - *Test create_directory creates a single directory.*
+- **`test_move_file`**
+  - *Test move_file renames/moves files.*
+- **`test_get_file_info`**
+  - *Test get_file_info returns metadata.*
+- **`test_sync_bridge_list_directory`**
+  - *Test sync_call_external_mcp works (validates fix for GitHub #28).*
+- **`test_sync_bridge_read_file`**
+  - *Test sync bridge read_file operation.*
+- **`test_read_nonexistent_file_raises`**
+  - *Test reading nonexistent file raises RuntimeError.*
+- **`test_list_nonexistent_directory_raises`**
+  - *Test listing nonexistent directory raises RuntimeError.*
 
 ## `app/tests/integration/test_flows.py`
 
@@ -174,6 +213,14 @@
 
 ## `app/tests/integration/test_gradio_integration.py`
 
+- **`test_api_client_can_connect_to_live_server`**
+  - *Tests that the ApiClient can successfully connect to a running API server.*
+- **`test_api_client_streaming_with_simple_prompt`**
+  - *Tests that the ApiClient can successfully stream responses from the API server*
+- **`test_api_client_handles_empty_prompt`**
+  - *Tests that the ApiClient handles empty prompts gracefully.*
+- **`test_gradio_handle_submit_integration`**
+  - *Integration test for the handle_submit function with a live API server.*
 
 ## `app/tests/integration/test_image_specialist_streaming.py`
 
@@ -325,6 +372,14 @@
 
 ## `app/tests/integration/test_navigator_browser_specialist_integration.py`
 
+- **`test_preflight_succeeds_with_navigator`**
+  - *Test that pre-flight check passes with connected navigator.*
+- **`test_preflight_passes_without_client_for_loading`**
+  - *Test that pre-flight passes without client (allows loading).*
+- **`test_mcp_is_available_when_connected`**
+  - *Test is_available returns True when navigator connected.*
+- **`test_mcp_is_available_when_client_not_injected`**
+  - *Test is_available returns True when client not yet injected (allows loading).*
 - **`test_graceful_message_when_unavailable`**
   - *Test that specialist provides helpful message when navigator unavailable.*
 - **`test_detect_navigate_operation`**
@@ -352,6 +407,40 @@
 
 ## `app/tests/integration/test_navigator_mcp.py`
 
+- **`test_connect_from_config_disabled_service`**
+  - *Test that disabled service returns None.*
+- **`test_connect_from_config_nonexistent_service`**
+  - *Test that nonexistent service returns None.*
+- **`test_connect_from_config_missing_connection_config`**
+  - *Test that service without container_name or command returns None.*
+- **`test_connect_from_config_required_missing_raises`**
+  - *Test that required service with missing config raises ValueError.*
+- **`test_connect_all_from_config_disabled_globally`**
+  - *Test that globally disabled external MCP returns empty dict.*
+- **`test_connect_navigator_via_config`**
+  - *Test connecting to navigator via connect_from_config.*
+- **`test_health_check`**
+  - *Test health check on connected navigator.*
+- **`test_list_tools`**
+  - *Test listing all navigator tools.*
+- **`test_create_and_destroy_browser_session`**
+  - *Test creating and destroying a browser session.*
+- **`test_session_list`**
+  - *Test listing active sessions.*
+- **`test_browser_goto`**
+  - *Test navigating to a URL.*
+- **`test_browser_read_content`**
+  - *Test reading page content.*
+- **`test_browser_snapshot`**
+  - *Test taking a screenshot.*
+- **`test_browser_click_visual_grounding`**
+  - *Test clicking element by natural language description.*
+- **`test_call_tool_disconnected_service`**
+  - *Test that calling tool on disconnected service raises ValueError.*
+- **`test_invalid_session_id`**
+  - *Test that invalid session_id returns error.*
+- **`test_optional_service_unavailable_returns_none`**
+  - *Test that optional unavailable service returns None, not raises.*
 
 ## `app/tests/integration/test_openai_endpoint.py`
 
@@ -366,6 +455,8 @@
 
 ## `app/tests/integration/test_parallel_execution.py`
 
+- **`test_parallel_execution_fan_out`**
+  - *Verifies that the graph executes nodes in parallel when the router returns a list.*
 
 ## `app/tests/integration/test_routing_integration.py`
 
@@ -693,20 +784,58 @@
 
 ## `app/tests/unit/test_ag_ui_translator.py`
 
+- **`test_translator_flow`**
+- **`test_translator_error_handling`**
+- **`test_translator_handles_interrupt_event`**
+  - *Regression test for Bug #50: AgUiTranslator must handle __interrupt__ events.*
+- **`test_translator_handles_interrupt_with_object_payload`**
+  - *Test interrupt handling when payload has .value attribute (namedtuple form).*
+- **`test_translator_forwards_facilitator_ask_user_payload`**
+  - *ADR-CORE-042: Facilitator ASK_USER sends {question, reason, action_type}*
+- **`test_translator_forwards_conversation_id_in_workflow_end`**
+  - *ADR-CORE-075: conversation_id from runner must appear in the workflow_end*
+- **`test_translator_skips_thread_id_metadata`**
+  - *Regression test for Bug #52: thread_id chunk must not be processed as node.*
 
 ## `app/tests/unit/test_api.py`
 
+- **`test_read_root`**
+  - *Tests the root health check endpoint.*
 - **`test_invoke_graph_sync`**
   - *Tests the synchronous /v1/graph/invoke endpoint.*
 - **`test_invoke_graph_sync_handles_runner_error`**
   - *Tests that the sync endpoint returns a 500 if the runner fails.*
 - **`test_invoke_graph_sync_invalid_input`**
   - *Tests that the sync endpoint returns a 422 for invalid input.*
+- **`test_stream_graph_events_async`**
+  - *Tests the standardized /v1/graph/stream/events endpoint.*
+- **`test_stream_events_registers_run_before_streaming`**
+  - *ADR-UI-003: Verify run is registered in active_runs before streaming begins.*
+- **`test_stream_events_deregisters_run_on_success`**
+  - *ADR-UI-003: Verify run is deregistered after successful completion.*
+- **`test_stream_events_deregisters_run_on_error`**
+  - *ADR-UI-003: Verify run is deregistered even when workflow errors.*
+- **`test_stream_events_pushes_to_event_bus`**
+  - *ADR-UI-003: Verify events are teed to event_bus for headless observers.*
+- **`test_stream_events_closes_event_bus_on_completion`**
+  - *ADR-UI-003: Verify event_bus.close() is called at end of stream.*
 
 ## `app/tests/unit/test_api_client.py`
 
 - **`test_encode_image_to_base64`**
   - *Tests the internal image encoding utility.*
+- **`test_invoke_agent_streaming_success`**
+  - *Tests the happy path: OpenAI SSE chunks → accumulated content → final yield.*
+- **`test_invoke_agent_streaming_simple_chat_mode`**
+  - *Tests that use_simple_chat=True sends model=las-simple.*
+- **`test_invoke_agent_streaming_handles_file`**
+  - *Tests that text files are injected as system messages.*
+- **`test_invoke_agent_streaming_handles_malformed_json`**
+  - *Tests robust error handling when SSE data is invalid JSON.*
+- **`test_invoke_agent_streaming_handles_network_error`**
+  - *Tests that a network error is caught and yielded as a status update.*
+- **`test_invoke_agent_streaming_handles_file_read_error`**
+  - *Tests that an error reading a file is caught and yielded.*
 
 ## `app/tests/unit/test_archiver_specialist.py`
 
@@ -1124,6 +1253,40 @@
 
 ## `app/tests/unit/test_external_mcp_config.py`
 
+- **`test_disabled_service_returns_none`**
+  - *Test that disabled service returns None without attempting connection.*
+- **`test_nonexistent_service_returns_none`**
+  - *Test that nonexistent service returns None.*
+- **`test_missing_connection_config_returns_none_for_optional`**
+  - *Test optional service with missing connection config returns None.*
+- **`test_missing_connection_config_raises_for_required`**
+  - *Test required service with missing connection config raises ValueError.*
+- **`test_container_name_builds_docker_exec_command`**
+  - *Test that container_name mode builds correct docker exec command.*
+- **`test_container_name_with_custom_entrypoint`**
+  - *Test that custom entrypoint overrides default.*
+- **`test_command_mode_uses_direct_command`**
+  - *Test that command/args mode uses direct subprocess.*
+- **`test_connection_failure_returns_none_for_optional`**
+  - *Test that connection failure returns None for optional service.*
+- **`test_connection_failure_raises_for_required`**
+  - *Test that connection failure raises for required service.*
+- **`test_globally_disabled_returns_empty_dict`**
+  - *Test that globally disabled external MCP returns empty dict.*
+- **`test_connects_all_enabled_services`**
+  - *Test that all enabled services are connected.*
+- **`test_skips_disabled_services`**
+  - *Test that disabled services are skipped.*
+- **`test_optional_failure_doesnt_stop_other_services`**
+  - *Test that optional service failure doesn't stop other services.*
+- **`test_required_failure_raises_immediately`**
+  - *Test that required service failure raises RuntimeError.*
+- **`test_container_name_mode_pattern`**
+  - *Test the container_name mode pattern (ADR-CORE-027).*
+- **`test_command_args_mode_pattern`**
+  - *Test the command/args mode pattern.*
+- **`test_docker_run_pattern`**
+  - *Test the docker run pattern (legacy).*
 
 ## `app/tests/unit/test_facilitator.py`
 
@@ -1322,6 +1485,16 @@
 
 ## `app/tests/unit/test_gradio_app.py`
 
+- **`test_handle_submit_processes_stream_correctly`**
+  - *Tests that the handle_submit generator correctly processes a stream of*
+- **`test_handle_submit_handles_api_error`**
+  - *Tests that handle_submit yields an error message if the API client fails.*
+- **`test_handle_submit_handles_all_output_types`**
+  - *Tests that all possible output types from the stream are handled.*
+- **`test_handle_submit_handles_empty_stream_data`**
+  - *Tests that empty or malformed data in the stream is ignored gracefully.*
+- **`test_handle_submit_with_no_prompt`**
+  - *Tests that submitting with no prompt does not call the API.*
 
 ## `app/tests/unit/test_graph_builder.py`
 
@@ -2048,6 +2221,38 @@
 
 ## `app/tests/unit/test_openai_translator.py`
 
+- **`test_scratchpad_reasoning_in_reasoning_content`**
+  - *Scratchpad *_reasoning and *_decision keys appear in reasoning_content.*
+- **`test_no_reasoning_after_content`**
+  - *Post-content nodes (end_specialist, archiver) must not emit reasoning.*
+- **`test_reasoning_not_in_content`**
+  - *Reasoning data must not leak into the content delta.*
+- **`test_think_tags_and_workflow_markers`**
+  - *Reasoning is wrapped in <think></think> with workflow start/end markers.*
+- **`test_artifacts_key_only_in_reasoning`**
+  - *Non-content artifacts appear as key notifications only (no content fencing).*
+- **`test_facilitator_complete_in_reasoning`**
+  - *facilitator_complete flag produces [OK] entry in reasoning_content.*
+- **`test_content_from_final_user_response`**
+  - *Content is extracted from artifacts['final_user_response.md'].*
+- **`test_content_emitted_only_once`**
+  - *If multiple nodes produce final_user_response.md, emit only the first.*
+- **`test_no_content_run`**
+  - *Runs that produce no final_user_response.md still complete cleanly.*
+- **`test_no_null_fields_in_sse`**
+  - *Chunks must not contain null-valued fields (exclude_none).*
+- **`test_sse_line_format`**
+  - *Each output line must be 'data: {json}\n\n' format.*
+- **`test_done_sentinel`**
+  - *Stream must end with 'data: [DONE]\n\n'.*
+- **`test_consistent_id_and_model`**
+  - *All chunks in a stream share the same id and model.*
+- **`test_no_las_metadata`**
+  - *No las_metadata or vendor extensions on any chunk.*
+- **`test_interrupt_degrades_gracefully`**
+  - *Interrupt events produce clarification as regular content, then stop.*
+- **`test_error_emitted_as_content`**
+  - *Error events produce error message as content, then stop.*
 
 ## `app/tests/unit/test_parallel_reducer.py`
 
@@ -2561,6 +2766,28 @@
 
 ## `app/tests/unit/test_thought_stream_events.py`
 
+- **`test_image_specialist_emits_node_start`**
+  - *Verify image_specialist triggers NODE_START event.*
+- **`test_image_specialist_emits_node_end`**
+  - *Verify image_specialist triggers NODE_END event with artifacts.*
+- **`test_image_specialist_emits_status_update`**
+  - *Verify image_specialist triggers STATUS_UPDATE event.*
+- **`test_all_specialists_emit_events_in_image_workflow`**
+  - *Verify ALL specialists in the image workflow emit events.*
+- **`test_event_ordering_matches_execution_order`**
+  - *Verify events are emitted in the correct execution order.*
+- **`test_specialist_emits_all_event_types`**
+  - *Verify each specialist type emits NODE_START, STATUS_UPDATE, LOG, NODE_END.*
+- **`test_parallel_progenitors_both_emit_events`**
+  - *Verify both parallel progenitors emit events independently.*
+- **`test_node_end_contains_scratchpad`**
+  - *Verify NODE_END events include scratchpad data.*
+- **`test_workflow_end_contains_accumulated_state`**
+  - *Verify WORKFLOW_END includes accumulated state from all specialists.*
+- **`test_translator_receives_all_chunks`**
+  - *Verify translator receives all chunks from the stream.*
+- **`test_event_count_matches_expected`**
+  - *Verify the total number of events emitted matches expected.*
 
 ## `app/tests/unit/test_tiered_chat_state_management.py`
 
@@ -2658,3 +2885,7 @@
   - *Tests that the sync run method handles a missing final artifact gracefully.*
 - **`test_workflow_runner_run_sync_handles_invoke_error`**
   - *Tests that the sync run method raises a WorkflowError on graph invocation failure.*
+- **`test_workflow_runner_run_streaming_handles_astream_error`**
+  - *Tests that the streaming run method yields an error on graph stream failure.*
+- **`test_workflow_runner_run_streaming`**
+  - *Tests the asynchronous streaming method.*

@@ -338,13 +338,13 @@ async def stream_graph_events(request: InvokeRequest):
     if not workflow_runner:
         raise HTTPException(status_code=503, detail="Workflow runner not initialized")
 
+    # Generate run_id for lifecycle tracking (ADR-UI-003)
+    run_id = str(uuid.uuid4())
+
+    # Register run immediately so observability head can discover it
+    active_runs.register(run_id, {"model": "standard-stream", "status": "streaming"})
+
     try:
-        # Generate run_id for lifecycle tracking (ADR-UI-003)
-        run_id = str(uuid.uuid4())
-
-        # Register run immediately so observability head can discover it
-        active_runs.register(run_id, {"model": "standard-stream", "status": "streaming"})
-
         logger.info(f"Received request to stream standardized events with prompt: '{request.input_prompt}' run_id={run_id}")
 
         raw_stream = workflow_runner.run_streaming(
@@ -378,7 +378,7 @@ async def stream_graph_events(request: InvokeRequest):
                 async for sse_line in _standard_stream_formatter(teed_stream):
                     yield sse_line
             finally:
-                # Deregister run on completion or error
+                # Deregister run on completion or error (streaming errors)
                 active_runs.deregister(run_id)
 
         return StreamingResponse(
@@ -387,6 +387,8 @@ async def stream_graph_events(request: InvokeRequest):
         )
     except WorkflowError as e:
         logger.error(f"Workflow streaming error: {e}", exc_info=True)
+        # Deregister run before re-raising as HTTPException (ADR-UI-003)
+        active_runs.deregister(run_id)
         raise HTTPException(status_code=500, detail=f"Workflow streaming error: {e}")
 
 

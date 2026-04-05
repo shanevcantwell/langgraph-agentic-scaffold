@@ -41,7 +41,7 @@ def summarize_tests(start_dir: str, output_file: str):
                         source = f.read()
                         tree = ast.parse(source)
                         for node in ast.walk(tree):
-                            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
                                 counts[category]["tests"] += 1
                 except Exception:
                     pass
@@ -81,7 +81,7 @@ def summarize_tests(start_dir: str, output_file: str):
                         tree = ast.parse(source)
 
                         for node in ast.walk(tree):
-                            if isinstance(node, ast.FunctionDef) and node.name.startswith("test_"):
+                            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
                                 docstring = ast.get_docstring(node)
                                 summary_lines.append(f"- **`{node.name}`**")
                                 if docstring:

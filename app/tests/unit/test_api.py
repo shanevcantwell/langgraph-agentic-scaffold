@@ -82,6 +82,32 @@ async def client(patched_api):
             yield c
 
 
+@pytest.fixture
+def mock_active_runs(mocker):
+    """
+    Mock active_runs registry for ADR-UI-003 lifecycle testing.
+
+    Returns a MagicMock that tracks register/deregister calls.
+    """
+    mock_registry = mocker.MagicMock()
+    mocker.patch('app.src.api.active_runs', mock_registry)
+    return mock_registry
+
+
+@pytest.fixture
+def mock_event_bus(mocker):
+    """
+    Mock event_bus for ADR-UI-003 lifecycle testing.
+
+    Returns a MagicMock that tracks push/close calls.
+    """
+    mock_bus = mocker.MagicMock()
+    mock_bus.push = mocker.AsyncMock()
+    mock_bus.close = mocker.AsyncMock()
+    mocker.patch('app.src.api.event_bus', mock_bus)
+    return mock_bus
+
+
 @pytest.fixture(autouse=True)
 async def reset_mocks(client, patched_api, mocker):  # Depend on client to ensure lifespan has run
     """Reset mocks before each test to ensure isolation."""
@@ -193,3 +219,164 @@ async def test_stream_graph_events_async(client, patched_api):
     assert "run_id" in call_args.kwargs
     assert isinstance(call_args.kwargs["run_id"], str)
     assert len(call_args.kwargs["run_id"]) > 0
+
+
+# ============================================================================
+# ADR-UI-003: Headless Observability Lifecycle Tests
+# ============================================================================
+
+@pytest.mark.asyncio
+async def test_stream_events_registers_run_before_streaming(
+    client, patched_api, mock_active_runs, mocker
+):
+    """
+    ADR-UI-003: Verify run is registered in active_runs before streaming begins.
+
+    The run must be registered before any events are emitted so headless
+    V.E.G.A.S. observability can discover and attach to the run.
+    """
+    payload = {
+        "input_prompt": "test registration",
+        "text_to_process": None,
+        "image_to_process": None
+    }
+
+    response = client.post("/v1/graph/stream/events", json=payload)
+    assert response.status_code == 200
+
+    # Verify register was called with run_id and info dict
+    assert mock_active_runs.register.called
+    call_args = mock_active_runs.register.call_args
+    assert isinstance(call_args.args[0], str)  # run_id
+    assert isinstance(call_args.args[1], dict)  # info dict
+    assert call_args.args[1].get("model") == "standard-stream"
+    assert call_args.args[1].get("status") == "streaming"
+
+
+@pytest.mark.asyncio
+async def test_stream_events_deregisters_run_on_success(
+    client, patched_api, mock_active_runs, mock_event_bus, mocker
+):
+    """
+    ADR-UI-003: Verify run is deregistered after successful completion.
+
+    The finally block ensures cleanup happens on successful completion.
+    """
+    payload = {
+        "input_prompt": "test deregister on success",
+        "text_to_process": None,
+        "image_to_process": None
+    }
+
+    response = client.post("/v1/graph/stream/events", json=payload)
+    assert response.status_code == 200
+
+    # Verify deregister was called (in finally block)
+    assert mock_active_runs.deregister.called
+    call_args = mock_active_runs.deregister.call_args
+    assert isinstance(call_args.args[0], str)  # run_id
+
+
+@pytest.mark.asyncio
+async def test_stream_events_deregisters_run_on_error(
+    client, patched_api, mock_active_runs, mocker
+):
+    """
+    ADR-UI-003: Verify run is deregistered even when workflow errors.
+
+    The try/finally block ensures cleanup happens regardless of success or failure.
+    """
+    # Make run_streaming raise an error
+    mocker.patch.object(
+        patched_api.workflow_runner,
+        'run_streaming',
+        side_effect=WorkflowError("Simulated workflow error")
+    )
+
+    payload = {
+        "input_prompt": "test deregister on error",
+        "text_to_process": None,
+        "image_to_process": None
+    }
+
+    response = client.post("/v1/graph/stream/events", json=payload)
+    # Should return 500 for WorkflowError
+    assert response.status_code == 500
+
+    # Verify register was still called
+    assert mock_active_runs.register.called
+
+    # Verify deregister was called in finally block despite error
+    assert mock_active_runs.deregister.called
+
+
+@pytest.mark.asyncio
+async def test_stream_events_pushes_to_event_bus(
+    client, patched_api, mock_event_bus, mocker
+):
+    """
+    ADR-UI-003: Verify events are teed to event_bus for headless observers.
+
+    Each event from the raw stream should be pushed to the event_bus.
+    """
+    # Create a mock stream that yields events with run_id
+    async def mock_stream_with_run_id():
+        test_run_id = "test-run-123"
+        yield {"run_id": test_run_id, "type": "test_event", "data": "event1"}
+        yield {"run_id": test_run_id, "type": "test_event", "data": "event2"}
+
+    mocker.patch.object(
+        patched_api.workflow_runner,
+        'run_streaming',
+        return_value=mock_stream_with_run_id()
+    )
+
+    payload = {
+        "input_prompt": "test event bus push",
+        "text_to_process": None,
+        "image_to_process": None
+    }
+
+    response = client.post("/v1/graph/stream/events", json=payload)
+    assert response.status_code == 200
+
+    # Verify push was called for each event
+    assert mock_event_bus.push.call_count >= 2
+    # First call should have run_id and event
+    first_call = mock_event_bus.push.call_args_list[0]
+    assert isinstance(first_call.args[0], str)  # run_id
+    assert isinstance(first_call.args[1], dict)  # event
+
+
+@pytest.mark.asyncio
+async def test_stream_events_closes_event_bus_on_completion(
+    client, patched_api, mock_event_bus, mocker
+):
+    """
+    ADR-UI-003: Verify event_bus.close() is called at end of stream.
+
+    The close() call sends a sentinel (None) to signal end-of-stream to
+    headless observers.
+    """
+    async def mock_stream():
+        yield {"run_id": "test-run", "type": "event"}
+
+    mocker.patch.object(
+        patched_api.workflow_runner,
+        'run_streaming',
+        return_value=mock_stream()
+    )
+
+    payload = {
+        "input_prompt": "test event bus close",
+        "text_to_process": None,
+        "image_to_process": None
+    }
+
+    response = client.post("/v1/graph/stream/events", json=payload)
+    assert response.status_code == 200
+
+    # Verify close was called with run_id
+    assert mock_event_bus.close.called
+    call_args = mock_event_bus.close.call_args
+    assert isinstance(call_args.args[0], str)  # run_id
