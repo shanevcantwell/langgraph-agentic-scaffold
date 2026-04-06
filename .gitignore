@@ -52,6 +52,9 @@ proxy/*
 # generated
 requirements*.txt
 build/
+htmlcov/
+.coverage
+uv.lock
 
 # backups
 *.bak
