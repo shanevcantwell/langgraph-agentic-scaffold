@@ -433,6 +433,17 @@ async def _openai_sync(request: ChatCompletionRequest, kwargs: Dict[str, Any]):
             run_id=run_id,
         )
 
+        # WorkflowRunner.run() swallows exceptions and returns {"error": ...}
+        # rather than raising. Surface that as a proper HTTP error so callers
+        # (tests, AnythingLLM, openai-python) get a meaningful failure instead
+        # of HTTP 200 with empty content.
+        if final_state.get("error"):
+            logger.error(f"OpenAI sync: workflow error: {final_state['error']}")
+            raise HTTPException(
+                status_code=503,
+                detail=f"Workflow error: {final_state['error']}",
+            )
+
         active_runs.update(run_id, status="completed")
         response = format_sync_response(final_state, request, run_id=run_id)
         return JSONResponse(content=response.model_dump(exclude_none=True))

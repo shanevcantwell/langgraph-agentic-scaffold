@@ -389,6 +389,25 @@ def assert_specialist_sequence(
 
 
 # =============================================================================
+# APP FIXTURE (Integration tests)
+# =============================================================================
+
+@pytest.fixture(scope="session")
+def initialized_app():
+    """
+    FastAPI app instance for integration tests.
+
+    Returns the module-level app object from app.src.api.  Tests that need
+    WorkflowRunner initialized (i.e. the full lifespan) should wrap their
+    requests in ``with TestClient(app) as client:`` (sync tests) or
+    ``async with api_lifespan(app):`` (async tests) — both trigger startup
+    and shutdown in their respective event loops.
+    """
+    from app.src.api import app
+    return app
+
+
+# =============================================================================
 # EXTERNAL MCP FIXTURES (Shared across MCP container tests)
 # =============================================================================
 

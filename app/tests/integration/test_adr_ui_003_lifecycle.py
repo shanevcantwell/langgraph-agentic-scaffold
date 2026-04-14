@@ -150,101 +150,86 @@ async def test_stream_events_tees_to_event_bus(initialized_app):
     """
     Integration test: Verifies events are teed to event_bus for headless observers.
 
-    This test uses an async client to subscribe to the event bus BEFORE
-    starting the workflow, then verifies events are received.
+    Runs the full lifespan in the *test's* asyncio event loop (via api_lifespan)
+    so that event_bus subscriptions, asyncio.Queue puts, and the ASGI request
+    handler all share the same loop.  TestClient is intentionally avoided here:
+    it spins up its own thread-local event loop, which creates cross-loop
+    asyncio.Lock/Queue usage that isn't safe.
 
     Expected behavior:
-    1. Test subscribes to event_bus for a specific run_id
-    2. Workflow runs and emits events
-    3. Events are pushed to event_bus (not just streamed to client)
-    4. Test receives events via event_bus subscription
+    1. Instrumented run_streaming subscribes to event_bus before emitting events
+    2. Workflow runs and pushes events to event_bus
+    3. Test drains the queue and verifies events arrived
     """
-    app = initialized_app
+    from httpx import AsyncClient, ASGITransport
+    from app.src.api import lifespan as api_lifespan
+    from app.src import api as api_module
 
-    # We need to coordinate: subscribe before run, then trigger run
-    # Use a semaphore to synchronize
-    subscribe_done = asyncio.Event()
+    app = initialized_app
     events_received = []
     subscription_task = None
 
-    async def subscribe_and_collect(run_id: str, timeout: float = 30.0):
-        """Subscribe to event bus and collect events."""
-        # Subscribe to the run
-        queue = await event_bus.subscribe(run_id)
-        subscribe_done.set()
-
-        # Collect events until sentinel (None) or timeout
-        try:
-            while True:
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=timeout)
-                    if event is None:  # sentinel
-                        break
-                    events_received.append(event)
-                except asyncio.TimeoutError:
-                    break
-        except Exception as e:
-            print(f"Event collection error: {e}")
-
-    # Trigger workflow and capture run_id from the stream
-    # We'll use a wrapper that lets us intercept the run_id
-    captured_run_id = None
-
-    original_run_streaming = api.workflow_runner.run_streaming
-
-    async def instrumented_run_streaming(*args, **kwargs):
-        """Wrap run_streaming to capture run_id and start event collection."""
-        nonlocal captured_run_id
-
-        # Extract run_id from kwargs
-        run_id = kwargs.get('run_id')
-        if run_id:
-            captured_run_id = run_id
-            # Start subscription task
-            subscription_task = asyncio.create_task(subscribe_and_collect(run_id))
-            # Wait for subscription to be ready
-            await asyncio.wait_for(subscribe_done.wait(), timeout=5.0)
-
-        # Call original
-        async for event in original_run_streaming(*args, **kwargs):
-            yield event
-
-    # Patch the workflow runner
-    api.workflow_runner.run_streaming = instrumented_run_streaming
-
-    try:
-        with TestClient(app) as client:
-            payload = {
-                "input_prompt": "What is the capital of France?",
-                "text_to_process": None,
-                "image_to_process": None
-            }
-
-            response = client.post("/v1/graph/stream/events", json=payload)
-            assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-
-        # Wait for subscription task to complete
-        if subscription_task:
+    async def drain_queue(queue: asyncio.Queue, timeout: float = 60.0):
+        """Drain event_bus queue until sentinel (None) or timeout."""
+        while True:
             try:
-                await asyncio.wait_for(subscription_task, timeout=30.0)
+                event = await asyncio.wait_for(queue.get(), timeout=timeout)
+                if event is None:  # sentinel from event_bus.close()
+                    break
+                events_received.append(event)
             except asyncio.TimeoutError:
-                print("Subscription task timed out")
+                break
 
-        # Verify we received events via event_bus
-        # (not just via the direct stream)
-        assert len(events_received) > 0, (
-            f"Expected events via event_bus, got {len(events_received)}. "
-            f"Captured run_id: {captured_run_id}"
-        )
+    # Run lifespan in THIS event loop so workflow_runner is initialised here,
+    # not in a TestClient thread.  ASGITransport routes requests directly to
+    # the ASGI app without re-triggering the lifespan.
+    async with api_lifespan(app):
+        original_run_streaming = api_module.workflow_runner.run_streaming
 
-        # Verify event structure (should have run_id and event data)
-        assert all(isinstance(e, dict) for e in events_received), (
-            "All events should be dictionaries"
-        )
+        async def instrumented_run_streaming(*args, **kwargs):
+            """Subscribe to event_bus before the first event is emitted."""
+            nonlocal subscription_task
+            run_id = kwargs.get('run_id')
+            if run_id:
+                # subscribe() is awaited here — same event loop, no race
+                queue = await event_bus.subscribe(run_id)
+                subscription_task = asyncio.create_task(drain_queue(queue))
+            async for event in original_run_streaming(*args, **kwargs):
+                yield event
 
-    finally:
-        # Restore original
-        api.workflow_runner.run_streaming = original_run_streaming
+        api_module.workflow_runner.run_streaming = instrumented_run_streaming
+
+        try:
+            async with AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="http://test"
+            ) as client:
+                payload = {
+                    "input_prompt": "What is the capital of France?",
+                    "text_to_process": None,
+                    "image_to_process": None
+                }
+                response = await client.post("/v1/graph/stream/events", json=payload)
+                assert response.status_code == 200, (
+                    f"Expected 200, got {response.status_code}: {response.text}"
+                )
+
+            if subscription_task:
+                try:
+                    await asyncio.wait_for(subscription_task, timeout=60.0)
+                except asyncio.TimeoutError:
+                    pass  # partial collection is still evidence of tee working
+
+        finally:
+            api_module.workflow_runner.run_streaming = original_run_streaming
+
+    assert len(events_received) > 0, (
+        "Expected events via event_bus (tee path), got none. "
+        "Verify /v1/graph/stream/events calls event_bus.push() per event."
+    )
+    assert all(isinstance(e, dict) for e in events_received), (
+        "All event_bus events should be dicts"
+    )
 
 
 @pytest.mark.integration
