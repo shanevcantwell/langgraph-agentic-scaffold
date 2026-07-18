@@ -1,4 +1,4 @@
-### **Specialist-Driven Conditional Routing**
+### **ADR-LAS-004: Specialist-Driven Conditional Routing**
 
 * **Status:** Completed  
 * **Date:** 2025-09-18  
