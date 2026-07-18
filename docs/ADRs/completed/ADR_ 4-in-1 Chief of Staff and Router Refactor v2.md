@@ -68,9 +68,9 @@
 
 ---
 
-## **Errata after producing ADR-004 Specialist-Driven Conditional Routing ADR**
+## **Errata after producing ADR-LAS-004 Specialist-Driven Conditional Routing ADR**
 
-This analysis details how the implementation of ADR-004 (Specialist-Driven Conditional Routing), particularly the generalized and robust implementation strategy (R1-R3), impacts the proposals outlined in the "ADR: 4-in-1 Chief of Staff and Router Refactor."
+This analysis details how the implementation of ADR-LAS-004 (Specialist-Driven Conditional Routing), particularly the generalized and robust implementation strategy (R1-R3), impacts the proposals outlined in the "ADR: 4-in-1 Chief of Staff and Router Refactor."
 
 The analysis reveals strong synergy with the proposed decomposition in Phase 1, a critical philosophical conflict regarding the routing architecture in Phase 2, and a clear evolutionary path for loop prevention mechanisms in Phase 4\.
 
@@ -78,11 +78,11 @@ The analysis reveals strong synergy with the proposed decomposition in Phase 1, 
 
 **Proposal:** Decompose the monolithic ChiefOfStaff into GraphBuilder (build-time concerns) and GraphOrchestrator (run-time concerns).
 
-**Impact of ADR-004:** **Highly Compatible and Increases Urgency.**
+**Impact of ADR-LAS-004:** **Highly Compatible and Increases Urgency.**
 
-ADR-004 significantly increases the complexity of the ChiefOfStaff by introducing configuration interpretation, validation logic (E2), a generalized decider factory (R2), and complex graph wiring. This reinforces the urgent need for the decomposition proposed in Phase 1 to maintain code quality and separation of concerns.
+ADR-LAS-004 significantly increases the complexity of the ChiefOfStaff by introducing configuration interpretation, validation logic (E2), a generalized decider factory (R2), and complex graph wiring. This reinforces the urgent need for the decomposition proposed in Phase 1 to maintain code quality and separation of concerns.
 
-The components introduced by ADR-004 map cleanly onto the proposed structure:
+The components introduced by ADR-LAS-004 map cleanly onto the proposed structure:
 
 * **GraphBuilder (Build-Time Responsibilities):**  
   * **Configuration Interpretation:** Reading the routing\_strategy and routing\_config from config.yaml.  
@@ -97,16 +97,16 @@ The components introduced by ADR-004 map cleanly onto the proposed structure:
 
 **Proposal:** Implement a unified Constraint-Based Routing (CBR) strategy where all execution follows a single path: Specialist \-\> GraphOrchestrator (Generate Constraints) \-\> RouterSpecialist (Constrained Decision).
 
-**Impact of ADR-004:** **Fundamental Conflict in Routing Philosophy.**
+**Impact of ADR-LAS-004:** **Fundamental Conflict in Routing Philosophy.**
 
-This is the most critical intersection. The implementation mechanism of ADR-004 directly conflicts with the unified flow proposed in Phase 2\.
+This is the most critical intersection. The implementation mechanism of ADR-LAS-004 directly conflicts with the unified flow proposed in Phase 2\.
 
-* **ADR-004 Mechanism (Deterministic Bypass):** Uses LangGraph conditional edges to explicitly *bypass* the RouterSpecialist for localized, deterministic decisions (e.g., the Critic refinement loop).  
+* **ADR-LAS-004 Mechanism (Deterministic Bypass):** Uses LangGraph conditional edges to explicitly *bypass* the RouterSpecialist for localized, deterministic decisions (e.g., the Critic refinement loop).  
 * **Phase 2 Mechanism (Unified CBR):** Mandates that the RouterSpecialist (an LLM) is invoked on every turn to maintain a single, observable decision point.
 
 **The Trade-Off: Performance vs. Architectural Purity**
 
-If the system were forced to adhere strictly to the proposed Unified CBR model, the ADR-004 mechanism would have to be refactored. The GraphOrchestrator would read the Critic's "REVISE" decision and generate a MUST\_ROUTE\_TO \= \["WebBuilder"\] constraint. The RouterSpecialist would then be invoked solely to satisfy that constraint.
+If the system were forced to adhere strictly to the proposed Unified CBR model, the ADR-LAS-004 mechanism would have to be refactored. The GraphOrchestrator would read the Critic's "REVISE" decision and generate a MUST\_ROUTE\_TO \= \["WebBuilder"\] constraint. The RouterSpecialist would then be invoked solely to satisfy that constraint.
 
 This introduces unnecessary latency, token costs, and complexity for a decision that is already deterministic. In interactive, multi-agent systems, forcing deterministic logic through an LLM inference step is generally an anti-pattern.
 
@@ -114,16 +114,16 @@ This introduces unnecessary latency, token costs, and complexity for a decision 
 
 The Phase 2 proposal must be amended. A rigid CBR model sacrifices too much efficiency. A hybrid architecture provides the optimal balance:
 
-1. **Deterministic Routing (ADR-004 "Express Lanes"):** Used for localized, configuration-driven sub-workflows (like refinement loops). The graph structure enforces the route deterministically, bypassing the Router for maximum efficiency and speed.  
+1. **Deterministic Routing (ADR-LAS-004 "Express Lanes"):** Used for localized, configuration-driven sub-workflows (like refinement loops). The graph structure enforces the route deterministically, bypassing the Router for maximum efficiency and speed.  
 2. **Constraint-Based Routing (Phase 2):** Used as the default routing mechanism when deterministic routing is not active. The RouterSpecialist handles complex, ambiguous decision-making, guided by constraints generated by the GraphOrchestrator (e.g., error handling, precondition fulfillment).
 
-This hybrid approach leverages the strengths of both patterns. The implementation of ADR-004 remains valid and will coexist with the future CBR implementation.
+This hybrid approach leverages the strengths of both patterns. The implementation of ADR-LAS-004 remains valid and will coexist with the future CBR implementation.
 
 ### **3\. Impact on Phase 3: Extensible Reporting Subsystem**
 
 **Proposal:** Decouple final report generation using the Adapter Pattern.
 
-**Impact of ADR-004:** **None.**
+**Impact of ADR-LAS-004:** **None.**
 
 These proposals concern different stages of the workflow (internal routing vs. terminal reporting) and do not overlap.
 
@@ -131,13 +131,13 @@ These proposals concern different stages of the workflow (internal routing vs. t
 
 **Proposal:** Introduce a centralized InvariantMonitor middleware to validate state integrity and enforce execution constraints, including the detection of infinite loops.
 
-**Impact of ADR-004:** **Highly Synergistic; Defines Evolution of Loop Management.**
+**Impact of ADR-LAS-004:** **Highly Synergistic; Defines Evolution of Loop Management.**
 
-ADR-004 highlighted the critical risk of localized infinite loops (E3) and implemented a localized loop management strategy (R3) as a mitigation. This strategy relies on the specialist managing a counter in the scratchpad and the orchestrator (decider function) enforcing the limit.
+ADR-LAS-004 highlighted the critical risk of localized infinite loops (E3) and implemented a localized loop management strategy (R3) as a mitigation. This strategy relies on the specialist managing a counter in the scratchpad and the orchestrator (decider function) enforcing the limit.
 
 **The Evolution of Loop Management:**
 
-* **Interim State (ADR-004 R3):** Loop management is localized and cooperative. This is functional but architecturally fragile:  
+* **Interim State (ADR-LAS-004 R3):** Loop management is localized and cooperative. This is functional but architecturally fragile:  
   * It violates the separation of concerns by forcing specialists (domain logic) to manage orchestration state (loop counters).  
   * It distributes enforcement logic across multiple generated decider functions.  
 * **Future State (Phase 4):** The InvariantMonitor provides a superior architectural solution. A centralized monitor inspecting state transitions and execution history is more robust, centralized, and decoupled from specialist logic. The InvariantMonitor can be configured to recognize intentional loops (like the Critic/Builder cycle) and enforce the max\_cycles limit without requiring manual counting by the specialists.
