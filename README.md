@@ -1,3 +1,8 @@
+---
+handle: las
+related: [wge, prompt-prix, semantic-chunker, local-inference-pool, call-economy, subagent-first-dispatch]
+---
+
 # LAS: langgraph-agentic-scaffold
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
